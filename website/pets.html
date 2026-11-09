@@ -73,6 +73,32 @@
     #chatlog div.old { opacity: 0; }
     #chatbar { position: fixed; left: 50%; transform: translateX(-50%); bottom: max(16px, env(safe-area-inset-bottom)); width: min(440px, calc(100vw - 24px)); display: none; gap: 8px; z-index: 9; }
     #chatbar input { flex: 1; min-width: 0; border: 0; border-radius: 16px; padding: 0 14px; font: 600 16px ui-rounded, system-ui, sans-serif; color: var(--ink); background: #fff; box-shadow: 0 4px 0 rgba(0,0,0,.18); outline: none; }
+    #party { display: none; gap: 4px; flex-wrap: wrap; align-items: center; pointer-events: auto; max-width: 60vw; }
+    #party .pill { font-size: 12px; padding: 4px 10px; color: var(--green); }
+    #party .x { border: 0; background: #fff; width: 26px; height: 26px; border-radius: 50%; font: 800 12px system-ui; color: var(--ink); cursor: pointer; }
+    #acts { display: flex; flex-direction: column; gap: 8px; align-items: flex-end; }
+    #acts .btn { min-height: 44px; padding: 8px 14px; }
+    kbd { display: inline-block; min-width: 20px; padding: 1px 5px; border-radius: 5px; background: var(--ink); color: #fff; font: 800 12px system-ui; margin-right: 4px; }
+    #invite { position: fixed; top: 22%; left: 50%; transform: translateX(-50%); z-index: 11; display: none; align-items: center; gap: 10px; padding: 10px 12px 10px 16px; border-radius: 18px; background: var(--card); box-shadow: 0 10px 30px rgba(0,0,0,.25); }
+    #invite #ikind { opacity: .8; }
+    #invite .btn { min-height: 42px; min-width: 46px; padding: 8px 12px; }
+    #login { position: fixed; inset: 0; z-index: 20; display: none; align-items: center; justify-content: center; background: rgba(20,30,45,.45); padding: 16px; }
+    #login .lbox { width: min(360px, 100%); background: var(--card); border-radius: 22px; padding: 18px; display: flex; flex-direction: column; gap: 10px; box-shadow: 0 10px 30px rgba(0,0,0,.25); }
+    #login h1 { margin: 0 0 4px; font: 800 34px "Big Shoulders Display", Impact, sans-serif; letter-spacing: .03em; text-align: center; }
+    #login input, .coinin input { border: 2px solid var(--line); border-radius: 14px; padding: 12px 14px; font: 600 16px ui-rounded, system-ui, sans-serif; color: var(--ink); background: #fff; outline: none; min-width: 0; }
+    #login input:focus, .coinin input:focus { border-color: var(--blue); }
+    #lerr { color: var(--red); font-size: 13px; min-height: 16px; text-align: center; }
+    .tside { display: flex; flex-direction: column; gap: 6px; margin-bottom: 10px; }
+    .chips { display: flex; flex-wrap: wrap; gap: 6px; min-height: 30px; }
+    .chip { border: 2px solid var(--line); border-radius: 12px; background: #fff; padding: 4px; display: flex; flex-direction: column; align-items: center; font: 700 11px system-ui; color: var(--ink); cursor: pointer; }
+    .chip img { width: 46px; height: 46px; }
+    .chip.on { border-color: var(--gold); background: #fff6dc; }
+    .chip:disabled { cursor: default; opacity: 1; }
+    .coinin { display: inline-flex; align-items: center; gap: 6px; font-weight: 800; }
+    .coinin input { width: 110px; padding: 8px 10px; }
+    .buildrow { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
+    .buildrow .btn { padding: 8px; line-height: 1.3; }
+    .card.off { opacity: .6; cursor: default; }
     @media (max-width: 420px) { #coins { font-size: 21px; } .btn { min-height: 48px; padding: 10px 13px; font-size: 14px; } }
   </style>
 </head>
@@ -82,6 +108,7 @@
     <div>
       <span class="pill"><span class="coin"></span><span id="coins">0</span></span>
       <span class="pill" id="who"></span>
+      <div id="party"></div>
     </div>
     <div>
       <span class="pill" id="bag"><span class="box"></span><b id="bagn">0/2</b></span>
@@ -93,18 +120,32 @@
   <div id="joy"><i></i></div>
   <div id="side">
     <div id="items"></div>
+    <div id="acts"></div>
+    <button class="btn" id="btn-build" type="button" style="display:none">Build</button>
     <button class="btn ghost" id="btn-chat" type="button">Chat</button>
+    <button class="btn green" id="btn-jump" type="button">Jump</button>
     <button class="btn" id="btn-pets" type="button">Pets</button>
   </div>
   <div class="panel" id="p-pets"><h2>Pets <button class="x" type="button">✕</button></h2><div class="grid" id="petlist"></div></div>
   <div class="panel" id="p-shop"><h2>Egg Shop <button class="x" type="button">✕</button></h2><div class="grid" id="eggs"></div></div>
   <div class="panel" id="p-train"><h2>Training Yard <button class="x" type="button">✕</button></h2><div id="train"></div></div>
+  <div class="panel" id="p-player"><h2><span id="pname"></span> <button class="x" type="button">✕</button></h2><div class="row2" id="player"></div></div>
+  <div class="panel" id="p-trade"><h2><span>Trade · <span id="tname"></span></span> <button class="x" type="button">✕</button></h2><div id="trade"></div></div>
+  <div class="panel" id="p-build"><h2>Build <button class="x" type="button">✕</button></h2><div id="build"></div></div>
+  <div class="panel" id="p-home"><h2>Home <button class="x" type="button">✕</button></h2><div id="homebuy"></div></div>
   <div class="panel" id="p-board"><h2>Contracts <button class="x" type="button">✕</button></h2><div id="board"></div></div>
   <div id="chatlog"></div>
   <form id="chatbar" autocomplete="off"><input id="chatin" maxlength="120" enterkeyhint="send"><button class="btn" type="submit">Send</button></form>
+  <div id="invite"><b id="iname"></b><span id="ikind"></span><button class="btn green" id="iyes" type="button">✓</button><button class="btn ghost" id="ino" type="button">✕</button></div>
+  <form id="login" autocomplete="on"><div class="lbox"><h1>Pet Delivery Co.</h1>
+    <input id="luser" name="username" autocomplete="username" placeholder="Username" maxlength="16" autocapitalize="off" spellcheck="false">
+    <input id="lpass" name="password" type="password" autocomplete="current-password" placeholder="Password" maxlength="64">
+    <span id="lerr"></span>
+    <div class="row2"><button class="btn green" id="lgo" type="submit" style="flex:1">Log in</button><button class="btn" id="lnew" type="button" style="flex:1">Create account</button></div>
+  </div></form>
   <div id="toast"></div>
   <div id="banner"></div>
   <div id="hatch"><canvas id="hatchc" width="440" height="440"></canvas><span class="nm" id="hatchn"></span><span class="rar" id="hatchr"></span><button class="btn green" id="hatchok" type="button">Ride</button></div>
-  <script type="module" src="pets.js?v=1793100004"></script>
+  <script type="module" src="pets.js?v=1793100005"></script>
 </body>
 </html>

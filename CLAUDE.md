@@ -58,14 +58,16 @@ website/          GitHub Pages site (atamus.io) and the game
   index.html      the front page (Updates list), style.css + theme.css + front-updates.js for it
   play.html       forwards to game.html (old links)
   pets.html       Pet Delivery Co. (owner, 2026-11-08): the page and HUD; pets.js the whole client (town, riding,
-                  parcels, eggs, training, items, co-op client); save in localStorage
+                  parcels, eggs, training, items, homes, co-op client); data saved on the server (accounts)
   fonts/, assets/ self-hosted fonts and the logo
 packages/server/src/
   index.js        Express bootstrap: /healthz {build} and the deploy workflows' /game routes; in the PTR it also
                   serves website/. Its one socket is Pet Delivery Co.'s (/pets, pets.js).
   build.js        SERVER_BUILD, website build polling, the update countdown the workflows call (announceUpdate)
   gamehttp.js     the deploy workflows' calls (build-check, update-countdown, update-status)
-  pets.js         Pet Delivery Co. co-op: WebSocket /pets, rooms of 16, positions, contracts, delivery effects
+  pets.js         Pet Delivery Co. co-op: WebSocket /pets, accounts, rooms of 16, positions, animal control, contracts,
+                  chat, parties, trades, homes; petstore.js its accounts (Postgres pet_accounts / pet_tokens);
+                  pets-world.js a copy of website/pets-world.js (keep identical)
   db.js           the schema migrations (old tables stay untouched, unused), config.js, hash.js
 reference/        old snapshots, for reference only (never deployed); 2026-10-31-pre-spaceport/ is the last
                   multiplayer game and Salvage

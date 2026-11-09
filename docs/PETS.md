@@ -23,7 +23,9 @@ Asked (owner): a web game on atamus.io (not Roblox), on its own page; the cargo 
   (a running track with hurdles, green ring) and the **pound** (animal control, striped front, a fenced yard).
 - **Houses** (about 130) line the roads on both sides, facing them, each with a red mailbox at the roadside; trees on
   open ground.
-- **Floating islands:** 5 off the town's edge (20–38 m up), each with 3 houses and trees. Only fliers reach them.
+- **Floating islands (owner, 2026-11-08: more, some above the town):** 10 off the town's edge, low (−10 to 16 m) so
+  gliders can reach them, and 8 high above the town (84–124 m) that only flapping fliers reach; each has 3 houses and
+  trees. Falling off into the clouds brings you back to the plaza.
 - Houses and buildings are solid (you slide along their walls); a house between the camera and you is hidden while
   it's in the way.
 
@@ -32,9 +34,14 @@ Asked (owner): a web game on atamus.io (not Roblox), on its own page; the cargo 
 - You ride your pet (the courier on its back: shirt, cap, mail bag). **Phone:** put a thumb down on the left half of
   the screen for a joystick there; drag elsewhere to turn the camera (up/down tilts it); two fingers pinch to zoom.
   **Computer:** WASD / arrows, drag to turn, the wheel zooms. Movement is relative to the camera.
-- **Flying (owner, 2026-11-08):** on a flier, moving forward climbs or dives the way the camera looks (look up, from
-  below, to climb; look down to dive; the camera can go below a flier); it hovers when stopped and walks when on the
-  ground. Up to 95 m.
+- **How pets move (owner, 2026-11-08):** a pet only turns to face where it's going (it never tilts up or down).
+  - **Land pets** jump (Space / Jump): high from standing, far on the run (1.6× speed in the air); a jump gets them up a
+    ledge.
+  - **Flapping fliers** (Butterfly, Owl, Dragon, Ice Dragon): moving forward climbs or dives the way the camera looks
+    (look up, from below, to climb; the camera can go below them); they hover when stopped; up to 130 m. They fly at
+    0.75× and walk at 0.7× their speed.
+  - **Gliders** (Parrot, Pegasus, Phoenix, Pterodactyl): can't climb; they jump and glide, sinking 1.6 m/s (faster
+    looking down) at 1.25× speed, and walk at 0.95×; they can step off the edge.
 - A pet grows 1.5% bigger with each level (owner, 2026-11-08), so a level 20 pet is about 29% bigger; others see it too.
 
 ## Animal control (owner, 2026-11-08)
@@ -54,7 +61,7 @@ Asked (owner): a web game on atamus.io (not Roblox), on its own page; the cargo 
 ## Delivering
 
 - Riding into the pickup ring fills your bag with parcels (as many as your pet's bag holds), each for a random house;
-  on a flier about 3 in 10 are for island houses. Switching to a pet that can't fly hands island parcels back.
+  on a flapping flier about 3 in 10 are for island houses (any island), on a glider for the low ones only. Switching to a pet that can't fly hands island parcels back.
 - Each house you have a parcel for shows a gold beam (pink for an island house) with a spinning parcel over its mailbox; a gold arrow over your pet
   points to the nearest one (or back to the post office when the bag's empty).
 - Riding within 3.6 m of that mailbox delivers: **8 coins + 1 per 10 m from the post office**, **double
@@ -86,6 +93,7 @@ Asked (owner): a web game on atamus.io (not Roblox), on its own page; the cargo 
   leaving **N Treats** for its kind (5 + 1 per level it had). Treats show on that kind's cards. In the training yard a
   Treats button trains the pet you ride a level for Treats instead of coins: 1 per level up to level 4, 2 up to 8, 3 up
   to 12, 4 up to 16, 5 after.
+- **Beds:** you can have 6 pets plus 2 for each bed in your home; eggs show Full when you're at the limit.
 - **Training yard** (ride into its ring): trains the pet you ride a level for coins (40 × 1.32 per level, × 1 / 1.6 / 2.6
   / 4 by rarity), up to level 20: each level +5% speed; every 5 levels one more parcel in the bag.
 
@@ -107,7 +115,6 @@ Asked (owner): a web game on atamus.io (not Roblox), on its own page; the cargo 
 - **Chat (owner, 2026-11-08):** Chat (the button, or Enter or / on a computer) opens a line to type in (up to 120 characters,
   one message per 1.2 s); messages show in a list at the bottom left for 12 s and as a speech bubble over the sender for
   6 s. Online only.
-- Your name is a random two words (kept in the browser).
 - **Contracts** (the contract board, owner 2026-11-08: shorter ones too): anyone starts one when none is running:
   - **Rush Order:** 3 + 3 per player parcels in 1 minute, 22 coins per parcel of the goal.
   - **Quick Contract:** 5 + 4 per player in 1:30, 26 per parcel.
@@ -117,6 +124,38 @@ Asked (owner): a web game on atamus.io (not Roblox), on its own page; the cargo 
   consolation by how close the room came (owner, 2026-11-08): **a Training Ribbon at 75%+ of the goal, 3 Speed Candies
   at 40%+**. Shown top right while it runs: time left, the room's progress, your
   count. Offline you can run one alone (goal as for 1 player).
+
+## Accounts (owner, 2026-11-08)
+
+- A login screen comes first: **Username** (3–16 letters, numbers or _, unique ignoring case) and **Password** (4–64
+  characters), **Log in** or **Create account**; no security questions. Errors: wrong name or password, name taken,
+  name or password not allowed. Passwords are stored hashed (scrypt).
+- Your data (coins, pets, items, Treats, deliveries, shirt, home) is kept on the server (`pet_accounts`): the page sends
+  it a second or two after a change, one save at a time, each built on the copy the server last confirmed; if the
+  server's copy moved on (a trade), the page takes the server's. The browser remembers you (`pet_tokens`) and logs you
+  straight back in. Logging in elsewhere sends the old page back to the login screen.
+- The first account made in a browser starts from the progress that browser had before accounts. Your name over your
+  head is your username.
+
+## Players (owner, 2026-11-08)
+
+- Next to another player (5 m), **F** (or the button with their name) opens a menu: **Trade** or **Party**, which sends
+  them an invite; invites pop up with ✓ / ✕ (30 s).
+- **Party:** up to 6; members show under your name (✕ leaves). A party can visit each other's homes.
+- **Trade:** both see each other's offer: tap your pets to offer them (not ones in a playpen) and type coins; when both
+  press Ready (any change un-readies both) the server swaps them. Everyone keeps at least one pet, and nobody goes over
+  their bed limit with what they get. Closing the panel cancels.
+
+## Homes (owner, 2026-11-08)
+
+- Buy a house: at any town or island house's door, **E** (or Home) opens Home: Buy for $2,500 ($5,000 on an island).
+  One house each; a green ring marks your door.
+- **E** at your door (Enter) takes you into your own copy of it, far off in the sky; only people in it see each other.
+  **E** on the doormat (Exit) takes you back out. **G** (Invite) asks your party in (Visit home).
+- **Build** (inside your home): a **Room** ($1,500 × rooms so far, up to 6, 14 m each, open to each other), a **Bed**
+  ($400, 2 more pets) or a **Playpen** ($800), each in the next free spot (4 a room). Tap a playpen to put a pet in it
+  (not the one you ride): it wanders there and earns coins a minute (2 / 3.5 / 5.5 / 8 by rarity, +5% per level), up
+  to 8 hours' worth, collected when you come home. A pet in a playpen can't be ridden, traded or sent to the farm.
 
 ## Celebrations (owner, 2026-11-08)
 
@@ -128,8 +167,7 @@ Asked (owner): a web game on atamus.io (not Roblox), on its own page; the cargo 
 
 ## Saving
 
-- Progress (coins, pets and levels, items, name, shirt, deliveries) is kept in this browser (localStorage), with no
-  account. The server trusts what browsers report (coins aren't checked).
+- See Accounts. The server trusts what pages report (coins aren't checked), except trades, which it checks and does.
 
 ## Rejected / removed
 

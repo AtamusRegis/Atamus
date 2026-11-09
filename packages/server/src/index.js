@@ -3,9 +3,10 @@ import fs from "node:fs";
 import express from "express";
 import cors from "cors";
 import { config } from "./config.js";
-import { migrate, cleanupExpired } from "./db.js";
+import { migrate, cleanupExpired, pool } from "./db.js";
 import { game } from "./gamehttp.js";
 import { attachPets } from "./pets.js";
+import { pgStore } from "./petstore.js";
 
 import { SERVER_BUILD as BUILD } from "./build.js";
 
@@ -56,7 +57,7 @@ async function main() {
 
   const server = http.createServer(app);
   // (owner, 2026-11-08) Pet Delivery Co. co-op: rooms, positions and contracts over a WebSocket at /pets
-  attachPets(server, { origins: config.allowedOrigins, allowLocal: process.env.ATAMUS_PTR === "1" });
+  attachPets(server, { origins: config.allowedOrigins, allowLocal: process.env.ATAMUS_PTR === "1", store: pgStore(pool) });
   server.listen(config.port, "127.0.0.1", () => {
     console.log(`Atamus server listening on 127.0.0.1:${config.port} (http + ws)`);
   });

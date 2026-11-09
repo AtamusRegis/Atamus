@@ -14,7 +14,7 @@ const touchy = matchMedia("(pointer: coarse)").matches;
 
 // ---- pets ----
 const RARITY = [{ name: "Common", c: "#6f7d8a" }, { name: "Rare", c: "#3a8ee6" }, { name: "Epic", c: "#a352e0" }, { name: "Legendary", c: "#e08a00" }];
-// speed in m/s, bag in parcels, fly: flies over everything (owner, 2026-11-08); body: how it's built; ears: what's on
+// speed in m/s, bag in parcels, fly: "fly" (flaps: goes anywhere, slower) or "glide" (fast, can't climb) (owner, 2026-11-08); body: how it's built; ears: what's on
 // its head; c / a: its colors
 const SPECIES = {
   pup: { name: "Pup", r: 0, speed: 7, bag: 2, c: "#c98b4f", a: "#7a4f28", body: "quad", ears: "flop", size: 1 },
@@ -24,22 +24,22 @@ const SPECIES = {
   fox: { name: "Fox", r: 1, speed: 9.5, bag: 3, c: "#e8722c", a: "#fff4ea", body: "quad", ears: "point", size: 1 },
   penguin: { name: "Penguin", r: 1, speed: 8.5, bag: 4, c: "#2b3440", a: "#f4f4f4", body: "bird", size: 1 },
   goat: { name: "Goat", r: 1, speed: 9, bag: 4, c: "#e6e1d6", a: "#9b8f7a", body: "quad", ears: "horns", size: 1.05 },
-  butterfly: { name: "Butterfly", r: 1, speed: 9, bag: 2, fly: true, c: "#3a8ee6", a: "#ffd84a", c2: "#e5534b", body: "butterfly", size: 1.1 },
-  parrot: { name: "Parrot", r: 1, speed: 9.5, bag: 3, fly: true, c: "#3fb36b", a: "#e5534b", body: "bird", wings: true, size: 1 },
+  butterfly: { name: "Butterfly", r: 1, speed: 9, bag: 2, fly: "fly", c: "#3a8ee6", a: "#ffd84a", c2: "#e5534b", body: "butterfly", size: 1.1 },
+  parrot: { name: "Parrot", r: 1, speed: 9.5, bag: 3, fly: "glide", c: "#3fb36b", a: "#e5534b", body: "bird", wings: true, size: 1 },
   stego: { name: "Stegosaurus", r: 1, speed: 8.5, bag: 5, c: "#7fae5a", a: "#e08a3a", body: "quad", plates: true, tail: "long", size: 1.25 },
   deer: { name: "Deer", r: 2, speed: 11.5, bag: 3, c: "#b9824e", a: "#f3e3cc", body: "quad", ears: "antlers", size: 1.15 },
   bear: { name: "Bear", r: 2, speed: 10, bag: 6, c: "#6b4a32", a: "#c9a27e", body: "quad", ears: "round", size: 1.3 },
   horse: { name: "Horse", r: 2, speed: 12.5, bag: 4, c: "#8a5a3a", a: "#2b1d14", body: "quad", ears: "point", legs: 1.4, size: 1.2 },
-  owl: { name: "Owl", r: 2, speed: 11, bag: 4, fly: true, c: "#9b7a55", a: "#f3e3cc", body: "bird", wings: true, ears: "tufts", size: 1.15 },
+  owl: { name: "Owl", r: 2, speed: 11, bag: 4, fly: "fly", c: "#9b7a55", a: "#f3e3cc", body: "bird", wings: true, ears: "tufts", size: 1.15 },
   trike: { name: "Triceratops", r: 2, speed: 11, bag: 6, c: "#5a8fb0", a: "#f3e3cc", body: "quad", frill: true, tail: "long", size: 1.3 },
   raptor: { name: "Raptor", r: 2, speed: 13, bag: 3, c: "#8aa04a", a: "#5a6a2a", body: "biped", tail: "long", size: 1.05 },
-  dragon: { name: "Dragon", r: 3, speed: 15, bag: 5, fly: true, c: "#3fb36b", a: "#ffd84a", body: "quad", wings: "big", ears: "horns", tail: "long", size: 1.35 },
+  dragon: { name: "Dragon", r: 3, speed: 15, bag: 5, fly: "fly", c: "#3fb36b", a: "#ffd84a", body: "quad", wings: "big", ears: "horns", tail: "long", size: 1.35 },
   unicorn: { name: "Unicorn", r: 3, speed: 16, bag: 4, c: "#fbf7ff", a: "#ff7ac8", body: "quad", ears: "horn", legs: 1.4, size: 1.25 },
-  pegasus: { name: "Pegasus", r: 3, speed: 15.5, bag: 4, fly: true, c: "#f4f6ff", a: "#9ad0ff", body: "quad", wings: "big", ears: "point", legs: 1.4, size: 1.25 },
-  phoenix: { name: "Phoenix", r: 3, speed: 17, bag: 3, fly: true, c: "#ff6a2a", a: "#ffd84a", body: "bird", wings: "big", tail: "fire", size: 1.25 },
+  pegasus: { name: "Pegasus", r: 3, speed: 15.5, bag: 4, fly: "glide", c: "#f4f6ff", a: "#9ad0ff", body: "quad", wings: "big", ears: "point", legs: 1.4, size: 1.25 },
+  phoenix: { name: "Phoenix", r: 3, speed: 17, bag: 3, fly: "glide", c: "#ff6a2a", a: "#ffd84a", body: "bird", wings: "big", tail: "fire", size: 1.25 },
   trex: { name: "T-Rex", r: 3, speed: 14.5, bag: 7, c: "#4f7a3a", a: "#e5d9a8", body: "biped", tail: "long", big: true, size: 1.4 },
-  ptero: { name: "Pterodactyl", r: 3, speed: 15, bag: 5, fly: true, c: "#b07a5a", a: "#e8c9a0", body: "bird", wings: "big", ears: "crest", size: 1.25 },
-  icedragon: { name: "Ice Dragon", r: 3, speed: 16, bag: 5, fly: true, c: "#bfe6ff", a: "#3a8ee6", body: "quad", wings: "big", ears: "horns", tail: "long", size: 1.35 },
+  ptero: { name: "Pterodactyl", r: 3, speed: 15, bag: 5, fly: "glide", c: "#b07a5a", a: "#e8c9a0", body: "bird", wings: "big", ears: "crest", size: 1.25 },
+  icedragon: { name: "Ice Dragon", r: 3, speed: 16, bag: 5, fly: "fly", c: "#bfe6ff", a: "#3a8ee6", body: "quad", wings: "big", ears: "horns", tail: "long", size: 1.35 },
 };
 // eggs: chance of each rarity (percent); the pet is any of that rarity
 const EGGS = [
@@ -69,9 +69,12 @@ const N1 = ["Swift", "Sunny", "Brave", "Zippy", "Lucky", "Happy", "Mighty", "Coz
 const N2 = ["Otter", "Robin", "Badger", "Panda", "Comet", "Pebble", "Maple", "Biscuit", "Rocket", "Clover", "Sparrow", "Mochi"];
 function fresh() { return { coins: 0, pets: [{ id: 1, sp: "pup", lv: 1 }], ride: 1, items: { snack: 0, ribbon: 0, ticket: 0 }, treats: {}, name: pick(N1) + " " + pick(N2), delivered: 0, nextId: 2, shirt: pick(["#3a8ee6", "#e5534b", "#3fb36b", "#a352e0", "#f2b01e", "#2bb3c0"]) }; }
 function load() { try { const s = JSON.parse(localStorage.getItem(SAVE)); if (s && Array.isArray(s.pets) && s.pets.length) { const f = Object.assign(fresh(), s); f.pets = f.pets.filter((p) => SPECIES[p.sp]); if (!f.pets.length) f.pets = fresh().pets; return f; } } catch (e) { /* none yet */ } return fresh(); }
-let save = load();
-const persist = () => { try { localStorage.setItem(SAVE, JSON.stringify(save)); } catch (e) { /* private mode */ } };
+// (owner, 2026-11-08) since accounts, the server keeps the data; what was in this browser before seeds the first account
+let save = load(), saveDirty = false;
+const SPECIES_SET = new Set(Object.keys(SPECIES));
+const persist = () => { saveDirty = true; };
 const riding = () => save.pets.find((p) => p.id === save.ride) || save.pets[0];
+const moveKind = () => SPECIES[riding().sp].fly || "land";
 const flies = () => !!SPECIES[riding().sp].fly;
 
 // ---- the world (shared with the server: pets-world.js): the town is a big floating island of plateaus and cliffs with
@@ -322,7 +325,7 @@ function banner(txt, color) { const b = $("banner"); b.textContent = txt; b.styl
 
 
 // ---- me ----
-const me = { x: SPAWN.x + (Math.random() - 0.5) * 8, y: 0, z: SPAWN.z + Math.random() * 3, yaw: Math.PI, moving: false, airborne: false, boostUntil: 0, bag: [], stunUntil: 0, stars: 0 };
+const me = { inst: 0, vy: 0, longJump: false, x: SPAWN.x + (Math.random() - 0.5) * 8, y: 0, z: SPAWN.z + Math.random() * 3, yaw: Math.PI, moving: false, airborne: false, boostUntil: 0, bag: [], stunUntil: 0, stars: 0 };
 let mine = null, myBubble = null;
 function mount() { if (mine) scene.remove(mine.g); mine = petModel(riding().sp, save.shirt); const sc = petScale(riding().lv); mine.g.scale.setScalar(sc); mine.top *= sc; mine.g.traverse((o) => (o.castShadow = true)); scene.add(mine.g); if (myBubble) { mine.g.add(myBubble.s); myBubble.s.position.y = mine.top + 2.4; } }
 mount();
@@ -396,10 +399,13 @@ function vehiclesDraw(dt) {
   vehs.forEach((m, i) => {
     if (online) { if (sampleAt(m.buf, rt, tmpS)) { m.x = tmpS.x; m.y = tmpS.y; m.z = tmpS.z; m.yaw = tmpS.yaw; } }
     else { const v = localVs[i]; m.x = v.x; m.y = v.y; m.z = v.z; m.yaw = v.yaw; m.mode = v.mode; m.target = v.target; }
-    m.g.position.set(m.x, m.y, m.z); m.g.rotation.y = m.yaw;
     const chasing = m.mode === 1;
-    if (!m.kind) { const ahead = terrain(m.x + Math.sin(m.yaw) * 2, m.z + Math.cos(m.yaw) * 2); m.pitch += (-Math.atan2(ahead - m.y, 2) * 0.9 - m.pitch) * Math.min(1, dt * 8); m.body.rotation.x = m.pitch; }
+    if (!m.kind) {   // (owner, 2026-11-08: rear clipping into the road) sit on the front and rear wheels, a little above the road
+      const sx = Math.sin(m.yaw), sz = Math.cos(m.yaw), front = terrain(m.x + sx * 1.6, m.z + sz * 1.6), rear = terrain(m.x - sx * 1.5, m.z - sz * 1.5);
+      m.y = Math.max((front + rear) / 2, terrain(m.x, m.z)) + 0.22; m.pitch += (-Math.atan2(front - rear, 3.1) - m.pitch) * Math.min(1, dt * 10); m.body.rotation.x = m.pitch;
+    }
     else { m.rotor.rotation.y += dt * 28; m.tail.rotation.x += dt * 34; m.body.rotation.x = chasing ? 0.18 : 0.06; m.beam.visible = chasing; }
+    m.g.position.set(m.x, m.y, m.z); m.g.rotation.y = m.yaw;
     m.red.material.color.set(chasing ? (flash ? "#ff3a3a" : "#5a1010") : "#7a2020"); m.blue.material.color.set(chasing ? (flash ? "#1a2a5a" : "#3a7aff") : "#203a7a");
   });
 }
@@ -414,7 +420,7 @@ let lastChaseToast = 0;
 
 // ---- the camera: behind and above me (below too, on a flier); drag to turn it, pinch (or the wheel) to zoom ----
 const cam = { yaw: 0, pitch: 0.5, dist: 14, goalDist: 14, y: 0 };
-const pitchMin = () => (flies() ? -0.75 : 0.18);
+const pitchMin = () => (moveKind() === "fly" && !me.inst ? -0.75 : 0.18);
 // (owner, 2026-11-08) a house between the camera and me is hidden while it's in the way
 const hiddenH = new Set();
 function placeCamera(dt) {
@@ -460,8 +466,13 @@ canvas.addEventListener("pointermove", (e) => {
 const up = (e) => { if (e.pointerId === joy.id) { joy.id = null; joy.x = joy.y = 0; joyEl.style.display = "none"; } drags.delete(e.pointerId); };
 canvas.addEventListener("pointerup", up); canvas.addEventListener("pointercancel", up);
 canvas.addEventListener("wheel", (e) => { e.preventDefault(); cam.goalDist = clamp(cam.goalDist * Math.exp(e.deltaY * 0.001), 7, 45); }, { passive: false });
-const typing = () => document.activeElement && document.activeElement.tagName === "INPUT";
-addEventListener("keydown", (e) => { if (typing()) return; keys.add(e.code); if (e.code === "Escape") closePanels(); if (e.code === "Enter" || e.code === "Slash") { e.preventDefault(); openChat(); } });
+const typing = () => { const a = document.activeElement; return !!a && a.tagName === "INPUT" && a.offsetParent !== null; };
+addEventListener("keydown", (e) => {
+  if (typing()) return; keys.add(e.code); if (e.code === "Escape") closePanels();
+  if ((e.code === "Enter" || e.code === "Slash") && loggedIn) { e.preventDefault(); openChat(); }
+  if (e.code === "Space") { e.preventDefault(); jumpQueued = performance.now() + 150; }
+  if (e.code === "KeyF") runAct("F"); if (e.code === "KeyE") runAct("E"); if (e.code === "KeyG") runAct("G");
+});
 addEventListener("keyup", (e) => keys.delete(e.code));
 addEventListener("blur", () => keys.clear());
 canvas.addEventListener("contextmenu", (e) => e.preventDefault());
@@ -483,10 +494,10 @@ function hud() {
   const items = $("items"); items.innerHTML = "";
   if (save.items.snack > 0) { const b = document.createElement("button"); b.className = "btn gold"; b.type = "button"; b.innerHTML = `${CANDY}<span class="n">${save.items.snack}</span>`; b.title = ITEMS.snack.name; b.disabled = me.boostUntil > performance.now(); b.onclick = useSnack; items.appendChild(b); }
 }
-const panels = ["p-pets", "p-shop", "p-train", "p-board"];
+const panels = ["p-pets", "p-shop", "p-train", "p-board", "p-player", "p-trade", "p-build", "p-home"];
 let openPanel = null;
-function show(id) { for (const p of panels) $(p).style.display = p === id ? "block" : "none"; openPanel = id; if (id === "p-pets") renderPets(); if (id === "p-shop") renderShop(); if (id === "p-train") renderTrain(); if (id === "p-board") renderBoard(); }
-function closePanels() { for (const p of panels) $(p).style.display = "none"; openPanel = null; }
+function show(id) { for (const p of panels) $(p).style.display = p === id ? "block" : "none"; openPanel = id; if (id === "p-pets") renderPets(); if (id === "p-shop") renderShop(); if (id === "p-train") renderTrain(); if (id === "p-board") renderBoard(); if (id === "p-player") renderPlayer(); if (id === "p-trade") renderTrade(); if (id === "p-build") renderBuild(); if (id === "p-home") renderHomeBuy(); }
+function closePanels() { if (openPanel === "p-trade" && trading) netSend({ t: "trade_cancel" }); for (const p of panels) $(p).style.display = "none"; openPanel = null; picking = -1; }
 for (const p of panels) $(p).querySelector(".x").onclick = closePanels;
 $("btn-pets").onclick = () => (openPanel === "p-pets" ? closePanels() : show("p-pets"));
 const WING = `<svg width="14" height="12" viewBox="0 0 14 12" style="vertical-align:-1px"><path d="M1 10C3 3 8 1 13 1c-1 5-5 9-12 9z" fill="#3a8ee6"/></svg>`;
@@ -496,11 +507,13 @@ function card(sp, lines, on, onclick) {
   if (onclick) d.onclick = onclick; return d;
 }
 const statLine = (p) => `<span class="stats"><span>Lv ${p.lv}</span><span>${petSpeed(p).toFixed(1)} m/s</span><span>${petBag(p)} bag</span></span>`;
+const PEN = `<svg class="ico" viewBox="0 0 24 24"><path d="M3 20V9m6 11V9m6 11V9m6 11V9M2 12h20M2 17h20" stroke="#a0703f" stroke-width="2" fill="none" stroke-linecap="round"/></svg>`;
 function renderPets() {
-  const el = $("petlist"); el.innerHTML = "";
+  const el = $("petlist"), pens = World.penPets(save); el.innerHTML = "";
   for (const p of save.pets.slice().sort((a, b) => SPECIES[b.sp].r - SPECIES[a.sp].r || a.sp.localeCompare(b.sp) || petSpeed(b) - petSpeed(a))) {
-    const t = save.treats[p.sp] || 0, d = card(p.sp, statLine(p) + (t ? `<span class="stats"><span>${TREAT} ${t}</span></span>` : ""), p.id === save.ride, () => ride(p.id));
-    if (p.id !== save.ride && save.pets.some((q) => q !== p && q.sp === p.sp)) {   // a spare: it can go to the farm
+    const t = save.treats[p.sp] || 0, penned = pens.has(p.id), d = card(p.sp, statLine(p) + (t ? `<span class="stats"><span>${TREAT} ${t}</span></span>` : "") + (penned ? `<span class="stats"><span>${PEN}</span></span>` : ""), p.id === save.ride, penned ? null : () => ride(p.id));
+    if (penned) d.classList.add("off");
+    if (p.id !== save.ride && !penned && save.pets.some((q) => q !== p && q.sp === p.sp)) {   // a spare: it can go to the farm
       const b = document.createElement("button"); b.className = "btn ghost small"; b.type = "button"; b.innerHTML = `Pet Farm +${tradeGives(p)} ${TREAT}`;
       b.onclick = (ev) => { ev.stopPropagation(); if (b.dataset.sure) trade(p); else { b.dataset.sure = 1; b.className = "btn gold small"; b.textContent = "Sure?"; } };
       d.appendChild(b);
@@ -509,16 +522,17 @@ function renderPets() {
   }
 }
 function trade(p) {
-  if (p.id === save.ride || !save.pets.some((q) => q !== p && q.sp === p.sp)) return;
+  if (p.id === save.ride || World.penPets(save).has(p.id) || !save.pets.some((q) => q !== p && q.sp === p.sp)) return;
   const n = tradeGives(p), name = SPECIES[p.sp].name;
   save.pets = save.pets.filter((q) => q !== p); save.treats[p.sp] = (save.treats[p.sp] || 0) + n; persist();
   toast(name + " → Pet Farm", "#3fb36b"); toast("+" + n + " " + name + " Treats", "#a0703f");
   emitConfetti(me.x, me.y + 3, me.z, 50, 4, 7); renderPets();
 }
 function ride(id) {
-  if (save.ride === id) return; save.ride = id; persist(); mount(); netSend({ t: "pet", sp: riding().sp, lv: riding().lv });
+  if (save.ride === id || World.penPets(save).has(id)) return; save.ride = id; persist(); mount(); netSend({ t: "pet", sp: riding().sp, lv: riding().lv });
+  if (moveKind() !== "fly") cam.pitch = Math.max(cam.pitch, 0.18);
   if (!flies()) {   // island parcels need wings: they go back; off the town island, back to the plaza
-    me.bag = me.bag.filter((i) => !houses[i].sky); cam.pitch = Math.max(cam.pitch, 0.18);
+    me.bag = me.bag.filter((i) => !houses[i].sky);
     if (!inside(me.x, me.z, 1.5)) { me.x = SPAWN.x; me.z = SPAWN.z; me.y = terrain(me.x, me.z); }
   }
   syncBeams(); if (openPanel === "p-pets") renderPets(); hudKey = "";
@@ -530,12 +544,14 @@ function renderShop() {
     d.innerHTML = `<svg width="84" height="84" viewBox="0 0 84 84"><ellipse cx="42" cy="46" rx="24" ry="31" fill="${egg.c}" stroke="${egg.s}" stroke-width="4"/><circle cx="34" cy="38" r="4" fill="${egg.s}"/><circle cx="50" cy="52" r="5" fill="${egg.s}"/></svg><span class="nm">${egg.name}</span>`
       + `<span class="stats">${egg.odds.map((o, r) => (o ? `<span style="color:${RARITY[r].c}">${o}%</span>` : "")).join("")}</span>`;
     const b = document.createElement("button"); b.className = "btn gold"; b.type = "button"; b.innerHTML = `<span class="coin" style="display:inline-block;vertical-align:-3px"></span> ${fmt(egg.price)}`; b.disabled = save.coins < egg.price; b.onclick = (ev) => { ev.stopPropagation(); buyEgg(egg, false); }; d.appendChild(b);
+    if (save.pets.length >= World.petCap(save)) { b.disabled = true; b.textContent = "Full"; }
     if (egg.id === "basic" && save.items.ticket > 0) { const t = document.createElement("button"); t.className = "btn"; t.type = "button"; t.textContent = ITEMS.ticket.name + " ×" + save.items.ticket; t.onclick = (ev) => { ev.stopPropagation(); buyEgg(egg, true); }; d.appendChild(t); }
     el.appendChild(d);
   }
 }
 function buyEgg(egg, ticket) {
   if (ticket ? save.items.ticket <= 0 : save.coins < egg.price) return;
+  if (save.pets.length >= World.petCap(save)) return;   // (owner, 2026-11-08) beds hold more pets
   if (ticket) save.items.ticket--; else save.coins -= egg.price;
   let roll = Math.random() * 100, r = 0; while (r < 3 && roll >= egg.odds[r]) { roll -= egg.odds[r]; r++; }
   const sp = pick(Object.keys(SPECIES).filter((k) => SPECIES[k].r === r)), p = { id: save.nextId++, sp, lv: 1 };
@@ -662,7 +678,8 @@ function contractOver(won, payN, progress, helped) {
 const STAR_PAY = 0.2;
 function fillBag() {
   const cap = petBag(riding()), before = me.bag.length; if (before >= cap) return;
-  const taken = new Set(me.bag), sky = flies(), town = houses.map((h, i) => i).filter((i) => !houses[i].sky), isl = houses.map((h, i) => i).filter((i) => houses[i].sky);
+  // island parcels: any island on a flapping flier, only the low ones (off the edge) on a glider
+  const kind = moveKind(), taken = new Set(me.bag), sky = kind !== "land", town = houses.map((h, i) => i).filter((i) => !houses[i].sky), isl = houses.map((h, i) => i).filter((i) => houses[i].sky && (kind === "fly" || houses[i].base < 20));
   while (me.bag.length < cap) { const i = sky && Math.random() < 0.3 ? pick(isl) : pick(town); if (!taken.has(i)) { taken.add(i); me.bag.push(i); } }
   toast("+" + (cap - before)); syncBeams(); hudKey = "";
   emitSparks(me.x, me.y + 2, me.z, 20, 4, ["#ffd35a", "#ffffff"], 0.7, -1, 0.8);
@@ -718,32 +735,73 @@ function bubble(text, old, parent, top) {
   const o = { s }; o.timer = setTimeout(() => { parent.remove(s); if (myBubble === o) myBubble = null; }, 6000); return o;
 }
 
-// ---- co-op: everyone in a room sees the others riding; the server shares where everyone is, runs animal control,
-// contracts and chat. A tab that's put away disconnects (and reconnects when it's back), and a reload replaces its old
-// connection, so nobody's left standing in town after they've gone (owner, 2026-11-08). ----
+// ---- co-op: everyone in a room sees the others riding; the server keeps your account and shares where everyone is,
+// runs animal control, contracts, chat, parties and trades. A tab that's put away disconnects (and reconnects when it's
+// back), and logging in again replaces the old connection, so nobody's left standing in town after they've gone. ----
 const WS_URL = /^(localhost|127\.0\.0\.1)$/.test(location.hostname) ? `ws://${location.host}/pets` : "wss://play.atamus.io/pets";
 let ws = null, netOk = false, myId = null, online = 1, retry = 1000, lastSent = 0, lastPos = "", hidden = document.hidden;
-const KEY = (() => { try { let k = sessionStorage.getItem("petdelivery.key"); if (!k) { k = Math.random().toString(36).slice(2) + Date.now().toString(36); sessionStorage.setItem("petdelivery.key", k); } return k; } catch (e) { return Math.random().toString(36).slice(2); } })();
-const others = new Map();   // id -> { name, sp, shirt, stars, buf, x, y, z, yaw, moving, m, tag, bub }
+const others = new Map();   // id -> { name, sp, lv, shirt, stars, inst, buf, x, y, z, yaw, moving, m, tag, bub }
 function netSend(o) { if (ws && ws.readyState === 1) ws.send(JSON.stringify(o)); }
 function connect() {
-  if (hidden || ws) return;
+  if (hidden || ws || kicked) return;
   try { ws = new WebSocket(WS_URL); } catch (e) { ws = null; setTimeout(connect, retry); return; }
   const sock = ws;
-  ws.onopen = () => { retry = 1000; netSend({ t: "hi", key: KEY, name: save.name, sp: riding().sp, lv: riding().lv, shirt: save.shirt, x: me.x, y: me.y, z: me.z }); };
+  ws.onopen = () => {
+    retry = 1000; $("lgo").disabled = $("lnew").disabled = false;
+    if (pendingAuth) { netSend(pendingAuth); pendingAuth = null; }
+    else if (getTok()) netSend(Object.assign({ t: "resume", token: getTok() }, meFields()));
+    else showLogin();
+  };
   ws.onmessage = (e) => { let m; try { m = JSON.parse(e.data); } catch (err) { return; } onNet(m); };
   ws.onclose = () => {
     if (ws === sock) ws = null;
-    const was = netOk; netOk = false; myId = null; clockOff = null; for (const id of [...others.keys()]) dropOther(id); online = 1; if (contract && !contract.local) contract = null; hudKey = "";
+    const was = netOk; netOk = false; myId = null; clockOff = null; saving = false; for (const id of [...others.keys()]) dropOther(id); online = 1; if (contract && !contract.local) contract = null; hudKey = "";
+    party = []; renderParty(); if (trading) { trading = null; if (openPanel === "p-trade") closePanels(); }
+    $("lgo").disabled = $("lnew").disabled = true;
     if (was && !hidden) toast("Offline");
-    if (!hidden) { setTimeout(connect, retry); retry = Math.min(15000, retry * 2); }
+    if (!hidden && !kicked) { setTimeout(connect, retry); retry = Math.min(15000, retry * 2); }
   };
   ws.onerror = () => {};
 }
 document.addEventListener("visibilitychange", () => {
   hidden = document.hidden;
-  if (hidden) { if (ws) ws.close(); } else { retry = 1000; last = performance.now(); connect(); }
+  if (hidden) { flushSave(true); if (ws) ws.close(); } else { retry = 1000; last = performance.now(); connect(); }
 });
+addEventListener("pagehide", () => flushSave(true));
+
+// ---- accounts (owner, 2026-11-08): a username and password; your pets, coins and home are kept on the server. This
+// browser remembers you (a token) so you're logged straight back in. The first account made in a browser starts from
+// the progress it had before accounts. ----
+const TOKEN = "petdelivery.token";
+let loggedIn = false, myName = "", rev = 0, saving = false, kicked = false, pendingAuth = null, lastSave = 0;
+const getTok = () => { try { return localStorage.getItem(TOKEN); } catch (e) { return null; } };
+const setTok = (t) => { try { if (t) localStorage.setItem(TOKEN, t); else localStorage.removeItem(TOKEN); } catch (e) { /* private mode */ } };
+const ERR = { name: "Names are 3–16 letters, numbers or _", pass: "Passwords need at least 4 characters", taken: "That name is taken", wrong: "Wrong name or password", server: "Something went wrong", kicked: "Logged in somewhere else" };
+function showLogin(msg) { $("login").style.display = "flex"; $("lerr").textContent = msg || ""; }
+function meFields() { return { sp: riding().sp, lv: riding().lv, shirt: save.shirt, x: me.x, y: me.y, z: me.z }; }
+function authSend(kind) {
+  const m = Object.assign({ t: kind, user: $("luser").value.trim(), pass: $("lpass").value }, meFields());
+  if (kind === "register") { try { if (!localStorage.getItem("petdelivery.claimed")) { const local = JSON.parse(localStorage.getItem(SAVE)); if (local) m.data = local; } } catch (e) { /* none */ } }
+  $("lerr").textContent = ""; kicked = false; registering = kind === "register";
+  if (ws && ws.readyState === 1) netSend(m); else { pendingAuth = m; connect(); }
+}
+let registering = false;
+$("login").addEventListener("submit", (e) => { e.preventDefault(); authSend("login"); });
+$("lnew").onclick = () => authSend("register");
+// what I've changed goes to the server: one save at a time, built on the copy it last confirmed
+function flushSave(now) {
+  if (!loggedIn || saving || !saveDirty || !netOk) return;
+  if (!now && performance.now() - lastSave < 1500) return;
+  saving = true; saveDirty = false; lastSave = performance.now();
+  const d = Object.assign({}, save); delete d.name; netSend({ t: "save", rev, data: d });
+}
+function adopt(data, r) {
+  save = Object.assign(World.cleanData(data, SPECIES_SET), { name: myName }); rev = r; saveDirty = false;
+  mount(); if (!SPECIES[riding().sp].fly) me.bag = me.bag.filter((i) => !houses[i].sky);
+  syncBeams(); hudKey = ""; uiKey = ""; if (openPanel && openPanel !== "p-trade") show(openPanel);
+  if (house && house.mine) buildHouse(houseMsgMine());
+}
+
 function nameTag(name, stars) {
   const c = document.createElement("canvas"); c.width = 256; c.height = 96; const g = c.getContext("2d");
   g.font = "800 30px system-ui, sans-serif"; const w = Math.min(250, g.measureText(name).width + 28);
@@ -755,7 +813,7 @@ function addOther(p) {
   if (p.id === myId) return; const old = others.get(p.id); dropOther(p.id);
   const sp = SPECIES[p.sp] ? p.sp : "pup", m = petModel(sp, p.shirt || "#3a8ee6"), lv = clamp(p.lv | 0, 1, MAXLV), sc = petScale(lv); m.g.scale.setScalar(sc); m.top *= sc; const stars = p.stars || 0, tag = nameTag(String(p.name || "Courier").slice(0, 18), stars);
   tag.position.y = m.top + 1.2; m.g.add(tag); const y = Number.isFinite(p.y) ? p.y : terrain(p.x, p.z); m.g.position.set(p.x, y, p.z); scene.add(m.g);
-  others.set(p.id, { name: p.name, sp, lv, shirt: p.shirt, stars, buf: old ? old.buf : [], x: p.x, y, z: p.z, yaw: p.yaw || 0, moving: false, m, tag, bub: null });
+  others.set(p.id, { name: p.name, sp, lv, shirt: p.shirt, stars, inst: p.inst || 0, buf: old ? old.buf : [], x: p.x, y, z: p.z, yaw: p.yaw || 0, moving: false, m, tag, bub: null });
 }
 function dropOther(id) { const o = others.get(id); if (!o) return; scene.remove(o.m.g); if (o.bub) clearTimeout(o.bub.timer); others.delete(id); }
 function setContract(c) {
@@ -765,28 +823,50 @@ function setContract(c) {
   hudKey = ""; if (openPanel === "p-board") renderBoard();
 }
 function onNet(m) {
-  if (m.t === "welcome") { if (stale(m.web)) return; myId = m.id; netOk = true; for (const p of m.players) addOther(p); online = m.players.length + 1; setContract(m.contract); me.stars = m.stars || 0; hudKey = ""; }
-  else if (m.t === "join") { addOther(m.p); online = others.size + 1; hudKey = ""; }
-  else if (m.t === "leave") { dropOther(m.id); online = others.size + 1; hudKey = ""; }
-  else if (m.t === "snap") {
-    serverTime(m.ts);
-    for (const [id, x, z, yaw, mv, y, st] of m.ps) {
-      const o = others.get(id); if (!o) continue;
-      pushSample(o.buf, m.ts, { x, y: Number.isFinite(y) ? y : terrain(x, z), z, yaw }); o.moving = !!mv;
-      if ((st || 0) !== o.stars) { o.stars = st || 0; o.m.g.remove(o.tag); o.tag = nameTag(String(o.name || "Courier").slice(0, 18), o.stars); o.tag.position.y = o.m.top + 1.2; o.m.g.add(o.tag); }
+  switch (m.t) {
+    case "welcome": {
+      if (stale(m.web)) return;
+      setTok(m.token); if (registering) { try { localStorage.setItem("petdelivery.claimed", "1"); } catch (e) { /* private mode */ } registering = false; }
+      const again = loggedIn && myName === m.name; myName = m.name; myId = m.id; netOk = true; loggedIn = true; $("login").style.display = "none"; if (document.activeElement && document.activeElement.blur) document.activeElement.blur();
+      if (again && saveDirty && m.rev === rev) { save.name = myName; flushSave(true); } else adopt(m.data, m.rev);   // back after a drop: my unsaved progress goes up
+      if (me.inst) leaveHouseLocal();
+      for (const p of m.players) addOther(p); online = m.players.length + 1; setContract(m.contract); me.stars = m.stars || 0; hudKey = ""; uiKey = "";
+      break;
     }
+    case "auth_err": if (m.why === "expired") { setTok(null); showLogin(); } else showLogin(ERR[m.why] || ERR.server); break;
+    case "kicked": kicked = true; loggedIn = false; showLogin(ERR.kicked); break;
+    case "saved": rev = m.rev; saving = false; break;
+    case "data": saving = false; adopt(m.data, m.rev); break;
+    case "join": addOther(m.p); online = others.size + 1; hudKey = ""; break;
+    case "leave": dropOther(m.id); online = others.size + 1; hudKey = ""; break;
+    case "snap":
+      serverTime(m.ts);
+      for (const [id, x, z, yaw, mv, y, st, inst] of m.ps) {
+        const o = others.get(id); if (!o) continue;
+        if ((inst || 0) !== o.inst) { o.inst = inst || 0; o.buf.length = 0; }
+        pushSample(o.buf, m.ts, { x, y: Number.isFinite(y) ? y : terrain(x, z), z, yaw }); o.moving = !!mv;
+        if ((st || 0) !== o.stars) { o.stars = st || 0; o.m.g.remove(o.tag); o.tag = nameTag(String(o.name || "Courier").slice(0, 18), o.stars); o.tag.position.y = o.m.top + 1.2; o.m.g.add(o.tag); }
+      }
+      break;
+    case "veh": serverTime(m.ts); m.v.forEach((r, i) => { const h = vehs[i]; if (!h) return; pushSample(h.buf, m.ts, { x: r[0], y: r[1], z: r[2], yaw: r[3] }); h.mode = r[4]; h.target = r[5]; }); break;
+    case "pet": { const o = others.get(m.id); if (o) addOther({ id: m.id, name: o.name, sp: m.sp, lv: m.lv, shirt: o.shirt, stars: o.stars, inst: o.inst, x: o.x, y: o.y, z: o.z, yaw: o.yaw }); break; }
+    case "fx": { const o = others.get(m.id); if (o && o.inst === me.inst) emitConfetti(o.x, o.y + 2.5, o.z, 35, 4, 7); break; }
+    case "chat": { const o = others.get(m.id); chatLine(o ? o.name : m.name, m.text); if (o) o.bub = bubble(m.text, o.bub, o.m.g, o.m.top); break; }
+    case "chase": case "caught": case "escaped": case "stars": onVehEvent(m.t, m.stars || 0); break;
+    case "reload": stale(m.web, true); break;
+    case "contract": setContract(m.c); break;
+    case "done": contractOver(m.won, m.pay || 0, m.progress || 0, !!m.helped); break;
+    case "invited": invites.push({ from: m.from, name: m.name, kind: m.kind, until: performance.now() + 28000 }); renderInvite(); break;
+    case "declined": toast(m.name + " ✕"); break;
+    case "party": party = m.members || []; renderParty(); uiKey = ""; break;
+    case "trade": { const first = !trading; trading = m; if (first) { offer = { pets: new Set(), coins: 0 }; show("p-trade"); } else if (openPanel === "p-trade") renderTrade(); break; }
+    case "trade_end": trading = null; if (openPanel === "p-trade") closePanels(); toast(m.done ? "Traded!" : "Trade cancelled", m.done ? "#3fb36b" : undefined); if (m.done) emitConfetti(me.x, me.y + 3, me.z, 60, 4, 7); break;
+    case "home": enterHome(m); break;
+    case "home_left": leaveHouseLocal(); break;
   }
-  else if (m.t === "veh") { serverTime(m.ts); m.v.forEach((r, i) => { const h = vehs[i]; if (!h) return; pushSample(h.buf, m.ts, { x: r[0], y: r[1], z: r[2], yaw: r[3] }); h.mode = r[4]; h.target = r[5]; }); }
-  else if (m.t === "pet") { const o = others.get(m.id); if (o) addOther({ id: m.id, name: o.name, sp: m.sp, lv: m.lv, shirt: o.shirt, stars: o.stars, x: o.x, y: o.y, z: o.z, yaw: o.yaw }); }
-  else if (m.t === "fx") { const o = others.get(m.id); if (o) emitConfetti(o.x, o.y + 2.5, o.z, 35, 4, 7); }
-  else if (m.t === "chat") { const o = others.get(m.id); chatLine(o ? o.name : m.name, m.text); if (o) o.bub = bubble(m.text, o.bub, o.m.g, o.m.top); }
-  else if (m.t === "chase" || m.t === "caught" || m.t === "escaped" || m.t === "stars") onVehEvent(m.t, m.stars || 0);
-  else if (m.t === "reload") stale(m.web, true);
-  else if (m.t === "contract") setContract(m.c);
-  else if (m.t === "done") contractOver(m.won, m.pay || 0, m.progress || 0, !!m.helped);
 }
-// (owner, 2026-11-08) updates: when a new build of the page is live, everyone reloads onto it (progress is saved in the
-// browser); this page's own build is read from version.json when it loads
+// (owner, 2026-11-08) updates: when a new build of the page is live, everyone reloads onto it (progress is saved on the
+// server); this page's own build is read from version.json when it loads
 let myBuild = null;
 fetch("version.json?t=" + Date.now(), { cache: "no-store" }).then((r) => (r.ok ? r.json() : null)).then((j) => { if (j && j.v) myBuild = j.v; }).catch(() => {});
 function stale(web, told) {
@@ -794,7 +874,7 @@ function stale(web, told) {
   let lastR = 0; try { lastR = +sessionStorage.getItem("petdelivery.reload") || 0; } catch (e) { /* none */ }
   if (Date.now() - lastR < 60000) return false;   // never loop
   try { sessionStorage.setItem("petdelivery.reload", String(Date.now())); } catch (e) { /* private mode */ }
-  persist(); banner("Updating!", "#ffd35a"); setTimeout(() => location.reload(), 1500); return true;
+  flushSave(true); banner("Updating!", "#ffd35a"); setTimeout(() => location.reload(), 1500); return true;
 }
 function sendPos(force) {
   const s = [me.x.toFixed(2), me.y.toFixed(1), me.z.toFixed(2), me.yaw.toFixed(2), me.moving ? 1 : 0].join();
@@ -802,82 +882,317 @@ function sendPos(force) {
   netSend({ t: "pos", x: +me.x.toFixed(2), y: +me.y.toFixed(2), z: +me.z.toFixed(2), yaw: +me.yaw.toFixed(2), mv: me.moving ? 1 : 0 }); lastPos = s;
 }
 
+// ---- players (owner, 2026-11-08): F next to someone opens a menu to trade with them or invite them to your party;
+// invites pop up to accept or turn down. A party can visit each other's homes. ----
+let party = [], invites = [], target = null;
+function nearPlayer() { let best = null, bd = 5; for (const [id, o] of others) { if (o.inst !== me.inst) continue; const d = hyp(o.x - me.x, o.z - me.z, o.y - me.y); if (d < bd) { bd = d; best = id; } } return best; }
+function renderPlayer() {
+  const o = others.get(target), el = $("player"); if (!o) { closePanels(); return; }
+  $("pname").textContent = o.name; el.innerHTML = "";
+  const inParty = party.some((q) => q.id === target);
+  const t = document.createElement("button"); t.className = "btn gold"; t.type = "button"; t.textContent = "Trade"; t.disabled = !!trading; t.onclick = () => { netSend({ t: "invite", id: target, kind: "trade" }); toast("→ " + o.name); closePanels(); };
+  const p = document.createElement("button"); p.className = "btn green"; p.type = "button"; p.textContent = inParty ? "Party ✓" : "Party"; p.disabled = inParty; p.onclick = () => { netSend({ t: "invite", id: target, kind: "party" }); toast("→ " + o.name); closePanels(); };
+  el.append(t, p);
+}
+const KIND_NAME = { party: "Party", trade: "Trade", home: "Visit home" };
+function renderInvite() {
+  invites = invites.filter((v) => v.until > performance.now());
+  const el = $("invite"), v = invites[0]; if (!v) { el.style.display = "none"; return; }
+  el.style.display = "flex"; $("iname").textContent = v.name; $("ikind").textContent = KIND_NAME[v.kind] || "";
+  $("iyes").onclick = () => { netSend({ t: "answer", from: v.from, kind: v.kind, yes: true }); invites.shift(); renderInvite(); };
+  $("ino").onclick = () => { netSend({ t: "answer", from: v.from, kind: v.kind, yes: false }); invites.shift(); renderInvite(); };
+}
+function renderParty() {
+  const el = $("party"); el.innerHTML = "";
+  if (party.length < 2) { el.style.display = "none"; return; }
+  el.style.display = "flex";
+  for (const q of party) { const s = document.createElement("span"); s.className = "pill"; s.textContent = q.id === myId ? myName : q.name; el.appendChild(s); }
+  const x = document.createElement("button"); x.className = "x"; x.type = "button"; x.textContent = "✕"; x.onclick = () => netSend({ t: "party_leave" }); el.appendChild(x);
+}
+// a trade: each side picks pets (not ones in a playpen) and coins to give; when both are ready the server swaps them
+let trading = null, offer = { pets: new Set(), coins: 0 };
+function sendOffer() { netSend({ t: "trade_offer", pets: [...offer.pets], coins: offer.coins }); }
+function renderTrade() {
+  if (!trading) return;
+  const pens = World.penPets(save), el = $("trade"); $("tname").textContent = trading.name; el.innerHTML = "";
+  const chip = (p, on, click) => { const d = document.createElement("button"); d.type = "button"; d.className = "chip" + (on ? " on" : ""); d.innerHTML = `<img alt="" src="${portrait(p.sp)}"><span>Lv ${p.lv}</span>`; d.title = SPECIES[p.sp].name; if (click) d.onclick = click; else d.disabled = true; return d; };
+  const mineH = document.createElement("div"); mineH.className = "tside";
+  mineH.innerHTML = `<b>${myName}${trading.me.ready ? " ✓" : ""}</b>`;
+  const grid = document.createElement("div"); grid.className = "chips";
+  for (const p of save.pets) if (!pens.has(p.id)) grid.appendChild(chip(p, offer.pets.has(p.id), () => { if (offer.pets.has(p.id)) offer.pets.delete(p.id); else offer.pets.add(p.id); sendOffer(); renderTrade(); }));
+  const coin = document.createElement("label"); coin.className = "coinin"; coin.innerHTML = `<span class="coin"></span>`;
+  const inp = document.createElement("input"); inp.type = "number"; inp.min = 0; inp.max = Math.floor(save.coins); inp.value = offer.coins; inp.inputMode = "numeric";
+  inp.onchange = () => { offer.coins = clamp(Math.floor(+inp.value || 0), 0, Math.floor(save.coins)); inp.value = offer.coins; sendOffer(); };
+  coin.appendChild(inp); mineH.append(grid, coin);
+  const theirs = document.createElement("div"); theirs.className = "tside"; theirs.innerHTML = `<b>${trading.name}${trading.them.ready ? " ✓" : ""}</b>`;
+  const g2 = document.createElement("div"); g2.className = "chips"; for (const p of trading.them.pets) g2.appendChild(chip(p, true, null));
+  const c2 = document.createElement("span"); c2.className = "coinin"; c2.innerHTML = `<span class="coin"></span> ${fmt(trading.them.coins)}`;
+  theirs.append(g2, c2);
+  const row = document.createElement("div"); row.className = "row2";
+  const ready = document.createElement("button"); ready.className = "btn green"; ready.type = "button"; ready.style.flex = "1"; ready.textContent = trading.me.ready ? "Ready ✓" : "Ready";
+  ready.onclick = () => { flushSave(true); netSend({ t: "trade_ready", on: !trading.me.ready }); };
+  row.appendChild(ready); el.append(mineH, theirs, row);
+}
+
+// ---- homes (owner, 2026-11-08): buy a house in town; its door (E) takes you into your own copy of it, far off in the
+// sky where nobody else is. Build rooms for space, beds (each holds 2 more pets) and playpens: a pet put in one earns
+// coins while you're away, collected when you come home. Invite your party in. ----
+const HOME = World.HOME, RS = HOME.roomSize, IN = { x: 5000, z: 5000 };
+const roomAt = (k) => ({ x: IN.x + (k % 3) * RS, z: IN.z + Math.floor(k / 3) * RS });
+const SLOTS = [[3.6, 4.2], [10.4, 4.2], [3.6, 10.4], [10.4, 10.4]];
+let house = null;   // { msg, mine, g, rects, pens: [{ m, cx, cz, x, z, yaw, tx, tz }] }
+const doorOf = (i) => { const h = houses[i]; return { x: h.x + Math.sin(h.yaw) * 5.4, z: h.z + Math.cos(h.yaw) * 5.4, y: h.base }; };
+const houseMsgMine = () => ({ host: myId, hostName: myName, home: save.home, pens: save.home ? save.home.items.map((t) => { const p = t.k === "pen" && t.pet && save.pets.find((q) => q.id === t.pet); return p ? { sp: p.sp, lv: p.lv } : null; }) : [], inst: -1, mine: true });
+const myRing = new THREE.Mesh(RINGG(1.6), ringM("#3fb36b")); myRing.visible = false; scene.add(myRing);
+function buildHouse(msg) {
+  if (house) scene.remove(house.g);
+  const g = new THREE.Group(), home = msg.home, rects = [], pens = [];
+  for (let k = 0; k < home.rooms; k++) {
+    const o = roomAt(k), has = (j) => j >= 0 && j < home.rooms;
+    box(RS, 0.3, RS, k % 2 ? "#e7cfa4" : "#dcc093", o.x + RS / 2, -0.15, o.z + RS / 2, g, false);
+    const col = k % 3, row = Math.floor(k / 3);
+    if (!(col > 0 && has(k - 1))) box(0.3, 1.3, RS, "#f4ead8", o.x, 0.65, o.z + RS / 2, g);
+    if (!(col < 2 && has(k + 1))) box(0.3, 1.3, RS, "#f4ead8", o.x + RS, 0.65, o.z + RS / 2, g);
+    if (!(row > 0 && has(k - 3))) { if (k === 0) { box(5, 1.3, 0.3, "#f4ead8", o.x + 2.5, 0.65, o.z, g); box(5, 1.3, 0.3, "#f4ead8", o.x + RS - 2.5, 0.65, o.z, g); } else box(RS, 1.3, 0.3, "#f4ead8", o.x + RS / 2, 0.65, o.z, g); }
+    if (!has(k + 3)) box(RS, 1.3, 0.3, "#f4ead8", o.x + RS / 2, 0.65, o.z + RS, g);
+  }
+  box(3.6, 0.06, 1.6, "#c8553d", IN.x + RS / 2, 0.03, IN.z + 1, g, false);   // the doormat: E here to go back out
+  home.items.forEach((t, i) => {
+    const o = roomAt(t.room), [sx, sz] = SLOTS[t.slot], x = o.x + sx, z = o.z + sz;
+    if (t.k === "bed") {
+      box(2.4, 0.5, 3.2, "#8a5a3a", x, 0.25, z, g); box(2.2, 0.35, 3, "#9ad0ff", x, 0.65, z, g); box(1.6, 0.3, 0.7, "#ffffff", x, 0.95, z - 1.05, g);
+      rects.push([x - 1.4, x + 1.4, z - 1.8, z + 1.8]);
+    } else {
+      for (let k = 0; k < 12; k++) { const a = (k / 12) * TAU; box(0.15, 1, 0.15, "#c98b4f", x + Math.cos(a) * 2.6, 0.5, z + Math.sin(a) * 2.6, g); }
+      const ring = new THREE.Mesh(new THREE.TorusGeometry(2.6, 0.07, 6, 32).rotateX(Math.PI / 2), mat("#c98b4f")); ring.position.set(x, 0.85, z); g.add(ring);
+      const grass = new THREE.Mesh(new THREE.CircleGeometry(2.5, 24).rotateX(-Math.PI / 2), mat("#9bd66f")); grass.position.set(x, 0.02, z); g.add(grass);
+      rects.push([x - 2.8, x + 2.8, z - 2.8, z + 2.8]);
+      const pp = msg.pens && msg.pens[i];
+      if (pp && SPECIES[pp.sp]) { const m = petModel(pp.sp); m.g.scale.setScalar(0.8 * petScale(pp.lv)); g.add(m.g); pens.push({ m, cx: x, cz: z, x, z, yaw: 0, tx: x, tz: z, wait: 0 }); }
+    }
+  });
+  scene.add(g); house = { msg, mine: !!msg.mine || msg.host === myId, g, rects, pens };
+}
+function inHouse(x, z) {
+  if (!house) return false;
+  for (let k = 0; k < house.msg.home.rooms; k++) { const o = roomAt(k); if (x > o.x + 0.7 && x < o.x + RS - 0.7 && z > o.z + 0.7 && z < o.z + RS - 0.7) return true; }
+  return false;
+}
+const houseBlocked = (x, z) => house.rects.some((r) => x > r[0] - 0.6 && x < r[1] + 0.6 && z > r[2] - 0.6 && z < r[3] + 0.6);
+function enterHome(msg) {
+  const mineToo = msg.host === myId; if (mineToo) msg.mine = true;
+  closePanels(); buildHouse(msg); me.inst = msg.inst || -1; me.bagBefore = me.bag.slice();
+  me.x = IN.x + RS / 2; me.z = IN.z + 2.6; me.y = 0; me.vy = 0; me.yaw = 0; cam.yaw = Math.PI; cam.pitch = Math.max(0.5, cam.pitch); cam.y = 0;
+  if (mineToo) collectPens();
+  else toast(msg.hostName);
+  uiKey = ""; sendPos(true);
+}
+function leaveHouseLocal() {
+  if (!house) { me.inst = 0; return; }
+  const i = house.msg.home.house, d = doorOf(i), h = houses[i];
+  scene.remove(house.g); house = null; me.inst = 0;
+  me.x = d.x + Math.sin(h.yaw) * 2; me.z = d.z + Math.cos(h.yaw) * 2; me.y = floorAt(me.x, me.z, d.y + 1); me.vy = 0; me.yaw = h.yaw; cam.yaw = h.yaw + Math.PI; cam.y = me.y;
+  if (openPanel === "p-build") closePanels(); uiKey = ""; sendPos(true);
+}
+function exitHome() { netSend({ t: "home_exit" }); leaveHouseLocal(); }
+// coins the playpens have made since they were last collected
+function collectPens() {
+  if (!save.home) return 0;
+  let total = 0; const now = Date.now();
+  for (const t of save.home.items) if (t.k === "pen" && t.pet) {
+    const p = save.pets.find((q) => q.id === t.pet); if (!p) { delete t.pet; continue; }
+    const min = Math.min((now - (t.since || now)) / 60000, World.PEN_MAX_H * 60);
+    total += min * World.PEN_RATE[SPECIES[p.sp].r] * (1 + 0.05 * (p.lv - 1)); t.since = now;
+  }
+  total = Math.floor(total);
+  if (total > 0) { save.coins += total; toast("+" + fmt(total), "#e08a00"); emitConfetti(me.x, me.y + 3, me.z, 40, 4, 7); hudKey = ""; }
+  persist(); return total;
+}
+function freeSlot() {
+  const used = new Set(save.home.items.map((t) => t.room * 10 + t.slot));
+  for (let r = 0; r < save.home.rooms; r++) for (let s = 0; s < HOME.slots; s++) if (!used.has(r * 10 + s) && !(r === 0 && s < 2 && false)) return { room: r, slot: s };
+  return null;
+}
+function buyHouse(i) {
+  const price = World.housePrice(i); if (save.home || save.coins < price) return;
+  save.coins -= price; save.home = { house: i, rooms: 1, items: [] }; persist(); flushSave(true);
+  closePanels(); banner("Home!", "#3fb36b"); firework(me.x, me.y + 2, me.z); emitConfetti(me.x, me.y + 3, me.z, 80, 5, 8); uiKey = ""; hudKey = "";
+}
+function renderHomeBuy() {
+  const el = $("homebuy"), i = homeTarget, price = World.housePrice(i); el.innerHTML = "";
+  const b = document.createElement("button"); b.className = "btn gold"; b.type = "button"; b.style.width = "100%";
+  b.innerHTML = `Buy <span class="coin" style="display:inline-block;vertical-align:-3px"></span> ${fmt(price)}`; b.disabled = save.coins < price || !netOk; b.onclick = () => buyHouse(i);
+  el.appendChild(b);
+}
+let homeTarget = -1, picking = -1;
+function build(kind) {
+  const h = save.home; if (!h) return;
+  const price = kind === "room" ? World.roomPrice(h.rooms) : HOME[kind];
+  if (save.coins < price) return;
+  if (kind === "room") { if (h.rooms >= HOME.maxRooms) return; h.rooms++; }
+  else { const s = freeSlot(); if (!s) return; h.items.push({ k: kind, room: s.room, slot: s.slot }); }
+  save.coins -= price; persist(); flushSave(true); buildHouse(houseMsgMine()); renderBuild(); hudKey = "";
+  emitConfetti(me.x, me.y + 2.5, me.z, 30, 3, 6);
+}
+function renderBuild() {
+  const el = $("build"), h = save.home; el.innerHTML = ""; if (!h) return;
+  if (picking >= 0) {   // choosing a pet for a playpen
+    const pens = World.penPets(save), grid = document.createElement("div"); grid.className = "grid";
+    const none = document.createElement("div"); none.className = "card"; none.innerHTML = `<span class="nm">—</span>`; none.onclick = () => setPen(picking, null); grid.appendChild(none);
+    for (const p of save.pets) if (p.id !== save.ride && (!pens.has(p.id) || h.items[picking].pet === p.id)) grid.appendChild(card(p.sp, statLine(p), h.items[picking].pet === p.id, () => setPen(picking, p.id)));
+    el.appendChild(grid); return;
+  }
+  const row = document.createElement("div"); row.className = "buildrow";
+  const opt = (label, kind, price, ok) => { const b = document.createElement("button"); b.className = "btn gold"; b.type = "button"; b.innerHTML = `${label}<br><span class="coin" style="display:inline-block;width:12px;height:12px;vertical-align:-2px"></span> ${fmt(price)}`; b.disabled = !ok || save.coins < price; b.onclick = () => build(kind); row.appendChild(b); };
+  const slot = !!freeSlot();
+  opt("Room", "room", World.roomPrice(h.rooms), h.rooms < HOME.maxRooms); opt("Bed", "bed", HOME.bed, slot); opt("Playpen", "pen", HOME.pen, slot);
+  el.appendChild(row);
+  const cap = document.createElement("div"); cap.className = "stats"; cap.style.margin = "10px 0"; cap.innerHTML = `<span>${save.pets.length} / ${World.petCap(save)}</span>`; el.appendChild(cap);
+  const grid = document.createElement("div"); grid.className = "grid";
+  h.items.forEach((t, i) => {
+    if (t.k !== "pen") return;
+    const p = t.pet && save.pets.find((q) => q.id === t.pet);
+    const d = p ? card(p.sp, statLine(p), false, () => { picking = i; renderBuild(); }) : document.createElement("div");
+    if (!p) { d.className = "card"; d.innerHTML = `<span class="nm">Playpen</span><span class="stats">+</span>`; d.onclick = () => { picking = i; renderBuild(); }; }
+    grid.appendChild(d);
+  });
+  el.appendChild(grid);
+}
+function setPen(i, id) {
+  collectPens(); const t = save.home.items[i]; if (!t) return;
+  if (id) { t.pet = id; t.since = Date.now(); } else { delete t.pet; delete t.since; }
+  picking = -1; persist(); flushSave(true); buildHouse(houseMsgMine()); renderBuild();
+}
+$("btn-build").onclick = () => { picking = -1; if (openPanel === "p-build") closePanels(); else show("p-build"); };
+
+// ---- what I can do where I am: talk to someone (F), a door or the doormat (E); buttons for them on a phone ----
+let uiKey = "", acts = [];
+function nearDoor() {
+  if (me.inst) return -1;
+  for (let i = 0; i < houses.length; i++) { const d = doorOf(i); if (Math.abs(me.y - d.y) < 3 && hyp(me.x - d.x, me.z - d.z) < 2.6) return i; }
+  return -1;
+}
+function context() {
+  const a = [], pl = netOk ? nearPlayer() : null;
+  if (pl !== null) { const o = others.get(pl); a.push({ key: "F", label: o.name, fn: () => { target = pl; show("p-player"); } }); }
+  if (me.inst && house) {
+    if (hyp(me.x - (IN.x + RS / 2), me.z - (IN.z + 1)) < 2.4) a.push({ key: "E", label: "Exit", fn: exitHome });
+    if (house.mine && party.length > 1) a.push({ key: "G", label: "Invite", fn: () => { netSend({ t: "home_invite" }); toast("→ Party"); } });
+  } else if (loggedIn) {
+    const i = nearDoor();
+    if (i >= 0 && save.home && save.home.house === i) a.push({ key: "E", label: "Enter", fn: () => (netOk ? netSend({ t: "home_enter" }) : null) });
+    else if (i >= 0 && !save.home) a.push({ key: "E", label: "Home", fn: () => { homeTarget = i; show("p-home"); } });
+  }
+  return a;
+}
+function runAct(key) { const a = acts.find((q) => q.key === key); if (a) a.fn(); }
+function ui() {
+  acts = context();
+  const kind = me.inst ? "land" : moveKind();
+  const key = acts.map((a) => a.key + a.label).join("|") + "|" + kind + "|" + !!(house && house.mine) + "|" + party.length;
+  if (key === uiKey) return; uiKey = key;
+  const el = $("acts"); el.innerHTML = "";
+  for (const a of acts) { const b = document.createElement("button"); b.className = "btn ghost"; b.type = "button"; b.innerHTML = touchy ? a.label : `<kbd>${a.key}</kbd> ${a.label}`; b.onclick = () => runAct(a.key); el.appendChild(b); }
+  $("btn-jump").style.display = kind === "fly" ? "none" : "";
+  $("btn-build").style.display = house && house.mine ? "" : "none";
+  myRing.visible = !!save.home; if (save.home) { const d = doorOf(save.home.house); myRing.position.set(d.x, d.y + 0.12, d.z); }
+}
+
 // ---- the loop ----
-let last = performance.now(), clock = 0, zone = null;
-const SLOPE = 0.8, FLY_TOP = 95, FLY_SPEED_UP = 0.85;
+let last = performance.now(), clock = 0, zone = null, jumpQueued = 0;
+const SLOPE = 0.8, FLY_TOP = 130, FLY_SPEED_UP = 0.85, GRAV = 26;
+// (owner, 2026-11-08) how each pet gets around: land pets jump (high from standing, far on the run); flapping fliers go
+// anywhere but fly and walk slower; gliders are fast but can't climb, sinking slowly as they glide, and walk well
+const MOVE = { land: { ground: 1, air: 1 }, fly: { ground: 0.7, air: 0.75 }, glide: { ground: 0.95, air: 1.25 } };
 function floorAt(x, z, y) {
+  if (me.inst) return 0;
   const isl = islandAt(x, z); if (isl && y > isl.y - 3) return isl.y;
-  return inside(x, z) ? terrain(x, z) : -60;
+  return inside(x, z) ? terrain(x, z) : -200;
 }
 function step(dt) {
   clock += dt;
   const now = performance.now();
+  if (!loggedIn) { joy.x = joy.y = 0; }
   // where the joystick (or keys) point, turned by the camera
   let jx = joy.x, jy = joy.y;
-  if (keys.has("KeyW") || keys.has("ArrowUp")) jy -= 1; if (keys.has("KeyS") || keys.has("ArrowDown")) jy += 1;
-  if (keys.has("KeyA") || keys.has("ArrowLeft")) jx -= 1; if (keys.has("KeyD") || keys.has("ArrowRight")) jx += 1;
+  if (loggedIn && !typing()) {
+    if (keys.has("KeyW") || keys.has("ArrowUp")) jy -= 1; if (keys.has("KeyS") || keys.has("ArrowDown")) jy += 1;
+    if (keys.has("KeyA") || keys.has("ArrowLeft")) jx -= 1; if (keys.has("KeyD") || keys.has("ArrowRight")) jx += 1;
+  }
   const l = hyp(jx, jy); if (l > 1) { jx /= l; jy /= l; }
   const fx = -Math.sin(cam.yaw), fz = -Math.cos(cam.yaw), rx = Math.cos(cam.yaw), rz = -Math.sin(cam.yaw);
   const mx = fx * -jy + rx * jx, mz = fz * -jy + rz * jx, ml = hyp(mx, mz);
-  const p = riding(), sp = petSpeed(p) * (me.boostUntil > now ? SNACK_BOOST : 1), fly = flies(), stunned = me.stunUntil > now;
+  const kind = me.inst ? "land" : moveKind(), M = MOVE[kind], p = riding(), stunned = me.stunUntil > now;
+  const floor0 = floorAt(me.x, me.z, me.y), grounded = me.y - floor0 < 0.08;
+  let sp = petSpeed(p) * (me.boostUntil > now ? SNACK_BOOST : 1) * (grounded ? M.ground : M.air);
+  if (kind === "land" && !grounded && me.longJump) sp *= 1.6;
   me.moving = ml > 0.08 && !stunned;
   if (me.moving) {
-    const v = sp * Math.min(1, ml) * dt;
-    const nx = me.x + (mx / ml) * v, nz = me.z + (mz / ml) * v;
+    const v = sp * Math.min(1, ml) * dt, nx = me.x + (mx / ml) * v, nz = me.z + (mz / ml) * v;
     const ok = (x, z) => {
+      if (me.inst) return inHouse(x, z) && !houseBlocked(x, z);
       if (hyp(x, z) > LIMIT || blocked(x, z, me.y)) return false;
-      if (fly) return true;
-      if (!inside(x, z, 1.5)) return false;   // the edge of the island
-      return terrain(x, z) - terrain(me.x, me.z) <= SLOPE * v + 0.03;   // cliffs are too steep to climb
+      if (kind === "fly") return true;
+      if (kind === "land" && !inside(x, z, 1.5) && !islandAt(x, z)) return false;   // the edge (gliders can step off)
+      return floorAt(x, z, me.y) - me.y <= SLOPE * v + 0.05;   // too steep to climb (a jump gets you up a ledge)
     };
     if (ok(nx, me.z)) me.x = nx; if (ok(me.x, nz)) me.z = nz;   // slide along walls
-    const want = Math.atan2(mx, mz); me.yaw = lerpYaw(me.yaw, want, Math.min(1, dt * 12));
+    me.yaw = lerpYaw(me.yaw, Math.atan2(mx, mz), Math.min(1, dt * 12));   // turn to where it's going (never tilting)
   }
-  // height: a ground pet keeps to the land (dropping off ledges); a flier climbs or dives as it flies forward, the way
-  // the camera looks, and hovers when stopped
   const floor = floorAt(me.x, me.z, me.y);
-  if (fly) {
+  if (kind === "fly") {   // climbs or dives as it flies forward, the way the camera looks; hovers when stopped
     const fwd = me.moving ? clamp(-jy, 0, 1) : 0, climb = clamp((0.42 - cam.pitch) * 1.8, -1, 1);
-    me.y += climb * fwd * sp * FLY_SPEED_UP * dt; me.y = Math.min(me.y, FLY_TOP); if (me.y < floor) me.y = floor;
+    me.y += climb * fwd * sp * FLY_SPEED_UP * dt; me.y = Math.min(me.y, FLY_TOP); if (me.y < floor) me.y = floor; me.vy = 0;
   } else {
-    if (!inside(me.x, me.z) && !islandAt(me.x, me.z)) { me.x = SPAWN.x; me.z = SPAWN.z; me.y = terrain(me.x, me.z); }
-    const f = floorAt(me.x, me.z, me.y); me.y = me.y > f ? Math.max(f, me.y - dt * 22) : f;
+    if (jumpQueued > now && grounded && !stunned) { me.vy = me.moving ? 7.5 : 11; me.longJump = me.moving; jumpQueued = 0; }
+    me.vy = (me.vy || 0) - GRAV * dt;
+    if (kind === "glide" && me.vy < 0 && me.y - floor > 1.2) me.vy = Math.max(me.vy, -(1.6 + Math.max(0, cam.pitch - 0.42) * 10));   // gliding down
+    me.y += me.vy * dt;
+    if (me.y <= floor || (grounded && me.vy <= 0 && me.y - floor < 0.6)) { me.y = floor; me.vy = 0; me.longJump = false; }   // landed (and keeping to the ground going downhill)
+    if (me.y < -150) { me.x = SPAWN.x; me.z = SPAWN.z; me.y = terrain(me.x, me.z); me.vy = 0; toast("Whoosh!"); }   // fell off into the clouds: back to the plaza
   }
   me.airborne = me.y - floor > 1.2;
   const low = me.y - floor < 3.5;
-  // the post office fills my bag; a mailbox I have a parcel for takes it
-  if (hyp(me.x - PICKUP.x, me.z - PICKUP.z) < PICKUP.r && low) fillBag();
-  for (const i of me.bag) { const h = houses[i]; if (hyp(me.x - h.mx, me.z - h.mz) < 3.6 && Math.abs(me.y - h.my) < 4.5) { deliver(i); break; } }
+  if (!me.inst) {
+    // the post office fills my bag; a mailbox I have a parcel for takes it
+    if (hyp(me.x - PICKUP.x, me.z - PICKUP.z) < PICKUP.r && low) fillBag();
+    for (const i of me.bag) { const h = houses[i]; if (hyp(me.x - h.mx, me.z - h.mz) < 3.6 && Math.abs(me.y - h.my) < 4.5) { deliver(i); break; } }
+  }
   // animal control: offline this page runs it
   if (!netOk) {
-    Object.assign(meP, { x: me.x, y: me.y, z: me.z, stars: me.stars });
+    Object.assign(meP, { x: me.inst ? 9999 : me.x, y: me.y, z: me.z, stars: me.stars });
     for (const e of World.stepVehicles(localVs, [meP], dt, now / 1000)) onVehEvent(e.k, e.stars || 0);
   }
   // the egg shop, the training yard and the board open their panel when I ride in
-  const z = !low ? null : hyp(me.x - SHOP.x, me.z - SHOP.z) < SHOP.r ? "p-shop" : hyp(me.x - TRAIN.x, me.z - TRAIN.z) < TRAIN.r ? "p-train" : hyp(me.x - BOARD.x, me.z - BOARD.z) < BOARD.r ? "p-board" : null;
+  const z = !low || me.inst ? null : hyp(me.x - SHOP.x, me.z - SHOP.z) < SHOP.r ? "p-shop" : hyp(me.x - TRAIN.x, me.z - TRAIN.z) < TRAIN.r ? "p-train" : hyp(me.x - BOARD.x, me.z - BOARD.z) < BOARD.r ? "p-board" : null;
   if (z !== zone) { if (zone && openPanel === zone) closePanels(); zone = z; if (z) show(z); }
   contractStep(); fxStep(dt);
   for (const c of clouds) { c.position.x += dt * 1.5; if (c.position.x > 400) c.position.x = -400; }
-  // send where I am, 10 times a second (by the real clock) when it changes, and every 2 s regardless
+  // send where I am, 10 times a second (by the real clock) when it changes, and every 2 s regardless; save now and then
   if (netOk && now - lastSent > 100) { sendPos(now - lastSent > 2000); lastSent = now; }
+  flushSave(false);
 }
 function draw(dt) {
   const now = performance.now();
-  mine.g.position.set(me.x, me.y, me.z); mine.g.rotation.y = me.yaw; mine.g.rotation.z = me.airborne && me.moving ? Math.sin(clock * 1.3) * 0.05 : 0;
-  mine.g.rotation.x = me.airborne && me.moving ? -clamp((0.42 - cam.pitch) * 0.6, -0.4, 0.4) * clamp(-joy.y + (keys.has("KeyW") || keys.has("ArrowUp") ? 1 : 0), 0, 1) : 0;
+  mine.g.position.set(me.x, me.y, me.z); mine.g.rotation.set(0, me.yaw, 0);
   animatePet(mine, clock, me.moving, petSpeed(riding()), me.airborne);
   dizzy.visible = me.stunUntil > now; if (dizzy.visible) { dizzy.position.set(me.x, me.y + mine.top + 0.5, me.z); dizzy.rotation.y = clock * 6; }
   const rt = renderTime();
   for (const o of others.values()) {
+    const vis = o.inst === me.inst; o.m.g.visible = vis; if (!vis) continue;
     if (sampleAt(o.buf, rt, tmpS)) { o.x = tmpS.x; o.y = tmpS.y; o.z = tmpS.z; o.yaw = tmpS.yaw; }
     o.m.g.position.set(o.x, o.y, o.z); o.m.g.rotation.y = o.yaw;
     animatePet(o.m, clock + o.x * 0.1, o.moving, 10, o.m.fly && o.y - (inside(o.x, o.z) ? terrain(o.x, o.z) : -60) > 1.2);
   }
   vehiclesDraw(dt);
+  if (house) for (const q of house.pens) {   // pets in playpens wander about
+    if (q.wait > 0) q.wait -= dt; else { const dx = q.tx - q.x, dz = q.tz - q.z, d = hyp(dx, dz); if (d < 0.1) { const a = Math.random() * TAU, r = Math.random() * 1.6; q.tx = q.cx + Math.cos(a) * r; q.tz = q.cz + Math.sin(a) * r; q.wait = 1 + Math.random() * 2; } else { const s = Math.min(d, dt * 1.5); q.x += (dx / d) * s; q.z += (dz / d) * s; q.yaw = lerpYaw(q.yaw, Math.atan2(dx, dz), Math.min(1, dt * 6)); } }
+    q.m.g.position.set(q.x, 0, q.z); q.m.g.rotation.y = q.yaw; animatePet(q.m, clock + q.cx, q.wait <= 0, 3, false);
+  }
   // the arrow: to the nearest house in my bag, else back to the post office
   let tx = PICKUP.x, tz = PICKUP.z, best = 1e9;
   for (const i of me.bag) { const h = houses[i], d = hyp(h.mx - me.x, h.mz - me.z); if (d < best) { best = d; tx = h.mx; tz = h.mz; } }
-  arrow.visible = hyp(tx - me.x, tz - me.z) > 6;
+  arrow.visible = !me.inst && hyp(tx - me.x, tz - me.z) > 6;
   arrow.position.set(me.x, me.y + mine.top + 1.4 + Math.sin(clock * 3) * 0.15, me.z); arrow.rotation.y = Math.atan2(tx - me.x, tz - me.z);
   for (const b of beams.values()) { b.userData.parcel.rotation.y = clock * 2; b.userData.parcel.position.y = 3 + Math.sin(clock * 3) * 0.3; }
   pickRing.material.opacity = 0.55 + Math.sin(clock * 4) * 0.3; bigEgg.rotation.y = clock * 0.6;
@@ -887,11 +1202,13 @@ function draw(dt) {
 function frame(now) {
   const dt = clamp((now - last) / 1000, 0, 0.1); last = now;
   if (dt > 0.05) { step(dt / 2); step(dt / 2); } else step(dt);
-  draw(dt); hud();
+  draw(dt); hud(); ui(); if (invites.length && invites[0].until < now) renderInvite();
   requestAnimationFrame(frame);
 }
+$("btn-jump").addEventListener("pointerdown", (e) => { e.preventDefault(); jumpQueued = performance.now() + 150; });
 me.y = terrain(me.x, me.z); cam.y = me.y;
 syncBeams(); hud(); requestAnimationFrame(frame); connect();
+$("lgo").disabled = $("lnew").disabled = true;
 
 // for tests
-window.Pets = { get save() { return save; }, me, houses, get contract() { return contract; }, get online() { return online; }, get netOk() { return netOk; }, get others() { return others; }, step, deliver, fillBag, buyEgg, train, startContract, ride, EGGS, SPECIES, PICKUP, SHOP, TRAIN, BOARD, ISLANDS, World, vehs, localVs, cam, terrain, contractOver, emitConfetti, firework, caught, trade, teleport: (x, z, y) => { me.x = x; me.z = z; me.y = y === undefined ? terrain(x, z) : y; } };
+window.Pets = { get save() { return save; }, me, houses, get contract() { return contract; }, get online() { return online; }, get netOk() { return netOk; }, get loggedIn() { return loggedIn; }, get others() { return others; }, get house() { return house; }, get party() { return party; }, get trading() { return trading; }, step, deliver, fillBag, buyEgg, train, startContract, ride, buyHouse, build, setPen, collectPens, runAct, netSend, EGGS, SPECIES, PICKUP, SHOP, TRAIN, BOARD, ISLANDS, World, vehs, localVs, cam, terrain, doorOf, contractOver, emitConfetti, firework, caught, trade, persist, flushSave, teleport: (x, z, y) => { me.x = x; me.z = z; me.y = y === undefined ? terrain(x, z) : y; me.vy = 0; } };

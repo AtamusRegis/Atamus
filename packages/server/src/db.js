@@ -154,6 +154,16 @@ export async function migrate() {
       kind TEXT NOT NULL, reason TEXT NOT NULL, minutes INTEGER, note TEXT, status TEXT NOT NULL DEFAULT 'open',
       created_at TIMESTAMPTZ NOT NULL DEFAULT now(), decided_by TEXT, decided_at TIMESTAMPTZ
     );
+    -- (owner, 2026-11-08) Pet Delivery Co. accounts: username / password, the player's data (pets, coins, home) as JSON
+    CREATE TABLE IF NOT EXISTS pet_accounts (
+      id BIGSERIAL PRIMARY KEY, name TEXT NOT NULL, name_lc TEXT NOT NULL UNIQUE, pass TEXT NOT NULL,
+      data JSONB NOT NULL DEFAULT '{}', rev INTEGER NOT NULL DEFAULT 0,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT now(), updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+    );
+    CREATE TABLE IF NOT EXISTS pet_tokens (
+      token TEXT PRIMARY KEY, account_id BIGINT NOT NULL REFERENCES pet_accounts(id) ON DELETE CASCADE,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT now(), last_used TIMESTAMPTZ NOT NULL DEFAULT now()
+    );
   `);
 }
 

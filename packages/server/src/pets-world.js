@@ -143,7 +143,11 @@ for (const R of ROADS) {
 for (const h of houses) { flatten(h.x, h.z, h.yaw, 4.5, 4.5, h.base); }
 for (const h of houses) { h.my = terrain(h.mx, h.mz); h.d = hyp(h.mx - POST.x, h.mz - POST.z); solid(h.x, h.z, h.yaw, 4.5, 4.5, h.base - 4, h.base + 8); }
 // the small floating islands, off the town's edge; only fliers get there
-export const ISLANDS = [0.5, 1.75, 3.0, 4.2, 5.4].map((a, k) => ({ x: Math.cos(a) * 300, z: Math.sin(a) * 300, y: [26, 34, 20, 30, 38][k], r: [16, 15, 17, 14, 13][k] }));
+// (owner, 2026-11-08: more, some above the town) off the edge, low enough to glide down to, and a ring high above
+// the town that only flapping fliers reach
+const OFF = [[0.5, 300, -4, 16], [1.15, 335, 10, 13], [1.75, 300, 6, 15], [2.4, 330, -10, 14], [3.0, 300, -8, 17], [3.6, 335, 14, 13], [4.2, 300, 2, 14], [4.8, 330, -2, 13], [5.4, 300, 10, 13], [5.95, 335, 16, 12]];
+const HIGH = [[-60, -40, 84, 15], [95, 70, 96, 14], [-125, -110, 88, 13], [20, 150, 92, 14], [150, -120, 100, 12], [-150, 60, 106, 13], [40, -170, 112, 12], [0, 20, 124, 11]];
+export const ISLANDS = [...OFF.map(([a, r, y, rr]) => ({ x: Math.cos(a) * r, z: Math.sin(a) * r, y, r: rr })), ...HIGH.map(([x, z, y, r]) => ({ x, z, y, r, high: true }))];
 export const islandAt = (x, z) => ISLANDS.find((i) => hyp(x - i.x, z - i.z) < i.r - 0.6) || null;
 for (const isl of ISLANDS) {
   for (let k = 0; k < 3; k++) {
@@ -256,3 +260,42 @@ export function stepVehicles(vs, players, dt, now) {
 }
 const insideWorld = (p) => hyp(p.x, p.z) < 360;
 function nearestS(R, x, z) { let best = 0, bd = 1e9; for (let i = 0; i < R.pts.length; i++) { const d = hyp(R.pts[i][0] - x, R.pts[i][1] - z); if (d < bd) { bd = d; best = R.S[i]; } } return best; }
+
+// ---- a player's data (owner, 2026-11-08: saved on the server) and home rules, the same on both sides ----
+// data: { coins, pets: [{ id, sp, lv }], ride, items: { snack, ribbon, ticket }, treats: { sp: n }, delivered, nextId,
+//   shirt, home: null | { house (index in houses), rooms, items: [{ k: "bed" | "pen", room, slot, pet?, since? }] } }
+// (owner, 2026-11-08) homes: buy a house in town, then its door takes you to your own copy of it inside; build rooms
+// for space, beds for more pets and playpens where a pet earns coins while you're away
+export const HOME = { price: 2500, skyPrice: 5000, room: 1500, bed: 400, pen: 800, maxRooms: 6, slots: 4, baseCap: 6, perBed: 2, roomSize: 14 };
+export const housePrice = (i) => (houses[i] && houses[i].sky ? HOME.skyPrice : HOME.price);
+export const roomPrice = (rooms) => HOME.room * rooms;
+export const petCap = (d) => HOME.baseCap + HOME.perBed * (d.home ? d.home.items.filter((t) => t.k === "bed").length : 0);
+export const penPets = (d) => new Set(d.home ? d.home.items.filter((t) => t.k === "pen" && t.pet).map((t) => t.pet) : []);
+// coins a minute a pet earns in a playpen: by rarity, more with level; it banks up to 8 hours
+export const PEN_RATE = [2, 3.5, 5.5, 8], PEN_MAX_H = 8;
+const int = (v, lo, hi, d = lo) => (Number.isFinite(+v) ? Math.max(lo, Math.min(hi, Math.floor(+v))) : d);
+export function cleanData(d, species) {
+  d = d && typeof d === "object" ? d : {};
+  const pets = (Array.isArray(d.pets) ? d.pets : []).filter((p) => p && species.has(p.sp)).slice(0, 400).map((p) => ({ id: int(p.id, 1, 1e9), sp: p.sp, lv: int(p.lv, 1, 20, 1) }));
+  const ids = new Set(); const uniq = pets.filter((p) => !ids.has(p.id) && ids.add(p.id));
+  if (!uniq.length) uniq.push({ id: 1, sp: "pup", lv: 1 });
+  const items = d.items || {}, treats = {};
+  for (const [k, v] of Object.entries(d.treats || {})) if (species.has(k)) treats[k] = int(v, 0, 1e6);
+  let home = null;
+  if (d.home && Number.isInteger(d.home.house) && houses[d.home.house]) {
+    const rooms = int(d.home.rooms, 1, HOME.maxRooms, 1), used = new Set(), its = [];
+    for (const t of Array.isArray(d.home.items) ? d.home.items : []) {
+      if (!t || (t.k !== "bed" && t.k !== "pen")) continue;
+      const room = int(t.room, 0, rooms - 1), slot = int(t.slot, 0, HOME.slots - 1), key = room * 10 + slot; if (used.has(key)) continue; used.add(key);
+      const it = { k: t.k, room, slot }; if (t.k === "pen" && t.pet && ids.has(t.pet)) { it.pet = t.pet; it.since = Number.isFinite(+t.since) ? +t.since : Date.now(); }
+      its.push(it);
+    }
+    home = { house: d.home.house, rooms, items: its };
+  }
+  const nextId = Math.max(int(d.nextId, 1, 1e9, 1), ...uniq.map((p) => p.id + 1));
+  return {
+    coins: Math.max(0, Math.min(1e9, Number.isFinite(+d.coins) ? +d.coins : 0)), pets: uniq, ride: uniq.some((p) => p.id === d.ride) ? d.ride : uniq[0].id,
+    items: { snack: int(items.snack, 0, 1e6), ribbon: int(items.ribbon, 0, 1e6), ticket: int(items.ticket, 0, 1e6) }, treats,
+    delivered: int(d.delivered, 0, 1e9), nextId, shirt: /^#[0-9a-f]{6}$/i.test(d.shirt) ? d.shirt : "#3a8ee6", home,
+  };
+}
