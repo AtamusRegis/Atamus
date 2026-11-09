@@ -153,6 +153,60 @@ export const PLOTS = [];
 export const VIP_ISLAND = { x: 0, z: 30, y: 62, r: 30 }, EXTRA_ISLAND = { x: 400, z: 0, y: 8, r: 48 };
 export const plotAt = (x, z) => PLOTS.find((p) => Math.abs(x - p.x) < PLOT / 2 && Math.abs(z - p.z) < PLOT / 2) || null;
 const nearPlot = (x, z, m) => PLOTS.some((p) => Math.abs(p.x - x) < PLOT / 2 + m && Math.abs(p.z - z) < PLOT / 2 + m);
+// ---- water (owner, 2026-11-09): a small lake in the low ground out past the outer road, two rivers from it running off
+// the island's edge in waterfalls, and a stream stepping down the terraces into it (small falls at each step). WAT holds
+// the water's surface on the height grid (also a little past the shore, so it reads smoothly); water is wherever the
+// land is under it. Swimmers swim in it; everyone else can't wade in from the shore. ----
+const WAT = new Float32Array(GN * GN).fill(-1e9);
+const polar = (a, r) => [Math.cos(a) * r, Math.sin(a) * r];
+export const LAKE = { x: polar(2.42, 208)[0], z: polar(2.42, 208)[1], r: 15, y: -0.4 };
+const lakeR = (a) => LAKE.r + 3 * Math.sin(2 * a + 1) + 2 * Math.sin(3 * a + 0.4);
+// each: the path (downstream), its half width and depth; outflows end past the edge
+export const RIVERS = [
+  { pts: [polar(2.4, 196), polar(2.3, 206), polar(2.22, 218), polar(2.17, 232), polar(2.15, 252)], hw: 4.2, deep: 2, fall: true },
+  { pts: [polar(2.4, 216), polar(2.37, 228), polar(2.32, 238), polar(2.29, 262)], hw: 3.6, deep: 1.8, fall: true },
+  { pts: [polar(2.84, 204), polar(2.75, 209), polar(2.66, 210), polar(2.56, 211), polar(2.47, 209), polar(2.43, 208)], hw: 3, deep: 1.2 },
+].map((R) => Object.assign(R, sampleRoad(R.pts, false)));
+{
+  const ORIG = HGT.slice(), at = (A, x, z) => sample(A, x, z);
+  // the surface along each river: it never rises going downstream; outflows leave at the lake's level
+  for (const R of RIVERS) {
+    let y = R.fall ? LAKE.y : at(ORIG, R.pts[0][0], R.pts[0][1]) - 0.4;
+    R.y = R.pts.map(([x, z]) => (y = Math.min(y, Math.max(LAKE.y, at(ORIG, x, z) - 0.4))));
+    if (!R.fall) R.y[R.y.length - 1] = LAKE.y;
+    if (!R.fall) R.y = R.y.map((_, n) => { let t = 0, c = 0; for (let m = n - 2; m <= n + 2; m++) if (m >= 0 && m < R.y.length) { t += R.y[m]; c++; } return t / c; });   // falls spread over a few metres
+  }
+  const lower = (k, v) => { if (v < HGT[k]) HGT[k] = v; };
+  const wet = (k, y) => { if (WAT[k] < -1e8 || y < WAT[k]) WAT[k] = y; };
+  for (let j = 0; j < GN; j++) for (let i = 0; i < GN; i++) {
+    const x = G0 + i * G, z = G0 + j * G, k = j * GN + i;
+    // the lake: a bowl, its banks sloping down to the water
+    const dl = hyp(x - LAKE.x, z - LAKE.z) - lakeR(Math.atan2(z - LAKE.z, x - LAKE.x));
+    if (dl < 14) {
+      if (dl < 0) lower(k, LAKE.y - 3 * smooth(clamp(-dl / 7, 0, 1)) - 0.3);
+      else lower(k, LAKE.y + 0.25 + dl * 1.1);
+      if (dl < 5) wet(k, LAKE.y);
+    }
+    for (const R of RIVERS) {
+      let bd = 1e9, bi = 0; for (let n = 0; n < R.pts.length; n++) { const d = hyp(R.pts[n][0] - x, R.pts[n][1] - z); if (d < bd) { bd = d; bi = n; } }
+      if (bd > R.hw + 14) continue;
+      const y = R.y[bi], d = bd - R.hw;
+      if (d < 0) lower(k, y - R.deep * smooth(clamp(-d / R.hw, 0, 1)) - 0.3);
+      else lower(k, y + 0.25 + d * 1.1);
+      if (d < 5) wet(k, y);
+    }
+  }
+}
+// the water's surface here, or -Infinity on dry land
+export function waterAt(x, z) {
+  const fx = (x - G0) / G, fz = (z - G0) / G; if (fx < 0 || fz < 0 || fx >= GN - 1 || fz >= GN - 1) return -Infinity;
+  const i = Math.floor(fx), j = Math.floor(fz), k = j * GN + i;
+  if (WAT[k] < -1e8 || WAT[k + 1] < -1e8 || WAT[k + GN] < -1e8 || WAT[k + GN + 1] < -1e8) return -Infinity;
+  const y = sample(WAT, x, z); return terrain(x, z) < y - 0.05 ? y : -Infinity;
+}
+// the water grid, for drawing it: [x0, step, n, surface heights (-1e9 where there's none)]
+export const waterGrid = () => ({ x0: G0, step: G, n: GN, w: WAT });
+const nearWater = (x, z, m) => { for (const [a, b] of [[0, 0], [-m, 0], [m, 0], [0, -m], [0, m], [-m, -m], [m, m], [-m, m], [m, -m]]) if (waterAt(x + a, z + b) > -Infinity) return true; return false; };
 for (const R of ROADS) {
   for (let s = 12; s < R.len - 8; s += 15) {
     const p = roadAt(R, s);
@@ -162,6 +216,7 @@ for (const R of ROADS) {
       if (houses.some((h) => hyp(h.x - x, h.z - z) < 12.5) || nearPlot(x, z, 7)) continue;
       const yaw = Math.atan2(-rx, -rz), c = Math.cos(yaw), sn = Math.sin(yaw), corners = [[-5, -5], [5, -5], [-5, 5], [5, 5], [0, 0]].map(([lx, lz]) => [x + lx * c + lz * sn, z - lx * sn + lz * c]);
       if (corners.some(([cx, cz]) => roadDist(cx, cz) < 5.2)) continue;
+      if (nearWater(x, z, 9) || nearWater(p.x + rx * 6, p.z + rz * 6, 3)) continue;   // (owner, 2026-11-09) not by the water
       const hs = corners.map(([cx, cz]) => terrain(cx, cz)), lo = Math.min(...hs);
       if (Math.max(...hs) - lo > 5) continue;
       const mx = p.x + rx * 6, mz = p.z + rz * 6;
@@ -193,7 +248,7 @@ solid(POST.x, POST.z, 0, 9, 5, -1, 8); solid(SHOP_B.x, SHOP_B.z, 0, 6, 4, -1, 9)
 // trees on open ground
 for (let n = 0; n < 1400 && trees.length < 340; n++) {
   const a = rand() * TAU, r = Math.sqrt(rand()) * R_TOWN, x = Math.cos(a) * r, z = Math.sin(a) * r;
-  if (!inside(x, z, 5) || r < PLAZA + 4 || roadDist(x, z) < 7.5) continue;
+  if (!inside(x, z, 5) || r < PLAZA + 4 || roadDist(x, z) < 7.5 || nearWater(x, z, 3)) continue;
   if (houses.some((h) => !h.sky && hyp(h.x - x, h.z - z) < 8.5) || nearPlot(x, z, 3)) continue;
   const y = terrain(x, z); if (Math.abs(terrain(x + 2, z) - y) + Math.abs(terrain(x, z + 2) - y) > 1.6) continue;
   trees.push({ x, z, y, s: 0.8 + rand() * 0.6 });

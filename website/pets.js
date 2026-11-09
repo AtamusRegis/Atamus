@@ -4,7 +4,7 @@
 // its edge; animal control chases you. Co-op: everyone in a room rides the same town, works on contracts together and
 // chats. The server (packages/server/src/pets.js) shares players, runs animal control, contracts and chat.
 import * as THREE from "./vendor/three.module.min.js";
-import * as World from "./pets-world.js?v=1793100004";
+import * as World from "./pets-world.js?v=1793100030";
 
 const $ = (id) => document.getElementById(id);
 const TAU = Math.PI * 2, clamp = (v, a, b) => Math.max(a, Math.min(b, v)), hyp = Math.hypot;
@@ -20,14 +20,16 @@ const SPECIES = {
   pup: { name: "Pup", r: 0, speed: 7, bag: 2, c: "#c98b4f", a: "#7a4f28", body: "quad", ears: "flop", size: 1 },
   kitten: { name: "Kitten", r: 0, speed: 7.5, bag: 2, c: "#f2a65a", a: "#fff1e0", body: "quad", ears: "point", size: 0.9 },
   bunny: { name: "Bunny", r: 0, speed: 8, bag: 2, c: "#f4f1ee", a: "#f3a7b5", body: "quad", ears: "long", size: 0.9 },
-  duck: { name: "Duck", r: 0, speed: 6.5, bag: 3, c: "#ffd84a", a: "#f08a24", body: "bird", size: 0.9 },
+  duck: { name: "Duck", r: 0, speed: 6.5, bag: 3, swim: true, c: "#ffd84a", a: "#f08a24", body: "bird", size: 0.9 },
   fox: { name: "Fox", r: 1, speed: 9.5, bag: 3, c: "#e8722c", a: "#fff4ea", body: "quad", ears: "point", size: 1 },
-  penguin: { name: "Penguin", r: 1, speed: 8.5, bag: 4, c: "#2b3440", a: "#f4f4f4", body: "bird", size: 1 },
+  otter: { name: "Otter", r: 1, speed: 9, bag: 3, swim: true, c: "#7a5232", a: "#e2c29a", body: "quad", ears: "round", size: 1 },
+  penguin: { name: "Penguin", r: 1, speed: 8.5, bag: 4, swim: true, c: "#2b3440", a: "#f4f4f4", body: "bird", size: 1 },
   goat: { name: "Goat", r: 1, speed: 9, bag: 4, c: "#e6e1d6", a: "#9b8f7a", body: "quad", ears: "horns", size: 1.05 },
   butterfly: { name: "Butterfly", r: 1, speed: 9, bag: 2, fly: "fly", c: "#3a8ee6", a: "#ffd84a", c2: "#e5534b", body: "butterfly", size: 1.1 },
   parrot: { name: "Parrot", r: 1, speed: 9.5, bag: 3, fly: "glide", c: "#3fb36b", a: "#e5534b", body: "bird", wings: true, size: 1 },
   stego: { name: "Stegosaurus", r: 1, speed: 8.5, bag: 5, c: "#7fae5a", a: "#e08a3a", body: "quad", plates: true, tail: "long", size: 1.25 },
   deer: { name: "Deer", r: 2, speed: 11.5, bag: 3, c: "#b9824e", a: "#f3e3cc", body: "quad", ears: "antlers", size: 1.15 },
+  turtle: { name: "Sea Turtle", r: 2, speed: 10.5, bag: 6, swim: true, c: "#7cb85a", a: "#8a6a3a", body: "quad", size: 1.15 },
   bear: { name: "Bear", r: 2, speed: 10, bag: 6, c: "#6b4a32", a: "#c9a27e", body: "quad", ears: "round", size: 1.3 },
   horse: { name: "Horse", r: 2, speed: 12.5, bag: 4, c: "#8a5a3a", a: "#2b1d14", body: "quad", ears: "point", legs: 1.4, size: 1.2 },
   owl: { name: "Owl", r: 2, speed: 11, bag: 4, fly: "fly", c: "#9b7a55", a: "#f3e3cc", body: "bird", wings: true, ears: "tufts", size: 1.15 },
@@ -133,7 +135,7 @@ function box(w, h, d, c, x, y, z, parent, shadow = true) { const m = new THREE.M
   const rocks = [], rr = World.rng(77);
   for (let n = 0; n < 9000 && rocks.length < 320; n++) {
     const a = rr() * TAU, r = Math.sqrt(rr()) * (World.R_TOWN - 6), x = Math.cos(a) * r, z = Math.sin(a) * r;
-    if (!inside(x, z, 4) || r < PLAZA + 6 || World.roadDist(x, z) < 9) continue;
+    if (!inside(x, z, 4) || r < PLAZA + 6 || World.roadDist(x, z) < 9 || World.waterAt(x, z) > -Infinity || World.waterAt(x + 3, z) > -Infinity || World.waterAt(x - 3, z) > -Infinity || World.waterAt(x, z + 3) > -Infinity || World.waterAt(x, z - 3) > -Infinity) continue;
     const slope = hyp(terrain(x + 2, z) - terrain(x - 2, z), terrain(x, z + 2) - terrain(x, z - 2)) / 4; if (slope < 0.9) continue;
     if (houses.some((h) => !h.sky && hyp(h.x - x, h.z - z) < 9)) continue;
     const lo = Math.min(terrain(x + 2, z), terrain(x - 2, z), terrain(x, z + 2), terrain(x, z - 2)), tall = rr() < 0.55;
@@ -171,6 +173,80 @@ ROADS.forEach((R, k) => {
   const g = new THREE.BufferGeometry(); g.setAttribute("position", new THREE.Float32BufferAttribute(pos, 3)); g.setAttribute("uv", new THREE.Float32BufferAttribute(uv, 2)); g.setIndex(idx); g.computeVertexNormals();
   const m = new THREE.Mesh(g, roadM); m.receiveShadow = true; scene.add(m);
 });
+// ---- water (owner, 2026-11-09): the lake, its rivers and the stream (pets-world.js), drawn over the height grid: deeper
+// is darker, steep runs (the stream's small falls) foam white; ripples drift across. Where a river runs off the edge it
+// pours over in a waterfall with spray at the lip. ----
+const waterTex = (() => { const c = document.createElement("canvas"); c.width = c.height = 128; const g = c.getContext("2d"); g.fillStyle = "#ffffff"; g.fillRect(0, 0, 128, 128); g.strokeStyle = "rgba(255,255,255,0.0)"; for (let k = 0; k < 40; k++) { const x = Math.random() * 128, y = Math.random() * 128, w = 8 + Math.random() * 18; g.strokeStyle = `rgba(190,225,255,${0.5 + Math.random() * 0.5})`; g.lineWidth = 1.5; g.beginPath(); g.moveTo(x, y); g.quadraticCurveTo(x + w / 2, y - 3, x + w, y); g.stroke(); } const t = new THREE.CanvasTexture(c); t.wrapS = t.wrapT = THREE.RepeatWrapping; t.colorSpace = THREE.SRGBColorSpace; return t; })();
+const fallTex = (() => { const c = document.createElement("canvas"); c.width = 64; c.height = 128; const g = c.getContext("2d"); g.fillStyle = "#cfeaff"; g.fillRect(0, 0, 64, 128); for (let k = 0; k < 70; k++) { g.fillStyle = `rgba(255,255,255,${0.4 + Math.random() * 0.6})`; g.fillRect(Math.random() * 64, Math.random() * 128, 1 + Math.random() * 3, 10 + Math.random() * 40); } const t = new THREE.CanvasTexture(c); t.wrapS = t.wrapT = THREE.RepeatWrapping; t.colorSpace = THREE.SRGBColorSpace; return t; })();
+const mistTex = (() => { const c = document.createElement("canvas"); c.width = c.height = 64; const g = c.getContext("2d"), r = g.createRadialGradient(32, 32, 0, 32, 32, 32); r.addColorStop(0, "rgba(255,255,255,0.9)"); r.addColorStop(1, "rgba(255,255,255,0)"); g.fillStyle = r; g.fillRect(0, 0, 64, 64); return new THREE.CanvasTexture(c); })();
+const mists = [];
+{
+  const { x0, step: G, n, w: WAT } = World.waterGrid(), pos = [], col = [], uv = [], idx = [], vid = new Map(), c = new THREE.Color();
+  const DEEP = new THREE.Color("#2f7fc4"), SHALLOW = new THREE.Color("#5cc3e8"), FOAM = new THREE.Color("#f2fbff");
+  const vert = (i, j) => {
+    const k = j * n + i; if (vid.has(k)) return vid.get(k);
+    const x = x0 + i * G, z = x0 + j * G, y = WAT[k], d = clamp((y - terrain(x, z)) / 2.5, 0, 1);
+    const sl = Math.max(Math.abs((WAT[k + 1] > -1e8 ? WAT[k + 1] : y) - y), Math.abs((WAT[k + n] > -1e8 ? WAT[k + n] : y) - y), Math.abs((WAT[k - 1] > -1e8 ? WAT[k - 1] : y) - y), Math.abs((WAT[k - n] > -1e8 ? WAT[k - n] : y) - y)) / G;
+    c.copy(SHALLOW).lerp(DEEP, d).lerp(FOAM, smooth(clamp((sl - 0.25) / 0.6, 0, 1)));
+    pos.push(x, y + 0.02, z); col.push(c.r, c.g, c.b); uv.push(x / 14, z / 14); vid.set(k, pos.length / 3 - 1); return pos.length / 3 - 1;
+  };
+  for (let j = 0; j < n - 1; j++) for (let i = 0; i < n - 1; i++) {
+    const k = j * n + i; if (WAT[k] < -1e8 || WAT[k + 1] < -1e8 || WAT[k + n] < -1e8 || WAT[k + n + 1] < -1e8) continue;
+    const x = x0 + i * G, z = x0 + j * G; if (![[0, 0], [G, 0], [0, G], [G, G]].some(([a, b]) => terrain(x + a, z + b) < WAT[k] - 0.05)) continue;
+    const a = vert(i, j), b = vert(i + 1, j), cc = vert(i, j + 1), d = vert(i + 1, j + 1); idx.push(a, cc, b, b, cc, d);
+  }
+  const g = new THREE.BufferGeometry(); g.setAttribute("position", new THREE.Float32BufferAttribute(pos, 3)); g.setAttribute("color", new THREE.Float32BufferAttribute(col, 3)); g.setAttribute("uv", new THREE.Float32BufferAttribute(uv, 2)); g.setIndex(idx); g.computeVertexNormals();
+  const m = new THREE.Mesh(g, new THREE.MeshLambertMaterial({ vertexColors: true, map: waterTex, transparent: true, opacity: 0.86, depthWrite: false })); m.receiveShadow = true; m.renderOrder = 1; scene.add(m);
+  // the waterfalls: where each outflowing river crosses the edge, a sheet of water pours over and down, thinning out
+  const fallM = new THREE.MeshBasicMaterial({ map: fallTex, transparent: true, vertexColors: true, side: THREE.DoubleSide, depthWrite: false });
+  for (const R of World.RIVERS) if (R.fall) {
+    let e = R.pts.findIndex(([x, z]) => !inside(x, z)); if (e < 1) continue; e--;
+    const [ex, ez] = R.pts[e], [px, pz] = R.pts[Math.max(0, e - 3)], dl = hyp(ex - px, ez - pz) || 1, fx = (ex - px) / dl, fz = (ez - pz) / dl, rx = -fz, rz = fx, y0 = R.y[e];
+    const fp = [], fc = [], fu = [], fi = [], COLS = 6, ROWS = 18;
+    for (let r = 0; r <= ROWS; r++) { const t = r / ROWS, drop = t * t * 130 + t * 6, out = 1 + Math.sqrt(t) * 9; for (let q = 0; q <= COLS; q++) { const s = (q / COLS - 0.5) * 2 * R.hw * (1 + t * 0.6); fp.push(ex + fx * out + rx * s, y0 - drop, ez + fz * out + rz * s); fc.push(1, 1, 1, (1 - t) * (0.95 - Math.abs(q / COLS - 0.5) * 0.6)); fu.push(q / COLS, t * 6); } }
+    for (let r = 0; r < ROWS; r++) for (let q = 0; q < COLS; q++) { const a = r * (COLS + 1) + q, b = a + 1, c2 = a + COLS + 1, d = c2 + 1; fi.push(a, c2, b, b, c2, d); }
+    const fg = new THREE.BufferGeometry(); fg.setAttribute("position", new THREE.Float32BufferAttribute(fp, 3)); fg.setAttribute("color", new THREE.Float32BufferAttribute(fc, 4)); fg.setAttribute("uv", new THREE.Float32BufferAttribute(fu, 2)); fg.setIndex(fi);
+    const fm = new THREE.Mesh(fg, fallM); fm.renderOrder = 2; scene.add(fm);
+    for (let k = 0; k < 7; k++) { const s = new THREE.Sprite(new THREE.SpriteMaterial({ map: mistTex, transparent: true, opacity: 0.55, depthWrite: false })), t = k / 6, out = 2 + Math.sqrt(t) * 9; s.position.set(ex + fx * out + rx * (Math.random() - 0.5) * R.hw, y0 - t * t * 60 - 1, ez + fz * out + rz * (Math.random() - 0.5) * R.hw); s.userData = { y: s.position.y, ph: k * 1.3, sz: 5 + t * 10 }; s.scale.setScalar(s.userData.sz); scene.add(s); mists.push(s); }
+  }
+}
+function waterStep(dt) {
+  waterTex.offset.x += dt * 0.015; waterTex.offset.y += dt * 0.01; fallTex.offset.y += dt * 1.6;
+  for (const s of mists) { const u = s.userData; s.position.y = u.y + Math.sin(clock * 0.8 + u.ph) * 0.6; s.scale.setScalar(u.sz * (1 + Math.sin(clock * 1.3 + u.ph) * 0.12)); }
+}
+// ---- speed boosts (owner, 2026-11-09): glowing arrow pads on the roads, rings in the air and rings on the water; run,
+// fly or swim through one and your pet goes 1.6x for 5 s (with Speed Candy too) ----
+const PAD_BOOST = 1.6, PAD_TIME = 5000;
+const BOOSTS = [];
+{
+  for (const R of ROADS) for (let s = 45; s < R.len - 20; s += 115) { const p = World.roadAt(R, s); if (hyp(p.x, p.z) < PLAZA + 12) continue; BOOSTS.push({ k: "pad", x: p.x, y: terrain(p.x, p.z) + ROAD_LIFT, z: p.z, yaw: Math.atan2(p.fx, p.fz), r: 3 }); }
+  for (let n = 0; n < 14; n++) { const a = (n / 14) * TAU + 0.35, r = n % 2 ? 95 : 160, x = Math.cos(a) * r, z = Math.sin(a) * r; BOOSTS.push({ k: "air", x, y: terrain(x, z) + 16 + (n % 3) * 9, z, yaw: a, r: 4 }); }
+  for (const [x, z, y] of [[0, 8, 34], [0, 18, 48], [-40, -20, 60], [60, 40, 70], [-90, -70, 80], [20, 110, 82]]) BOOSTS.push({ k: "air", x, y, z, yaw: Math.atan2(x, z), r: 4 });
+  const L = World.LAKE; BOOSTS.push({ k: "water", x: L.x + 5, z: L.z - 4, r: 3 }, { k: "water", x: L.x - 6, z: L.z + 3, r: 3 });
+  for (const [ri, f] of [[0, 0.35], [0, 0.7], [1, 0.45], [2, 0.3], [2, 0.65]]) { const R = World.RIVERS[ri], q = R.pts[Math.floor(R.pts.length * f)], q2 = R.pts[Math.floor(R.pts.length * f) + 1]; BOOSTS.push({ k: "water", x: q[0], z: q[1], yaw: Math.atan2(q2[0] - q[0], q2[1] - q[1]), r: 3 }); }
+  for (const b of BOOSTS) if (b.k === "water") { b.y = World.waterAt(b.x, b.z); if (b.yaw === undefined) b.yaw = 0; }
+  const arrowTex = (() => { const c = document.createElement("canvas"); c.width = 64; c.height = 128; const g = c.getContext("2d"); g.fillStyle = "#ff9f1a"; g.fillRect(0, 0, 64, 128); g.fillStyle = "#fff4c2"; for (const y of [18, 58, 98]) { g.beginPath(); g.moveTo(8, y + 22); g.lineTo(32, y); g.lineTo(56, y + 22); g.lineTo(56, y + 34); g.lineTo(32, y + 12); g.lineTo(8, y + 34); g.fill(); } const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace; t.wrapT = THREE.RepeatWrapping; return t; })();
+  const padM = new THREE.MeshBasicMaterial({ map: arrowTex, polygonOffset: true, polygonOffsetFactor: -6, polygonOffsetUnits: -6 });
+  const ringM = { air: new THREE.MeshBasicMaterial({ color: "#5fe3ff" }), water: new THREE.MeshBasicMaterial({ color: "#8f9bff" }) };
+  const glowM = { air: new THREE.MeshBasicMaterial({ color: "#5fe3ff", transparent: true, opacity: 0.25, blending: THREE.AdditiveBlending, depthWrite: false }), water: new THREE.MeshBasicMaterial({ color: "#8f9bff", transparent: true, opacity: 0.25, blending: THREE.AdditiveBlending, depthWrite: false }) };
+  const padG = new THREE.PlaneGeometry(3.4, 5).rotateX(-Math.PI / 2), ringG = new THREE.TorusGeometry(3.2, 0.32, 8, 32), glowG = new THREE.TorusGeometry(3.2, 0.9, 8, 32), wringG = new THREE.TorusGeometry(2.4, 0.3, 8, 28);
+  for (const b of BOOSTS) {
+    const g = new THREE.Group(); g.position.set(b.x, b.y, b.z); g.rotation.y = b.yaw; scene.add(g); b.g = g;
+    if (b.k === "pad") { const m = new THREE.Mesh(padG, padM); m.position.y = 0.04; g.add(m); }
+    else { const big = b.k === "air", m = new THREE.Mesh(big ? ringG : wringG, ringM[b.k]), gl = new THREE.Mesh(big ? glowG : wringG, glowM[b.k]); if (!big) gl.scale.setScalar(1.25); m.position.y = gl.position.y = big ? 0 : 0.6; g.add(m, gl); }
+  }
+  BOOSTS.tex = arrowTex;
+}
+function boostStep(dt) { BOOSTS.tex.offset.y -= dt * 1.5; for (const b of BOOSTS) if (b.k !== "pad") b.g.children[1].material.opacity = 0.18 + Math.sin(clock * 4) * 0.1; }
+function boostTouch(now) {
+  for (const b of BOOSTS) {
+    const dy = b.k === "pad" ? me.y - b.y : b.k === "water" ? me.y - b.y + 0.4 : me.y + 0.8 - b.y;
+    if (hyp(me.x - b.x, me.z - b.z) < b.r && dy > -1.5 && dy < (b.k === "pad" ? 1.5 : 2.5)) {
+      if (me.padUntil < now - 600 || !me.padUntil) emitSparks(me.x, me.y + 1, me.z, 26, 6, b.k === "pad" ? ["#ff9f1a", "#fff4c2"] : b.k === "air" ? ["#5fe3ff", "#ffffff"] : ["#8f9bff", "#ffffff"], 0.7, 0);
+      me.padUntil = now + PAD_TIME; me.padC = b.k; return;
+    }
+  }
+}
 // houses as instances: walls (reaching down into the slope), roofs, doors, mailboxes; each faces its road
 function instanced(geo, color, n, each) { const m = new THREE.InstancedMesh(geo, mat(color), n); m.castShadow = true; m.receiveShadow = true; for (let i = 0; i < n; i++) { dummy.rotation.set(0, 0, 0); dummy.scale.set(1, 1, 1); each(i, dummy); dummy.updateMatrix(); m.setMatrixAt(i, dummy.matrix); } scene.add(m); return m; }
 const wallAt = (h, d) => { d.position.set(h.x, h.base + 2.2 - (h.sky ? 0 : 2), h.z); d.scale.set(9, 4.4 + (h.sky ? 0 : 4), 9); d.rotation.y = h.yaw; };
@@ -376,6 +452,8 @@ const LOOK = {
   fox: { plan: "quad", body: [0.62, 0.55, 1.35], leg: 0.6, head: 0.55, snout: 0.5, snoutC: "a", ears: "big", tail: "bushy", nose: "#1d232a", socks: "#2b1d14" },
   goat: { plan: "quad", body: [0.85, 0.75, 1.25], leg: 0.72, head: 0.5, snout: 0.35, ears: "side", horns: "curl", beard: true, tail: "stub", hooves: "#4a3a2a" },
   deer: { plan: "quad", body: [0.72, 0.68, 1.35], leg: 1.05, neck: 0.65, head: 0.48, snout: 0.38, ears: "side", antlers: true, tail: "stub", spots: true, hooves: "#3a2a1a" },
+  otter: { plan: "quad", body: [0.62, 0.5, 1.5], leg: 0.28, head: 0.5, roundHead: true, snout: 0.18, snoutC: "a", ears: "round", tail: "thick", nose: "#1d232a", whiskers: true, low: true },
+  turtle: { plan: "quad", round: true, body: [1.25, 0.7, 1.45], leg: 0.3, legW: 0.34, head: 0.46, roundHead: true, snout: 0.08, ears: "none", tail: "stub", shell: true, low: true },
   bear: { plan: "quad", round: true, body: [1.3, 1.1, 1.65], leg: 0.48, legW: 0.42, head: 0.85, roundHead: true, snout: 0.3, snoutC: "a", ears: "round", tail: "none", nose: "#1d232a" },
   horse: { plan: "quad", body: [0.82, 0.85, 1.7], leg: 1.25, neck: 0.95, head: 0.45, snout: 0.6, ears: "point", mane: "a", tail: "hair", hooves: "#2b1d14" },
   unicorn: { plan: "quad", body: [0.82, 0.85, 1.7], leg: 1.25, neck: 0.95, head: 0.45, snout: 0.6, ears: "point", mane: "rainbow", tail: "rainbow", horn: true, hooves: "#e0c070" },
@@ -431,6 +509,7 @@ function petModel(sp, rider) {
     if (L.round) { ball(1, C, 0, by, 0, body, bw / 2, bh / 2, bl / 2); ball(1, A, 0, by - bh * 0.18, bl * 0.08, body, bw * 0.38, bh * 0.32, bl * 0.4); }
     else { box(bw, bh, bl, C, 0, by, 0, body); box(bw * 0.72, bh * 0.3, bl * 0.62, A, 0, legH + 0.05 * k, 0, body); }
     if (L.spots) for (const [x, y, z] of [[1, 0.25, 0.1], [1, 0.1, -0.25], [-1, 0.2, -0.05], [-1, 0.05, 0.3], [1, -0.05, 0.35]]) ball(0.07 * k, "#fff4e0", x * bw / 2, by + y * bh, z * bl, body);
+    if (L.shell) { ball(1, A, 0, by + bh * 0.12, 0, body, bw * 0.56, bh * 0.62, bl * 0.56); for (const [x, z] of [[0, 0], [0.5, 0.45], [-0.5, 0.45], [0.5, -0.45], [-0.5, -0.45], [0, 0.85], [0, -0.85]]) ball(bw * 0.12, "#6b4f2a", x * bw * 0.28, by + bh * (0.62 - 0.12 * hyp(x, z)), z * bl * 0.25, body, 1, 0.35, 1); }   // (owner, 2026-11-09) a turtle's shell
     if (L.plates) for (let n = 0; n < 6; n++) { const p = box(0.08 * k, (0.45 + 0.2 * Math.sin((n / 5) * Math.PI)) * k, 0.4 * k, A, 0, by + bh / 2 + 0.15 * k, (n - 2.5) * bl * 0.17, body); p.rotation.y = Math.PI / 4; }
     if (L.spikes) for (let n = 0; n < 5; n++) cone(0.09 * k, 0.32 * k, L.spikes === "ice" ? "#e8f8ff" : A, 0, by + bh / 2 + 0.12 * k, (n - 2) * bl * 0.2, body);
     // neck and head
@@ -868,7 +947,8 @@ const typing = () => { const a = document.activeElement; return !!a && a.tagName
 addEventListener("keydown", (e) => {
   if (typing()) return; keys.add(e.code); if (e.code === "Escape") { if (building) closeBuild(); closePanels(); }
   if ((e.code === "Enter" || e.code === "Slash") && loggedIn) { e.preventDefault(); openChat(); }
-  if (e.code === "Space") { e.preventDefault(); if (!e.repeat) jumpQueued = performance.now() + 150; }   // (owner, 2026-11-08) a press each time, never held
+  if (e.code === "Space") { e.preventDefault(); if (!e.repeat) jumpQueued = performance.now() + 150; }   // (owner, 2026-11-08) a press each time, never held (a flier holds it: step)
+  if (e.ctrlKey && !me.foot && moveKind() === "fly" && /^(Key|Arrow|Digit)/.test(e.code)) e.preventDefault();   // Ctrl held to fly down: keep the browser's Ctrl shortcuts out of the way
   if (e.code === "KeyF") runAct("F"); if (e.code === "KeyE") runAct("E"); if (e.code === "KeyG") runAct("G"); if (e.code === "KeyR" && building) building.r = (building.r + 1) % 4;
 });
 addEventListener("keyup", (e) => keys.delete(e.code));
@@ -908,9 +988,10 @@ const WING = `<svg class="ico" viewBox="0 0 14 12" style="width:14px;height:12px
 // or Glider (teal, spread wings), and the card's frame in that colour
 const GLIDE_ICO = `<svg class="ico" viewBox="0 0 24 14" style="width:20px;height:12px"><path d="M1 6c4-3 7-4 11-1 4-3 7-2 11 1-4 0-7 1-11 4C8 7 5 6 1 6z" fill="currentColor"/></svg>`;
 const FLY_ICO = `<svg class="ico" viewBox="0 0 24 16" style="width:20px;height:14px"><path d="M12 13C9 6 5 2 1 2c1 5 4 9 11 11zm0 0c3-7 7-11 11-11-1 5-4 9-11 11z" fill="currentColor"/></svg>`;
-const moveBadge = (sp) => { const f = SPECIES[sp].fly; return f === "fly" ? `<span class="mbadge fly">${FLY_ICO}Flier</span>` : f === "glide" ? `<span class="mbadge glide">${GLIDE_ICO}Glider</span>` : ""; };
+const SWIM_ICO = `<svg class="ico" viewBox="0 0 24 14" style="width:20px;height:12px"><path d="M1 5c3-3 5-3 7 0s4 3 7 0 5-3 8 0M1 11c3-3 5-3 7 0s4 3 7 0 5-3 8 0" stroke="currentColor" stroke-width="2.2" fill="none" stroke-linecap="round"/></svg>`;
+const moveBadge = (sp) => { const s = SPECIES[sp], f = s.fly; return f === "fly" ? `<span class="mbadge fly">${FLY_ICO}Flier</span>` : f === "glide" ? `<span class="mbadge glide">${GLIDE_ICO}Glider</span>` : s.swim ? `<span class="mbadge swim">${SWIM_ICO}Swimmer</span>` : ""; };
 function card(sp, lines, on, onclick) {
-  const s = SPECIES[sp], d = document.createElement("div"); d.className = "card" + (on ? " on" : "") + (s.fly ? " " + s.fly : "");
+  const s = SPECIES[sp], d = document.createElement("div"); d.className = "card" + (on ? " on" : "") + (s.fly ? " " + s.fly : s.swim ? " swim" : "");
   d.innerHTML = `<img alt="" src="${portrait(sp)}" width="84" height="84">${moveBadge(sp)}<span class="nm">${s.name}</span><span class="rar" style="color:${RARITY[s.r].c}">${RARITY[s.r].name}</span>${lines}`;
   if (onclick) d.onclick = onclick; return d;
 }
@@ -989,7 +1070,7 @@ function buyEgg(egg, ticket) {
 // (owner, 2026-11-08) hatching: the egg shakes harder and cracks, then bursts in a flash of fireworks to the pet, rays
 // behind it in its rarity's color
 function hatch(p, egg) {
-  const s = SPECIES[p.sp], rc = RARITY[s.r].c; $("hatchn").innerHTML = s.name + (s.fly ? " " + moveBadge(p.sp) : ""); $("hatchr").textContent = RARITY[s.r].name; $("hatchr").style.color = rc;
+  const s = SPECIES[p.sp], rc = RARITY[s.r].c; $("hatchn").innerHTML = s.name + (s.fly || s.swim ? " " + moveBadge(p.sp) : ""); $("hatchr").textContent = RARITY[s.r].name; $("hatchr").style.color = rc;
   const c = $("hatchc"), g = c.getContext("2d"), img = new Image(); img.src = portrait(p.sp);
   $("hatch").style.display = "flex"; $("hatchok").style.visibility = "hidden"; $("hatchno").style.visibility = "hidden"; $("hatchn").style.visibility = "hidden"; $("hatchr").style.visibility = "hidden";
   const t0 = performance.now(), parts = []; let burst = 0, lastT = 0;
@@ -1160,6 +1241,7 @@ function renderHist() {
 $("btn-chat").onclick = () => (chatBar.style.display === "flex" ? closeChat() : openChat());
 chatBar.addEventListener("submit", (e) => {
   e.preventDefault(); const text = chatIn.value.replace(/\s+/g, " ").trim().slice(0, 120); chatIn.value = "";
+  if (text[0] === "/" && isStaff()) { slash(text); closeChat(); return; }   // (owner, 2026-11-09) staff commands
   if (text) { netSend({ t: "chat", text }); chatLine(save.name, text, true); myBubble = bubble(text, myBubble, mine.g, mine.top); }
   closeChat();
 });
@@ -1733,6 +1815,8 @@ function ui() {
   for (const a of acts) { const b = document.createElement("button"); b.className = "btn ghost"; b.type = "button"; b.innerHTML = touchy || a.key.length > 1 ? a.label : `<kbd>${a.key}</kbd> ${a.label}`; b.onclick = () => runAct(a.key); el.appendChild(b); }
   $("btn-jump").style.display = building ? "none" : "";
   $("btn-jump").textContent = kind === "fly" ? "Fly ▲" : kind === "glide" ? "Flap ▲" : "Jump";
+  $("btn-down").style.display = kind === "fly" && !building ? "" : "none";
+  $("flykeys").style.display = kind === "fly" && !building && !touchy ? "" : "none";   // (owner, 2026-11-09) only on a flier
   $("btn-build").style.display = mine2 || building ? "" : "none"; $("btn-build").textContent = building ? "Done" : "Build";
   $("btn-admin").style.display = isStaff() ? "" : "none";
 }
@@ -1746,33 +1830,59 @@ const isStaff = () => myRole === "moderator" || myRole === "admin";
 const GIVES = () => [{ id: "coins", name: "Coins" }, ...Object.entries(ITEMS).map(([id, it]) => ({ id, name: it.name })), ...Object.entries(SPECIES).map(([id, sp]) => ({ id: "pet:" + id, name: sp.name, pet: true })), ...Object.entries(SPECIES).map(([id, sp]) => ({ id: "treat:" + id, name: sp.name + " Treats" }))];
 let adminTimer = 0;
 function adminSend(o) { netSend(Object.assign({ t: "admin", q: adminQ }, o)); }
+// (owner, 2026-11-09) admins' quick commands: on yourself from the top of the panel, on anyone from their row's Quick
+// menu, or typed in chat (slash below)
+const QUICK = [["coins:10000", "+10K"], ["coins:100000", "+100K"], ["coins:1000000", "+1M"], ["allpets", "All pets"], ["maxlv", "Max levels"], ["items", "Items"], ["treats", "Treats"], ["unwanted", "Clear wanted"], ["everything", "Everything"]];
+const quick = (target, v) => { const [cmd, n] = v.split(":"); adminSend(Object.assign({ op: "quick", cmd, n: +n || 0 }, target)); };
+let adminBuilt = "";
 function renderAdmin() {
   const el = $("admin"); if (!el) return;
-  if (giveTo) return renderGive();
-  el.innerHTML = "";
-  const q = document.createElement("input"); q.className = "field"; q.placeholder = "Search"; q.value = adminQ; q.maxLength = 16;
-  q.oninput = () => { adminQ = q.value.trim(); clearTimeout(adminTimer); adminTimer = setTimeout(() => adminSend({ op: "list" }), 250); };
-  el.appendChild(q);
+  if (giveTo) { adminBuilt = ""; return renderGive(); }
+  if (adminBuilt !== myRole) {   // the search box and quick commands are built once, so typing keeps its focus while the list refreshes
+    adminBuilt = myRole; el.innerHTML = "";
+    const q = document.createElement("input"); q.className = "field asearch"; q.placeholder = "Search"; q.value = adminQ; q.maxLength = 16;
+    q.oninput = () => { adminQ = q.value.trim(); renderAdmin(); clearTimeout(adminTimer); adminTimer = setTimeout(() => adminSend({ op: "list" }), 250); };
+    el.appendChild(q);
+    if (myRole === "admin") {
+      const h = document.createElement("div"); h.className = "ahead"; h.textContent = "Me";
+      const g = document.createElement("div"); g.className = "qgrid";
+      for (const [v, t] of QUICK) {
+        const b = document.createElement("button"); b.type = "button"; b.className = "btn small" + (v.startsWith("coins") ? " gold" : v === "everything" ? " green" : " ghost");
+        b.innerHTML = v.startsWith("coins") ? `<span class="coin"></span>` : ""; b.append(document.createTextNode(t)); b.onclick = () => quick({ name: myName }, v); g.appendChild(b);
+      }
+      el.append(h, g);
+    }
+    const h = document.createElement("div"); h.className = "ahead"; h.innerHTML = `Players <span class="cnt" id="admin-n"></span>`;
+    const rows = document.createElement("div"); rows.className = "arows"; rows.id = "arows";
+    el.append(h, rows);
+  }
   const owner = myName.toLowerCase() === "nyssary";
   const sel = (opts, val, on) => { const s = document.createElement("select"); s.className = "field small"; for (const [v, t] of opts) { const o = document.createElement("option"); o.value = v; o.textContent = t; if (v === val) o.selected = true; s.appendChild(o); } s.onchange = () => on(s.value); return s; };
   const TIMES = [["", "—"], ["10", "10m"], ["60", "1h"], ["1440", "1d"], ["10080", "7d"], ["43200", "30d"], ["perma", "Perma"], ["off", "Off"]];
-  const rows = document.createElement("div"); rows.className = "arows";
-  for (const p of adminList.filter((r) => !adminQ || r.name.toLowerCase().startsWith(adminQ.toLowerCase()))) {
-    const r = document.createElement("div"); r.className = "arow";
+  const btn = (txt, cls, on) => { const b = document.createElement("button"); b.className = "btn small " + cls; b.type = "button"; b.textContent = txt; b.onclick = on; return b; };
+  const rows = $("arows"); rows.innerHTML = "";
+  const list = adminList.filter((r) => !adminQ || r.name.toLowerCase().startsWith(adminQ.toLowerCase())).sort((x, y) => y.online - x.online || x.name.localeCompare(y.name));
+  $("admin-n").textContent = adminList.filter((r) => r.online).length + " online";
+  for (const p of list) {
+    const r = document.createElement("div"); r.className = "arow" + (p.online ? " on" : "") + (p.name === myName ? " me" : "");
     const nm = document.createElement("div"); nm.className = "aname";
-    nm.innerHTML = `<span class="dot${p.online ? " on" : ""}"></span><b></b><span class="role ${p.role}">${p.role}</span>${p.muted ? `<span class="tag">Muted ${p.muted === -1 ? "" : untilText(p.muted)}</span>` : ""}${p.banned ? `<span class="tag">Banned ${p.banned === -1 ? "" : untilText(p.banned)}</span>` : ""}`;
+    nm.innerHTML = `<span class="dot${p.online ? " on" : ""}"></span><b></b><span class="role ${p.role}">${p.role}</span>${p.vip ? `<span class="tag vip">VIP</span>` : ""}${p.muted ? `<span class="tag">Muted ${p.muted === -1 ? "" : untilText(p.muted)}</span>` : ""}${p.banned ? `<span class="tag">Banned ${p.banned === -1 ? "" : untilText(p.banned)}</span>` : ""}`;
     nm.querySelector("b").textContent = p.name; r.appendChild(nm);
     const acts = document.createElement("div"); acts.className = "aacts";
     const canRole = owner ? p.role !== "owner" : myRole === "admin" && (p.role === "player" || p.role === "moderator");
     if (canRole && p.name !== myName) acts.appendChild(sel(owner ? [["player", "Player"], ["moderator", "Moderator"], ["admin", "Admin"]] : [["player", "Player"], ["moderator", "Moderator"]], p.role, (v) => adminSend({ op: "role", id: p.id, role: v })));
-    const mute = sel(TIMES.map(([v, t]) => [v, v ? "Mute " + t : "Mute"]), "", (v) => v && adminSend({ op: "mute", id: p.id, mins: v })); acts.appendChild(mute);
-    const ban = sel(TIMES.map(([v, t]) => [v, v ? "Ban " + t : "Ban"]), "", (v) => v && adminSend({ op: "ban", id: p.id, mins: v })); acts.appendChild(ban);
-    if (p.online) { const k = document.createElement("button"); k.className = "btn small"; k.type = "button"; k.textContent = "Kick"; k.onclick = () => adminSend({ op: "kick", id: p.id }); acts.appendChild(k); }
-    if (myRole === "admin") { const v = document.createElement("button"); v.className = "btn small" + (p.vip ? " gold" : ""); v.type = "button"; v.textContent = p.vip ? "VIP ★" : "VIP"; v.onclick = () => adminSend({ op: "vip", id: p.id, on: !p.vip }); acts.appendChild(v); }
-    if (myRole === "admin") { const g = document.createElement("button"); g.className = "btn gold small"; g.type = "button"; g.textContent = "Give"; g.onclick = () => { giveTo = p; giveWhat = null; renderAdmin(); }; acts.appendChild(g); }
+    if (p.name !== myName) {
+      acts.appendChild(sel(TIMES.map(([v, t]) => [v, v ? "Mute " + t : "Mute"]), "", (v) => v && adminSend({ op: "mute", id: p.id, mins: v })));
+      acts.appendChild(sel(TIMES.map(([v, t]) => [v, v ? "Ban " + t : "Ban"]), "", (v) => v && adminSend({ op: "ban", id: p.id, mins: v })));
+      if (p.online) acts.appendChild(btn("Kick", "", () => adminSend({ op: "kick", id: p.id })));
+    }
+    if (myRole === "admin") {
+      acts.appendChild(sel([["", "Quick"], ...QUICK], "", (v) => v && quick({ id: p.id }, v)));
+      acts.appendChild(btn(p.vip ? "VIP ★" : "VIP", p.vip ? "gold" : "ghost", () => adminSend({ op: "vip", id: p.id, on: !p.vip })));
+      acts.appendChild(btn("Give", "gold", () => { giveTo = p; giveWhat = null; renderAdmin(); }));
+    }
     r.appendChild(acts); rows.appendChild(r);
   }
-  el.appendChild(rows);
 }
 // give someone an item, coins, Treats or a pet: type to narrow the list, pick one (owner, 2026-11-09: pets show the
 // Flier / Glider badge here too)
@@ -1793,9 +1903,21 @@ function renderGive() {
   row.append(n, lv, go); el.append(q, list, row); fill();
 }
 $("btn-admin").onclick = () => { if (openPanel === "p-admin") closePanels(); else { giveTo = null; show("p-admin"); adminSend({ op: "list" }); } };
+// (owner, 2026-11-09) staff chat commands, never sent as chat: /coins 1m, /allpets, /maxlv, /items, /treats, /everything
+// (or /all), /unwanted, each on yourself or a player named after it (/coins 50k Name); /kick Name, /mute Name 1h, /ban
+// Name 7d (minutes, or m / h / d, perma, off)
+function slash(text) {
+  const [c, ...a] = text.slice(1).split(" "), cmd = c.toLowerCase(), who = (s) => (s && /^[A-Za-z0-9_]{3,16}$/.test(s) ? s : null);
+  const QC = { allpets: "allpets", maxlv: "maxlv", items: "items", treats: "treats", everything: "everything", all: "everything", unwanted: "unwanted" };
+  const dur = (s) => { s = (s || "").toLowerCase(); if (s === "perma" || s === "off") return s; const r = /^(\d+)([mhd]?)$/.exec(s); return r ? String(+r[1] * { "": 1, m: 1, h: 60, d: 1440 }[r[2]]) : "60"; };
+  if (cmd === "coins") { const r = /^(\d+(?:\.\d+)?)([km]?)$/i.exec(a[0] || ""); if (!r) return toast("Unknown"); return adminSend({ op: "quick", cmd: "coins", n: Math.floor(+r[1] * { "": 1, k: 1e3, m: 1e6 }[r[2].toLowerCase()]), name: who(a[1]) || myName }); }
+  if (QC[cmd]) return adminSend({ op: "quick", cmd: QC[cmd], name: who(a[0]) || myName });
+  if ((cmd === "kick" || cmd === "mute" || cmd === "ban") && who(a[0])) return adminSend(cmd === "kick" ? { op: "kick", name: a[0] } : { op: cmd, name: a[0], mins: dur(a[1]) });
+  toast("Unknown");
+}
 
 // ---- the loop ----
-let last = performance.now(), clock = 0, zone = null, jumpQueued = 0;
+let last = performance.now(), clock = 0, zone = null, jumpQueued = 0, flyUp = false, flyDown = false;   // flyUp / flyDown: Fly ▲ / Fly ▼ held
 const SLOPE = 0.8, FLY_TOP = 130, FLY_SPEED_UP = 0.85, GRAV = 26;
 // (owner, 2026-11-08) how each pet gets around: land pets jump (high from standing, far on the run); flapping fliers go
 // anywhere but fly and walk slower; gliders are fast but can't climb, sinking slowly as they glide, and walk well
@@ -1806,8 +1928,13 @@ const MOVE = { land: { ground: 1, air: 1 }, fly: { ground: 0.7, air: 0.75 }, gli
 const FOOT_SPEED = 5.5;
 function groundAt(x, z, y) {
   const isl = islandAt(x, z); if (isl && y > isl.y - 3) return isl.y;
-  return inside(x, z) ? terrain(x, z) + (World.roadDist(x, z) < ROAD_HALF + 0.3 ? ROAD_LIFT : 0) : -200;
+  if (!inside(x, z)) return -200;
+  const w = World.waterAt(x, z); if (w > -Infinity) return w - SWIM_SINK;   // (owner, 2026-11-09) in the water you float
+  return terrain(x, z) + (World.roadDist(x, z) < ROAD_HALF + 0.3 ? ROAD_LIFT : 0);
 }
+// (owner, 2026-11-09) swimmers swim fast; anyone else paddles slowly, and can't wade in from the shore (they can jump in)
+const SWIM_SINK = 0.55, SWIM_FAST = 1.35, PADDLE = 0.4;
+const swims = () => !!SPECIES[riding().sp].swim;
 function floorAt(x, z, y) { return Math.max(groundAt(x, z, y), houseSurface(x, z, y)); }
 function step(dt) {
   clock += dt;
@@ -1827,8 +1954,11 @@ function step(dt) {
   const kind = me.foot ? "foot" : moveKind(), M = MOVE[kind], p = riding(), stunned = me.stunUntil > now;
   const floor0 = floorAt(me.x, me.z, me.y), grounded = me.y - floor0 < 0.08;
   if (grounded) me.flapped = false;
-  let sp = (kind === "foot" ? FOOT_SPEED : petSpeed(p)) * (me.boostUntil > now ? SNACK_BOOST : 1) * (grounded ? M.ground : M.air);
+  if (!me.inst && kind !== "foot") boostTouch(now);
+  let sp = (kind === "foot" ? FOOT_SPEED : petSpeed(p)) * (me.boostUntil > now ? SNACK_BOOST : 1) * (me.padUntil > now && kind !== "foot" ? PAD_BOOST : 1) * (grounded ? M.ground : M.air);
   if ((kind === "land" || kind === "foot") && !grounded && me.longJump) sp *= 1.6;
+  const wNow = World.waterAt(me.x, me.z), wet = wNow > -Infinity && me.y < wNow - 0.2;
+  if (wet && kind !== "foot") sp *= swims() ? SWIM_FAST : PADDLE;
   me.moving = ml > 0.08 && !stunned;
   if (!me.moving) stuckFor = 0;
   if (me.moving) {
@@ -1838,7 +1968,9 @@ function step(dt) {
       if (kind === "fly") return true;
       const hs = houseSurface(x, z, me.y); if (hs > -Infinity && hs >= groundAt(x, z, me.y) && hs - me.y <= 0.6) return true;   // floors, steps and slopes of houses
       if ((kind === "land" || kind === "foot") && !inside(x, z, 1.5) && !islandAt(x, z)) return false;   // the edge (gliders can step off)
-      return floorAt(x, z, me.y) - me.y <= SLOPE * v + 0.05;   // too steep to climb (a jump gets you up a ledge)
+      if (!wet && !swims() && World.waterAt(x, z) > me.y - 0.3) return false;   // the shore: only swimmers walk in
+      if (wet && !inside(x, z, 2.5)) return false;   // not over the waterfall
+      return floorAt(x, z, me.y) - me.y <= SLOPE * v + 0.05 + (wet ? 1.1 : 0);   // too steep to climb (a jump gets you up a ledge; out of the water too)
     };
     const bx = me.x, bz = me.z;
     if (ok(nx, me.z)) me.x = nx; if (ok(me.x, nz)) me.z = nz;   // slide along walls
@@ -1848,10 +1980,10 @@ function step(dt) {
     me.yaw = lerpYaw(me.yaw, Math.atan2(mx, mz), Math.min(1, dt * 12));   // turn to where it's going (fliers also pitch: flightPitch)
   }
   const floor = floorAt(me.x, me.z, me.y);
-  if (kind === "fly") {   // climbs or dives as it flies forward, the way the camera looks; hovers when stopped; Space rises straight up
-    const fwd = me.moving ? clamp(-jy, 0, 1) : 0, climb = clamp((0.42 - cam.pitch) * 1.8, -1, 1);
-    if (jumpQueued > now && !stunned) { me.vy = 10; jumpQueued = 0; }
-    me.y += (climb * fwd * sp * FLY_SPEED_UP + (me.vy || 0)) * dt; me.vy = (me.vy || 0) * Math.exp(-2.5 * dt); if (me.vy < 0.2) me.vy = 0;
+  if (kind === "fly") {   // (owner, 2026-11-09) up and down only by holding Space / Fly ▲ (up) and Ctrl / Fly ▼ (down); hovers otherwise
+    const held = loggedIn && !typing(), upH = flyUp || (held && keys.has("Space")), downH = flyDown || (held && (keys.has("ControlLeft") || keys.has("ControlRight")));
+    me.vy = 0; jumpQueued = 0;
+    if (!stunned) me.y += ((upH ? 1 : 0) - (downH ? 1 : 0)) * sp * FLY_SPEED_UP * dt;
     me.y = Math.min(me.y, FLY_TOP); if (me.y < floor) me.y = floor;
   } else {
     if (jumpQueued > now && grounded && !stunned) { me.vy = me.moving ? (kind === "glide" ? 9 : 7.5) : kind === "glide" ? 10 : 11; me.longJump = me.moving && kind !== "glide"; jumpQueued = 0; }
@@ -1863,6 +1995,8 @@ function step(dt) {
     if (jumpQueued && jumpQueued < now) jumpQueued = 0;   // landed (and keeping to the ground going downhill)
     if (me.y < -150) { me.x = SPAWN.x; me.z = SPAWN.z; me.y = terrain(me.x, me.z); me.vy = 0; toast("Whoosh!"); }   // fell off into the clouds: back to the plaza
   }
+  if (me.padUntil > now && me.moving && Math.random() < dt * 24) emitSparks(me.x - Math.sin(me.yaw) * 0.8, me.y + 0.8, me.z - Math.cos(me.yaw) * 0.8, 2, 1.2, me.padC === "pad" ? ["#ff9f1a", "#fff4c2"] : me.padC === "air" ? ["#5fe3ff", "#ffffff"] : ["#8f9bff", "#ffffff"], 0.45, 0, 0.8);   // a boost's trail
+  if (wet && me.moving && Math.random() < dt * 14) emitSparks(me.x, wNow + 0.1, me.z, 2, 1.6, ["#ffffff", "#bfe6ff"], 0.5, 5, 0.7);   // a splash
   // (owner, 2026-11-09) a strong wind (from 12 mph, most at 40) gently pushes a flier or glider in the air along with it
   // and bumps it about a little; never on the ground, at home or inside
   const gust = me.inst || stunned || !me.airborne || (kind !== "fly" && kind !== "glide") ? 0 : clamp((windNow.mph - 12) / 28, 0, 1);
@@ -1929,7 +2063,7 @@ function draw(dt) {
   const ti = me.bag.find((i) => houses[i].mx === tx && houses[i].mz === tz), ty = ti !== undefined ? houses[ti].my : 0;
   for (const b of beams.values()) { b.userData.parcel.rotation.y = clock * 2; b.userData.parcel.position.y = 3 + Math.sin(clock * 3) * 0.3; }
   pickRing.material.opacity = 0.55 + Math.sin(clock * 4) * 0.3; bigEgg.rotation.y = clock * 0.6;
-  cutaway(); poiStep(); placeCamera(dt); camera.updateMatrixWorld(); drawGuide(tx, ty, tz, loggedIn && !building && hyp(tx - me.x, tz - me.z) > 6); skyStep(dt, camera.position.x, camera.position.y, camera.position.z);
+  cutaway(); poiStep(); waterStep(dt); boostStep(dt); placeCamera(dt); camera.updateMatrixWorld(); drawGuide(tx, ty, tz, loggedIn && !building && hyp(tx - me.x, tz - me.z) > 6); skyStep(dt, camera.position.x, camera.position.y, camera.position.z);
   renderer.render(scene, camera);
 }
 function frame(now) {
@@ -1938,7 +2072,9 @@ function frame(now) {
   draw(dt); hud(); ui(); if (invites.length && invites[0].until < now) renderInvite();
   requestAnimationFrame(frame);
 }
-$("btn-jump").addEventListener("pointerdown", (e) => { e.preventDefault(); jumpQueued = performance.now() + 150; });
+$("btn-jump").addEventListener("pointerdown", (e) => { e.preventDefault(); jumpQueued = performance.now() + 150; flyUp = true; });
+$("btn-down").addEventListener("pointerdown", (e) => { e.preventDefault(); flyDown = true; });
+for (const ev of ["pointerup", "pointercancel", "pointerleave"]) { $("btn-jump").addEventListener(ev, () => { flyUp = false; }); $("btn-down").addEventListener(ev, () => { flyDown = false; }); }
 me.y = terrain(me.x, me.z); cam.y = me.y;
 syncBeams(); hud(); requestAnimationFrame(frame); connect();
 $("lgo").disabled = $("lnew").disabled = true;
