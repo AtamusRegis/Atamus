@@ -4,7 +4,7 @@
 // its edge; animal control chases you. Co-op: everyone in a room rides the same town, works on contracts together and
 // chats. The server (packages/server/src/pets.js) shares players, runs animal control, contracts and chat.
 import * as THREE from "./vendor/three.module.min.js";
-import * as World from "./pets-world.js?v=1793100003";
+import * as World from "./pets-world.js?v=1793100004";
 
 const $ = (id) => document.getElementById(id);
 const TAU = Math.PI * 2, clamp = (v, a, b) => Math.max(a, Math.min(b, v)), hyp = Math.hypot;
@@ -615,15 +615,28 @@ function sampleAt(buf, t, out) {
   const b = buf[i], a = i > 0 ? buf[i - 1] : b;
   if (t >= b.t) {   // past the newest: guess ahead a little along its last motion (not if it had stopped)
     const p = buf.length > 1 ? buf[buf.length - 2] : b, span = Math.max(1, b.t - p.t), k = b.mv === false ? 0 : Math.min(t - b.t, 200) / span;
-    out.x = b.x + (b.x - p.x) * k; out.y = b.y + (b.y - p.y) * k; out.z = b.z + (b.z - p.z) * k; out.yaw = b.yaw; return true;
+    out.x = b.x + (b.x - p.x) * k; out.y = b.y + (b.y - p.y) * k; out.z = b.z + (b.z - p.z) * k; out.yaw = b.yaw; out.ba = b.ba; out.bd = b.bd; return true;
   }
   const k = a === b ? 1 : clamp((t - a.t) / (b.t - a.t), 0, 1);
-  out.x = a.x + (b.x - a.x) * k; out.y = a.y + (b.y - a.y) * k; out.z = a.z + (b.z - a.z) * k; out.yaw = lerpYaw(a.yaw, b.yaw, k); return true;
+  out.x = a.x + (b.x - a.x) * k; out.y = a.y + (b.y - a.y) * k; out.z = a.z + (b.z - a.z) * k; out.yaw = lerpYaw(a.yaw, b.yaw, k);
+  if (b.ba !== undefined && a.ba !== undefined) { out.ba = lerpYaw(a.ba, b.ba, k); out.bd = a.bd + (b.bd - a.bd) * k; }   // a helicopter's searchlight
+  return true;
 }
 
 // ---- animal control (owner, 2026-11-08): vans on the roads and helicopters over town (pets-world.js); online the
 // server runs them for the whole room, offline this page does ----
 const lightR = new THREE.MeshBasicMaterial({ color: "#ff3a3a" }), lightB = new THREE.MeshBasicMaterial({ color: "#3a7aff" });
+// (owner, 2026-11-09) beams of light: an open cone from the lamp (its tip) down -y, brightest at the lamp and down the
+// middle, soft at the edges; the ground and anything in the way hides the rest of it
+const BEAM_CONE = new THREE.ConeGeometry(1, 1, 24, 1, true).translate(0, -0.5, 0);
+const beamMat = (c) => new THREE.ShaderMaterial({
+  uniforms: { c: { value: new THREE.Color(c) }, o: { value: 0.2 } }, transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, side: THREE.DoubleSide,
+  vertexShader: "varying vec3 vN; varying vec3 vV; varying float vT; void main() { vT = -position.y; vec4 mv = modelViewMatrix * vec4(position, 1.0); vN = normalMatrix * normal; vV = -mv.xyz; gl_Position = projectionMatrix * mv; }",
+  fragmentShader: "uniform vec3 c; uniform float o; varying vec3 vN; varying vec3 vV; varying float vT; void main() { float e = abs(dot(normalize(vN), normalize(vV))); gl_FragColor = vec4(c * o * pow(e, 2.5) * (1.0 - 0.8 * clamp(vT, 0.0, 1.0)), 1.0);\n#include <colorspace_fragment>\n}",
+});
+const headBeamM = beamMat("#fff1c8"), searchBeamM = beamMat("#f4f7ff");
+const POOL_G = new THREE.PlaneGeometry(5.5, 11).rotateX(-Math.PI / 2);
+const headPoolM = new THREE.MeshBasicMaterial({ color: "#fff1c8", transparent: true, opacity: 0, depthWrite: false, blending: THREE.AdditiveBlending, map: (() => { const cv = document.createElement("canvas"); cv.width = cv.height = 64; const x = cv.getContext("2d"), gr = x.createRadialGradient(32, 32, 0, 32, 32, 32); gr.addColorStop(0, "rgba(255,255,255,1)"); gr.addColorStop(1, "rgba(255,255,255,0)"); x.fillStyle = gr; x.fillRect(0, 0, 64, 64); return new THREE.CanvasTexture(cv); })(), polygonOffset: true, polygonOffsetFactor: -2 });
 function vanModel() {
   const g = new THREE.Group(), body = new THREE.Group(); g.add(body);
   box(2.4, 1.8, 3.2, "#f4f4f0", 0, 1.5, -0.6, body); box(2.34, 1.4, 1.6, "#f4f4f0", 0, 1.3, 1.72, body); box(2.1, 0.7, 0.1, "#3a5a7a", 0, 1.6, 2.58, body);
@@ -633,7 +646,14 @@ function vanModel() {
   const red = new THREE.Mesh(BOX, lightR.clone()); red.scale.set(0.8, 0.25, 0.35); red.position.set(-0.45, 2.15, 1.6); body.add(red);
   const blue = new THREE.Mesh(BOX, lightB.clone()); blue.scale.set(0.8, 0.25, 0.35); blue.position.set(0.45, 2.15, 1.6); body.add(blue);
   g.traverse((o) => (o.castShadow = true));
-  return { g, body, red, blue };
+  // (owner, 2026-11-09) headlights, on while it's moving: lamps, two beams reaching ahead and a pool of light on the road
+  const lamp = new THREE.MeshBasicMaterial({ color: "#6d6a5c" }), lit = new THREE.Group(), cones = [];
+  for (const x of [-0.78, 0.78]) {
+    const l = new THREE.Mesh(BOX, lamp); l.scale.set(0.42, 0.26, 0.08); l.position.set(x, 0.95, 2.55); body.add(l);
+    const c = new THREE.Mesh(BEAM_CONE, headBeamM); c.position.set(x, 0.95, 2.6); c.rotation.x = -(Math.PI / 2 - 0.09); c.scale.set(1.5, 10, 1.5); lit.add(c); cones.push(c);
+  }
+  const pool = new THREE.Mesh(POOL_G, headPoolM); pool.position.set(0, -0.12, 8.2); lit.add(pool); body.add(lit);
+  return { g, body, red, blue, lamp, lit, spd: 0 };
 }
 function heliModel() {
   const g = new THREE.Group(), body = new THREE.Group(); g.add(body);
@@ -644,25 +664,39 @@ function heliModel() {
   const tail = new THREE.Group(); tail.position.set(0.3, 0.9, -6.1); body.add(tail); box(0.05, 2, 0.25, "#2b3440", 0, 0, 0, tail);
   const red = new THREE.Mesh(BOX, lightR.clone()); red.scale.set(0.5, 0.2, 0.5); red.position.set(-0.5, 1.05, 0.6); body.add(red);
   const blue = new THREE.Mesh(BOX, lightB.clone()); blue.scale.set(0.5, 0.2, 0.5); blue.position.set(0.5, 1.05, 0.6); body.add(blue);
-  const beam = new THREE.Mesh(new THREE.ConeGeometry(4, 14, 20, 1, true), new THREE.MeshBasicMaterial({ color: "#fff6c0", transparent: true, opacity: 0.18, depthWrite: false, side: THREE.DoubleSide })); beam.position.y = -8; body.add(beam);
-  g.traverse((o) => { if (o !== beam) o.castShadow = true; });
-  return { g, body, red, blue, rotor, tail, beam };
+  g.traverse((o) => (o.castShadow = true));
+  // (owner, 2026-11-09) the searchlight (pets-world.js aims it): a lamp under the nose, a real light where it lands and
+  // the beam down to it; the light is always there (only its strength changes) so nothing has to recompile
+  box(0.6, 0.45, 0.6, "#2b3440", 0, -1.15, 1.6, body); const lens = new THREE.Mesh(new THREE.CircleGeometry(0.26, 16).rotateX(Math.PI / 2), new THREE.MeshBasicMaterial({ color: "#fffdf2" })); lens.position.set(0, -1.39, 1.6); body.add(lens);
+  const spot = new THREE.SpotLight("#f4f7ff", 0, 0, World.BEAM.half * 1.15, 0.45, 0); scene.add(spot, spot.target);
+  const beam = new THREE.Mesh(BEAM_CONE, searchBeamM); beam.frustumCulled = false; scene.add(beam);
+  return { g, body, red, blue, rotor, tail, spot, beam, ba: 0, bd: 15 };
 }
 const localVs = World.makeVehicles();
 const vehs = localVs.map((v) => { const m = v.kind ? heliModel() : vanModel(); scene.add(m.g); return Object.assign(m, { kind: v.kind, buf: [], x: v.x, y: v.y, z: v.z, yaw: v.yaw, mode: 0, target: 0, pitch: 0 }); });
 const meP = { id: 0, x: 0, y: 0, z: 0, stars: 0, lastChased: 0, lastStar: 0, immuneUntil: 0 };   // me, for running them offline
-const tmpS = {};
+const tmpS = {}, beamB = {}, DOWN = new THREE.Vector3(0, -1, 0);
 function vehiclesDraw(dt) {
-  const online = netOk, rt = renderTime(), flash = Math.floor(performance.now() / 120) % 2 === 0;
+  const online = netOk, rt = renderTime(), flash = Math.floor(performance.now() / 120) % 2 === 0, dark = 1 - skyNow.day;
+  headBeamM.uniforms.o.value = 0.02 + 0.07 * dark; headPoolM.opacity = 0.04 + 0.5 * dark; searchBeamM.uniforms.o.value = me.inst ? 0 : 0.06 + 0.09 * dark;
   vehs.forEach((m, i) => {
-    if (online) { if (sampleAt(m.buf, rt, tmpS)) { m.x = tmpS.x; m.y = tmpS.y; m.z = tmpS.z; m.yaw = tmpS.yaw; } }
-    else { const v = localVs[i]; m.x = v.x; m.y = v.y; m.z = v.z; m.yaw = v.yaw; m.mode = v.mode; m.target = v.target; }
+    const px = m.x, pz = m.z;
+    if (online) { if (sampleAt(m.buf, rt, tmpS)) { m.x = tmpS.x; m.y = tmpS.y; m.z = tmpS.z; m.yaw = tmpS.yaw; if (tmpS.ba !== undefined) { m.ba = tmpS.ba; m.bd = tmpS.bd; } } }
+    else { const v = localVs[i]; m.x = v.x; m.y = v.y; m.z = v.z; m.yaw = v.yaw; m.mode = v.mode; m.target = v.target; if (v.kind) { m.ba = v.ba; m.bd = v.bd; } }
     const chasing = m.mode === 1;
     if (!m.kind) {   // (owner, 2026-11-08: rear clipping into the road) sit on the front and rear wheels, a little above the road
       const sx = Math.sin(m.yaw), sz = Math.cos(m.yaw), front = terrain(m.x + sx * 1.6, m.z + sz * 1.6), rear = terrain(m.x - sx * 1.5, m.z - sz * 1.5);
       m.y = Math.max((front + rear) / 2, terrain(m.x, m.z)) + 0.22; m.pitch += (-Math.atan2(front - rear, 3.1) - m.pitch) * Math.min(1, dt * 10); m.body.rotation.x = m.pitch;
+      if (dt > 0) m.spd += (Math.min(40, hyp(m.x - px, m.z - pz) / dt) - m.spd) * Math.min(1, dt * 4);   // headlights while it's moving
+      const on = m.spd > 1.5; m.lit.visible = on; m.lamp.color.set(on ? "#fff8dc" : "#6d6a5c");
     }
-    else { m.rotor.rotation.y += dt * 28; m.tail.rotation.x += dt * 34; m.body.rotation.x = chasing ? 0.18 : 0.06; m.beam.visible = chasing; }
+    else {
+      m.rotor.rotation.y += dt * 28; m.tail.rotation.x += dt * 34; m.body.rotation.x = chasing ? 0.18 : 0.06;
+      const b = World.beamOf(m, beamB), len = (terrain(m.x + Math.sin(m.ba) * m.bd, m.z + Math.cos(m.ba) * m.bd) - b.ly) / Math.min(-0.05, b.dy) + 6;   // to the ground (and a little on: the ground hides it)
+      tmpV.set(b.dx, b.dy, b.dz); m.beam.position.set(b.lx, b.ly, b.lz); m.beam.quaternion.setFromUnitVectors(DOWN, tmpV); const r = len * Math.tan(World.BEAM.half); m.beam.scale.set(r, len, r);
+      m.spot.position.set(b.lx, b.ly, b.lz); m.spot.target.position.set(b.lx + b.dx * len, b.ly + b.dy * len, b.lz + b.dz * len); m.spot.target.updateMatrixWorld();
+      m.spot.intensity = me.inst ? 0 : 5 + 3 * dark;   // strong enough to see by day too
+    }
     m.g.position.set(m.x, m.y, m.z); m.g.rotation.y = m.yaw;
     m.red.material.color.set(chasing ? (flash ? "#ff3a3a" : "#5a1010") : "#7a2020"); m.blue.material.color.set(chasing ? (flash ? "#1a2a5a" : "#3a7aff") : "#203a7a");
   });
@@ -1197,7 +1231,7 @@ function onNet(m) {
         if ((st || 0) !== o.stars) { o.stars = st || 0; o.m.g.remove(o.tag); o.tag = nameTag(String(o.name || "Courier").slice(0, 18), o.stars); o.tag.position.y = o.m.top + 1.2; o.m.g.add(o.tag); }
       }
       break;
-    case "veh": serverTime(m.ts); m.v.forEach((r, i) => { const h = vehs[i]; if (!h) return; pushSample(h.buf, m.ts, { x: r[0], y: r[1], z: r[2], yaw: r[3] }); h.mode = r[4]; h.target = r[5]; }); break;
+    case "veh": serverTime(m.ts); m.v.forEach((r, i) => { const h = vehs[i]; if (!h) return; pushSample(h.buf, m.ts, r.length > 6 ? { x: r[0], y: r[1], z: r[2], yaw: r[3], ba: r[6], bd: r[7] } : { x: r[0], y: r[1], z: r[2], yaw: r[3] }); h.mode = r[4]; h.target = r[5]; }); break;
     case "pet": { const o = others.get(m.id); if (o) addOther({ id: m.id, name: o.name, sp: m.sp, lv: m.lv, shirt: o.shirt, stars: o.stars, inst: o.inst, x: o.x, y: o.y, z: o.z, yaw: o.yaw }); break; }
     case "fx": { const o = others.get(m.id); if (o && o.inst === me.inst) emitConfetti(o.x, o.y + 2.5, o.z, 35, 4, 7); break; }
     case "chat": { const o = others.get(m.id); chatLine(o ? o.name : m.name, m.text); if (o) o.bub = bubble(m.text, o.bub, o.m.g, o.m.top); break; }

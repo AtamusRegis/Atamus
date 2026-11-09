@@ -2,8 +2,8 @@
 // (packages/server/src/pets-world.js). The two copies must stay identical (scripts/check.sh compares them).
 // (owner, 2026-11-08) The town is a big floating island: plateaus with cliffs, winding roads cut into the slopes, houses
 // along the roads, the plaza in the middle; small islands float off its edge. Animal control vans patrol the roads and
-// helicopters the sky; they chase whoever they spot for a short while, and a player who keeps getting away gets a
-// wanted level that makes them easier to spot and chased harder.
+// chase whoever they spot for a short while, and a player who keeps getting away gets a wanted level that makes them
+// easier to spot and chased harder; helicopters circle the sky sweeping searchlights that catch whoever they light.
 
 export const TAU = Math.PI * 2;
 const clamp = (v, a, b) => Math.max(a, Math.min(b, v)), hyp = Math.hypot, smooth = (t) => t * t * (3 - 2 * t);
@@ -208,19 +208,24 @@ export function blocked(x, z, y) {
 }
 
 // ---- animal control (owner, 2026-11-08) ----
-// A van patrols its road (driving on the right, turning round at a road's end); a helicopter circles over town. Each
-// spots players near it carrying parcels (owner, 2026-11-08; vans only those on the ground) and chases one for a short while, faster for a wanted player;
-// a van catches you on the ground, a helicopter anywhere. Caught: off to the pound, wanted level cleared. Getting away
-// raises your wanted level (up to 5); it drops a star every 25 s nobody's chasing you.
+// A van patrols its road (driving on the right, turning round at a road's end). It spots players near it carrying
+// parcels (owner, 2026-11-08; only those on the ground) and chases one for a short while, faster for a wanted player, and
+// catches you if it touches you. A helicopter circles over town sweeping a searchlight (owner, 2026-11-09): the light
+// turns slowly, now one way, now the other, its spot moving in and out over the ground, and a parcel carrier who stays
+// in the light for half a second is caught (wherever they are, in the air too). Caught: off to the pound, wanted level
+// cleared. Getting away from a van raises your wanted level (up to 5); it drops a star every 25 s nobody's after you.
 export const WANTED_MAX = 5, WANTED_COOL = 25, IMMUNE = 7;
 const VAN = { patrol: 8, chase: 9.5, perStar: 1.3, spot: 16, time: 3, timeStar: 0.8, catch: 2.6 };
-const HELI = { patrol: 10, chase: 11, perStar: 1.6, spot: 22, time: 3.5, timeStar: 0.8, catch: 3.4, alt: 26 };
+const HELI = { patrol: 10, alt: 26 };
+// the searchlight: cone half-angle (rad), turning speed (rad/s, a random 60-140% of it, flipping every 3-8 s), how far
+// out the spot goes (m, sideways from under the helicopter), seconds in the light before you're caught
+export const BEAM = { half: 0.14, turn: 0.45, near: 6, far: 24, hold: 0.5 };
 export function makeVehicles() {
   const vs = [];
   const van = (road, s, dir) => vs.push({ kind: 0, road, s, dir, x: 0, y: 0, z: 0, yaw: 0, mode: 0, target: 0, t: 0, cool: 0 });
   van(0, 0, 1); van(0, ROADS[0].len / 2, -1); van(1, 0, 1); van(1, ROADS[1].len / 3, -1); van(1, (ROADS[1].len * 2) / 3, 1);
   van(2, 20, 1); van(4, 60, 1); van(6, 40, -1);
-  for (const ph of [0, Math.PI]) vs.push({ kind: 1, ph, x: 0, y: 40, z: 0, yaw: 0, mode: 0, target: 0, t: 0, cool: 0 });
+  for (const ph of [0, Math.PI]) vs.push({ kind: 1, ph, x: 0, y: 40, z: 0, yaw: 0, mode: 0, target: 0, t: 0, cool: 0, ba: ph, bd: 15, bw: 0, bt: 0, bn: 0, bp: ph });
   for (const v of vs) placePatrol(v, 0, true);
   return vs;
 }
@@ -239,13 +244,55 @@ function placePatrol(v, dt, snap) {
   v.x += (tx - v.x) * k; v.z += (tz - v.z) * k; v.y += (ty - v.y) * (snap ? 1 : Math.min(1, dt * 2)); v.yaw = turn(v.yaw, yaw, snap ? 1 : Math.min(1, dt * 8));
 }
 function turn(a, b, k) { let d = b - a; while (d > Math.PI) d -= TAU; while (d < -Math.PI) d += TAU; return a + d * k; }
+// a helicopter's searchlight from its state { x, y, z, yaw, ba (the light's heading), bd (how far out its spot is) }: the
+// lamp under the nose and the unit direction it shines (down to the ground at the spot); the page draws the same beam
+export function beamOf(v, out = {}) {
+  const lx = v.x + Math.sin(v.yaw) * 1.6, ly = v.y - 1.3, lz = v.z + Math.cos(v.yaw) * 1.6;
+  const ax = v.x + Math.sin(v.ba) * v.bd, az = v.z + Math.cos(v.ba) * v.bd, dx = ax - lx, dy = terrain(ax, az) - ly, dz = az - lz, d = hyp(dx, dy, dz) || 1;
+  out.lx = lx; out.ly = ly; out.lz = lz; out.dx = dx / d; out.dy = dy / d; out.dz = dz / d; return out;
+}
+const beamTmp = {};
+function lit(b, p) {   // is the player (a 1.6 m ball around their middle) in this light?
+  const wx = p.x - b.lx, wy = p.y + 1 - b.ly, wz = p.z - b.lz, along = wx * b.dx + wy * b.dy + wz * b.dz;
+  if (along <= 0) return false;
+  const off = hyp(wx - b.dx * along, wy - b.dy * along, wz - b.dz * along);
+  return off < along * Math.tan(BEAM.half) + 0.8;
+}
+function stepHeli(v, dt, now) {
+  placePatrol(v, dt, false);
+  if (!(v.bn > now)) { v.bt = (Math.random() < 0.5 ? -1 : 1) * BEAM.turn * (0.6 + Math.random() * 0.8); v.bn = now + 3 + Math.random() * 5; }
+  v.bw += (v.bt - v.bw) * Math.min(1, dt * 0.7);   // eases round to its new way rather than snapping
+  v.ba += v.bw * dt; if (v.ba > Math.PI) v.ba -= TAU; else if (v.ba < -Math.PI) v.ba += TAU;
+  v.bp += dt * (0.2 + 0.1 * Math.sin(v.ba * 2)); v.bd = (BEAM.near + BEAM.far) / 2 + ((BEAM.far - BEAM.near) / 2) * Math.sin(v.bp);
+}
+function catchPlayer(p, vs, now, ev) {
+  ev.push({ k: "caught", id: p.id }); p.stars = 0; p.immuneUntil = now + IMMUNE; p.litT = 0;
+  for (const o of vs) if (o.kind === 0 && o.mode === 1 && o.target === p.id) { o.mode = 2; o.cool = now + 5; }
+}
 // players: [{ id, x, y, z, bag (parcels carried), stars, lastChased, lastStar, immuneUntil }] (changed in place); returns
 // what happened
 export function stepVehicles(vs, players, dt, now) {
   const ev = [];
   for (const p of players) if (p.stars > 0 && now - p.lastChased > WANTED_COOL) { p.stars--; p.lastChased = now; ev.push({ k: "stars", id: p.id, stars: p.stars }); }
+  // the helicopters' searchlights
+  const inLight = new Set();
   for (const v of vs) {
-    const C = v.kind ? HELI : VAN;
+    if (v.kind !== 1) continue;
+    stepHeli(v, dt, now); beamOf(v, beamTmp); v.mode = 0;
+    for (const p of players) {
+      if (p.immuneUntil > now || !insideWorld(p) || !p.bag || !lit(beamTmp, p)) continue;
+      inLight.add(p); v.mode = 1; v.target = p.id;
+    }
+  }
+  for (const p of players) {
+    if (!inLight.has(p)) { p.litT = 0; continue; }
+    if (!p.litT) ev.push({ k: "chase", id: p.id });
+    p.litT = (p.litT || 0) + dt; p.lastChased = now;
+    if (p.litT >= BEAM.hold) catchPlayer(p, vs, now, ev);
+  }
+  for (const v of vs) {
+    if (v.kind !== 0) continue;
+    const C = VAN;
     if (v.mode === 1) {
       const p = players.find((q) => q.id === v.target);
       if (!p || p.immuneUntil > now || !insideWorld(p) || !p.bag) { v.mode = 2; v.cool = now + 4; }
@@ -253,34 +300,29 @@ export function stepVehicles(vs, players, dt, now) {
         v.t -= dt; p.lastChased = now;
         const dx = p.x - v.x, dz = p.z - v.z, d = hyp(dx, dz), sp = C.chase + C.perStar * p.stars;
         if (d > 0.01) { const m = Math.min(d, sp * dt); v.x += (dx / d) * m; v.z += (dz / d) * m; v.yaw = turn(v.yaw, Math.atan2(dx, dz), Math.min(1, dt * 10)); }
-        if (v.kind === 0) v.y = terrain(v.x, v.z); else v.y += (Math.max(p.y + 2.4, smoothTerrain(v.x, v.z) + 3) - v.y) * Math.min(1, dt * 2.5);
-        const got = v.kind === 0 ? d < C.catch && p.y - terrain(p.x, p.z) < 3 : hyp(d, v.y - (p.y + 1.5)) < C.catch;
-        if (got) {
-          ev.push({ k: "caught", id: p.id }); p.stars = 0; p.immuneUntil = now + IMMUNE;
-          for (const o of vs) if (o.mode === 1 && o.target === p.id) { o.mode = 2; o.cool = now + 5; }
-        } else if (v.t <= 0) {
+        v.y = terrain(v.x, v.z);
+        if (d < C.catch && p.y - terrain(p.x, p.z) < 3) catchPlayer(p, vs, now, ev);
+        else if (v.t <= 0) {
           v.mode = 2; v.cool = now + 6;
           if (now - p.lastStar > 4 && p.stars < WANTED_MAX) { p.stars++; p.lastStar = now; ev.push({ k: "escaped", id: p.id, stars: p.stars }); }
         }
       }
-      if (v.mode === 2 && v.kind === 0) v.rs = nearestS(ROADS[v.road], v.x, v.z);
+      if (v.mode === 2) v.rs = nearestS(ROADS[v.road], v.x, v.z);
       continue;
     }
-    if (v.mode === 2) {   // back to its road (or up to its circuit)
-      let tx, tz;
-      if (v.kind === 0) { const p = roadAt(ROADS[v.road], v.rs), fx = p.fx * v.dir, fz = p.fz * v.dir; tx = p.x - fz * 2; tz = p.z + fx * 2; }
-      else { const r = 140 + 30 * Math.sin(v.ph * 2); tx = Math.cos(v.ph) * r; tz = Math.sin(v.ph) * r; }
+    if (v.mode === 2) {   // back to its road
+      const p = roadAt(ROADS[v.road], v.rs), fx = p.fx * v.dir, fz = p.fz * v.dir, tx = p.x - fz * 2, tz = p.z + fx * 2;
       const dx = tx - v.x, dz = tz - v.z, d = hyp(dx, dz), m = Math.min(d, C.patrol * 1.4 * dt);
       if (d > 0.01) { v.x += (dx / d) * m; v.z += (dz / d) * m; v.yaw = turn(v.yaw, Math.atan2(dx, dz), Math.min(1, dt * 8)); }
-      v.y = v.kind === 0 ? terrain(v.x, v.z) : v.y + (Math.max(smoothTerrain(v.x, v.z), 0) + HELI.alt - v.y) * Math.min(1, dt * 1.5);
-      if (d < 1) { v.mode = 0; if (v.kind === 0) v.s = v.rs; }
+      v.y = terrain(v.x, v.z);
+      if (d < 1) { v.mode = 0; v.s = v.rs; }
     } else placePatrol(v, dt, false);
     if (v.mode === 0 && now > v.cool) {   // look around
       let best = null, bd = 1e9;
       for (const p of players) {
         if (p.immuneUntil > now || !insideWorld(p) || !p.bag) continue;
-        if (v.kind === 0 && p.y - terrain(p.x, p.z) > 6) continue;
-        const d = v.kind ? hyp(p.x - v.x, p.z - v.z, (p.y - v.y) * 0.5) : hyp(p.x - v.x, p.z - v.z);
+        if (p.y - terrain(p.x, p.z) > 6) continue;
+        const d = hyp(p.x - v.x, p.z - v.z);
         if (d < C.spot + 7 * p.stars && d < bd) { bd = d; best = p; }
       }
       if (best) { v.mode = 1; v.target = best.id; v.t = C.time + C.timeStar * best.stars; ev.push({ k: "chase", id: best.id }); }

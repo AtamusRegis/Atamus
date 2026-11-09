@@ -6,6 +6,7 @@ and any rule decided. Use `git log` for the code detail (and for the older Atamu
 
 ## 2026-11-09
 
+- **Van headlights and helicopter searchlights (owner).** Animal control vans have headlights while they're moving (beams ahead and a pool of light on the road, brightest at night). Helicopters no longer chase: each sweeps a real searchlight over town that turns slowly and swings back the other way now and then, its spot moving in and out; it lights the ground and anything it lands on. A parcel carrier who stays in the beam for half a second is caught.
 - **Wind (owner).** The wind now changes between 3 and 40 mph (windier in the rain, with gusts) and swings slowly round, the same for everyone; streaks, rain and clouds move with it. In a strong wind, fliers and gliders in the air drift gently downwind and bob a little. A pill under your name shows the wind's speed and an arrow the way it blows.
 
 ## 2026-11-08
