@@ -4,7 +4,7 @@
 // its edge; animal control chases you. Co-op: everyone in a room rides the same town, works on contracts together and
 // chats. The server (packages/server/src/pets.js) shares players, runs animal control, contracts and chat.
 import * as THREE from "./vendor/three.module.min.js";
-import * as World from "./pets-world.js?v=1793100030";
+import * as World from "./pets-world.js?v=1793100031";
 
 const $ = (id) => document.getElementById(id);
 const TAU = Math.PI * 2, clamp = (v, a, b) => Math.max(a, Math.min(b, v)), hyp = Math.hypot;
@@ -48,13 +48,15 @@ const EGGS = [
   { id: "basic", name: "Basic Egg", price: 150, odds: [72, 24, 4, 0], c: "#f4ead8", s: "#d8c39c" },
   { id: "gold", name: "Golden Egg", price: 1500, odds: [0, 60, 32, 8], c: "#ffd35a", s: "#e89a10" },
 ];
+// (owner, 2026-11-09) the mount shop sells every pet: Legendary 2,500, and each rarity below a random 500-750 less
+// than the one above (drawn once per pet, so each pet keeps its price)
+const MOUNT_PRICE = { pup: 775, kitten: 625, bunny: 675, duck: 800, fox: 1250, penguin: 1300, goat: 1325, butterfly: 1150, parrot: 1325, stego: 1200, deer: 1925, bear: 1775, horse: 1775, owl: 1850, trike: 1975, raptor: 1925, dragon: 2500, unicorn: 2500, pegasus: 2500, phoenix: 2500, trex: 2500, ptero: 2500, icedragon: 2500 };
 // training: each level +5% speed (up to level 20), every 5 levels one more parcel in the bag
 const MAXLV = 20;
 const petSpeed = (p) => SPECIES[p.sp].speed * (1 + 0.05 * (p.lv - 1));
 const petBag = (p) => SPECIES[p.sp].bag + Math.floor((p.lv - 1) / 5);
 // (owner, 2026-11-08) a pet grows a little with each level: 1.5% bigger per level
 const petScale = (lv) => 1 + 0.015 * ((lv || 1) - 1);
-const trainCost = (p) => Math.round(40 * Math.pow(1.32, p.lv - 1) * [1, 1.6, 2.6, 4][SPECIES[p.sp].r]);
 // items dropped by deliveries (and contracts that fall short)
 const ITEMS = { snack: { name: "Speed Candy", c: "#ff5aa0" }, ribbon: { name: "Training Ribbon", c: "#e5534b" }, ticket: { name: "Egg Ticket", c: "#f2b01e" } };
 // (owner, 2026-11-08) Treats, like a kind's candy: a spare pet (you have another of its kind) can go live on the Pet
@@ -81,7 +83,7 @@ const flies = () => !!SPECIES[riding().sp].fly;
 
 // ---- the world (shared with the server: pets-world.js): the town is a big floating island of plateaus and cliffs with
 // winding roads, houses along them and the plaza in the middle; small islands float off its edge ----
-const { terrain, smoothTerrain, inside, edgeR, ROADS, ROAD_HALF, houses, trees, ISLANDS, islandAt, blocked, PLAZA, POST, PICKUP, BOARD, SHOP, SHOP_B, TRAIN, POUND, RELEASE, SPAWN } = World;
+const { terrain, smoothTerrain, inside, edgeR, ROADS, ROAD_HALF, houses, trees, ISLANDS, islandAt, blocked, PLAZA, POST, PICKUP, BOARD, SHOP, SHOP_B, MOUNT, MOUNT_B, TRAIN, POUND, RELEASE, SPAWN } = World;
 let seed = 20261108; const srnd = () => ((seed = (seed * 16807) % 2147483647) / 2147483647);
 const pick2 = (a) => a[Math.floor(srnd() * a.length)];
 const HOUSE_C = ["#f6d9b8", "#cfe6f7", "#f7cfd8", "#d8f0c8", "#fbe7a8", "#e3d4f5", "#f9f4ea"], ROOF_C = ["#c8553d", "#3b6ea8", "#5a8f3e", "#8a5a3a", "#6b5b95"];
@@ -246,6 +248,109 @@ function boostTouch(now) {
     }
   }
 }
+// ---- the training arena (owner, 2026-11-09): riding into the training yard takes you to a big floating arena with an
+// obstacle course round a track. Clear the glowing obstacle (in order, round the track the way the arrow points) for a
+// training point; enough points and your pet goes up a level: 20 for level 2, 4 more for each level after. The gold
+// circle in the middle has the Training Yard panel (Treats, Training Ribbons); the purple arch takes you back to town. ----
+const AR = { x: 0, z: -405, y: 20, r: 40 }, TR0 = 20, TR1 = 28, TRM = 24;
+const trainNeed = (lv) => 20 + 4 * (lv - 1);
+const OBS = [
+  { k: "hurdle", a: 0, top: 0.7 },
+  { k: "hoop", a: TAU / 8, bot: 0.5, c: 1.9, rr: 1.4 },
+  { k: "plat", a: (2 * TAU) / 8, h: 0.9, da: 0.12 },
+  { k: "gate", a: (3 * TAU) / 8, r0: TR0, r1: TRM },
+  { k: "gate", a: (4 * TAU) / 8, r0: TRM, r1: TR1 },
+  { k: "tunnel", a: (5 * TAU) / 8, da: 0.13, w0: 22, w1: 26, roof: 2.6 },
+  { k: "hurdle", a: (6 * TAU) / 8, top: 0.85 },
+  { k: "hoop", a: (7 * TAU) / 8, bot: 0.7, c: 2.3, rr: 1.6 },
+];
+const PODIUM = 3, EXIT = { x: 0, z: -9 };
+const wrapA = (d) => { while (d > Math.PI) d -= TAU; while (d < -Math.PI) d += TAU; return d; };
+const arLocal = (x, z) => { const lx = x - AR.x, lz = z - AR.z; return { lx, lz, r: hyp(lx, lz), a: Math.atan2(lz, lx) }; };
+const inArena = (x = me.x, z = me.z, m = 0) => hyp(x - AR.x, z - AR.z) < AR.r - m;
+// the floor's height above the arena (a platform where there is one)
+function arenaFloor(x, z) { const q = arLocal(x, z); for (const o of OBS) if (o.k === "plat" && q.r > TR0 + 1 && q.r < TR1 - 1 && Math.abs(wrapA(q.a - o.a)) < o.da) return o.h; return 0; }
+// solid parts: hurdle bars (and the sill under a hoop), gate poles, tunnel walls
+function arenaBlocked(x, z, y) {
+  const q = arLocal(x, z); if (q.r > AR.r) return false; const h = y - AR.y;
+  for (const o of OBS) {
+    const along = wrapA(q.a - o.a) * q.r;
+    if ((o.k === "hurdle" || o.k === "hoop") && Math.abs(along) < 0.7 && q.r > TR0 && q.r < TR1 && h < (o.k === "hurdle" ? o.top : o.bot)) return true;
+    if (o.k === "gate") for (const r of [o.r0, o.r1]) if (hyp(q.lx - Math.cos(o.a) * r, q.lz - Math.sin(o.a) * r) < 0.9 && h < 3) return true;
+    if (o.k === "tunnel" && Math.abs(wrapA(q.a - o.a)) < o.da && h < o.roof + 0.4) for (const r of [o.w0, o.w1]) if (Math.abs(q.r - r) < 0.75) return true;
+  }
+  return false;
+}
+let arNext = 0, arPrev = null, arPanel = false, trainPill = "";
+{
+  const top = new THREE.Mesh(new THREE.CylinderGeometry(AR.r, AR.r * 0.95, 2, 48), mat("#86c95f")); top.position.set(AR.x, AR.y - 1, AR.z); top.receiveShadow = true; scene.add(top);
+  const rock = new THREE.Mesh(new THREE.ConeGeometry(AR.r * 0.95, AR.r * 1.3, 12).rotateX(Math.PI), mat("#8a7f72")); rock.position.set(AR.x, AR.y - 2 - AR.r * 0.65, AR.z); scene.add(rock);
+  const flat = (g, c, y) => { const m = new THREE.Mesh(g.rotateX(-Math.PI / 2), mat(c)); m.position.set(AR.x, AR.y + y, AR.z); m.receiveShadow = true; scene.add(m); return m; };
+  flat(new THREE.RingGeometry(TR0, TR1, 72), "#d98b5f", 0.03); flat(new THREE.RingGeometry(TR0 - 0.3, TR0, 72), "#ffffff", 0.04); flat(new THREE.RingGeometry(TR1, TR1 + 0.3, 72), "#ffffff", 0.04);
+  flat(new THREE.CircleGeometry(PODIUM, 32), "#ffd35a", 0.06);
+  const W = (lx, lz) => [AR.x + lx, AR.z + lz];
+  for (let n = 0; n < 40; n++) { const a = (n / 40) * TAU, [x, z] = W(Math.cos(a) * (AR.r - 1), Math.sin(a) * (AR.r - 1)); box(0.25, 1.2, 0.25, "#ffffff", x, AR.y + 0.6, z); if (n % 2 === 0) { const g = new THREE.Group(); g.position.set(x, AR.y + 1, z); g.rotation.y = -a; scene.add(g); box(0.1, 0.15, (TAU / 40) * (AR.r - 1) * 2, "#ffffff", 0, 0, 0, g); } }
+  // the exit: a purple arch back to town
+  { const [x, z] = W(EXIT.x, EXIT.z), g = new THREE.Group(); g.position.set(x, AR.y, z); scene.add(g); const arch = new THREE.Mesh(new THREE.TorusGeometry(2.4, 0.35, 10, 32, Math.PI), new THREE.MeshBasicMaterial({ color: "#b67cff" })); arch.position.y = 0; g.add(arch); const glow = new THREE.Mesh(new THREE.CircleGeometry(2.3, 32, 0, Math.PI), new THREE.MeshBasicMaterial({ color: "#d9b8ff", transparent: true, opacity: 0.45, side: THREE.DoubleSide, depthWrite: false })); g.add(glow); }
+  for (const o of OBS) {
+    const g = new THREE.Group(), [x, z] = W(Math.cos(o.a) * TRM, Math.sin(o.a) * TRM); g.position.set(x, AR.y, z); g.rotation.y = -o.a; scene.add(g); o.g = g;   // local x: out across the track, z: along it
+    const span = TR1 - TR0;
+    if (o.k === "hurdle") { for (const s of [-1, 1]) box(0.25, o.top + 0.4, 0.25, "#ffffff", s * span / 2, (o.top + 0.4) / 2, 0, g); for (let n = 0; n < 8; n++) box(span / 8, 0.22, 0.22, n % 2 ? "#ffffff" : "#e5534b", -span / 2 + span / 16 + (n * span) / 8, o.top - 0.11, 0, g); }
+    if (o.k === "hoop") { box(span, o.bot, 0.3, "#3a8ee6", 0, o.bot / 2, 0, g); const ring = new THREE.Mesh(new THREE.TorusGeometry(o.rr, 0.18, 10, 32), mat("#ffd35a")); ring.position.set(0, o.c, 0); g.add(ring); for (const s of [-1, 1]) box(0.2, o.c, 0.2, "#ffffff", s * (o.rr + 0.2), o.c / 2, 0, g); }
+    if (o.k === "plat") { const len = 2 * o.da * TRM; box(span - 2, o.h, len, "#3a8ee6", 0, o.h / 2, 0, g); box(span - 1.8, 0.08, len + 0.2, "#ffffff", 0, o.h, 0, g); }
+    if (o.k === "gate") for (const r of [o.r0, o.r1]) { box(0.35, 3, 0.35, "#ffd35a", r - TRM, 1.5, 0, g); if (r === o.r0) { const b = box(Math.abs(o.r1 - o.r0), 0.6, 0.06, "#a352e0", (o.r0 + o.r1) / 2 - TRM, 2.7, 0, g); void b; } }
+    if (o.k === "tunnel") { const len = 2 * o.da * TRM; for (const r of [o.w0, o.w1]) box(0.4, o.roof, len, "#e08a00", r - TRM, o.roof / 2, 0, g); box(o.w1 - o.w0 + 0.4, 0.3, len, "#c8553d", (o.w0 + o.w1) / 2 - TRM, o.roof + 0.15, 0, g); }
+  }
+  // the next obstacle: a gold beam and a bobbing diamond over it
+  const beam = new THREE.Mesh(new THREE.CylinderGeometry(1.6, 1.6, 14, 20, 1, true), new THREE.MeshBasicMaterial({ color: "#ffd35a", transparent: true, opacity: 0.22, side: THREE.DoubleSide, depthWrite: false, blending: THREE.AdditiveBlending }));
+  const gem = new THREE.Mesh(new THREE.OctahedronGeometry(0.7, 0), new THREE.MeshBasicMaterial({ color: "#ffd35a" }));
+  scene.add(beam, gem); AR.beam = beam; AR.gem = gem;
+}
+function enterArena() {
+  const a = -0.35; me.x = AR.x + Math.cos(a) * TRM; me.z = AR.z + Math.sin(a) * TRM; me.y = AR.y; me.vy = 0; cam.y = me.y;
+  me.yaw = Math.atan2(-Math.sin(a), Math.cos(a)); cam.yaw = me.yaw + Math.PI; arPrev = null; arNext = 0;
+  emitSparks(me.x, me.y + 1, me.z, 30, 5, ["#ffd35a", "#ffffff"], 0.8, 0); sendPos(true);
+}
+function leaveArena() {
+  me.x = TRAIN.x; me.z = TRAIN.z + TRAIN.r + 5; me.y = terrain(me.x, me.z); me.vy = 0; cam.y = me.y; me.yaw = 0; cam.yaw = Math.PI; arPrev = null;
+  if (openPanel === "p-train") closePanels(); arPanel = false; emitSparks(me.x, me.y + 1, me.z, 30, 5, ["#b67cff", "#ffffff"], 0.8, 0); sendPos(true);
+}
+function trainPoint() {
+  const p = riding(); if (p.lv >= MAXLV) return;
+  p.tp = (p.tp || 0) + 1; persist();
+  emitSparks(me.x, me.y + 1.5, me.z, 18, 5, ["#ffd35a", "#ffffff"], 0.7, -2);
+  if (p.tp >= trainNeed(p.lv)) { p.tp -= trainNeed(p.lv); train("points"); }
+  else if (openPanel === "p-train") renderTrain();
+}
+function arenaStep() {
+  const here = inArena(), pill = $("trainp");
+  AR.beam.visible = AR.gem.visible = here;
+  if (!here) { arPrev = null; if (trainPill) { trainPill = ""; pill.style.display = "none"; } return; }
+  const p = riding(), s = p.lv >= MAXLV ? "Lv " + MAXLV : `${p.tp || 0}/${trainNeed(p.lv)}`;
+  if (s !== trainPill) { trainPill = s; $("trainn").textContent = s; pill.style.display = ""; }
+  const o = OBS[arNext], [bx, bz] = [AR.x + Math.cos(o.a) * TRM, AR.z + Math.sin(o.a) * TRM];
+  AR.beam.position.set(bx, AR.y + 7, bz); AR.gem.position.set(bx, AR.y + 5 + Math.sin(clock * 3) * 0.4, bz); AR.gem.rotation.y = clock * 2;
+  const q = arLocal(me.x, me.z), h = me.y - AR.y;
+  // the middle: the panel on the gold circle, the arch back to town
+  const onPod = q.r < PODIUM && h < 1.5;
+  if (onPod && !arPanel) { arPanel = true; show("p-train"); } else if (!onPod && arPanel) { arPanel = false; if (openPanel === "p-train") closePanels(); }
+  if (hyp(q.lx - EXIT.x, q.lz - EXIT.z) < 1.8 && h < 3) { leaveArena(); return; }
+  if (p.lv < MAXLV) {
+    let hit = false;
+    if (o.k === "plat") hit = Math.abs(wrapA(q.a - o.a)) < o.da && q.r > TR0 + 1 && q.r < TR1 - 1 && Math.abs(h - o.h) < 0.12;
+    else if (arPrev) {
+      const d0 = wrapA(arPrev.a - o.a), d1 = wrapA(q.a - o.a);
+      if (d0 < 0 && d1 >= 0 && d1 - d0 < 0.5) {   // went past it, the way round the track
+        if (o.k === "hurdle") hit = q.r > TR0 && q.r < TR1 && h > o.top - 0.05;
+        if (o.k === "hoop") hit = Math.abs(q.r - TRM) < o.rr && h > o.bot - 0.05 && h < o.c + o.rr;
+        if (o.k === "gate") hit = q.r > o.r0 && q.r < o.r1;
+        if (o.k === "tunnel") hit = q.r > o.w0 && q.r < o.w1 && h < o.roof;
+      }
+    }
+    if (hit) { arNext = (arNext + 1) % OBS.length; trainPoint(); }
+  }
+  arPrev = q;
+}
 // houses as instances: walls (reaching down into the slope), roofs, doors, mailboxes; each faces its road
 function instanced(geo, color, n, each) { const m = new THREE.InstancedMesh(geo, mat(color), n); m.castShadow = true; m.receiveShadow = true; for (let i = 0; i < n; i++) { dummy.rotation.set(0, 0, 0); dummy.scale.set(1, 1, 1); each(i, dummy); dummy.updateMatrix(); m.setMatrixAt(i, dummy.matrix); } scene.add(m); return m; }
 const wallAt = (h, d) => { d.position.set(h.x, h.base + 2.2 - (h.sky ? 0 : 2), h.z); d.scale.set(9, 4.4 + (h.sky ? 0 : 4), 9); d.rotation.y = h.yaw; };
@@ -401,6 +506,10 @@ const boardRing = new THREE.Mesh(RINGG(BOARD.r), ringM("#e5534b")); boardRing.po
 box(12, 5, 8, "#f7cfd8", SHOP_B.x, 2.5, SHOP_B.z); box(13, 0.6, 9, "#e5739d", SHOP_B.x, 5.3, SHOP_B.z); box(3, 3, 0.2, "#7a4f28", SHOP_B.x, 1.5, SHOP_B.z + 4.05);
 const bigEgg = new THREE.Mesh(new THREE.SphereGeometry(2, 16, 12), mat("#fff3d6")); bigEgg.scale.set(1, 1.3, 1); bigEgg.position.set(SHOP_B.x, 8.3, SHOP_B.z); bigEgg.castShadow = true; scene.add(bigEgg);
 const shopRing = new THREE.Mesh(RINGG(SHOP.r), ringM("#e5739d")); shopRing.position.set(SHOP.x, 0.16, SHOP.z); scene.add(shopRing);
+// the mount shop (owner, 2026-11-09), facing the egg shop, with a giant golden horseshoe on top
+box(12, 5, 8, "#cfeef1", MOUNT_B.x, 2.5, MOUNT_B.z); box(13, 0.6, 9, "#2bb3c0", MOUNT_B.x, 5.3, MOUNT_B.z); box(3, 3, 0.2, "#7a4f28", MOUNT_B.x, 1.5, MOUNT_B.z - 4.05);
+{ const shoe = new THREE.Mesh(new THREE.TorusGeometry(1.7, 0.45, 10, 28, TAU * 0.7), mat("#f2b01e")); shoe.rotation.z = Math.PI * 1.5 - TAU * 0.35; shoe.position.set(MOUNT_B.x, 8, MOUNT_B.z); shoe.castShadow = true; scene.add(shoe); }
+const mountRing = new THREE.Mesh(RINGG(MOUNT.r), ringM("#2bb3c0")); mountRing.position.set(MOUNT.x, 0.16, MOUNT.z); scene.add(mountRing);
 // the training yard: a track with hurdles
 const track = new THREE.Mesh(new THREE.RingGeometry(9, 14, 48).rotateX(-Math.PI / 2), mat("#d98b5f")); track.position.set(TRAIN.x, 0.12, TRAIN.z); track.receiveShadow = true; scene.add(track);
 for (let k = 0; k < 6; k++) { const a = (k / 6) * TAU, x = TRAIN.x + Math.cos(a) * 11.5, z = TRAIN.z + Math.sin(a) * 11.5, g = new THREE.Group(); g.position.set(x, 0, z); g.rotation.y = -a; box(0.15, 1, 0.15, "#ffffff", 0, 0.5, -1.8, g); box(0.15, 1, 0.15, "#ffffff", 0, 0.5, 1.8, g); box(0.2, 0.25, 3.8, "#e5534b", 0, 1, 0, g); scene.add(g); }
@@ -991,6 +1100,7 @@ function hud() {
   const wkey = me.inst ? "-" : Math.round(windNow.mph) + "|" + Math.round(Math.atan2(wr, wf) * 180 / Math.PI / 3) * 3;
   if (wkey !== windKey) { windKey = wkey; $("windp").style.display = me.inst ? "none" : "inline-flex"; if (!me.inst) { const [mph, deg] = wkey.split("|"); $("windn").textContent = mph + " mph"; $("winda").style.transform = `rotate(${deg}deg)`; } }
   if (key === hudKey) return; hudKey = key;
+  if (openPanel === "p-shop" && Math.floor(save.coins) !== shopCoins) renderShop();
   $("coins").textContent = fmt(save.coins); $("bagn").textContent = me.bag.length + "/" + cap; $("who").textContent = save.name;
   $("onlinen").textContent = online; $("net").classList.toggle("on", netOk); $("btn-chat").disabled = !netOk;
   $("wanted").style.display = me.stars ? "inline-flex" : "none"; $("wanted").textContent = "★".repeat(me.stars) + "☆".repeat(World.WANTED_MAX - me.stars);
@@ -1001,7 +1111,8 @@ function hud() {
 }
 const panels = ["p-pets", "p-shop", "p-train", "p-board", "p-player", "p-trade", "p-build", "p-admin"];
 let openPanel = null;
-function show(id) { for (const p of panels) $(p).style.display = p === id ? "block" : "none"; openPanel = id; if (id === "p-pets") renderPets(); if (id === "p-shop") renderShop(); if (id === "p-train") renderTrain(); if (id === "p-board") renderBoard(); if (id === "p-player") renderPlayer(); if (id === "p-trade") renderTrade(); if (id === "p-build") renderPenPick(); if (id === "p-admin") renderAdmin(); }
+function show(id) { if (id === "p-train" && !inArena()) { enterArena(); return; } showPanel(id); }
+function showPanel(id) { for (const p of panels) $(p).style.display = p === id ? "block" : "none"; openPanel = id; if (id === "p-pets") renderPets(); if (id === "p-shop") renderShop(); if (id === "p-train") renderTrain(); if (id === "p-board") renderBoard(); if (id === "p-player") renderPlayer(); if (id === "p-trade") renderTrade(); if (id === "p-build") renderPenPick(); if (id === "p-admin") renderAdmin(); }
 function closePanels() { if (openPanel === "p-trade" && trading) netSend({ t: "trade_cancel" }); for (const p of panels) $(p).style.display = "none"; openPanel = null; }
 for (const p of panels) $(p).querySelector(".x").onclick = closePanels;
 $("btn-pets").onclick = () => (openPanel === "p-pets" ? closePanels() : show("p-pets"));
@@ -1048,8 +1159,22 @@ function ride(id) {
   }
   syncBeams(); if (openPanel === "p-pets") renderPets(); hudKey = "";
 }
+// (owner, 2026-11-09) the shops share one window in the middle of the screen, showing your coins and each item's price
+const SHOPS = { egg: "Egg Shop", mount: "Mount Shop" };
+let shopKind = "egg", shopCoins = -1;
 function renderShop() {
-  const el = $("eggs"); el.innerHTML = "";
+  $("shopname").textContent = SHOPS[shopKind]; shopCoins = Math.floor(save.coins); $("shopcash").textContent = fmt(save.coins);
+  const el = $("shopitems"); el.innerHTML = "";
+  if (shopKind === "mount") {
+    const full = save.pets.length >= World.petCap(save);
+    for (const sp of Object.keys(SPECIES)) {
+      const s = SPECIES[sp], price = MOUNT_PRICE[sp], d = card(sp, `<span class="stats"><span>${s.speed.toFixed(1)} m/s</span><span>${s.bag} bag</span></span>`, false, null);
+      const b = document.createElement("button"); b.className = "btn gold"; b.type = "button"; b.innerHTML = `<span class="coin" style="display:inline-block;vertical-align:-3px"></span> ${fmt(price)}`; b.disabled = full || save.coins < price; b.onclick = (ev) => { ev.stopPropagation(); buyMount(sp); };
+      if (full) b.textContent = "Full";
+      d.appendChild(b); el.appendChild(d);
+    }
+    return;
+  }
   for (const egg of EGGS) {
     const d = document.createElement("div"); d.className = "card";
     d.innerHTML = `<svg width="84" height="84" viewBox="0 0 84 84"><ellipse cx="42" cy="46" rx="24" ry="31" fill="${egg.c}" stroke="${egg.s}" stroke-width="4"/><circle cx="34" cy="38" r="4" fill="${egg.s}"/><circle cx="50" cy="52" r="5" fill="${egg.s}"/></svg><span class="nm">${egg.name}</span>`
@@ -1059,6 +1184,13 @@ function renderShop() {
     if (egg.id === "basic" && save.items.ticket > 0) { const t = document.createElement("button"); t.className = "btn"; t.type = "button"; t.textContent = ITEMS.ticket.name + " ×" + save.items.ticket; t.onclick = (ev) => { ev.stopPropagation(); buyEgg(egg, true); }; d.appendChild(t); }
     el.appendChild(d);
   }
+}
+function buyMount(sp) {
+  const price = MOUNT_PRICE[sp];
+  if (!price || save.coins < price || save.pets.length >= World.petCap(save)) return;
+  save.coins -= price; const p = { id: save.nextId++, sp, lv: 1 }; save.pets.push(p); persist();
+  toast(SPECIES[sp].name, RARITY[SPECIES[sp].r].c); emitConfetti(me.x, me.y + 3, me.z, 50, 4, 7);
+  ride(p.id); hudKey = ""; renderShop();
 }
 function buyEgg(egg, ticket) {
   if (ticket ? save.items.ticket <= 0 : save.coins < egg.price) return;
@@ -1115,11 +1247,9 @@ function hatch(p, egg) {
   $("hatchok").onclick = () => done(true); $("hatchno").onclick = () => done(false);
 }
 function renderTrain() {
-  const p = riding(), el = $("train"), cost = trainCost(p), max = p.lv >= MAXLV;
-  el.innerHTML = ""; el.appendChild(card(p.sp, statLine(p), true));
+  const p = riding(), el = $("train"), max = p.lv >= MAXLV;
+  el.innerHTML = ""; el.appendChild(card(p.sp, statLine(p) + `<span class="stats"><span>${max ? "Lv " + MAXLV : `★ ${p.tp || 0}/${trainNeed(p.lv)}`}</span></span>`, true));
   const row = document.createElement("div"); row.className = "row2";
-  const b = document.createElement("button"); b.className = "btn green"; b.type = "button"; b.style.flex = "1";
-  b.innerHTML = max ? "Lv " + MAXLV : `Train <span class="coin" style="display:inline-block;vertical-align:-3px"></span> ${fmt(cost)}`; b.disabled = max || save.coins < cost; b.onclick = () => train("coins"); row.appendChild(b);
   const t = save.treats[p.sp] || 0;
   if (t > 0 && !max) { const r = document.createElement("button"); r.className = "btn gold"; r.type = "button"; r.innerHTML = `${TREAT} ${treatCost(p)} <span class="n">${t}</span>`; r.title = SPECIES[p.sp].name + " Treats"; r.disabled = t < treatCost(p); r.onclick = () => train("treat"); row.appendChild(r); }
   if (save.items.ribbon > 0 && !max) { const r = document.createElement("button"); r.className = "btn"; r.type = "button"; r.textContent = ITEMS.ribbon.name + " ×" + save.items.ribbon; r.onclick = () => train("ribbon"); row.appendChild(r); }
@@ -1129,7 +1259,7 @@ function train(how) {
   const p = riding(); if (p.lv >= MAXLV) return;
   if (how === "ribbon" || how === true) { if (save.items.ribbon <= 0) return; save.items.ribbon--; }
   else if (how === "treat") { const c = treatCost(p); if ((save.treats[p.sp] || 0) < c) return; save.treats[p.sp] -= c; }
-  else { const c = trainCost(p); if (save.coins < c) return; save.coins -= c; }
+  else if (how !== "points") return;
   p.lv++; persist(); mount(); netSend({ t: "pet", sp: p.sp, lv: p.lv }); toast(SPECIES[p.sp].name + " Lv " + p.lv, "#3fb36b"); if (openPanel === "p-train") renderTrain();
   emitSparks(me.x, me.y + 1.5, me.z, 50, 6, ["#3fb36b", "#ffd35a", "#ffffff"], 1.1, -3); emitConfetti(me.x, me.y + 2, me.z, 30, 3, 6);
 }
@@ -1511,6 +1641,7 @@ const POIS = [
   { x: PICKUP.x, y: 7.5, z: PICKUP.z - 1, name: "Post Office", what: "Pick up parcels here" },
   { x: BOARD.x, y: 4.6, z: BOARD.z - 1.5, name: "Contract Board", what: "Start a contract with your room" },
   { x: SHOP_B.x, y: 12, z: SHOP_B.z, name: "Egg Shop", what: "Buy eggs to hatch new pets" },
+  { x: MOUNT_B.x, y: 11.5, z: MOUNT_B.z, name: "Mount Shop", what: "Buy pets to ride" },
   { x: TRAIN.x, y: 4.5, z: TRAIN.z, name: "Training Yard", what: "Train the pet you ride" },
   { x: POUND.x, y: 8.5, z: POUND.z + 3, name: "Animal Control", what: "Where caught couriers end up" },
   { x: LIFT.x, y: 6, z: LIFT.z, name: "Sky Lift", what: "Up to your plot" },
@@ -1941,6 +2072,7 @@ const MOVE = { land: { ground: 1, air: 1 }, fly: { ground: 0.7, air: 0.75 }, gli
 const FOOT_SPEED = 5.5;
 function groundAt(x, z, y) {
   const isl = islandAt(x, z); if (isl && y > isl.y - 3) return isl.y;
+  if (inArena(x, z) && y > AR.y - 3) return AR.y + arenaFloor(x, z);
   if (!inside(x, z)) return -200;
   const w = World.waterAt(x, z); if (w > -Infinity) return w - SWIM_SINK;   // (owner, 2026-11-09) in the water you float
   return terrain(x, z) + (World.roadDist(x, z) < ROAD_HALF + 0.3 ? ROAD_LIFT : 0);
@@ -1977,10 +2109,10 @@ function step(dt) {
   if (me.moving) {
     const v = sp * Math.min(1, ml) * dt, nx = me.x + (mx / ml) * v, nz = me.z + (mz / ml) * v;
     const ok = (x, z) => {
-      if (hyp(x, z) > LIMIT || blocked(x, z, me.y) || houseWall(x, z, me.y)) return false;
+      if (hyp(x, z) > LIMIT || blocked(x, z, me.y) || houseWall(x, z, me.y) || arenaBlocked(x, z, me.y)) return false;
       if (kind === "fly") return true;
       const hs = houseSurface(x, z, me.y); if (hs > -Infinity && hs >= groundAt(x, z, me.y) && hs - me.y <= 0.6) return true;   // floors, steps and slopes of houses
-      if ((kind === "land" || kind === "foot") && !inside(x, z, 1.5) && !islandAt(x, z)) return false;   // the edge (gliders can step off)
+      if ((kind === "land" || kind === "foot") && !inside(x, z, 1.5) && !islandAt(x, z) && !inArena(x, z, 1.5)) return false;   // the edge (gliders can step off)
       if (!wet && !swims() && World.waterAt(x, z) > me.y - 0.3) return false;   // the shore: only swimmers walk in
       if (wet && !inside(x, z, 2.5)) return false;   // not over the waterfall
       return floorAt(x, z, me.y) - me.y <= SLOPE * v + 0.05 + (wet ? 1.1 : 0);   // too steep to climb (a jump gets you up a ledge; out of the water too)
@@ -2022,6 +2154,7 @@ function step(dt) {
     if (kind === "fly") me.y = Math.min(me.y, FLY_TOP);
   }
   me.airborne = me.y - floor > 1.2;
+  arenaStep();
   const low = me.y - floor < 3.5;
   const atHome = onMyPlot(1); if (atHome && !me.atHome) collectPens(); me.atHome = atHome;   // playpen coins, collected on coming home
   if (!me.inst) {
@@ -2034,9 +2167,9 @@ function step(dt) {
     Object.assign(meP, { x: me.inst ? 9999 : me.x, y: me.y, z: me.z, stars: me.stars, bag: me.bag.length });
     for (const e of World.stepVehicles(localVs, [meP], dt, now / 1000)) onVehEvent(e.k, e.stars || 0);
   }
-  // the egg shop, the training yard and the board open their panel when I ride in
-  const z = !low || me.inst ? null : hyp(me.x - SHOP.x, me.z - SHOP.z) < SHOP.r ? "p-shop" : hyp(me.x - TRAIN.x, me.z - TRAIN.z) < TRAIN.r ? "p-train" : hyp(me.x - BOARD.x, me.z - BOARD.z) < BOARD.r ? "p-board" : null;
-  if (z !== zone) { if (zone && openPanel === zone) closePanels(); zone = z; if (z) show(z); }
+  // the shops, the training yard and the board open their panel when I ride in
+  const z = !low || me.inst ? null : hyp(me.x - SHOP.x, me.z - SHOP.z) < SHOP.r ? "p-shop:egg" : hyp(me.x - MOUNT.x, me.z - MOUNT.z) < MOUNT.r ? "p-shop:mount" : hyp(me.x - TRAIN.x, me.z - TRAIN.z) < TRAIN.r ? "p-train" : hyp(me.x - BOARD.x, me.z - BOARD.z) < BOARD.r ? "p-board" : null;
+  if (z !== zone) { if (zone && openPanel === zone.split(":")[0]) closePanels(); zone = z; if (z) { const [id, kind] = z.split(":"); if (kind) shopKind = kind; show(id); } }
   contractStep(); fxStep(dt);
   const cs = (0.5 + windNow.mph * 0.08) * dt;   // clouds drift with the wind
   for (const c of clouds) { c.position.x += WIND.x * cs; c.position.z += WIND.z * cs; for (const ax of ["x", "z"]) { if (c.position[ax] > 420) c.position[ax] -= 840; else if (c.position[ax] < -420) c.position[ax] += 840; } }
@@ -2076,7 +2209,7 @@ function draw(dt) {
   const ti = me.bag.find((i) => houses[i].mx === tx && houses[i].mz === tz), ty = ti !== undefined ? houses[ti].my : 0;
   for (const b of beams.values()) { b.userData.parcel.rotation.y = clock * 2; b.userData.parcel.position.y = 3 + Math.sin(clock * 3) * 0.3; }
   pickRing.material.opacity = 0.55 + Math.sin(clock * 4) * 0.3; bigEgg.rotation.y = clock * 0.6;
-  cutaway(); poiStep(); waterStep(dt); boostStep(dt); placeCamera(dt); camera.updateMatrixWorld(); drawGuide(tx, ty, tz, loggedIn && !building && hyp(tx - me.x, tz - me.z) > 6); skyStep(dt, camera.position.x, camera.position.y, camera.position.z);
+  cutaway(); poiStep(); waterStep(dt); boostStep(dt); placeCamera(dt); camera.updateMatrixWorld(); const gd = inArena() ? [AR.x + Math.cos(OBS[arNext].a) * TRM, AR.y, AR.z + Math.sin(OBS[arNext].a) * TRM] : [tx, ty, tz]; drawGuide(gd[0], gd[1], gd[2], loggedIn && !building && hyp(gd[0] - me.x, gd[2] - me.z) > 6); skyStep(dt, camera.position.x, camera.position.y, camera.position.z);
   renderer.render(scene, camera);
 }
 function frame(now) {
@@ -2093,4 +2226,4 @@ syncBeams(); hud(); requestAnimationFrame(frame); connect();
 $("lgo").disabled = $("lnew").disabled = true;
 
 // for tests
-window.Pets = { get save() { return save; }, me, houses, get contract() { return contract; }, get online() { return online; }, get netOk() { return netOk; }, get loggedIn() { return loggedIn; }, get others() { return others; }, get myPlot() { return myPlot; }, plotState, get party() { return party; }, get trading() { return trading; }, step, deliver, fillBag, buyEgg, train, startContract, ride, setPen, collectPens, openBuild, closeBuild, get building() { return building; }, buildTap, showGhost, runAct, netSend, EGGS, SPECIES, PICKUP, SHOP, TRAIN, BOARD, ISLANDS, World, vehs, localVs, cam, terrain, contractOver, houseSurface, houseWall, refreshTest: () => refreshMyPlot(), emitConfetti, firework, caught, trade, persist, flushSave, set skyOffset(v) { skyOffset = v; }, get environment() { return { ...environment }; }, get sky() { return { day: skyNow.day, rain: skyNow.rain, snow: skyNow.snow, storm: skyNow.storm, fog: skyNow.fog }; }, get wind() { return { mph: windNow.mph, x: WIND.x, z: WIND.z }; }, reach, camera, V3: THREE.Vector3, teleport: (x, z, y) => { me.x = x; me.z = z; me.y = y === undefined ? terrain(x, z) : y; me.vy = 0; } };
+window.Pets = { get save() { return save; }, get arena() { return { AR, OBS, next: arNext, TRM }; }, me, houses, get contract() { return contract; }, get online() { return online; }, get netOk() { return netOk; }, get loggedIn() { return loggedIn; }, get others() { return others; }, get myPlot() { return myPlot; }, plotState, get party() { return party; }, get trading() { return trading; }, step, deliver, fillBag, buyEgg, buyMount, train, startContract, ride, setPen, collectPens, openBuild, closeBuild, get building() { return building; }, buildTap, showGhost, runAct, netSend, EGGS, MOUNT_PRICE, SPECIES, PICKUP, SHOP, MOUNT, TRAIN, BOARD, ISLANDS, World, vehs, localVs, cam, terrain, contractOver, houseSurface, houseWall, refreshTest: () => refreshMyPlot(), emitConfetti, firework, caught, trade, persist, flushSave, set skyOffset(v) { skyOffset = v; }, get environment() { return { ...environment }; }, get sky() { return { day: skyNow.day, rain: skyNow.rain, snow: skyNow.snow, storm: skyNow.storm, fog: skyNow.fog }; }, get wind() { return { mph: windNow.mph, x: WIND.x, z: WIND.z }; }, reach, camera, V3: THREE.Vector3, teleport: (x, z, y) => { me.x = x; me.z = z; me.y = y === undefined ? terrain(x, z) : y; me.vy = 0; } };

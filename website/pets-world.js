@@ -27,6 +27,7 @@ export const inside = (x, z, margin = 0) => hyp(x, z) < edgeR(Math.atan2(z, x)) 
 export const PLAZA = 50;
 export const POST = { x: 0, z: -10 }, PICKUP = { x: 0, z: 4, r: 4 }, BOARD = { x: 11, z: 4, r: 3 };
 export const SHOP = { x: 32, z: 2, r: 5 }, SHOP_B = { x: 32, z: -9 }, TRAIN = { x: -31, z: 2, r: 9 };
+export const MOUNT = { x: 28, z: 15, r: 5 }, MOUNT_B = { x: 28, z: 26 };   // the mount shop (owner, 2026-11-09)
 export const POUND = { x: 0, z: 36 }, RELEASE = { x: 0, z: 26 }, SPAWN = { x: 0, z: 14 };
 
 // ---- the land: rolling ground stepped into plateaus (the steps are cliffs), two big hills, flat at the plaza ----
@@ -243,7 +244,7 @@ for (const isl of ISLANDS) {
   for (let k = 0; k < 3; k++) { const a = (k * TAU) / 3 + 1, x = isl.x + Math.cos(a) * isl.r * 0.75, z = isl.z + Math.sin(a) * isl.r * 0.75; trees.push({ x, z, y: isl.y, s: 0.7 + rand() * 0.4 }); }
 }
 // the plaza's buildings
-solid(POST.x, POST.z, 0, 9, 5, -1, 8); solid(SHOP_B.x, SHOP_B.z, 0, 6, 4, -1, 9); solid(POUND.x, POUND.z + 3, 0, 8, 4, -1, 7);
+solid(POST.x, POST.z, 0, 9, 5, -1, 8); solid(SHOP_B.x, SHOP_B.z, 0, 6, 4, -1, 9); solid(MOUNT_B.x, MOUNT_B.z, 0, 6, 4, -1, 9); solid(POUND.x, POUND.z + 3, 0, 8, 4, -1, 7);
 // trees on open ground
 for (let n = 0; n < 1400 && trees.length < 340; n++) {
   const a = rand() * TAU, r = Math.sqrt(rand()) * R_TOWN, x = Math.cos(a) * r, z = Math.sin(a) * r;
@@ -423,7 +424,7 @@ export function starterHouse() {
 const int = (v, lo, hi, d = lo) => (Number.isFinite(+v) ? Math.max(lo, Math.min(hi, Math.floor(+v))) : d);
 export function cleanData(d, species) {
   d = d && typeof d === "object" ? d : {};
-  const pets = (Array.isArray(d.pets) ? d.pets : []).filter((p) => p && species.has(p.sp)).slice(0, 400).map((p) => ({ id: int(p.id, 1, 1e9), sp: p.sp, lv: int(p.lv, 1, 20, 1) }));
+  const pets = (Array.isArray(d.pets) ? d.pets : []).filter((p) => p && species.has(p.sp)).slice(0, 400).map((p) => Object.assign({ id: int(p.id, 1, 1e9), sp: p.sp, lv: int(p.lv, 1, 20, 1) }, int(p.tp, 0, 999, 0) ? { tp: int(p.tp, 0, 999, 0) } : {}));   // tp: training points toward the next level (owner, 2026-11-09)
   const ids = new Set(); const uniq = pets.filter((p) => !ids.has(p.id) && ids.add(p.id));
   if (!uniq.length) uniq.push({ id: 1, sp: "pup", lv: 1 });
   const items = d.items || {}, treats = {};
