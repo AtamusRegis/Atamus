@@ -211,6 +211,9 @@ Asked (owner): a web game on atamus.io (not Roblox), on its own page; the cargo 
   correction in. Nothing is checked by the server (no anti-cheat).
 - **Leaving (owner, 2026-11-08: ghosts and clones):** the server drops connections that don't answer its ping within 10 s; a page that reconnects (same tab) replaces its
   old connection (keeping its wanted level).
+- **Everyone sees the pet you ride (owner, 2026-11-09: wrong pets):** whenever the pet you ride (or its level) changes,
+  however it changed (riding another, training, a trade, your data coming back from the server at login or after a
+  stale save), your page redraws it and tells the room; after logging in it tells the room again.
 - **Staying in the game while away (owner, 2026-11-09):** a tab that's put away (minimized, behind another window, another
   tab) stays connected: you stop where you are, your keys and joystick let go, and others keep seeing you there. If the
   connection does drop (a phone suspending the page), it reconnects as soon as it can and when the tab is back.
