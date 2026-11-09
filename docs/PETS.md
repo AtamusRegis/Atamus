@@ -52,7 +52,10 @@ Asked (owner): a web game on atamus.io (not Roblox), on its own page; the cargo 
 - You ride your pet (the courier on its back). **Phone:** put a thumb down on the left half of
   the screen for a joystick there; drag elsewhere to turn the camera (up/down tilts it); two fingers pinch to zoom.
   **Computer:** WASD / arrows, drag to turn, the wheel zooms. Movement is relative to the camera.
-- **How pets move (owner, 2026-11-08):** a pet only turns to face where it's going (it never tilts up or down).
+- **How pets move (owner, 2026-11-08; pitch 2026-11-09):** a pet turns to face where it's going. Fliers and gliders in the
+  air also pitch with how they're really moving: nose-up climbing, nose-down diving or gliding down, up to about 40°,
+  eased in, about the middle of pet and rider, the same for everyone's pets; level on the ground. Land pets never
+  tilt. (The tilt removed on 2026-11-08 followed the camera, not the flight.)
   - **Space (or the Jump / Fly ▲ / Flap ▲ button) is pressed each time, never held (owner, 2026-11-08).**
   - **Land pets** jump: straight up when not moving, far on the run (1.6× speed in the air); a jump gets them up a
     ledge.

@@ -610,6 +610,17 @@ function drawGuide(tx, ty, tz, on) {
 // the courier on foot (inside houses): legs that walk, arms that swing against them
 function walkerModel(shirt) { const w = courierModel(shirt); scene.add(w.g); w.g.visible = false; return w; }
 const walker = walkerModel(save.shirt);
+// (owner, 2026-11-09) fliers and gliders point nose-up while climbing and nose-down while diving or gliding down, by
+// how they're really moving (height gained against ground covered); level on the ground. The body turns about its
+// middle so the pet stays where it is.
+function flightPitch(m, x, y, z, dt, airborne) {
+  const f = m.fp || (m.fp = { x, y, z, a: 0 }), d = Math.max(dt, 1e-3), hs = hyp(x - f.x, z - f.z) / d, vy = (y - f.y) / d;
+  f.x = x; f.y = y; f.z = z;
+  const want = m.fly && airborne && hs < 120 && Math.abs(vy) < 120 ? clamp(-Math.atan2(vy, hs + 3), -0.7, 0.7) : 0;   // not on a teleport
+  f.a += (want - f.a) * Math.min(1, dt * 5);
+  const c = (m.top / m.g.scale.y) * 0.45;   // the middle of pet and rider
+  m.body.rotation.x = f.a; m.body.position.y += c * (1 - Math.cos(f.a)); m.body.position.z = -c * Math.sin(f.a);
+}
 function animateWalker(w, t, moving) { const sw = moving ? Math.sin(t * 9) * 0.7 : 0; w.legs[0].rotation.x = sw; w.legs[1].rotation.x = -sw; w.arms[0].rotation.x = -sw; w.arms[1].rotation.x = sw; }
 // dizzy stars when animal control catches me
 const dizzy = new THREE.Group(); for (let k = 0; k < 4; k++) { const s = new THREE.Mesh(new THREE.OctahedronGeometry(0.22, 0), new THREE.MeshBasicMaterial({ color: "#ffd84a" })); s.position.set(Math.cos((k * TAU) / 4) * 0.8, 0, Math.sin((k * TAU) / 4) * 0.8); dizzy.add(s); } dizzy.visible = false; scene.add(dizzy);
@@ -1683,7 +1694,7 @@ function step(dt) {
       return floorAt(x, z, me.y) - me.y <= SLOPE * v + 0.05;   // too steep to climb (a jump gets you up a ledge)
     };
     if (ok(nx, me.z)) me.x = nx; if (ok(me.x, nz)) me.z = nz;   // slide along walls
-    me.yaw = lerpYaw(me.yaw, Math.atan2(mx, mz), Math.min(1, dt * 12));   // turn to where it's going (never tilting)
+    me.yaw = lerpYaw(me.yaw, Math.atan2(mx, mz), Math.min(1, dt * 12));   // turn to where it's going (fliers also pitch: flightPitch)
   }
   const floor = floorAt(me.x, me.z, me.y);
   if (kind === "fly") {   // climbs or dives as it flies forward, the way the camera looks; hovers when stopped; Space rises straight up
@@ -1727,7 +1738,7 @@ function draw(dt) {
   const now = performance.now();
   mine.g.position.set(me.x, me.y, me.z); mine.g.rotation.set(0, me.yaw, 0); mine.g.visible = !me.foot;
   walker.g.visible = !!me.foot; if (me.foot) { walker.g.position.set(me.x, me.y, me.z); walker.g.rotation.y = me.yaw; animateWalker(walker, clock, me.moving); }
-  animatePet(mine, clock, me.moving, petSpeed(riding()), me.airborne);
+  animatePet(mine, clock, me.moving, petSpeed(riding()), me.airborne); flightPitch(mine, me.x, me.y, me.z, dt, me.airborne);
   dizzy.visible = me.stunUntil > now; if (dizzy.visible) { dizzy.position.set(me.x, me.y + mine.top + 0.5, me.z); dizzy.rotation.y = clock * 6; }
   for (const o of others.values()) {
     const vis = o.inst === me.inst; o.m.g.visible = vis && !o.foot;
@@ -1741,7 +1752,8 @@ function draw(dt) {
     o.m.g.position.set(o.x, o.y, o.z); o.m.g.rotation.y = o.yaw;
     if (o.walker && o.foot) { o.walker.g.position.set(o.x, o.y, o.z); o.walker.g.rotation.y = o.yaw; animateWalker(o.walker, clock + o.x, o.moving); }
     if (o.foot) o.tag.position.y = 2.6; else o.tag.position.y = o.m.top + 1.2;
-    animatePet(o.m, clock + o.x * 0.1, o.moving, 10, o.m.fly && o.y - (inside(o.x, o.z) ? terrain(o.x, o.z) : -60) > 1.2);
+    const air = o.m.fly && o.y - (inside(o.x, o.z) ? terrain(o.x, o.z) : -60) > 1.2;
+    animatePet(o.m, clock + o.x * 0.1, o.moving, 10, air); flightPitch(o.m, o.x, o.y, o.z, dt, air);
   }
   vehiclesDraw(dt);
   for (const st of plotState.values()) for (const q of st.pens || []) {   // pets in playpens wander about
