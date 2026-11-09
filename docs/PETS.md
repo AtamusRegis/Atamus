@@ -34,8 +34,11 @@ Asked (owner): a web game on atamus.io (not Roblox), on its own page; the cargo 
   Every 4 minutes the weather's decided: about 1 in 4 rain (streaks around you, a grey sky, shorter fog, easing in and
   out). Wind streaks blow past (more up high and in the rain); god rays slant down from the sun (strongest with it
   low, none at night or in rain); 56 clouds in three layers (below the island, around it and high above).
-- Houses and buildings are solid (you slide along their walls); a house between the camera and you is hidden while
-  it's in the way.
+- Houses and buildings are solid (you slide along their walls). **A house between the camera and you fades (owner,
+  2026-11-08):** the more of you it hides (5 points on you), the more see-through it gets (down to 18%), easing in and
+  out.
+- Roads are laid on the land vertex by vertex (5 across, every ~2 m) just above it, and pets stand on the road surface.
+- No flicker: shadows are biased against acne and the vans' overlapping faces are offset.
 
 ## Riding
 
@@ -50,18 +53,29 @@ Asked (owner): a web game on atamus.io (not Roblox), on its own page; the cargo 
     0.75× and walk at 0.7× their speed.
   - **Gliders** (Parrot, Pegasus, Phoenix, Pterodactyl): can't climb; they jump and glide, sinking 1.6 m/s (faster
     looking down) at 1.25× speed, and walk at 0.95×; they can step off the edge.
+- **Every kind has its own build (owner, 2026-11-08):** body shape and size (boxy, round, upright birds, two-legged
+  dinosaurs), leg length, a neck on horses, deer and dragons, head and snout, ears, tail and extras: floppy ears and a
+  wagging tail (Pup), cat ears, whiskers and a curled tail (Kitten), a round body, long ears, a puff tail and a hop
+  (Bunny), a long snout and bushy white-tipped tail (Fox), curled horns and a beard (Goat), antlers and spots (Deer),
+  a big round body (Bear), a mane and hair tail (Horse; rainbow ones and a horn for the Unicorn; wings for the
+  Pegasus), plates and a spiked tail (Stegosaurus), a frill and horns (Triceratops), bat wings, back horns, spikes and a
+  spade tail (Dragons; ice-white spikes and a crest on the Ice Dragon), a flat bill (Duck), an upright body with
+  flippers (Penguin), a hooked beak and long tail (Parrot), big eyes and tufts (Owl), a crest and fire tail (Phoenix), a
+  long beak, back crest and bat wings (Pterodactyl), stripes, claws and a crest (Raptor), a huge head and tiny arms
+  (T-Rex). Upright birds waddle.
 - A pet grows 1.5% bigger with each level (owner, 2026-11-08), so a level 20 pet is about 29% bigger; others see it too.
 
 ## Animal control (owner, 2026-11-08)
 
 - 8 white vans with light bars patrol the roads (driving on the right, turning round at a road's end) and 2
   helicopters circle over town. Online the server runs them for the whole room; offline the page does.
+- They only go after players carrying parcels (owner, 2026-11-08); a chase ends if the bag empties (no star).
 - Each spots a player near it (vans 16 m, helicopters 22 m, plus 7 m per wanted star; vans only see players on or near
   the ground) and chases them straight for a short while (vans 3 s, helicopters 3.5 s, plus 0.8 s per star), lights
   flashing (a helicopter shines a searchlight). Vans chase at 9.5 m/s, helicopters 11, plus 1.3 / 1.6 per star, so a
   faster pet gets away.
-- **Caught** (a van touching you on the ground, a helicopter reaching you anywhere): you're taken to the pound's yard,
-  dizzy for 2.2 s, your parcels go back to the post office and your wanted level is cleared; 7 s before you can be
+- **Caught** (a van touching you on the ground, a helicopter reaching you anywhere): you're taken straight to the
+  pound's yard (no stun, owner 2026-11-08), your parcels go back to the post office and your wanted level is cleared; 7 s before you can be
   caught again.
 - **Wanted level (0–5 stars):** each chase you get away from adds a star (at most one every 4 s); a star drops every
   25 s nobody's chasing you. Shown top right, and over your name for others. Each star adds **20% to delivery pay**.
@@ -114,10 +128,11 @@ Asked (owner): a web game on atamus.io (not Roblox), on its own page; the cargo 
 - The game connects to the Atamus server (`wss://play.atamus.io/pets`) and puts you in a room of up to 16. Everyone in
   the room rides the same town and sees the others (their pet, shirt and name over their head), moving smoothly. Top
   right: a green dot when connected and how many are in the room. Offline, it keeps trying and you play alone.
-- **Smooth movement (owner, 2026-11-08: rubber-banding):** the server sends everyone's position and animal control 10
-  times a second stamped with its clock; pages draw others and vehicles 140 ms in the past, gliding between updates
-  (guessing ahead up to 0.2 s if one's late). Your own position is sent 10 times a second by the real clock (and every
-  2 s regardless).
+- **Smooth movement (owner, 2026-11-08: rubber-banding):** your page sends your position 20 times a second (when it
+  changes, and every second regardless) stamped with your own clock; the server passes positions on 20 times a second
+  (animal control 10, stamped with its clock). Pages replay each player 170 ms in the past on that player's own clock
+  (so speeds stay even), guessing ahead up to 0.2 s if an update's late (not if they'd stopped) and easing any
+  correction in. Nothing is checked by the server (no anti-cheat).
 - **Leaving (owner, 2026-11-08: ghosts and clones):** a tab that's put away disconnects and reconnects when it's back;
   the server drops connections that don't answer its ping within 10 s; a page that reconnects (same tab) replaces its
   old connection (keeping its wanted level).
@@ -166,8 +181,11 @@ Asked (owner): a web game on atamus.io (not Roblox), on its own page; the cargo 
   One house each; a green ring marks your door.
 - **E** at your door (Enter) takes you into your own copy of it, far off in the sky; only people in it see each other.
   **E** on the doormat (Exit) takes you back out. **G** (Invite) asks your party in (Visit home).
-- **Build** (inside your home): a **Room** ($1,500 × rooms so far, up to 6, 14 m each, open to each other), a **Bed**
-  ($400, 2 more pets) or a **Playpen** ($800), each in the next free spot (4 a room). Tap a playpen to put a pet in it
+- **Build** (inside your home): a **Room** ($1,500 × rooms so far, up to 6, 14 m squares open to each other), a
+  **Bed** ($400, 2 more pets) or a **Playpen** ($800). **You choose where (owner, 2026-11-08):** green markers show
+  where it can go (a room on any free square next to one you have, not in front of the door; furniture on any free
+  spot, 4 a room); tap one to build there, ✕ (or Escape) to stop. You walk freely between rooms. Homes are always
+  bright and dry inside. Tap a playpen to put a pet in it
   (not the one you ride): it wanders there and earns coins a minute (2 / 3.5 / 5.5 / 8 by rarity, +5% per level), up
   to 8 hours' worth, collected when you come home. A pet in a playpen can't be ridden, traded or sent to the farm.
 

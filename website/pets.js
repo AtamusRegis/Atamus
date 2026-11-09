@@ -93,9 +93,9 @@ renderer.setPixelRatio(Math.min(devicePixelRatio || 1, touchy ? 1.6 : 2));
 renderer.shadowMap.enabled = true; renderer.shadowMap.type = THREE.PCFSoftShadowMap;
 const scene = new THREE.Scene();
 scene.background = new THREE.Color("#8fd3ff"); scene.fog = new THREE.Fog("#bfe6ff", 150, 560);
-const camera = new THREE.PerspectiveCamera(55, 1, 0.3, 1000);
+const camera = new THREE.PerspectiveCamera(55, 1, 0.5, 1000);
 scene.add(new THREE.HemisphereLight("#ffffff", "#7aa35a", 1.1));
-const sun = new THREE.DirectionalLight("#fff6e0", 1.6); sun.castShadow = true; sun.shadow.mapSize.set(1024, 1024);
+const sun = new THREE.DirectionalLight("#fff6e0", 1.6); sun.castShadow = true; sun.shadow.mapSize.set(1024, 1024); sun.shadow.bias = -0.0006; sun.shadow.normalBias = 0.05;   // (owner, 2026-11-08: flickering) no shadow acne
 Object.assign(sun.shadow.camera, { left: -45, right: 45, top: 45, bottom: -45, near: 1, far: 200 }); scene.add(sun, sun.target);
 const dummy = new THREE.Object3D();
 const MATS = new Map(), mat = (c) => { if (!MATS.has(c)) MATS.set(c, new THREE.MeshLambertMaterial({ color: c })); return MATS.get(c); };
@@ -156,13 +156,14 @@ function box(w, h, d, c, x, y, z, parent, shadow = true) { const m = new THREE.M
 { const m = new THREE.Mesh(new THREE.CircleGeometry(PLAZA - 4, 64).rotateX(-Math.PI / 2), mat("#e8dcc4")); m.position.y = 0.06; m.receiveShadow = true; scene.add(m); }
 // roads: a ribbon along each, laid on the land, with the dashed center line
 const roadTex = (() => { const c = document.createElement("canvas"); c.width = 32; c.height = 64; const g = c.getContext("2d"); g.fillStyle = "#5c6670"; g.fillRect(0, 0, 32, 64); g.fillStyle = "#6c757e"; g.fillRect(0, 0, 2, 64); g.fillRect(30, 0, 2, 64); g.fillStyle = "#f4f1e6"; g.fillRect(14.5, 8, 3, 30); const t = new THREE.CanvasTexture(c); t.wrapT = THREE.RepeatWrapping; t.colorSpace = THREE.SRGBColorSpace; t.anisotropy = 4; return t; })();
-const roadM = new THREE.MeshLambertMaterial({ map: roadTex, side: THREE.DoubleSide, polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -2 });
+const roadM = new THREE.MeshLambertMaterial({ map: roadTex, side: THREE.DoubleSide, polygonOffset: true, polygonOffsetFactor: -4, polygonOffsetUnits: -4 });
+const ROAD_LIFT = 0.1;   // (owner, 2026-11-08: clipping) every road vertex sits just above the land under it, and pets stand on that
 ROADS.forEach((R, k) => {
   const P = R.loop ? [...R.pts, R.pts[0]] : R.pts, S = R.loop ? [...R.S, R.len] : R.S, pos = [], uv = [], idx = [];
   for (let i = 0; i < P.length; i++) {
     const a = P[Math.max(0, i - 1)], b = P[Math.min(P.length - 1, i + 1)], fx = b[0] - a[0], fz = b[1] - a[1], fl = hyp(fx, fz) || 1, rx = -fz / fl, rz = fx / fl;
-    for (const sd of [-1, 1]) { const x = P[i][0] + rx * ROAD_HALF * sd, z = P[i][1] + rz * ROAD_HALF * sd; pos.push(x, Math.max(terrain(x, z), terrain(P[i][0], P[i][1])) + 0.18 + k * 0.01, z); uv.push(sd < 0 ? 0 : 1, S[i] / 8); }
-    if (i) { const q = (i - 1) * 2; idx.push(q, q + 1, q + 2, q + 1, q + 3, q + 2); }
+    for (const sd of [-1, -0.5, 0, 0.5, 1]) { const x = P[i][0] + rx * ROAD_HALF * sd, z = P[i][1] + rz * ROAD_HALF * sd; pos.push(x, terrain(x, z) + ROAD_LIFT + k * 0.004, z); uv.push((sd + 1) / 2, S[i] / 8); }
+    if (i) { const q = (i - 1) * 5; for (let c = 0; c < 4; c++) idx.push(q + c, q + c + 1, q + c + 5, q + c + 1, q + c + 6, q + c + 5); }
   }
   const g = new THREE.BufferGeometry(); g.setAttribute("position", new THREE.Float32BufferAttribute(pos, 3)); g.setAttribute("uv", new THREE.Float32BufferAttribute(uv, 2)); g.setIndex(idx); g.computeVertexNormals();
   const m = new THREE.Mesh(g, roadM); m.receiveShadow = true; scene.add(m);
@@ -231,7 +232,8 @@ function skyStep(dt, cx, cy, cz) {
   const t = Date.now() / 1000 + skyOffset, ph = (t % DAY_S) / DAY_S, a = ph * TAU;
   const el = Math.sin(a) + 0.2;   // the sun's height: a little more day than night
   skyNow.sun.set(Math.cos(a), Math.max(-0.4, el), 0.35).normalize();
-  const day = smooth(clamp((el + 0.08) / 0.35, 0, 1)), dusk = clamp(1 - Math.abs(el - 0.05) / 0.3, 0, 1) * day, rainK = weatherAt(t);
+  let day = smooth(clamp((el + 0.08) / 0.35, 0, 1)), dusk = clamp(1 - Math.abs(el - 0.05) / 0.3, 0, 1) * day, rainK = weatherAt(t);
+  if (me.inst) { day = 1; dusk = 0; rainK = 0; }   // inside a home it's always bright and dry
   skyNow.day = day; skyNow.rain = rainK;
   tmpCol.copy(SKY.night).lerp(SKY.day, day).lerp(SKY.dusk, dusk * 0.55).lerp(SKY.rain, rainK * 0.6 * (0.4 + 0.6 * day)); scene.background.copy(tmpCol);
   tmpCol.copy(FOG.night).lerp(FOG.day, day).lerp(FOG.dusk, dusk * 0.5).lerp(FOG.rain, rainK * 0.6 * (0.4 + 0.6 * day)); scene.fog.color.copy(tmpCol);
@@ -249,17 +251,17 @@ function skyStep(dt, cx, cy, cz) {
   }
   if (rain.visible) rainG.attributes.position.needsUpdate = true;
   // wind streaks, more of them up high and in the rain
-  const windK = 0.35 + rainK * 0.4 + clamp((me.y - terrain(me.x, me.z)) / 40, 0, 0.5);
+  const windK = me.inst ? 0 : 0.35 + rainK * 0.4 + clamp((me.y - terrain(me.x, me.z)) / 40, 0, 0.5);
   for (const w of winds) {
     w.life -= dt;
-    if (w.life <= 0) { if (Math.random() > windK) { w.m.material.opacity = 0; w.life = 0.3 + Math.random(); continue; } w.max = w.life = 1 + Math.random() * 1.2; w.x = cx + (Math.random() - 0.5) * 60 - WIND.x * 20; w.y = cy - 6 + Math.random() * 14; w.z = cz + (Math.random() - 0.5) * 60 - WIND.z * 20; }
-    w.x += WIND.x * 22 * dt; w.z += WIND.z * 22 * dt; w.m.position.set(w.x, w.y + Math.sin(w.life * 3) * 0.3, w.z);
+    if (w.life <= 0) { if (Math.random() > windK) { w.m.material.opacity = 0; w.life = 0.3 + Math.random(); continue; } w.max = w.life = 2 + Math.random() * 2; const a = Math.random() * TAU, r = 20 + Math.random() * 30; w.x = cx + Math.cos(a) * r - WIND.x * 10; w.y = cy - 6 + Math.random() * 16; w.z = cz + Math.sin(a) * r - WIND.z * 10; }   // (owner, 2026-11-08) out of the way, never right at the camera
+    w.x += WIND.x * 9 * dt; w.z += WIND.z * 9 * dt; w.m.position.set(w.x, w.y + Math.sin(w.life * 3) * 0.3, w.z);
     tmpV.copy(camera.position).sub(w.m.position); tmpV.addScaledVector(WIND, -tmpV.dot(WIND)).normalize(); tmpV2.crossVectors(tmpV, WIND);   // long side along the wind, flat face to the camera
     tmpM.makeBasis(WIND, tmpV2, tmpV); w.m.quaternion.setFromRotationMatrix(tmpM);
-    w.m.material.opacity = Math.sin((w.life / w.max) * Math.PI) * 0.35 * (0.4 + 0.6 * day);
+    w.m.material.opacity = Math.sin((w.life / w.max) * Math.PI) * 0.16 * (0.4 + 0.6 * day) * clamp((hyp(w.x - cx, w.z - cz) - 12) / 8, 0, 1);
   }
   // god rays: brightest with the sun low, gone at night and in the rain
-  const rk = day * (1 - rainK) * (0.35 + dusk * 0.9) * 0.22;
+  const rk = me.inst ? 0 : day * (1 - rainK) * (0.35 + dusk * 0.9) * 0.22;
   for (const r of rays) {
     r.m.visible = rk > 0.005; if (!r.m.visible) continue;
     tmpV.set(cx + r.off.x, 0, cz + r.off.z); tmpV.addScaledVector(skyNow.sun, 60); tmpV.y = Math.max(tmpV.y, cy + 40); r.m.position.copy(tmpV);
@@ -292,81 +294,193 @@ for (let k = -4; k <= 4; k++) { box(0.15, 1.3, 0.15, "#9aa7b2", POUND.x + k * 2,
 for (const sx of [-1, 1]) for (let k = 0; k < 4; k++) box(0.15, 1.3, 0.15, "#9aa7b2", POUND.x + sx * 8, 0.65, POUND.z - 9 + k * 2.4);
 box(16, 0.12, 0.12, "#9aa7b2", POUND.x, 1.2, POUND.z - 9);
 
-// ---- a pet (built from boxes; it faces +z) with its rider ----
+// ---- a pet (built from simple shapes; it faces +z) with its rider ----
+// (owner, 2026-11-08: they all looked alike) each kind has its own build: body shape and size, legs, neck, head and
+// snout, ears, tail and its own extras, so each reads at a glance
+const SPHERE = new THREE.SphereGeometry(1, 14, 10), CONE = new THREE.ConeGeometry(1, 1, 10), CYL = new THREE.CylinderGeometry(1, 1, 1, 10);
+function ball(r, c, x, y, z, parent, sx = 1, sy = 1, sz = 1) { const m = new THREE.Mesh(SPHERE, mat(c)); m.scale.set(r * sx, r * sy, r * sz); m.position.set(x, y, z); m.castShadow = true; parent.add(m); return m; }
+function cone(r, h, c, x, y, z, parent, rx = 0, rz = 0) { const m = new THREE.Mesh(CONE, mat(c)); m.scale.set(r, h, r); m.position.set(x, y, z); m.rotation.set(rx, 0, rz); m.castShadow = true; parent.add(m); return m; }
+// a box from point a to point b (y, z in the body's side view), w wide and t thick
+function strut(w, t, c, y0, z0, y1, z1, parent, x = 0) { const len = hyp(y1 - y0, z1 - z0), m = box(w, t, len, c, x, (y0 + y1) / 2, (z0 + z1) / 2, parent); m.rotation.x = -Math.atan2(y1 - y0, z1 - z0); return m; }
+// each kind: plan (quad, upright, bird, biped, butterfly), body size [width, height, length], round body, leg length,
+// neck length, head size, snout length, ears, tail and extras
+const LOOK = {
+  pup: { plan: "quad", body: [0.8, 0.62, 1.25], leg: 0.55, head: 0.62, snout: 0.32, ears: "flop", tail: "wag", nose: "#2b1d14" },
+  kitten: { plan: "quad", body: [0.55, 0.5, 1.1], leg: 0.5, head: 0.58, roundHead: true, snout: 0.06, ears: "cat", tail: "curl", whiskers: true, nose: "#f3a7b5" },
+  bunny: { plan: "quad", round: true, body: [0.9, 0.82, 1.0], leg: 0.22, head: 0.6, roundHead: true, snout: 0.05, ears: "long", tail: "puff", nose: "#f3a7b5", hop: true },
+  fox: { plan: "quad", body: [0.62, 0.55, 1.35], leg: 0.6, head: 0.55, snout: 0.5, snoutC: "a", ears: "big", tail: "bushy", nose: "#1d232a", socks: "#2b1d14" },
+  goat: { plan: "quad", body: [0.85, 0.75, 1.25], leg: 0.72, head: 0.5, snout: 0.35, ears: "side", horns: "curl", beard: true, tail: "stub", hooves: "#4a3a2a" },
+  deer: { plan: "quad", body: [0.72, 0.68, 1.35], leg: 1.05, neck: 0.65, head: 0.48, snout: 0.38, ears: "side", antlers: true, tail: "stub", spots: true, hooves: "#3a2a1a" },
+  bear: { plan: "quad", round: true, body: [1.3, 1.1, 1.65], leg: 0.48, legW: 0.42, head: 0.85, roundHead: true, snout: 0.3, snoutC: "a", ears: "round", tail: "none", nose: "#1d232a" },
+  horse: { plan: "quad", body: [0.82, 0.85, 1.7], leg: 1.25, neck: 0.95, head: 0.45, snout: 0.6, ears: "point", mane: "a", tail: "hair", hooves: "#2b1d14" },
+  unicorn: { plan: "quad", body: [0.82, 0.85, 1.7], leg: 1.25, neck: 0.95, head: 0.45, snout: 0.6, ears: "point", mane: "rainbow", tail: "rainbow", horn: true, hooves: "#e0c070" },
+  pegasus: { plan: "quad", body: [0.82, 0.85, 1.7], leg: 1.25, neck: 0.95, head: 0.45, snout: 0.6, ears: "point", mane: "a", tail: "hair", wings: "feather", hooves: "#8aa6c8" },
+  stego: { plan: "quad", body: [1.05, 0.95, 1.9], leg: 0.55, legW: 0.38, head: 0.42, snout: 0.25, ears: "none", plates: true, tail: "spike", low: true },
+  trike: { plan: "quad", body: [1.2, 1.0, 1.8], leg: 0.6, legW: 0.42, head: 0.75, snout: 0.35, ears: "none", frill: true, tail: "thick" },
+  dragon: { plan: "quad", body: [0.95, 0.8, 1.6], leg: 0.7, neck: 0.85, head: 0.55, snout: 0.5, ears: "none", horns: "back", tail: "spade", wings: "bat", spikes: true },
+  icedragon: { plan: "quad", body: [0.95, 0.8, 1.6], leg: 0.7, neck: 0.85, head: 0.55, snout: 0.5, ears: "none", horns: "back", tail: "spade", wings: "bat", spikes: "ice", crest: true },
+  duck: { plan: "bird", round: true, body: [0.85, 0.7, 1.05], leg: 0.32, head: 0.48, bill: "flat", tail: "tuft" },
+  penguin: { plan: "upright", body: [0.85, 1.3, 0.75], leg: 0.18, head: 0.5, bill: "small", belly: "front", wings: "flipper" },
+  parrot: { plan: "upright", body: [0.6, 0.95, 0.6], leg: 0.32, head: 0.45, bill: "hook", wings: "feather", tail: "long", crest: true },
+  owl: { plan: "upright", round: true, body: [1.0, 1.1, 0.9], leg: 0.22, head: 0.0, bill: "small", eyes: "big", ears: "tufts", wings: "feather" },
+  phoenix: { plan: "bird", body: [0.55, 0.55, 1.1], leg: 0.6, neck: 0.55, head: 0.42, bill: "point", wings: "feather", tail: "fire", crest: true },
+  ptero: { plan: "bird", body: [0.5, 0.45, 0.9], leg: 0.5, neck: 0.45, head: 0.4, bill: "long", crest: "back", wings: "bat", tail: "none" },
+  raptor: { plan: "biped", body: [0.7, 0.75, 1.5], leg: 0.95, head: 0.6, snout: 0.45, tail: "long", claws: true, stripes: true },
+  trex: { plan: "biped", body: [1.1, 1.05, 1.9], leg: 1.05, legW: 0.5, head: 1.15, snout: 0.6, tail: "long", tiny: true },
+  butterfly: { plan: "butterfly" },
+};
+const RAINBOW = ["#ff6b6b", "#ffb84d", "#ffe66b", "#7ee08a", "#6bb8ff", "#b48cff"];
 function petModel(sp, rider) {
-  const s = SPECIES[sp], k = s.size, g = new THREE.Group(), body = new THREE.Group(); g.add(body);
-  const B = s.body;
-  const legs = [], wings = [], tails = [];
-  let legH, bh, bl, bw;
-  if (B === "biped") { legH = 0.95 * k; bh = 0.95 * k; bl = 1.5 * k; bw = 0.85 * k; }
-  else if (B === "bird") { legH = 0.45 * k; bh = 0.85 * k; bl = 1.15 * k; bw = 0.85 * k; }
-  else if (B === "butterfly") { legH = 0.6 * k; bh = 0.38 * k; bl = 1.5 * k; bw = 0.4 * k; }
-  else { legH = 0.6 * k * (s.legs || 1); bh = 0.7 * k; bl = 1.5 * k; bw = 0.9 * k; }
-  const top = legH + bh;
-  // legs
-  if (B === "quad") for (const [lx, lz] of [[-1, -1], [1, -1], [-1, 1], [1, 1]]) { const l = new THREE.Group(); l.position.set(lx * bw * 0.32, legH, lz * bl * 0.32); box(0.24 * k, legH, 0.24 * k, s.c, 0, -legH / 2, 0, l); body.add(l); legs.push(l); }
-  if (B === "biped" || B === "bird") for (const lx of [-1, 1]) { const l = new THREE.Group(); l.position.set(lx * bw * 0.28, legH, B === "biped" ? -bl * 0.1 : 0); box((B === "biped" ? 0.34 : 0.14) * k, legH, (B === "biped" ? 0.4 : 0.14) * k, B === "bird" ? "#f08a24" : s.c, 0, -legH / 2, 0, l); box(0.3 * k, 0.1 * k, 0.4 * k, B === "bird" ? "#f08a24" : s.a, 0, -legH + 0.05, 0.1 * k, l); body.add(l); legs.push(l); }
-  // body and belly
-  box(bw, bh, bl, s.c, 0, legH + bh / 2, 0, body);
-  if (B !== "butterfly") box(bw * 0.72, bh * 0.4, bl * 0.62, s.a, 0, legH + 0.08 * k, 0, body);
-  // head
-  const head = new THREE.Group(); body.add(head);
-  let hs = 0.75 * k;
-  if (B === "biped") { hs = (s.big ? 1.15 : 0.8) * k; head.position.set(0, top + hs * 0.35, bl / 2 + hs * 0.35); }
-  else if (B === "bird") { hs = 0.7 * k; head.position.set(0, top + hs * 0.35, bl * 0.35); }
-  else if (B === "butterfly") { hs = 0.45 * k; head.position.set(0, legH + bh / 2, bl / 2 + hs * 0.4); }
-  else head.position.set(0, top + 0.1 * k, bl / 2 + 0.15 * k);
-  box(hs, hs, B === "biped" ? hs * 1.3 : hs, s.c, 0, 0, 0, head);
-  if (B === "bird") box(hs * 0.4, hs * 0.25, 0.4 * k, s.ears === "crest" ? s.a : "#f2a33a", 0, -hs * 0.1, hs / 2 + 0.15 * k, head);   // beak
-  else if (B === "biped") { box(hs * 0.9, hs * 0.25, hs * 0.9, s.a, 0, -hs * 0.35, hs * 0.25, head); for (let t = -1; t <= 1; t += 0.5) box(0.06 * k, 0.12 * k, 0.06 * k, "#ffffff", t * hs * 0.35, -hs * 0.2, hs * 0.65, head); }
-  else if (B !== "butterfly") box(hs * 0.5, hs * 0.35, 0.2 * k, s.a, 0, -hs * 0.15, hs / 2 + 0.05, head);   // snout
-  const eyeR = s.ears === "tufts" ? 0.2 : 0.12;
-  for (const ex of [-1, 1]) { if (s.ears === "tufts") box(eyeR * 1.6 * k, eyeR * 1.6 * k, 0.04, "#ffffff", ex * hs * 0.24, hs * 0.12, hs / 2 + 0.01, head); box(eyeR * k, eyeR * k, 0.05, "#1d232a", ex * hs * 0.24, hs * 0.12, hs / 2 + 0.03, head); }
-  const e = s.ears, ear = (x, y, z, w, h, d, c) => box(w, h, d, c || s.c, x, y, z, head);
-  if (e === "flop") { ear(-hs * 0.55, 0, 0, 0.15 * k, hs * 0.8, hs * 0.4, s.a); ear(hs * 0.55, 0, 0, 0.15 * k, hs * 0.8, hs * 0.4, s.a); }
-  else if (e === "point") { ear(-hs * 0.3, hs * 0.6, 0, 0.22 * k, 0.35 * k, 0.12 * k); ear(hs * 0.3, hs * 0.6, 0, 0.22 * k, 0.35 * k, 0.12 * k); }
-  else if (e === "long") { ear(-hs * 0.22, hs * 0.95, 0, 0.18 * k, 0.9 * k, 0.12 * k); ear(hs * 0.22, hs * 0.95, 0, 0.18 * k, 0.9 * k, 0.12 * k); }
-  else if (e === "horns") { ear(-hs * 0.3, hs * 0.65, -0.1, 0.12 * k, 0.45 * k, 0.12 * k, s.a); ear(hs * 0.3, hs * 0.65, -0.1, 0.12 * k, 0.45 * k, 0.12 * k, s.a); }
-  else if (e === "antlers") { for (const x of [-1, 1]) { ear(x * hs * 0.3, hs * 0.8, 0, 0.1 * k, 0.7 * k, 0.1 * k, s.a); ear(x * hs * 0.45, hs * 1.05, 0, 0.35 * k, 0.1 * k, 0.1 * k, s.a); } }
-  else if (e === "round") { ear(-hs * 0.4, hs * 0.55, 0, 0.25 * k, 0.25 * k, 0.15 * k); ear(hs * 0.4, hs * 0.55, 0, 0.25 * k, 0.25 * k, 0.15 * k); }
-  else if (e === "tufts") { ear(-hs * 0.35, hs * 0.6, 0, 0.16 * k, 0.3 * k, 0.12 * k); ear(hs * 0.35, hs * 0.6, 0, 0.16 * k, 0.3 * k, 0.12 * k); }
-  else if (e === "crest") ear(0, hs * 0.35, -hs * 0.6, 0.12 * k, 0.3 * k, 0.9 * k, s.a);
-  else if (e === "horn") { const h = new THREE.Mesh(new THREE.ConeGeometry(0.12 * k, 0.7 * k, 8), mat(s.a)); h.position.set(0, hs * 0.75, hs * 0.25); h.rotation.x = 0.4; head.add(h); }
-  if (B === "butterfly") for (const x of [-1, 1]) { const a = box(0.04 * k, 0.6 * k, 0.04 * k, "#1d232a", x * hs * 0.2, hs * 0.6, hs * 0.1, head); a.rotation.z = -x * 0.4; }
-  if (s.frill) { box(hs * 1.7, hs * 1.3, 0.12 * k, s.a, 0, hs * 0.45, -hs * 0.5, head); for (const [x, y] of [[-0.3, 0.55], [0.3, 0.55], [0, -0.05]]) { const h = new THREE.Mesh(new THREE.ConeGeometry(0.1 * k, 0.6 * k, 8), mat("#f4f1e6")); h.position.set(x * hs, y * hs, hs * 0.55); h.rotation.x = 1.2; head.add(h); } }
-  // back plates (stegosaurus)
-  if (s.plates) for (let n = 0; n < 5; n++) { const p = box(0.08 * k, 0.5 * k, 0.45 * k, s.a, 0, top + 0.15 * k, (n - 2) * bl * 0.2, body); p.rotation.x = 0.3; }
-  // little arms (T-rex, raptor)
-  if (B === "biped") for (const x of [-1, 1]) box(0.14 * k, 0.4 * k, 0.14 * k, s.c, x * bw * 0.45, legH + bh * 0.4, bl * 0.4, body);
-  // wings: feathered (birds), big (dragons, pegasus, phoenix, pterodactyl), a butterfly's four
-  if (B === "butterfly") for (const x of [-1, 1]) {
-    const w = new THREE.Group(); w.position.set(x * bw / 2, legH + bh / 2, 0); body.add(w);
-    box(1.7 * k, 0.05, 1.3 * k, s.c, x * 0.85 * k, 0, 0.35 * k, w); box(0.9 * k, 0.06, 0.6 * k, s.a, x * 1.05 * k, 0.01, 0.45 * k, w); box(1.2 * k, 0.05, 1.0 * k, s.c2, x * 0.6 * k, 0, -0.6 * k, w);
-    wings.push(w);
-  } else if (s.wings) for (const x of [-1, 1]) {
-    const big = s.wings === "big", w = new THREE.Group(); w.position.set(x * bw / 2, top - 0.1, B === "bird" ? 0 : -0.1 * k); body.add(w);
-    box((big ? 1.9 : 1.1) * k, 0.08, (big ? 1.2 : 0.7) * k, s.a, x * (big ? 0.95 : 0.55) * k, 0, 0, w); if (big) box(0.9 * k, 0.09, 0.5 * k, s.c, x * 1.5 * k, 0.01, -0.45 * k, w);
-    wings.push(w);
-  } else if (B === "bird") for (const x of [-1, 1]) { const w = new THREE.Group(); w.position.set(x * bw / 2, legH + bh * 0.6, 0); body.add(w); box(0.1 * k, bh * 0.6, bl * 0.6, s.c, x * 0.05, 0, 0, w); wings.push(w); }
-  // tail
-  if (s.tail === "long") { const t1 = new THREE.Group(); t1.position.set(0, legH + bh * 0.6, -bl / 2); body.add(t1); box(bw * 0.55, bh * 0.5, 0.9 * k, s.c, 0, 0, -0.4 * k, t1); const t2 = new THREE.Group(); t2.position.set(0, 0, -0.85 * k); t1.add(t2); box(bw * 0.3, bh * 0.3, 0.9 * k, s.c, 0, 0, -0.4 * k, t2); tails.push(t1, t2); }
-  else if (s.tail === "fire") { for (const [x, c] of [[-0.2, "#ffd84a"], [0, "#e5534b"], [0.2, "#ffd84a"]]) { const t = new THREE.Group(); t.position.set(x * k, top - 0.2, -bl / 2); body.add(t); box(0.14 * k, 0.06, 1.3 * k, c, 0, 0, -0.6 * k, t); tails.push(t); } }
-  else if (B !== "butterfly") { const t = new THREE.Group(); t.position.set(0, top - 0.15, -bl / 2); body.add(t); box(0.18 * k, 0.18 * k, 0.5 * k, s.a, 0, 0, -0.2 * k, t); tails.push(t); }
-  let seat = top;
-  if (rider) {   // the courier: a shirt, a cap and a mail bag
-    const r = new THREE.Group(); r.position.set(0, B === "butterfly" ? legH + bh : top, -0.1 * k); body.add(r);
-    box(0.55, 0.75, 0.35, rider, 0, 0.45, 0, r); box(0.45, 0.45, 0.45, "#f1c9a5", 0, 1.08, 0, r); box(0.5, 0.15, 0.55, "#3a6ea8", 0, 1.36, 0.05, r); box(0.5, 0.06, 0.3, "#3a6ea8", 0, 1.3, 0.32, r);
-    box(0.25, 0.42, 0.5, "#a0703f", 0.38, 0.35, -0.02, r); seat = (B === "butterfly" ? legH + bh : top) + 1.6;
+  const s = SPECIES[sp], L = LOOK[sp] || LOOK.pup, k = s.size, g = new THREE.Group(), body = new THREE.Group(); g.add(body);
+  const legs = [], wings = [], tails = [], head = new THREE.Group();
+  const C = s.c, A = s.a;
+  let seat = 1, seatZ = -0.1 * k;
+  const eyes = (hs, z, big) => { for (const ex of [-1, 1]) { if (big) { ball(hs * 0.2, "#ffffff", ex * hs * 0.24, hs * 0.08, z, head); ball(hs * 0.11, "#1d232a", ex * hs * 0.24, hs * 0.08, z + hs * 0.12, head); } else ball(hs * 0.09, "#1d232a", ex * hs * 0.26, hs * 0.12, z, head); } };
+  const tail = (type, y, z) => {
+    const t = new THREE.Group(); t.position.set(0, y, z); body.add(t); tails.push(t);
+    if (type === "wag") { const m = box(0.14 * k, 0.14 * k, 0.5 * k, C, 0, 0.12 * k, -0.2 * k, t); m.rotation.x = 0.6; }
+    else if (type === "curl") { strut(0.1 * k, 0.1 * k, C, 0, 0, 0.35 * k, -0.35 * k, t); strut(0.1 * k, 0.1 * k, C, 0.35 * k, -0.35 * k, 0.75 * k, -0.3 * k, t); }
+    else if (type === "puff") ball(0.22 * k, "#ffffff", 0, 0, -0.05 * k, t);
+    else if (type === "bushy") { ball(0.26 * k, C, 0, 0.05 * k, -0.45 * k, t, 1, 1, 2); ball(0.18 * k, A, 0, 0.08 * k, -0.95 * k, t, 1, 1, 1.4); }
+    else if (type === "stub") ball(0.12 * k, A, 0, 0, -0.05 * k, t);
+    else if (type === "hair" || type === "rainbow") { for (let i = 0; i < (type === "rainbow" ? 4 : 3); i++) { const m = box(0.12 * k, 0.9 * k, 0.12 * k, type === "rainbow" ? RAINBOW[i] : A, (i - 1) * 0.07 * k, -0.4 * k, -0.15 * k, t); m.rotation.x = 0.35; } }
+    else if (type === "spike" || type === "thick" || type === "spade" || type === "long") {
+      const t2 = new THREE.Group(); t2.position.set(0, -0.05 * k, -0.85 * k); t.add(t2); tails.push(t2);
+      box(0.45 * k, 0.4 * k, 0.95 * k, C, 0, 0, -0.4 * k, t); box(0.28 * k, 0.26 * k, 0.95 * k, C, 0, 0, -0.4 * k, t2);
+      if (type === "spike") for (const x of [-1, 1]) for (const zz of [-0.6, -0.85]) cone(0.06 * k, 0.45 * k, "#f4f1e6", x * 0.2 * k, 0.12 * k, zz * k, t2, 0, -x * 1.1);
+      if (type === "spade") { const m = box(0.5 * k, 0.06, 0.4 * k, A, 0, 0, -0.95 * k, t2); m.rotation.y = Math.PI / 4; }
+    }
+    else if (type === "tuft") { const m = box(0.3 * k, 0.12 * k, 0.3 * k, C, 0, 0.12 * k, -0.1 * k, t); m.rotation.x = 0.5; }
+    else if (type === "fire") for (const [x, c, l] of [[-0.18, "#ffd84a", 1.4], [0, "#e5534b", 1.8], [0.18, "#ffd84a", 1.4]]) { const f = box(0.14 * k, 0.05, l * k, c, x * k, 0, -l * 0.5 * k, t); f.rotation.x = -0.15; }
+    else if (type === "long" && false) { /* biped handled above */ }
+    return t;
+  };
+  if (L.plan === "quad") {
+    const [bw0, bh0, bl0] = L.body, bw = bw0 * k, bh = bh0 * k, bl = bl0 * k, legH = L.leg * k, lw = (L.legW || 0.24) * k;
+    for (const [lx, lz] of [[-1, -1], [1, -1], [-1, 1], [1, 1]]) {
+      const l = new THREE.Group(); l.position.set(lx * bw * 0.32, legH + (L.round ? bh * 0.2 : 0), lz * bl * 0.33); body.add(l); legs.push(l);
+      const lh = legH + (L.round ? bh * 0.2 : 0); box(lw, lh, lw, L.socks || C, 0, -lh / 2, 0, l);
+      if (L.hooves) box(lw * 1.1, 0.12 * k, lw * 1.1, L.hooves, 0, -lh + 0.06 * k, 0, l);
+    }
+    const by = legH + bh / 2;
+    if (L.round) { ball(1, C, 0, by, 0, body, bw / 2, bh / 2, bl / 2); ball(1, A, 0, by - bh * 0.18, bl * 0.08, body, bw * 0.38, bh * 0.32, bl * 0.4); }
+    else { box(bw, bh, bl, C, 0, by, 0, body); box(bw * 0.72, bh * 0.3, bl * 0.62, A, 0, legH + 0.05 * k, 0, body); }
+    if (L.spots) for (const [x, y, z] of [[1, 0.25, 0.1], [1, 0.1, -0.25], [-1, 0.2, -0.05], [-1, 0.05, 0.3], [1, -0.05, 0.35]]) ball(0.07 * k, "#fff4e0", x * bw / 2, by + y * bh, z * bl, body);
+    if (L.plates) for (let n = 0; n < 6; n++) { const p = box(0.08 * k, (0.45 + 0.2 * Math.sin((n / 5) * Math.PI)) * k, 0.4 * k, A, 0, by + bh / 2 + 0.15 * k, (n - 2.5) * bl * 0.17, body); p.rotation.y = Math.PI / 4; }
+    if (L.spikes) for (let n = 0; n < 5; n++) cone(0.09 * k, 0.32 * k, L.spikes === "ice" ? "#e8f8ff" : A, 0, by + bh / 2 + 0.12 * k, (n - 2) * bl * 0.2, body);
+    // neck and head
+    const hs = L.head * k, front = bl / 2;
+    let hy = by + bh * (L.low ? 0.0 : 0.35), hz = front + hs * 0.35;
+    if (L.neck) { const ny = by + bh * 0.3, nz = front * 0.75; hy = ny + L.neck * k * 0.85; hz = nz + L.neck * k * 0.5; strut(hs * 0.7, hs * 0.75, C, ny, nz, hy, hz, body); }
+    head.position.set(0, hy, hz); body.add(head);
+    if (L.roundHead) ball(hs / 2, C, 0, 0, 0, head, 1.05, 0.95, 1); else box(hs, hs * 0.9, hs, C, 0, 0, 0, head);
+    if (L.snout) box(hs * (L.snout > 0.45 ? 0.55 : 0.6), hs * 0.42, L.snout * k, L.snoutC === "a" ? A : C, 0, -hs * 0.18, hs / 2 + L.snout * k / 2 - 0.02, head);
+    if (L.nose) ball(hs * 0.09, L.nose, 0, -hs * 0.05, hs / 2 + (L.snout || 0) * k, head);
+    eyes(hs, hs * 0.48);
+    const ear = (x, y, z, w, h, d, c) => box(w, h, d, c || C, x, y, z, head);
+    if (L.ears === "flop") { ear(-hs * 0.55, -hs * 0.1, -hs * 0.05, 0.12 * k, hs * 0.75, hs * 0.38, A); ear(hs * 0.55, -hs * 0.1, -hs * 0.05, 0.12 * k, hs * 0.75, hs * 0.38, A); }
+    else if (L.ears === "cat") for (const x of [-1, 1]) cone(0.12 * k, 0.3 * k, C, x * hs * 0.28, hs * 0.5, 0, head, 0, x * -0.2);
+    else if (L.ears === "big") for (const x of [-1, 1]) { cone(0.16 * k, 0.42 * k, C, x * hs * 0.3, hs * 0.6, 0, head, 0, x * -0.15); cone(0.09 * k, 0.28 * k, "#1d232a", x * hs * 0.3, hs * 0.66, 0.04 * k, head, 0, x * -0.15); }
+    else if (L.ears === "long") for (const x of [-1, 1]) { ear(x * hs * 0.2, hs * 0.85, -hs * 0.05, 0.16 * k, 0.85 * k, 0.1 * k); ear(x * hs * 0.2, hs * 0.85, -hs * 0.0, 0.09 * k, 0.65 * k, 0.11 * k, A); }
+    else if (L.ears === "side") for (const x of [-1, 1]) { const e = ear(x * hs * 0.6, hs * 0.25, -hs * 0.1, 0.32 * k, 0.12 * k, 0.16 * k); e.rotation.z = x * 0.3; }
+    else if (L.ears === "round") for (const x of [-1, 1]) ball(0.15 * k, C, x * hs * 0.36, hs * 0.42, -hs * 0.05, head);
+    else if (L.ears === "point") for (const x of [-1, 1]) cone(0.08 * k, 0.26 * k, C, x * hs * 0.24, hs * 0.55, -hs * 0.15, head);
+    if (L.whiskers) for (const x of [-1, 1]) for (const y of [-0.12, -0.22]) box(0.4 * k, 0.015, 0.015, "#ffffff", x * hs * 0.4, y * hs, hs * 0.48, head);
+    if (L.horn) { const h = cone(0.08 * k, 0.7 * k, "#ffe9a8", 0, hs * 0.6, hs * 0.2, head, 0.45); h.position.y = hs * 0.75; }
+    if (L.horns === "curl") for (const x of [-1, 1]) { strut(0.1 * k, 0.1 * k, A, hs * 0.45, -hs * 0.1, hs * 0.8, -hs * 0.45, head, x * hs * 0.25); strut(0.1 * k, 0.1 * k, A, hs * 0.8, -hs * 0.45, hs * 0.55, -hs * 0.75, head, x * hs * 0.3); }
+    if (L.horns === "back") for (const x of [-1, 1]) cone(0.07 * k, 0.5 * k, L.spikes === "ice" ? "#e8f8ff" : A, x * hs * 0.28, hs * 0.55, -hs * 0.35, head, -1.0);
+    if (L.antlers) for (const x of [-1, 1]) { strut(0.07 * k, 0.07 * k, "#c9a27e", hs * 0.4, 0, hs * 1.3, -hs * 0.2, head, x * hs * 0.35); strut(0.06 * k, 0.06 * k, "#c9a27e", hs * 1.0, -hs * 0.12, hs * 1.3, hs * 0.25, head, x * hs * 0.45); strut(0.06 * k, 0.06 * k, "#c9a27e", hs * 1.2, -hs * 0.18, hs * 1.55, -hs * 0.05, head, x * hs * 0.5); }
+    if (L.beard) box(0.14 * k, 0.32 * k, 0.12 * k, "#ffffff", 0, -hs * 0.6, hs * 0.5, head);
+    if (L.crest) for (let n = 0; n < 3; n++) cone(0.06 * k, 0.3 * k, "#e8f8ff", 0, hs * 0.5, -hs * 0.2 - n * 0.15 * k, head, -0.6);
+    if (L.frill) { const f = box(hs * 1.9, hs * 1.4, 0.12 * k, A, 0, hs * 0.5, -hs * 0.55, head); f.rotation.x = -0.3; for (const [x, y] of [[-0.28, 0.55], [0.28, 0.55], [0, -0.05]]) cone(0.09 * k, 0.6 * k, "#f4f1e6", x * hs, y * hs, hs * 0.55, head, 1.2); }
+    if (L.mane) { const nl = L.neck ? L.neck * k : 0.5 * k; for (let n = 0; n < 5; n++) { const c = L.mane === "rainbow" ? RAINBOW[n] : A; const t = n / 4; box(0.12 * k, 0.25 * k, 0.25 * k, c, 0, by + bh * 0.45 + (hy - by - bh * 0.45) * t + 0.15 * k, front * 0.7 + (hz - front * 0.7) * t - 0.15 * k, body); } box(0.14 * k, 0.15 * k, 0.25 * k, L.mane === "rainbow" ? RAINBOW[5] : A, 0, hs * 0.5, hs * 0.1, head); void nl; }
+    if (L.tail !== "none") tail(L.tail, by + bh * 0.2, -bl / 2);
+    if (L.wings) for (const x of [-1, 1]) {
+      const w = new THREE.Group(); w.position.set(x * bw / 2, by + bh * 0.4, bl * 0.1); body.add(w); wings.push(w);
+      if (L.wings === "bat") { for (let n = 0; n < 3; n++) strut(0.08 * k, 0.08 * k, A, 0, 0, 0.1 * k, -n * 0.45 * k, w, x * (0.5 + n * 0.55) * k); box(1.9 * k, 0.05, 1.1 * k, A, x * 0.95 * k, 0, -0.4 * k, w); box(1.2 * k, 0.06, 0.6 * k, C, x * 0.6 * k, 0.01, -0.1 * k, w); }
+      else { box(1.5 * k, 0.08, 0.7 * k, "#ffffff", x * 0.75 * k, 0, 0, w); box(1.1 * k, 0.09, 0.45 * k, A, x * 0.95 * k, 0.01, -0.3 * k, w); }
+    }
+    seat = legH + bh + (L.round ? 0 : 0) ; seatZ = L.neck ? -0.15 * k : -0.1 * k;
+  } else if (L.plan === "upright" || L.plan === "bird") {
+    const [bw0, bh0, bl0] = L.body, bw = bw0 * k, bh = bh0 * k, bl = bl0 * k, legH = L.leg * k, up = L.plan === "upright";
+    for (const x of [-1, 1]) { const l = new THREE.Group(); l.position.set(x * bw * 0.25, legH, 0); body.add(l); legs.push(l); box(0.08 * k, legH, 0.08 * k, "#f08a24", 0, -legH / 2, 0, l); box(0.22 * k, 0.06 * k, 0.32 * k, "#f08a24", 0, -legH + 0.03, 0.08 * k, l); }
+    const by = legH + bh / 2;
+    if (L.round || up) ball(1, C, 0, by, 0, body, bw / 2, bh / 2, bl / 2); else box(bw, bh, bl, C, 0, by, 0, body);
+    if (L.belly === "front") ball(1, A, 0, by - bh * 0.05, bl * 0.18, body, bw * 0.38, bh * 0.4, bl * 0.35);
+    else ball(1, A, 0, by - bh * 0.15, up ? bl * 0.15 : 0, body, bw * 0.35, bh * 0.3, bl * 0.38);
+    const hs = (L.head || 0.5) * k;
+    let hy, hz;
+    if (up) { hy = legH + bh * (L.head ? 1.0 : 0.72); hz = L.head ? bl * 0.08 : bl * 0.15; }
+    else if (L.neck) { const ny = by + bh * 0.25, nz = bl * 0.4; hy = ny + L.neck * k * 0.85; hz = nz + L.neck * k * 0.45; strut(hs * 0.45, hs * 0.5, C, ny, nz, hy, hz, body); }
+    else { hy = by + bh * 0.45; hz = bl * 0.45; }
+    head.position.set(0, hy, hz); body.add(head);
+    if (L.head) ball(hs / 2, C, 0, 0, 0, head);
+    const face = L.head ? hs / 2 : bl / 2;
+    if (L.eyes === "big") { for (const x of [-1, 1]) { ball(0.17 * k, "#ffffff", x * 0.2 * k, 0.05 * k, face * 0.85, head); ball(0.09 * k, "#ffb020", x * 0.2 * k, 0.05 * k, face * 0.85 + 0.1 * k, head); ball(0.05 * k, "#1d232a", x * 0.2 * k, 0.05 * k, face * 0.85 + 0.15 * k, head); } }
+    else eyes(hs, face * 0.8);
+    if (L.bill === "flat") box(hs * 0.55, hs * 0.14, hs * 0.55, "#f2a33a", 0, -hs * 0.1, face + hs * 0.2, head);
+    else if (L.bill === "hook") { cone(hs * 0.16, hs * 0.4, "#f4e6c0", 0, -hs * 0.02, face + hs * 0.12, head, 1.9); }
+    else if (L.bill === "long") { cone(hs * 0.13, 1.1 * k, "#e8c9a0", 0, -hs * 0.05, face + 0.5 * k, head, Math.PI / 2); }
+    else if (L.bill === "point") cone(hs * 0.12, hs * 0.5, "#ffd84a", 0, -hs * 0.05, face + hs * 0.2, head, Math.PI / 2);
+    else cone(0.07 * k, 0.2 * k, "#f2a33a", 0, -0.05 * k, face + 0.06 * k, head, Math.PI / 2);
+    if (L.ears === "tufts") for (const x of [-1, 1]) cone(0.08 * k, 0.3 * k, A, x * 0.28 * k, (L.head ? hs * 0.5 : 0.35 * k), 0, head, 0, x * -0.3);
+    if (L.crest === "back") { const c = box(0.08 * k, 0.5 * k, 0.9 * k, A, 0, hs * 0.3, -0.45 * k, head); c.rotation.x = 0.35; }
+    else if (L.crest) for (let n = 0; n < 3; n++) { const c = box(0.06 * k, 0.4 * k, 0.12 * k, n === 1 ? A : C, 0, hs * 0.5 + 0.15 * k, -n * 0.1 * k, head); c.rotation.x = -0.4 - n * 0.2; }
+    if (L.wings) for (const x of [-1, 1]) {
+      const w = new THREE.Group(); w.position.set(x * bw * 0.45, by + bh * (up ? 0.15 : 0.3), 0); body.add(w); wings.push(w);
+      if (L.wings === "flipper") { const f = box(0.12 * k, bh * 0.6, 0.3 * k, C, x * 0.06 * k, -bh * 0.25, 0, w); f.rotation.z = x * 0.2; }
+      else if (L.wings === "bat") { box(2.0 * k, 0.05, 0.9 * k, A, x * 1.0 * k, 0, -0.2 * k, w); for (let n = 0; n < 3; n++) strut(0.07 * k, 0.07 * k, C, 0, 0, 0.05 * k, -n * 0.4 * k, w, x * (0.6 + n * 0.6) * k); }
+      else if (up) { const f = box(0.14 * k, bh * 0.7, bl * 0.75, A, x * 0.05 * k, -bh * 0.05, -bl * 0.05, w); f.rotation.x = -0.2; if (sp === "parrot") box(0.15 * k, bh * 0.3, bl * 0.5, "#3a8ee6", x * 0.06 * k, -bh * 0.35, -bl * 0.1, w); }
+      else { box(1.4 * k, 0.07, 0.65 * k, A, x * 0.7 * k, 0, 0, w); box(0.9 * k, 0.08, 0.4 * k, "#e5534b", x * 1.0 * k, 0.01, -0.25 * k, w); }
+    }
+    if (L.tail === "long") { const t = new THREE.Group(); t.position.set(0, by - bh * 0.3, -bl * 0.35); body.add(t); tails.push(t); for (const [x, c] of [[-0.06, "#e5534b"], [0.06, "#3a8ee6"]]) { const f = box(0.1 * k, 0.05, 1.0 * k, c, x * k, -0.25 * k, -0.4 * k, t); f.rotation.x = 0.55; } }
+    else if (L.tail && L.tail !== "none") tail(L.tail, by + bh * 0.1, -bl / 2);
+    seat = up ? legH + bh * 0.95 : legH + bh; seatZ = up ? -bl * 0.35 : -0.1 * k;
+  } else if (L.plan === "biped") {
+    const [bw0, bh0, bl0] = L.body, bw = bw0 * k, bh = bh0 * k, bl = bl0 * k, legH = L.leg * k, lw = (L.legW || 0.32) * k;
+    for (const x of [-1, 1]) { const l = new THREE.Group(); l.position.set(x * bw * 0.32, legH, -bl * 0.1); body.add(l); legs.push(l); box(lw, legH * 0.6, lw * 1.2, C, 0, -legH * 0.3, 0.05 * k, l); box(lw * 0.7, legH * 0.5, lw * 0.7, C, 0, -legH * 0.72, -0.08 * k, l); box(lw * 1.1, 0.1 * k, lw * 1.6, A, 0, -legH + 0.05, 0.12 * k, l); if (L.claws) cone(0.06 * k, 0.25 * k, "#f4f1e6", x * 0.06 * k, -legH + 0.22 * k, 0.2 * k, l, 0.6); }
+    const by = legH + bh / 2;
+    const b = box(bw, bh, bl, C, 0, by, 0, body); b.rotation.x = -0.12;
+    box(bw * 0.7, bh * 0.35, bl * 0.6, A, 0, by - bh * 0.35, 0.05 * k, body);
+    if (L.stripes) for (let n = 0; n < 3; n++) box(bw * 1.02, bh * 0.12, 0.1 * k, "#3a4a1a", 0, by + bh * 0.25, (n - 1) * 0.35 * k, body);
+    const hs = L.head * k;
+    head.position.set(0, by + bh * 0.55 + hs * 0.1, bl / 2 + hs * 0.25); body.add(head);
+    box(hs * 0.8, hs * 0.75, hs * 1.0, C, 0, 0, 0, head); box(hs * 0.7, hs * 0.3, hs * 0.75, A, 0, -hs * 0.4, hs * 0.2, head);
+    box(hs * 0.65, hs * 0.38, L.snout * k, C, 0, -hs * 0.02, hs * 0.5 + L.snout * k / 2, head);
+    for (let t = -1; t <= 1; t += 0.5) box(0.05 * k, 0.12 * k, 0.05 * k, "#ffffff", t * hs * 0.28, -hs * 0.24, hs * 0.5 + L.snout * k * 0.8, head);
+    eyes(hs, hs * 0.51);
+    if (sp === "raptor") for (let n = 0; n < 3; n++) { const f = box(0.06 * k, 0.32 * k, 0.12 * k, "#e5534b", 0, hs * 0.45, -n * 0.12 * k, head); f.rotation.x = -0.5; }
+    for (const x of [-1, 1]) box(0.11 * k, (L.tiny ? 0.3 : 0.45) * k, 0.11 * k, C, x * bw * 0.48, by - bh * 0.05, bl * 0.42, body);
+    tail("long", by + bh * 0.1, -bl / 2);
+    seat = legH + bh; seatZ = -0.2 * k;
+  } else {   // butterfly
+    const legH = 0.6 * k, bh = 0.38 * k, bl = 1.5 * k, bw = 0.4 * k;
+    box(bw, bh, bl, "#2b2b35", 0, legH + bh / 2, 0, body);
+    head.position.set(0, legH + bh / 2, bl / 2 + 0.2 * k); body.add(head); ball(0.22 * k, "#2b2b35", 0, 0, 0, head); eyes(0.45 * k, 0.18 * k);
+    for (const x of [-1, 1]) { const a = box(0.04 * k, 0.6 * k, 0.04 * k, "#1d232a", x * 0.1 * k, 0.3 * k, 0.05 * k, head); a.rotation.z = -x * 0.4; ball(0.06 * k, "#1d232a", x * 0.22 * k, 0.58 * k, 0.05 * k, head); }
+    for (const x of [-1, 1]) {
+      const w = new THREE.Group(); w.position.set(x * bw / 2, legH + bh / 2, 0); body.add(w); wings.push(w);
+      box(1.7 * k, 0.05, 1.3 * k, C, x * 0.85 * k, 0, 0.35 * k, w); ball(0.25 * k, A, x * 1.1 * k, 0.03, 0.45 * k, w, 1, 0.2, 1); box(1.2 * k, 0.05, 1.0 * k, s.c2, x * 0.6 * k, 0, -0.6 * k, w);
+    }
+    seat = legH + bh;
   }
-  return { g, body, legs, wings, head, tails, k, top: seat, butterfly: B === "butterfly", fly: !!s.fly };
+  let top = seat;
+  if (rider) {   // the courier: a shirt, a cap and a mail bag
+    const r = new THREE.Group(); r.position.set(0, seat, seatZ); body.add(r);
+    box(0.55, 0.75, 0.35, rider, 0, 0.45, 0, r); box(0.45, 0.45, 0.45, "#f1c9a5", 0, 1.08, 0, r); box(0.5, 0.15, 0.55, "#3a6ea8", 0, 1.36, 0.05, r); box(0.5, 0.06, 0.3, "#3a6ea8", 0, 1.3, 0.32, r);
+    box(0.25, 0.42, 0.5, "#a0703f", 0.38, 0.35, -0.02, r); top = seat + 1.6;
+  }
+  return { g, body, legs, wings, head, tails, k, top, butterfly: L.plan === "butterfly", fly: !!s.fly, hop: !!L.hop, plan: L.plan };
 }
 function animatePet(m, t, moving, speed, airborne) {
-  const sw = moving && !airborne ? Math.sin(t * (6 + speed * 0.5)) * 0.6 : 0;
-  m.legs.forEach((l, i) => (l.rotation.x = airborne ? 0.6 : (i === 0 || i === 3 ? sw : -sw)));
-  m.body.position.y = airborne ? Math.sin(t * 3) * 0.25 : moving ? Math.abs(Math.sin(t * (6 + speed * 0.5))) * 0.12 * m.k : (m.butterfly ? 0.3 + Math.sin(t * 3) * 0.1 : Math.sin(t * 2) * 0.02);
+  const f = 6 + speed * 0.5, sw = moving && !airborne ? Math.sin(t * f) * 0.6 : 0;
+  m.legs.forEach((l, i) => (l.rotation.x = airborne ? 0.6 : m.hop ? -Math.abs(sw) : m.legs.length === 2 ? (i ? sw : -sw) : (i === 0 || i === 3 ? sw : -sw)));
+  m.body.position.y = airborne ? Math.sin(t * 3) * 0.25 : moving ? Math.abs(Math.sin(t * f)) * (m.hop ? 0.35 : 0.12) * m.k : (m.butterfly ? 0.3 + Math.sin(t * 3) * 0.1 : Math.sin(t * 2) * 0.02);
+  if (m.plan === "upright" && moving && !airborne) m.body.rotation.z = Math.sin(t * f) * 0.08; else m.body.rotation.z = 0;   // a waddle
   const flap = m.butterfly ? 0.25 + Math.sin(t * (airborne ? 14 : 5)) * 0.7 : m.fly ? 0.15 + Math.sin(t * (airborne ? 9 : 3)) * (airborne ? 0.6 : 0.25) : 0.1 + Math.sin(t * (moving ? 12 : 3)) * 0.2;
   for (const [i, w] of m.wings.entries()) w.rotation.z = (i ? -1 : 1) * flap;
   m.tails.forEach((tl, i) => (tl.rotation.y = Math.sin(t * 4 - i * 0.8) * 0.35));
+  m.head.rotation.y = Math.sin(t * 0.7) * 0.12;
 }
 // pet portraits for the menus, drawn once per species
 const portraitR = new THREE.WebGLRenderer({ antialias: true, alpha: true, preserveDrawingBuffer: true }); portraitR.setSize(168, 168);
@@ -376,8 +490,8 @@ const PORTRAITS = {};
 function portrait(sp) {
   if (PORTRAITS[sp]) return PORTRAITS[sp];
   const m = petModel(sp); m.g.rotation.y = 0.7; pScene.add(m.g);
-  const k = SPECIES[sp].size, wide = SPECIES[sp].wings === "big" || SPECIES[sp].body === "butterfly" ? 1.35 : 1;
-  pCam.position.set(0, 2.4 * k * wide, 5.6 * k * wide); pCam.lookAt(0, 1.0 * k, 0);
+  const L = LOOK[sp] || {}, k = SPECIES[sp].size, wide = L.wings === "bat" || L.wings === "feather" && L.plan === "quad" || L.plan === "butterfly" ? 1.35 : 1, tall = (L.neck || 0) + (L.leg || 0.5) > 1.5 ? 1.3 : 1;
+  pCam.position.set(0, 2.4 * k * wide * tall, 5.6 * k * wide * tall); pCam.lookAt(0, 1.0 * k * tall, 0);
   portraitR.render(pScene, pCam); pScene.remove(m.g);
   return (PORTRAITS[sp] = portraitR.domElement.toDataURL());
 }
@@ -448,7 +562,7 @@ function syncBeams() {
 // server's clock; others and vehicles are drawn a little in the past, gliding between the two updates around that
 // moment (a short guess ahead if the next is late) ----
 let clockOff = null;   // my clock minus the server's (ms), from the quickest-arriving updates
-const DELAY = 140;
+const DELAY = 140, OTHER_DELAY = 170;
 function serverTime(ts) { const est = performance.now() - ts; if (clockOff === null || est < clockOff) clockOff = est; else clockOff += (est - clockOff) * 0.01; }
 const renderTime = () => performance.now() - (clockOff || 0) - DELAY;
 function pushSample(buf, ts, s) { if (buf.length && ts <= buf[buf.length - 1].t) return; buf.push(Object.assign({ t: ts }, s)); while (buf.length > 30) buf.shift(); }
@@ -457,8 +571,8 @@ function sampleAt(buf, t, out) {
   if (!buf.length) return false;
   let i = buf.length - 1; while (i > 0 && buf[i - 1].t > t) i--;
   const b = buf[i], a = i > 0 ? buf[i - 1] : b;
-  if (t >= b.t) {   // past the newest: guess ahead a little along its last motion
-    const p = buf.length > 1 ? buf[buf.length - 2] : b, span = Math.max(1, b.t - p.t), k = Math.min(t - b.t, 200) / span;
+  if (t >= b.t) {   // past the newest: guess ahead a little along its last motion (not if it had stopped)
+    const p = buf.length > 1 ? buf[buf.length - 2] : b, span = Math.max(1, b.t - p.t), k = b.mv === false ? 0 : Math.min(t - b.t, 200) / span;
     out.x = b.x + (b.x - p.x) * k; out.y = b.y + (b.y - p.y) * k; out.z = b.z + (b.z - p.z) * k; out.yaw = b.yaw; return true;
   }
   const k = a === b ? 1 : clamp((t - a.t) / (b.t - a.t), 0, 1);
@@ -470,8 +584,8 @@ function sampleAt(buf, t, out) {
 const lightR = new THREE.MeshBasicMaterial({ color: "#ff3a3a" }), lightB = new THREE.MeshBasicMaterial({ color: "#3a7aff" });
 function vanModel() {
   const g = new THREE.Group(), body = new THREE.Group(); g.add(body);
-  box(2.4, 1.8, 3.2, "#f4f4f0", 0, 1.5, -0.6, body); box(2.4, 1.4, 1.6, "#f4f4f0", 0, 1.3, 1.7, body); box(2.2, 0.7, 0.1, "#3a5a7a", 0, 1.6, 2.52, body);
-  box(2.45, 0.35, 3.2, "#e08a00", 0, 1.2, -0.6, body); box(2.5, 0.3, 4.9, "#3d4650", 0, 0.55, 0.2, body);
+  box(2.4, 1.8, 3.2, "#f4f4f0", 0, 1.5, -0.6, body); box(2.34, 1.4, 1.6, "#f4f4f0", 0, 1.3, 1.72, body); box(2.1, 0.7, 0.1, "#3a5a7a", 0, 1.6, 2.58, body);
+  box(2.46, 0.35, 3.24, "#e08a00", 0, 1.2, -0.6, body); box(2.5, 0.3, 4.9, "#3d4650", 0, 0.55, 0.2, body);
   for (const [x, z] of [[-1.1, 1.5], [1.1, 1.5], [-1.1, -1.4], [1.1, -1.4]]) { const w = new THREE.Mesh(new THREE.CylinderGeometry(0.45, 0.45, 0.35, 12), mat("#1d232a")); w.rotation.z = Math.PI / 2; w.position.set(x, 0.45, z); body.add(w); }
   for (let k = 0; k < 4; k++) { box(0.06, 1.1, 0.06, "#1d232a", -1.21, 1.5, -1.9 + k * 0.7, body); box(0.06, 1.1, 0.06, "#1d232a", 1.21, 1.5, -1.9 + k * 0.7, body); }
   const red = new THREE.Mesh(BOX, lightR.clone()); red.scale.set(0.8, 0.25, 0.35); red.position.set(-0.45, 2.15, 1.6); body.add(red);
@@ -523,8 +637,59 @@ let lastChaseToast = 0;
 // ---- the camera: behind and above me (below too, on a flier); drag to turn it, pinch (or the wheel) to zoom ----
 const cam = { yaw: 0, pitch: 0.5, dist: 14, goalDist: 14, y: 0 };
 const pitchMin = () => (moveKind() === "fly" && !me.inst ? -0.75 : 0.18);
-// (owner, 2026-11-08) a house between the camera and me is hidden while it's in the way
-const hiddenH = new Set();
+// (owner, 2026-11-08) a house between the camera and me fades: the more of me it hides, the more see-through it gets,
+// easing in and out (it's swapped for a see-through copy while it's faded)
+const fades = new Map();   // house index -> { a: how solid now, g: its see-through copy }
+const ghostPool = [];
+function ghost(i) {
+  const h = houses[i];
+  let gh = ghostPool.pop();
+  if (!gh) {
+    const mk = (geo) => { const m = new THREE.Mesh(geo, new THREE.MeshLambertMaterial({ transparent: true })); m.matrixAutoUpdate = false; return m; };
+    gh = { walls: mk(BOX), roof: mk(ROOFG), door: mk(BOX) }; gh.g = new THREE.Group(); gh.g.add(gh.walls, gh.roof, gh.door);
+  }
+  for (const [m, f, c] of [[gh.walls, wallAt, h.c], [gh.roof, roofAt, h.roof], [gh.door, doorAt, "#7a4f28"]]) { dummy.rotation.set(0, 0, 0); f(h, dummy); dummy.updateMatrix(); m.matrix.copy(dummy.matrix); m.material.color.set(c); }
+  scene.add(gh.g); return gh;
+}
+// how much of me (5 points on me) a house hides from the camera
+const RAY_PTS = [[0, 1], [0, 2.2], [0.8, 1.2], [-0.8, 1.2], [0, 0.3]];
+function hiddenBy(h, cx, cy, cz) {
+  const c = Math.cos(h.yaw), s = Math.sin(h.yaw), top = h.base + 7.9, bot = h.base - (h.sky ? 0.5 : 4);
+  let hits = 0;
+  for (const [ox, oy] of RAY_PTS) {
+    const px = me.x + Math.cos(cam.yaw) * ox, pz = me.z - Math.sin(cam.yaw) * ox, py = me.y + oy;
+    // the ray from the camera to that point, in the house's own frame
+    const ax = (cx - h.x) * c - (cz - h.z) * s, az = (cx - h.x) * s + (cz - h.z) * c, bx = (px - h.x) * c - (pz - h.z) * s, bz = (px - h.x) * s + (pz - h.z) * c;
+    let t0 = 0, t1 = 0.97, ok = true;
+    for (const [a, b, lo, hi] of [[ax, bx, -4.7, 4.7], [cy, py, bot, top], [az, bz, -4.7, 4.7]]) {
+      const d = b - a; if (Math.abs(d) < 1e-6) { if (a < lo || a > hi) { ok = false; break; } continue; }
+      let u = (lo - a) / d, v = (hi - a) / d; if (u > v) [u, v] = [v, u]; t0 = Math.max(t0, u); t1 = Math.min(t1, v); if (t0 > t1) { ok = false; break; }
+    }
+    if (ok) hits++;
+  }
+  return hits / RAY_PTS.length;
+}
+function fadeHouses(dt, cx, cy, cz) {
+  const want = new Map();
+  if (!me.inst) {
+    const sx = cx - me.x, sz = cz - me.z, L2 = sx * sx + sz * sz || 1;
+    houses.forEach((h, i) => {
+      const t = clamp(((h.x - me.x) * sx + (h.z - me.z) * sz) / L2, 0, 1), d = hyp(me.x + sx * t - h.x, me.z + sz * t - h.z);
+      if (d < 8) { const f = hiddenBy(h, cx, cy, cz); if (f > 0) want.set(i, f); }
+    });
+  }
+  for (const i of new Set([...want.keys(), ...fades.keys()])) {
+    let f = fades.get(i); const target = 1 - 0.82 * (want.get(i) || 0);
+    if (!f) { f = { a: 1, g: null }; fades.set(i, f); }
+    f.a += (target - f.a) * Math.min(1, dt * 7);
+    if (f.a < 0.985) {
+      if (!f.g) { f.g = ghost(i); setHouse(i, false); }
+      for (const m of [f.g.walls, f.g.roof, f.g.door]) { m.material.opacity = f.a; m.material.depthWrite = f.a > 0.9; }
+    } else if (target >= 0.985) {
+      if (f.g) { scene.remove(f.g.g); ghostPool.push(f.g); setHouse(i, true); } fades.delete(i);
+    }
+  }
+}
 function placeCamera(dt) {
   cam.dist += (cam.goalDist - cam.dist) * Math.min(1, dt * 8); cam.y += (me.y - cam.y) * Math.min(1, dt * 10);
   const cx = me.x + Math.sin(cam.yaw) * cam.dist * Math.cos(cam.pitch), cz = me.z + Math.cos(cam.yaw) * cam.dist * Math.cos(cam.pitch);
@@ -533,14 +698,7 @@ function placeCamera(dt) {
   const isl = islandAt(cx, cz); if (isl && cy < isl.y + 1.2 && cy > isl.y - 3) cy = isl.y + 1.2;
   camera.position.set(cx, cy, cz); camera.lookAt(me.x, cam.y + 1.8, me.z);
   sun.position.set(me.x + skyNow.sun.x * 90, me.y + Math.max(20, skyNow.sun.y * 90), me.z + skyNow.sun.z * 90); sun.target.position.set(me.x, me.y, me.z);
-  const hide = new Set();
-  for (let k = 1; k <= 20; k++) {
-    const t = k / 20, x = me.x + (cx - me.x) * t, z = me.z + (cz - me.z) * t, y = cam.y + 1.5 + (cy - cam.y - 1.5) * t;
-    houses.forEach((h, i) => { if (Math.abs(x - h.x) < 6.4 && Math.abs(z - h.z) < 6.4 && y < h.base + 8.5 && y > h.base - 4) hide.add(i); });
-  }
-  if (hide.size === hiddenH.size && [...hide].every((i) => hiddenH.has(i))) return;
-  for (const i of new Set([...hide, ...hiddenH])) setHouse(i, !hide.has(i));
-  hiddenH.clear(); for (const i of hide) hiddenH.add(i);
+  fadeHouses(dt, cx, cy, cz);
 }
 function resize() { const w = innerWidth, h = innerHeight; renderer.setSize(w, h, false); camera.aspect = w / h; camera.updateProjectionMatrix(); }
 addEventListener("resize", resize); resize();
@@ -550,8 +708,10 @@ addEventListener("resize", resize); resize();
 // forward climbs or dives the way the camera looks (owner, 2026-11-08). ----
 const joy = { id: null, ox: 0, oy: 0, x: 0, y: 0 }, drags = new Map(), keys = new Set();
 const joyEl = $("joy"), knob = joyEl.firstElementChild;
+const taps = new Map();   // pointer -> where and when it went down, to tell a tap from a drag
 canvas.addEventListener("pointerdown", (e) => {
   try { canvas.setPointerCapture(e.pointerId); } catch (err) { /* not a live pointer */ }
+  taps.set(e.pointerId, { x: e.clientX, y: e.clientY, t: performance.now() });
   if (document.activeElement === $("chatin")) $("chatin").blur();
   if (e.pointerType !== "mouse" && joy.id === null && e.clientX < innerWidth * 0.5 && drags.size === 0) { Object.assign(joy, { id: e.pointerId, ox: e.clientX, oy: e.clientY, x: 0, y: 0 }); joyEl.style.display = "block"; joyEl.style.left = e.clientX + "px"; joyEl.style.top = e.clientY + "px"; knob.style.transform = ""; return; }
   drags.set(e.pointerId, { x: e.clientX, y: e.clientY });
@@ -565,12 +725,15 @@ canvas.addEventListener("pointermove", (e) => {
   }
   cam.yaw -= (e.clientX - d.x) * 0.006; cam.pitch = clamp(cam.pitch + (e.clientY - d.y) * 0.004, pitchMin(), 1.25); d.x = e.clientX; d.y = e.clientY;
 });
-const up = (e) => { if (e.pointerId === joy.id) { joy.id = null; joy.x = joy.y = 0; joyEl.style.display = "none"; } drags.delete(e.pointerId); };
+const up = (e) => {
+  const tp = taps.get(e.pointerId); taps.delete(e.pointerId);
+  if (tp && e.type === "pointerup" && hyp(e.clientX - tp.x, e.clientY - tp.y) < 10 && performance.now() - tp.t < 400) tapAt(e.clientX, e.clientY);
+  if (e.pointerId === joy.id) { joy.id = null; joy.x = joy.y = 0; joyEl.style.display = "none"; } drags.delete(e.pointerId); };
 canvas.addEventListener("pointerup", up); canvas.addEventListener("pointercancel", up);
 canvas.addEventListener("wheel", (e) => { e.preventDefault(); cam.goalDist = clamp(cam.goalDist * Math.exp(e.deltaY * 0.001), 7, 45); }, { passive: false });
 const typing = () => { const a = document.activeElement; return !!a && a.tagName === "INPUT" && a.offsetParent !== null; };
 addEventListener("keydown", (e) => {
-  if (typing()) return; keys.add(e.code); if (e.code === "Escape") closePanels();
+  if (typing()) return; keys.add(e.code); if (e.code === "Escape") { if (placing) stopPlacing(); closePanels(); }
   if ((e.code === "Enter" || e.code === "Slash") && loggedIn) { e.preventDefault(); openChat(); }
   if (e.code === "Space") { e.preventDefault(); jumpQueued = performance.now() + 150; }
   if (e.code === "KeyF") runAct("F"); if (e.code === "KeyE") runAct("E"); if (e.code === "KeyG") runAct("G");
@@ -602,7 +765,7 @@ function show(id) { for (const p of panels) $(p).style.display = p === id ? "blo
 function closePanels() { if (openPanel === "p-trade" && trading) netSend({ t: "trade_cancel" }); for (const p of panels) $(p).style.display = "none"; openPanel = null; picking = -1; }
 for (const p of panels) $(p).querySelector(".x").onclick = closePanels;
 $("btn-pets").onclick = () => (openPanel === "p-pets" ? closePanels() : show("p-pets"));
-const WING = `<svg width="14" height="12" viewBox="0 0 14 12" style="vertical-align:-1px"><path d="M1 10C3 3 8 1 13 1c-1 5-5 9-12 9z" fill="#3a8ee6"/></svg>`;
+const WING = `<svg class="ico" viewBox="0 0 14 12" style="width:14px;height:12px;vertical-align:-1px"><path d="M1 10C3 3 8 1 13 1c-1 5-5 9-12 9z" fill="#3a8ee6"/></svg>`;
 function card(sp, lines, on, onclick) {
   const s = SPECIES[sp], d = document.createElement("div"); d.className = "card" + (on ? " on" : "");
   d.innerHTML = `<img alt="" src="${portrait(sp)}" width="84" height="84"><span class="nm">${s.name}${s.fly ? " " + WING : ""}</span><span class="rar" style="color:${RARITY[s.r].c}">${RARITY[s.r].name}</span>${lines}`;
@@ -808,9 +971,9 @@ function deliver(i) {
   if (netOk) netSend({ t: "del" });
   if (contract && contract.local) { contract.done++; contract.mine++; }
 }
-// caught by animal control (owner, 2026-11-08): taken to the pound, dizzy for a moment, parcels gone, wanted cleared
+// caught by animal control (owner, 2026-11-08): taken straight to the pound (no stun), parcels gone, wanted cleared
 function caught() {
-  me.stunUntil = performance.now() + 2200; me.stars = 0;
+  me.stars = 0;
   if (me.bag.length) { me.bag = []; syncBeams(); }
   me.x = RELEASE.x + (Math.random() - 0.5) * 10; me.z = RELEASE.z + (Math.random() - 0.5) * 3; me.y = terrain(me.x, me.z); cam.y = me.y; cam.yaw = Math.PI;
   toast("Caught!", "#e5534b"); emitSparks(me.x, me.y + 2, me.z, 24, 4, ["#ffd84a", "#ffffff"], 0.8, 1); hudKey = "";
@@ -858,6 +1021,7 @@ function bubble(text, old, parent, top) {
 // runs animal control, contracts, chat, parties and trades. A tab that's put away disconnects (and reconnects when it's
 // back), and logging in again replaces the old connection, so nobody's left standing in town after they've gone. ----
 const WS_URL = /^(localhost|127\.0\.0\.1)$/.test(location.hostname) ? `ws://${location.host}/pets` : "wss://play.atamus.io/pets";
+let lastActual = 0;
 let ws = null, netOk = false, myId = null, online = 1, retry = 1000, lastSent = 0, lastPos = "", hidden = document.hidden;
 const others = new Map();   // id -> { name, sp, lv, shirt, stars, inst, buf, x, y, z, yaw, moving, m, tag, bub }
 function netSend(o) { if (ws && ws.readyState === 1) ws.send(JSON.stringify(o)); }
@@ -966,10 +1130,13 @@ function onNet(m) {
     case "leave": dropOther(m.id); online = others.size + 1; hudKey = ""; break;
     case "snap":
       serverTime(m.ts);
-      for (const [id, x, z, yaw, mv, y, st, inst] of m.ps) {
+      for (const [id, x, z, yaw, mv, y, st, inst, ct] of m.ps) {
         const o = others.get(id); if (!o) continue;
-        if ((inst || 0) !== o.inst) { o.inst = inst || 0; o.buf.length = 0; }
-        pushSample(o.buf, m.ts, { x, y: Number.isFinite(y) ? y : terrain(x, z), z, yaw }); o.moving = !!mv;
+        if ((inst || 0) !== o.inst) { o.inst = inst || 0; o.buf.length = 0; o.snap = true; }
+        // stamped with the sender's own clock: how far it is from mine, from the quickest-arriving updates
+        const t = ct || m.ts, est = performance.now() - t;
+        if (o.off === undefined || est < o.off || o.ctMode !== !!ct) { o.off = est; o.ctMode = !!ct; } else o.off += (est - o.off) * 0.005;
+        pushSample(o.buf, t, { x, y: Number.isFinite(y) ? y : terrain(x, z), z, yaw, mv: !!mv }); o.moving = !!mv;
         if ((st || 0) !== o.stars) { o.stars = st || 0; o.m.g.remove(o.tag); o.tag = nameTag(String(o.name || "Courier").slice(0, 18), o.stars); o.tag.position.y = o.m.top + 1.2; o.m.g.add(o.tag); }
       }
       break;
@@ -1002,9 +1169,9 @@ function stale(web, told) {
   flushSave(true); banner("Updating!", "#ffd35a"); setTimeout(() => location.reload(), 1500); return true;
 }
 function sendPos(force) {
-  const s = [me.x.toFixed(2), me.y.toFixed(1), me.z.toFixed(2), me.yaw.toFixed(2), me.moving ? 1 : 0].join();
+  const s = [me.x.toFixed(2), me.y.toFixed(1), me.z.toFixed(2), me.yaw.toFixed(2), me.moving ? 1 : 0, me.bag.length].join();
   if (!force && s === lastPos) return;
-  netSend({ t: "pos", x: +me.x.toFixed(2), y: +me.y.toFixed(2), z: +me.z.toFixed(2), yaw: +me.yaw.toFixed(2), mv: me.moving ? 1 : 0 }); lastPos = s;
+  netSend({ t: "pos", x: +me.x.toFixed(2), y: +me.y.toFixed(2), z: +me.z.toFixed(2), yaw: +me.yaw.toFixed(2), mv: me.moving ? 1 : 0, ct: Math.round(performance.now()), bag: me.bag.length }); lastPos = s; lastActual = performance.now();
 }
 
 // ---- players (owner, 2026-11-08): F next to someone opens a menu to trade with them or invite them to your party;
@@ -1063,7 +1230,9 @@ function renderTrade() {
 // sky where nobody else is. Build rooms for space, beds (each holds 2 more pets) and playpens: a pet put in one earns
 // coins while you're away, collected when you come home. Invite your party in. ----
 const HOME = World.HOME, RS = HOME.roomSize, IN = { x: 5000, z: 5000 };
-const roomAt = (k) => ({ x: IN.x + (k % 3) * RS, z: IN.z + Math.floor(k / 3) * RS });
+const cellsOf = (home) => home.cells || Array.from({ length: home.rooms }, (_, k) => [k % 3, Math.floor(k / 3)]);
+const roomAt = (k, home = house ? house.msg.home : save.home) => { const c = cellsOf(home)[k] || [0, 0]; return { x: IN.x + c[0] * RS, z: IN.z + c[1] * RS }; };
+const hasCell = (home, x, z) => cellsOf(home).some(([a, b]) => a === x && b === z);
 const SLOTS = [[3.6, 4.2], [10.4, 4.2], [3.6, 10.4], [10.4, 10.4]];
 let house = null;   // { msg, mine, g, rects, pens: [{ m, cx, cz, x, z, yaw, tx, tz }] }
 const doorOf = (i) => { const h = houses[i]; return { x: h.x + Math.sin(h.yaw) * 5.4, z: h.z + Math.cos(h.yaw) * 5.4, y: h.base }; };
@@ -1072,18 +1241,17 @@ const myRing = new THREE.Mesh(RINGG(1.6), ringM("#3fb36b")); myRing.visible = fa
 function buildHouse(msg) {
   if (house) scene.remove(house.g);
   const g = new THREE.Group(), home = msg.home, rects = [], pens = [];
-  for (let k = 0; k < home.rooms; k++) {
-    const o = roomAt(k), has = (j) => j >= 0 && j < home.rooms;
-    box(RS, 0.3, RS, k % 2 ? "#e7cfa4" : "#dcc093", o.x + RS / 2, -0.15, o.z + RS / 2, g, false);
-    const col = k % 3, row = Math.floor(k / 3);
-    if (!(col > 0 && has(k - 1))) box(0.3, 1.3, RS, "#f4ead8", o.x, 0.65, o.z + RS / 2, g);
-    if (!(col < 2 && has(k + 1))) box(0.3, 1.3, RS, "#f4ead8", o.x + RS, 0.65, o.z + RS / 2, g);
-    if (!(row > 0 && has(k - 3))) { if (k === 0) { box(5, 1.3, 0.3, "#f4ead8", o.x + 2.5, 0.65, o.z, g); box(5, 1.3, 0.3, "#f4ead8", o.x + RS - 2.5, 0.65, o.z, g); } else box(RS, 1.3, 0.3, "#f4ead8", o.x + RS / 2, 0.65, o.z, g); }
-    if (!has(k + 3)) box(RS, 1.3, 0.3, "#f4ead8", o.x + RS / 2, 0.65, o.z + RS, g);
-  }
+  cellsOf(home).forEach(([cx, cz], k) => {   // rooms: open to their neighbors, walled outside, the door in the first room's front
+    const o = roomAt(k, home), has = (dx, dz) => hasCell(home, cx + dx, cz + dz);
+    box(RS, 0.3, RS, (cx + cz) % 2 ? "#e7cfa4" : "#dcc093", o.x + RS / 2, -0.15, o.z + RS / 2, g, false);
+    if (!has(-1, 0)) box(0.3, 1.3, RS, "#f4ead8", o.x, 0.65, o.z + RS / 2, g);
+    if (!has(1, 0)) box(0.3, 1.3, RS, "#f4ead8", o.x + RS, 0.65, o.z + RS / 2, g);
+    if (!has(0, -1)) { if (k === 0) { box(5, 1.3, 0.3, "#f4ead8", o.x + 2.5, 0.65, o.z, g); box(5, 1.3, 0.3, "#f4ead8", o.x + RS - 2.5, 0.65, o.z, g); } else box(RS, 1.3, 0.3, "#f4ead8", o.x + RS / 2, 0.65, o.z, g); }
+    if (!has(0, 1)) box(RS, 1.3, 0.3, "#f4ead8", o.x + RS / 2, 0.65, o.z + RS, g);
+  });
   box(3.6, 0.06, 1.6, "#c8553d", IN.x + RS / 2, 0.03, IN.z + 1, g, false);   // the doormat: E here to go back out
   home.items.forEach((t, i) => {
-    const o = roomAt(t.room), [sx, sz] = SLOTS[t.slot], x = o.x + sx, z = o.z + sz;
+    const o = roomAt(t.room, home), [sx, sz] = SLOTS[t.slot], x = o.x + sx, z = o.z + sz;
     if (t.k === "bed") {
       box(2.4, 0.5, 3.2, "#8a5a3a", x, 0.25, z, g); box(2.2, 0.35, 3, "#9ad0ff", x, 0.65, z, g); box(1.6, 0.3, 0.7, "#ffffff", x, 0.95, z - 1.05, g);
       rects.push([x - 1.4, x + 1.4, z - 1.8, z + 1.8]);
@@ -1098,10 +1266,15 @@ function buildHouse(msg) {
   });
   scene.add(g); house = { msg, mine: !!msg.mine || msg.host === myId, g, rects, pens };
 }
+// (owner, 2026-11-08: couldn't walk into new rooms) inside any room, kept off its outside walls only
 function inHouse(x, z) {
   if (!house) return false;
-  for (let k = 0; k < house.msg.home.rooms; k++) { const o = roomAt(k); if (x > o.x + 0.7 && x < o.x + RS - 0.7 && z > o.z + 0.7 && z < o.z + RS - 0.7) return true; }
-  return false;
+  const home = house.msg.home, cx = Math.floor((x - IN.x) / RS), cz = Math.floor((z - IN.z) / RS);
+  if (!hasCell(home, cx, cz)) return false;
+  const lx = x - IN.x - cx * RS, lz = z - IN.z - cz * RS, m = 0.7;
+  if (lx < m && !hasCell(home, cx - 1, cz)) return false; if (lx > RS - m && !hasCell(home, cx + 1, cz)) return false;
+  if (lz < m && !hasCell(home, cx, cz - 1)) return false; if (lz > RS - m && !hasCell(home, cx, cz + 1)) return false;
+  return true;
 }
 const houseBlocked = (x, z) => house.rects.some((r) => x > r[0] - 0.6 && x < r[1] + 0.6 && z > r[2] - 0.6 && z < r[3] + 0.6);
 function enterHome(msg) {
@@ -1115,7 +1288,7 @@ function enterHome(msg) {
 function leaveHouseLocal() {
   if (!house) { me.inst = 0; return; }
   const i = house.msg.home.house, d = doorOf(i), h = houses[i];
-  scene.remove(house.g); house = null; me.inst = 0;
+  stopPlacing(); scene.remove(house.g); house = null; me.inst = 0;
   me.x = d.x + Math.sin(h.yaw) * 2; me.z = d.z + Math.cos(h.yaw) * 2; me.y = floorAt(me.x, me.z, d.y + 1); me.vy = 0; me.yaw = h.yaw; cam.yaw = h.yaw + Math.PI; cam.y = me.y;
   if (openPanel === "p-build") closePanels(); uiKey = ""; sendPos(true);
 }
@@ -1133,11 +1306,6 @@ function collectPens() {
   if (total > 0) { save.coins += total; toast("+" + fmt(total), "#e08a00"); emitConfetti(me.x, me.y + 3, me.z, 40, 4, 7); hudKey = ""; }
   persist(); return total;
 }
-function freeSlot() {
-  const used = new Set(save.home.items.map((t) => t.room * 10 + t.slot));
-  for (let r = 0; r < save.home.rooms; r++) for (let s = 0; s < HOME.slots; s++) if (!used.has(r * 10 + s) && !(r === 0 && s < 2 && false)) return { room: r, slot: s };
-  return null;
-}
 function buyHouse(i) {
   const price = World.housePrice(i); if (save.home || save.coins < price) return;
   save.coins -= price; save.home = { house: i, rooms: 1, items: [] }; persist(); flushSave(true);
@@ -1150,14 +1318,47 @@ function renderHomeBuy() {
   el.appendChild(b);
 }
 let homeTarget = -1, picking = -1;
-function build(kind) {
+// building (owner, 2026-11-08: choose where): a room on any free square next to one you have (not in front of the door),
+// furniture on any free spot; pick it on the floor
+function freeCells() {
+  const h = save.home, out = [];
+  for (const [x, z] of cellsOf(h)) for (const [dx, dz] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) { const a = x + dx, b = z + dz; if (Math.abs(a) > 4 || Math.abs(b) > 4 || (a === 0 && b === -1) || hasCell(h, a, b) || out.some((c) => c[0] === a && c[1] === b)) continue; out.push([a, b]); }
+  return out;
+}
+function freeSlots() {
+  const used = new Set(save.home.items.map((t) => t.room * 10 + t.slot)), out = [];
+  for (let r = 0; r < cellsOf(save.home).length; r++) for (let sl = 0; sl < HOME.slots; sl++) if (!used.has(r * 10 + sl)) out.push({ room: r, slot: sl });
+  return out;
+}
+function build(kind, where) {
   const h = save.home; if (!h) return;
   const price = kind === "room" ? World.roomPrice(h.rooms) : HOME[kind];
   if (save.coins < price) return;
-  if (kind === "room") { if (h.rooms >= HOME.maxRooms) return; h.rooms++; }
-  else { const s = freeSlot(); if (!s) return; h.items.push({ k: kind, room: s.room, slot: s.slot }); }
-  save.coins -= price; persist(); flushSave(true); buildHouse(houseMsgMine()); renderBuild(); hudKey = "";
+  if (kind === "room") {
+    if (h.rooms >= HOME.maxRooms) return; const c = where || freeCells()[0]; if (!c || !freeCells().some((q) => q[0] === c[0] && q[1] === c[1])) return;
+    h.cells = cellsOf(h).concat([[c[0], c[1]]]); h.rooms = h.cells.length;
+  } else { const sl = where || freeSlots()[0]; if (!sl || !freeSlots().some((q) => q.room === sl.room && q.slot === sl.slot)) return; h.items.push({ k: kind, room: sl.room, slot: sl.slot }); }
+  save.coins -= price; persist(); flushSave(true); buildHouse(houseMsgMine()); if (openPanel === "p-build") renderBuild(); hudKey = "";
   emitConfetti(me.x, me.y + 2.5, me.z, 30, 3, 6);
+}
+let placing = null;   // { kind, g, picks: [{ mesh, where }] }
+const pickM = new THREE.MeshBasicMaterial({ color: "#3fb36b", transparent: true, opacity: 0.45, depthWrite: false });
+function startPlacing(kind) {
+  stopPlacing(); closePanels();
+  const g = new THREE.Group(), picks = [];
+  if (kind === "room") for (const c of freeCells()) { const m = new THREE.Mesh(new THREE.BoxGeometry(RS - 1, 0.2, RS - 1), pickM); m.position.set(IN.x + c[0] * RS + RS / 2, 0.1, IN.z + c[1] * RS + RS / 2); g.add(m); picks.push({ mesh: m, where: c }); }
+  else for (const sl of freeSlots()) { const o = roomAt(sl.room, save.home), [sx, sz] = SLOTS[sl.slot], m = new THREE.Mesh(new THREE.CylinderGeometry(kind === "pen" ? 2.6 : 1.6, kind === "pen" ? 2.6 : 1.6, 0.2, 24), pickM); m.position.set(o.x + sx, 0.1, o.z + sz); g.add(m); picks.push({ mesh: m, where: sl }); }
+  if (!picks.length) return;
+  scene.add(g); placing = { kind, g, picks }; uiKey = "";
+  if (kind === "room") { cam.goalDist = Math.max(cam.goalDist, 34); cam.pitch = Math.max(cam.pitch, 0.9); }
+}
+function stopPlacing() { if (placing) { scene.remove(placing.g); placing = null; uiKey = ""; } }
+const ray = new THREE.Raycaster(), ndc = new THREE.Vector2();
+function tapAt(px, py) {   // a tap on the floor while placing: build there
+  if (!placing) return false;
+  ndc.set((px / innerWidth) * 2 - 1, -(py / innerHeight) * 2 + 1); ray.setFromCamera(ndc, camera);
+  const hit = ray.intersectObjects(placing.picks.map((p) => p.mesh))[0]; if (!hit) return false;
+  const p = placing.picks.find((q) => q.mesh === hit.object), kind = placing.kind; stopPlacing(); build(kind, p.where); return true;
 }
 function renderBuild() {
   const el = $("build"), h = save.home; el.innerHTML = ""; if (!h) return;
@@ -1168,9 +1369,9 @@ function renderBuild() {
     el.appendChild(grid); return;
   }
   const row = document.createElement("div"); row.className = "buildrow";
-  const opt = (label, kind, price, ok) => { const b = document.createElement("button"); b.className = "btn gold"; b.type = "button"; b.innerHTML = `${label}<br><span class="coin" style="display:inline-block;width:12px;height:12px;vertical-align:-2px"></span> ${fmt(price)}`; b.disabled = !ok || save.coins < price; b.onclick = () => build(kind); row.appendChild(b); };
-  const slot = !!freeSlot();
-  opt("Room", "room", World.roomPrice(h.rooms), h.rooms < HOME.maxRooms); opt("Bed", "bed", HOME.bed, slot); opt("Playpen", "pen", HOME.pen, slot);
+  const opt = (label, kind, price, ok) => { const b = document.createElement("button"); b.className = "btn gold"; b.type = "button"; b.innerHTML = `${label}<br><span class="coin" style="display:inline-block;width:12px;height:12px;vertical-align:-2px"></span> ${fmt(price)}`; b.disabled = !ok || save.coins < price; b.onclick = () => startPlacing(kind); row.appendChild(b); };
+  const slot = freeSlots().length > 0;
+  opt("Room", "room", World.roomPrice(h.rooms), h.rooms < HOME.maxRooms && freeCells().length > 0); opt("Bed", "bed", HOME.bed, slot); opt("Playpen", "pen", HOME.pen, slot);
   el.appendChild(row);
   const cap = document.createElement("div"); cap.className = "stats"; cap.style.margin = "10px 0"; cap.innerHTML = `<span>${save.pets.length} / ${World.petCap(save)}</span>`; el.appendChild(cap);
   const grid = document.createElement("div"); grid.className = "grid";
@@ -1203,6 +1404,7 @@ function context() {
   if (me.inst && house) {
     if (hyp(me.x - (IN.x + RS / 2), me.z - (IN.z + 1)) < 2.4) a.push({ key: "E", label: "Exit", fn: exitHome });
     if (house.mine && party.length > 1) a.push({ key: "G", label: "Invite", fn: () => { netSend({ t: "home_invite" }); toast("→ Party"); } });
+    if (placing) a.push({ key: "Escape", label: "✕", fn: stopPlacing });
   } else if (loggedIn) {
     const i = nearDoor();
     if (i >= 0 && save.home && save.home.house === i) a.push({ key: "E", label: "Enter", fn: () => (netOk ? netSend({ t: "home_enter" }) : null) });
@@ -1217,7 +1419,7 @@ function ui() {
   const key = acts.map((a) => a.key + a.label).join("|") + "|" + kind + "|" + !!(house && house.mine) + "|" + party.length + "|" + myRole;
   if (key === uiKey) return; uiKey = key;
   const el = $("acts"); el.innerHTML = "";
-  for (const a of acts) { const b = document.createElement("button"); b.className = "btn ghost"; b.type = "button"; b.innerHTML = touchy ? a.label : `<kbd>${a.key}</kbd> ${a.label}`; b.onclick = () => runAct(a.key); el.appendChild(b); }
+  for (const a of acts) { const b = document.createElement("button"); b.className = "btn ghost"; b.type = "button"; b.innerHTML = touchy || a.key.length > 1 ? a.label : `<kbd>${a.key}</kbd> ${a.label}`; b.onclick = () => runAct(a.key); el.appendChild(b); }
   $("btn-jump").style.display = kind === "fly" ? "none" : "";
   $("btn-build").style.display = house && house.mine ? "" : "none";
   $("btn-admin").style.display = isStaff() ? "" : "none";
@@ -1288,7 +1490,7 @@ const MOVE = { land: { ground: 1, air: 1 }, fly: { ground: 0.7, air: 0.75 }, gli
 function floorAt(x, z, y) {
   if (me.inst) return 0;
   const isl = islandAt(x, z); if (isl && y > isl.y - 3) return isl.y;
-  return inside(x, z) ? terrain(x, z) : -200;
+  return inside(x, z) ? terrain(x, z) + (World.roadDist(x, z) < ROAD_HALF + 0.3 ? ROAD_LIFT : 0) : -200;
 }
 function step(dt) {
   clock += dt;
@@ -1341,7 +1543,7 @@ function step(dt) {
   }
   // animal control: offline this page runs it
   if (!netOk) {
-    Object.assign(meP, { x: me.inst ? 9999 : me.x, y: me.y, z: me.z, stars: me.stars });
+    Object.assign(meP, { x: me.inst ? 9999 : me.x, y: me.y, z: me.z, stars: me.stars, bag: me.bag.length });
     for (const e of World.stepVehicles(localVs, [meP], dt, now / 1000)) onVehEvent(e.k, e.stars || 0);
   }
   // the egg shop, the training yard and the board open their panel when I ride in
@@ -1350,7 +1552,7 @@ function step(dt) {
   contractStep(); fxStep(dt);
   for (const c of clouds) { c.position.x += dt * 1.5; if (c.position.x > 400) c.position.x = -400; }
   // send where I am, 10 times a second (by the real clock) when it changes, and every 2 s regardless; save now and then
-  if (netOk && now - lastSent > 100) { sendPos(now - lastSent > 2000); lastSent = now; }
+  if (netOk && now - lastSent > 50) { sendPos(now - lastActual > 1000); lastSent = now; }
   flushSave(false);
 }
 function draw(dt) {
@@ -1358,10 +1560,13 @@ function draw(dt) {
   mine.g.position.set(me.x, me.y, me.z); mine.g.rotation.set(0, me.yaw, 0);
   animatePet(mine, clock, me.moving, petSpeed(riding()), me.airborne);
   dizzy.visible = me.stunUntil > now; if (dizzy.visible) { dizzy.position.set(me.x, me.y + mine.top + 0.5, me.z); dizzy.rotation.y = clock * 6; }
-  const rt = renderTime();
   for (const o of others.values()) {
     const vis = o.inst === me.inst; o.m.g.visible = vis; if (!vis) continue;
-    if (sampleAt(o.buf, rt, tmpS)) { o.x = tmpS.x; o.y = tmpS.y; o.z = tmpS.z; o.yaw = tmpS.yaw; }
+    // replayed a little in the past on its own clock; a correction after a guess ahead is eased in, never snapped
+    if (o.off !== undefined && sampleAt(o.buf, performance.now() - o.off - OTHER_DELAY, tmpS)) {
+      if (o.snap || hyp(tmpS.x - o.x, tmpS.z - o.z) > 25) { o.x = tmpS.x; o.y = tmpS.y; o.z = tmpS.z; o.snap = false; }
+      const k = Math.min(1, dt * 18); o.x += (tmpS.x - o.x) * k; o.y += (tmpS.y - o.y) * k; o.z += (tmpS.z - o.z) * k; o.yaw = lerpYaw(o.yaw, tmpS.yaw, k);
+    }
     o.m.g.position.set(o.x, o.y, o.z); o.m.g.rotation.y = o.yaw;
     animatePet(o.m, clock + o.x * 0.1, o.moving, 10, o.m.fly && o.y - (inside(o.x, o.z) ? terrain(o.x, o.z) : -60) > 1.2);
   }
@@ -1392,4 +1597,4 @@ syncBeams(); hud(); requestAnimationFrame(frame); connect();
 $("lgo").disabled = $("lnew").disabled = true;
 
 // for tests
-window.Pets = { get save() { return save; }, me, houses, get contract() { return contract; }, get online() { return online; }, get netOk() { return netOk; }, get loggedIn() { return loggedIn; }, get others() { return others; }, get house() { return house; }, get party() { return party; }, get trading() { return trading; }, step, deliver, fillBag, buyEgg, train, startContract, ride, buyHouse, build, setPen, collectPens, runAct, netSend, EGGS, SPECIES, PICKUP, SHOP, TRAIN, BOARD, ISLANDS, World, vehs, localVs, cam, terrain, doorOf, contractOver, emitConfetti, firework, caught, trade, persist, flushSave, set skyOffset(v) { skyOffset = v; }, reach, teleport: (x, z, y) => { me.x = x; me.z = z; me.y = y === undefined ? terrain(x, z) : y; me.vy = 0; } };
+window.Pets = { get save() { return save; }, me, houses, get contract() { return contract; }, get online() { return online; }, get netOk() { return netOk; }, get loggedIn() { return loggedIn; }, get others() { return others; }, get house() { return house; }, get party() { return party; }, get trading() { return trading; }, step, deliver, fillBag, buyEgg, train, startContract, ride, buyHouse, build, setPen, collectPens, runAct, netSend, EGGS, SPECIES, PICKUP, SHOP, TRAIN, BOARD, ISLANDS, World, vehs, localVs, cam, terrain, doorOf, contractOver, emitConfetti, firework, caught, trade, persist, flushSave, set skyOffset(v) { skyOffset = v; }, reach, camera, placingPicks: () => (placing ? placing.picks : []), inHouseTest: (x, z) => inHouse(x, z) && !houseBlocked(x, z), teleport: (x, z, y) => { me.x = x; me.z = z; me.y = y === undefined ? terrain(x, z) : y; me.vy = 0; } };

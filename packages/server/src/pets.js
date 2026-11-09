@@ -15,7 +15,7 @@ import { onWebsiteUpdate, websiteBuild } from "./build.js";
 import { hashSecret, verifySecret } from "./hash.js";
 import { memStore } from "./petstore.js";
 
-const ROOM_MAX = 16, SNAP_MS = 100, DEL_GAP_MS = 900, CHAT_GAP_MS = 1200, BEAT_MS = 10000, SAVE_MS = 3000, INVITE_MS = 30000, PARTY_MAX = 6;
+const ROOM_MAX = 16, SNAP_MS = 50, DEL_GAP_MS = 900, CHAT_GAP_MS = 1200, BEAT_MS = 10000, SAVE_MS = 3000, INVITE_MS = 30000, PARTY_MAX = 6;
 const SPECIES = new Set(["pup", "kitten", "bunny", "duck", "fox", "penguin", "goat", "butterfly", "parrot", "stego", "deer", "bear", "horse", "owl", "trike", "raptor",
   "dragon", "unicorn", "pegasus", "phoenix", "trex", "ptero", "icedragon"]);
 // (owner, 2026-11-08) three kinds of contract: the goal grows with the room; the reward is per parcel of the goal
@@ -215,7 +215,8 @@ export function attachPets(server, { origins = [], allowLocal = false, store = m
       if (me.gone) return;
       const d = me.acct.data;
       switch (m.t) {
-        case "pos": me.x = num(m.x, 6000); me.y = num(m.y, 300); me.z = num(m.z, 6000); me.yaw = num(m.yaw, 10); me.mv = m.mv ? 1 : 0; break;
+        // (owner, 2026-11-08: rubber-banding) each position carries the sender's own clock, passed on so others replay it at its true pace
+        case "pos": me.x = num(m.x, 6000); me.y = num(m.y, 300); me.z = num(m.z, 6000); me.yaw = num(m.yaw, 10); me.mv = m.mv ? 1 : 0; me.ct = Number.isFinite(+m.ct) ? +m.ct : 0; me.bag = Math.max(0, Math.min(99, m.bag | 0)); me.fresh = true; break;
         case "pet": if (SPECIES.has(m.sp)) { me.sp = m.sp; me.lv = Math.max(1, Math.min(20, m.lv | 0)); all(room, { t: "pet", id: me.id, sp: me.sp, lv: me.lv }, me); } break;
         case "save": {
           if (m.rev !== me.acct.rev) { pushData(me); break; }
@@ -308,8 +309,8 @@ export function attachPets(server, { origins = [], allowLocal = false, store = m
       const dt = Math.min(0.5, (now - r.last) / 1000); r.last = now;
       const players = [...r.players.values()];
       for (const e of stepVehicles(r.vs, players.filter((p) => !p.inst), dt, now / 1000)) { const p = r.players.get(e.id); if (p) send(p.ws, { t: e.k, stars: e.stars || 0 }); }
-      all(r, { t: "veh", ts: now, v: r.vs.map((v) => [r2(v.x), r2(v.y), r2(v.z), r2(v.yaw), v.mode, v.target]) });
-      if (players.length > 1) all(r, { t: "snap", ts: now, ps: players.map((p) => [p.id, p.x, p.z, p.yaw, p.mv, p.y, p.stars, p.inst]) });
+      if (r.tick = !r.tick) all(r, { t: "veh", ts: now, v: r.vs.map((v) => [r2(v.x), r2(v.y), r2(v.z), r2(v.yaw), v.mode, v.target]) });   // vehicles 10 times a second
+      if (players.length > 1) { const ps = players.filter((p) => p.fresh || r.tick).map((p) => { p.fresh = false; return [p.id, p.x, p.z, p.yaw, p.mv, p.y, p.stars, p.inst, p.ct || 0]; }); if (ps.length) all(r, { t: "snap", ts: now, ps }); }
       if (r.contract && now > r.contract.ends) finish(r, false);
     }
   }, SNAP_MS).unref();

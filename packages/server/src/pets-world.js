@@ -180,7 +180,7 @@ export function blocked(x, z, y) {
 
 // ---- animal control (owner, 2026-11-08) ----
 // A van patrols its road (driving on the right, turning round at a road's end); a helicopter circles over town. Each
-// spots players near it (vans only those on the ground) and chases one for a short while, faster for a wanted player;
+// spots players near it carrying parcels (owner, 2026-11-08; vans only those on the ground) and chases one for a short while, faster for a wanted player;
 // a van catches you on the ground, a helicopter anywhere. Caught: off to the pound, wanted level cleared. Getting away
 // raises your wanted level (up to 5); it drops a star every 25 s nobody's chasing you.
 export const WANTED_MAX = 5, WANTED_COOL = 25, IMMUNE = 7;
@@ -210,7 +210,8 @@ function placePatrol(v, dt, snap) {
   v.x += (tx - v.x) * k; v.z += (tz - v.z) * k; v.y += (ty - v.y) * (snap ? 1 : Math.min(1, dt * 2)); v.yaw = turn(v.yaw, yaw, snap ? 1 : Math.min(1, dt * 8));
 }
 function turn(a, b, k) { let d = b - a; while (d > Math.PI) d -= TAU; while (d < -Math.PI) d += TAU; return a + d * k; }
-// players: [{ id, x, y, z, stars, lastChased, lastStar, immuneUntil }] (changed in place); returns what happened
+// players: [{ id, x, y, z, bag (parcels carried), stars, lastChased, lastStar, immuneUntil }] (changed in place); returns
+// what happened
 export function stepVehicles(vs, players, dt, now) {
   const ev = [];
   for (const p of players) if (p.stars > 0 && now - p.lastChased > WANTED_COOL) { p.stars--; p.lastChased = now; ev.push({ k: "stars", id: p.id, stars: p.stars }); }
@@ -218,7 +219,7 @@ export function stepVehicles(vs, players, dt, now) {
     const C = v.kind ? HELI : VAN;
     if (v.mode === 1) {
       const p = players.find((q) => q.id === v.target);
-      if (!p || p.immuneUntil > now || !insideWorld(p)) { v.mode = 2; v.cool = now + 4; }
+      if (!p || p.immuneUntil > now || !insideWorld(p) || !p.bag) { v.mode = 2; v.cool = now + 4; }
       else {
         v.t -= dt; p.lastChased = now;
         const dx = p.x - v.x, dz = p.z - v.z, d = hyp(dx, dz), sp = C.chase + C.perStar * p.stars;
@@ -248,7 +249,7 @@ export function stepVehicles(vs, players, dt, now) {
     if (v.mode === 0 && now > v.cool) {   // look around
       let best = null, bd = 1e9;
       for (const p of players) {
-        if (p.immuneUntil > now || !insideWorld(p)) continue;
+        if (p.immuneUntil > now || !insideWorld(p) || !p.bag) continue;
         if (v.kind === 0 && p.y - terrain(p.x, p.z) > 6) continue;
         const d = v.kind ? hyp(p.x - v.x, p.z - v.z, (p.y - v.y) * 0.5) : hyp(p.x - v.x, p.z - v.z);
         if (d < C.spot + 7 * p.stars && d < bd) { bd = d; best = p; }
@@ -263,7 +264,8 @@ function nearestS(R, x, z) { let best = 0, bd = 1e9; for (let i = 0; i < R.pts.l
 
 // ---- a player's data (owner, 2026-11-08: saved on the server) and home rules, the same on both sides ----
 // data: { coins, pets: [{ id, sp, lv }], ride, items: { snack, ribbon, ticket }, treats: { sp: n }, delivered, nextId,
-//   shirt, home: null | { house (index in houses), rooms, items: [{ k: "bed" | "pen", room, slot, pet?, since? }] } }
+//   shirt, home: null | { house (index in houses), rooms, cells: [[x, z], ...] (where each room is, 14 m squares; the
+//   first, with the front door, at [0, 0]), items: [{ k: "bed" | "pen", room, slot, pet?, since? }] } }
 // (owner, 2026-11-08) homes: buy a house in town, then its door takes you to your own copy of it inside; build rooms
 // for space, beds for more pets and playpens where a pet earns coins while you're away
 export const HOME = { price: 2500, skyPrice: 5000, room: 1500, bed: 400, pen: 800, maxRooms: 6, slots: 4, baseCap: 6, perBed: 2, roomSize: 14 };
@@ -283,14 +285,23 @@ export function cleanData(d, species) {
   for (const [k, v] of Object.entries(d.treats || {})) if (species.has(k)) treats[k] = int(v, 0, 1e6);
   let home = null;
   if (d.home && Number.isInteger(d.home.house) && houses[d.home.house]) {
-    const rooms = int(d.home.rooms, 1, HOME.maxRooms, 1), used = new Set(), its = [];
+    // (owner, 2026-11-08: choose where rooms go) each room after the first joins one already built, never in front of the door
+    let cells = [];
+    if (Array.isArray(d.home.cells)) for (const c of d.home.cells) {
+      if (!Array.isArray(c) || cells.length >= HOME.maxRooms) continue; const x = int(c[0], -4, 4), z = int(c[1], -4, 4);
+      if (!cells.length) { if (x || z) break; cells.push([0, 0]); continue; }
+      if (cells.some(([a, b]) => a === x && b === z) || (x === 0 && z === -1) || !cells.some(([a, b]) => Math.abs(a - x) + Math.abs(b - z) === 1)) continue;
+      cells.push([x, z]);
+    }
+    if (!cells.length) for (let k = 0; k < int(d.home.rooms, 1, HOME.maxRooms, 1); k++) cells.push([k % 3, Math.floor(k / 3)]);   // homes from before
+    const rooms = cells.length, used = new Set(), its = [];
     for (const t of Array.isArray(d.home.items) ? d.home.items : []) {
       if (!t || (t.k !== "bed" && t.k !== "pen")) continue;
       const room = int(t.room, 0, rooms - 1), slot = int(t.slot, 0, HOME.slots - 1), key = room * 10 + slot; if (used.has(key)) continue; used.add(key);
       const it = { k: t.k, room, slot }; if (t.k === "pen" && t.pet && ids.has(t.pet)) { it.pet = t.pet; it.since = Number.isFinite(+t.since) ? +t.since : Date.now(); }
       its.push(it);
     }
-    home = { house: d.home.house, rooms, items: its };
+    home = { house: d.home.house, rooms, cells, items: its };
   }
   const nextId = Math.max(int(d.nextId, 1, 1e9, 1), ...uniq.map((p) => p.id + 1));
   return {
