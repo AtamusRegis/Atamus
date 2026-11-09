@@ -1112,7 +1112,7 @@ let ws = null, netOk = false, myId = null, online = 1, retry = 1000, lastSent = 
 const others = new Map();   // id -> { name, sp, lv, shirt, stars, inst, buf, x, y, z, yaw, moving, m, tag, bub }
 function netSend(o) { if (ws && ws.readyState === 1) ws.send(JSON.stringify(o)); }
 function connect() {
-  if (hidden || ws || kicked) return;
+  if (ws || kicked) return;
   try { ws = new WebSocket(WS_URL); } catch (e) { ws = null; setTimeout(connect, retry); return; }
   const sock = ws;
   ws.onopen = () => {
@@ -1129,13 +1129,14 @@ function connect() {
     if (building) closeBuild(); for (const id of [...plotState.keys()]) setPlot(id, 0); myPlot = -1;
     $("lgo").disabled = $("lnew").disabled = true;
     if (was && !hidden) toast("Offline");
-    if (!hidden && !kicked) { setTimeout(connect, retry); retry = Math.min(15000, retry * 2); }
+    if (!kicked) { setTimeout(connect, retry); retry = Math.min(15000, retry * 2); }
   };
   ws.onerror = () => {};
 }
+// (owner, 2026-11-09) a tab that's put away (minimized, behind another window) stays in the game: you stop where you are
 document.addEventListener("visibilitychange", () => {
   hidden = document.hidden;
-  if (hidden) { flushSave(true); if (ws) ws.close(); } else { retry = 1000; last = performance.now(); connect(); }
+  if (hidden) { keys.clear(); joy.id = null; joy.x = joy.y = 0; joyEl.style.display = "none"; drags.clear(); me.moving = false; sendPos(true); flushSave(true); } else { retry = 1000; last = performance.now(); connect(); }
 });
 addEventListener("pagehide", () => flushSave(true));
 
