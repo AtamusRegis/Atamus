@@ -84,10 +84,10 @@ Asked (owner): a web game on atamus.io (not Roblox), on its own page; the cargo 
   - **Land pets** jump: straight up when not moving, far on the run (1.6× speed in the air); a jump gets them up a
     ledge.
   - **Flapping fliers** (Butterfly, Owl, Dragon, Ice Dragon) (owner, 2026-11-09): only two controls go up and down:
-    hold Space (or Fly ▲) to keep rising, hold Ctrl (or Fly ▼, shown only on a flier) to keep sinking; otherwise they
+    hold Space (or Fly ▲) to keep rising, hold Shift (or Fly ▼, shown only on a flier) to keep sinking; otherwise they
     hold their height, moving or not (the camera's angle no longer climbs or dives); up to 130 m, down to the ground.
     Vertical speed is 0.85× their flying speed. They fly at 0.75× and walk at 0.7× their speed. On a computer, a
-    "Space Up · Ctrl Down" key strip shows at the bottom of the screen only while riding one (not while building).
+    "Space Up · Shift Down" key strip shows at the bottom of the screen only while riding one (not while building).
   - **Gliders** (Parrot, Pegasus, Phoenix, Pterodactyl): can't climb, but Space jumps off the ground and gives one flap
     up in the air; they glide, sinking 1.6 m/s (faster
     looking down) at 1.25× speed, and walk at 0.95×; they can step off the edge.
@@ -317,5 +317,5 @@ Asked (owner): a web game on atamus.io (not Roblox), on its own page; the cargo 
 - Training for coins (owner, 2026-11-09): replaced by the training arena's obstacle course.
 - The courier's cap and mail bag (owner, 2026-11-09): replaced by the R6-style figure.
 - Fliers climbing or diving the way the camera looks, and Space as a single rise per press on a flier (owner,
-  2026-11-09): replaced by holding Space / Ctrl.
+  2026-11-09): replaced by holding Space / Shift.
 - Helicopters spotting players by distance and chasing them down (owner, 2026-11-09): replaced by the searchlight.
