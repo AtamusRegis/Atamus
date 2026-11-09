@@ -59,6 +59,12 @@
     #hatch canvas { width: 220px; height: 220px; }
     #hatch .nm { font: 800 34px "Big Shoulders Display", Impact, sans-serif; color: #fff; letter-spacing: .04em; text-shadow: 0 3px 0 rgba(0,0,0,.25); }
     #hatch .rar { font-weight: 800; font-size: 18px; padding: 4px 14px; border-radius: 999px; background: #fff; }
+    #banner { position: fixed; left: 0; right: 0; top: 18%; text-align: center; z-index: 9; pointer-events: none; font: 800 54px "Big Shoulders Display", Impact, sans-serif; letter-spacing: .04em; text-shadow: 0 4px 0 rgba(0,0,0,.28), 0 0 24px rgba(255,200,60,.6); opacity: 0; }
+    #banner.go { animation: ban 2.4s ease-out forwards; }
+    @keyframes ban { 0% { opacity: 0; transform: scale(.4) rotate(-6deg); } 12% { opacity: 1; transform: scale(1.15) rotate(2deg); } 22% { transform: scale(1) rotate(0); } 80% { opacity: 1; } 100% { opacity: 0; transform: translateY(-20px); } }
+    .card.wide { flex-direction: row; text-align: left; margin-bottom: 10px; }
+    .card.wide .col { flex: 1; display: flex; flex-direction: column; gap: 4px; }
+    .card.wide .stats { justify-content: flex-start; }
     @media (max-width: 420px) { #coins { font-size: 21px; } .btn { min-height: 48px; padding: 10px 13px; font-size: 14px; } }
   </style>
 </head>
@@ -72,7 +78,7 @@
     <div>
       <span class="pill" id="bag"><span class="box"></span><b id="bagn">0/2</b></span>
       <span class="pill" id="online"><span class="dot" id="net"></span><b id="onlinen">1</b></span>
-      <span class="pill" id="contract" style="display:none"><span class="row"><b>Contract</b><span id="ctime"></span></span><span class="bar"><i id="cbar"></i></span><span class="row"><span id="cdone"></span><span id="cmine"></span></span></span>
+      <span class="pill" id="contract" style="display:none"><span class="row"><b id="cname">Contract</b><span id="ctime"></span></span><span class="bar"><i id="cbar"></i></span><span class="row"><span id="cdone"></span><span id="cmine"></span></span></span>
     </div>
   </div>
   <div id="joy"><i></i></div>
@@ -85,7 +91,8 @@
   <div class="panel" id="p-train"><h2>Training Yard <button class="x" type="button">✕</button></h2><div id="train"></div></div>
   <div class="panel" id="p-board"><h2>Contracts <button class="x" type="button">✕</button></h2><div id="board"></div></div>
   <div id="toast"></div>
+  <div id="banner"></div>
   <div id="hatch"><canvas id="hatchc" width="440" height="440"></canvas><span class="nm" id="hatchn"></span><span class="rar" id="hatchr"></span><button class="btn green" id="hatchok" type="button">Ride</button></div>
-  <script type="module" src="pets.js?v=1793100001"></script>
+  <script type="module" src="pets.js?v=1793100002"></script>
 </body>
 </html>

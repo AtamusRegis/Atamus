@@ -65,7 +65,7 @@ packages/server/src/
                   serves website/. Its one socket is Pet Delivery Co.'s (/pets, pets.js).
   build.js        SERVER_BUILD, website build polling, the update countdown the workflows call (announceUpdate)
   gamehttp.js     the deploy workflows' calls (build-check, update-countdown, update-status)
-  pets.js         Pet Delivery Co. co-op: WebSocket /pets, rooms of 16, positions, big contracts
+  pets.js         Pet Delivery Co. co-op: WebSocket /pets, rooms of 16, positions, contracts, delivery effects
   db.js           the schema migrations (old tables stay untouched, unused), config.js, hash.js
 reference/        old snapshots, for reference only (never deployed); 2026-10-31-pre-spaceport/ is the last
                   multiplayer game and Salvage

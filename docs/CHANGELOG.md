@@ -4,6 +4,7 @@ Newest first. Add one entry per patch in the same commit, and keep it short: wha
 
 ## 2026-11-08
 
+- **Pet Delivery Co.: fliers, dinosaurs, islands, hills, animal control and celebrations (owner).** 11 new pets (23 in all): fliers (Butterfly, Parrot, Owl, Pegasus, Phoenix, Pterodactyl, Ice Dragon; the Dragon now flies) soar over houses and trucks, and dinosaurs (Stegosaurus, Triceratops, Raptor, T-Rex). Hills across town; 5 floating islands with houses only fliers reach, paying double. Animal control vans roam the roads: a touch stuns you and sends your parcels back. Rush Order (1 min) and Quick Contract (1:30) beside the Big Contract; falling short still gives whoever delivered a Training Ribbon (75%+) or 3 Speed Candies (40%+). The Speed Snack is now the Speed Candy. Confetti on deliveries (yours and others'), fireworks when eggs hatch and contracts are won, banners, sparkles on level-ups. The server shares heights and delivery effects and runs the three contract kinds.
 - **New game: Pet Delivery Co. (owner).** A co-op, phone-first 3D game on its own page (pets.html): ride your pet around a small town delivering mail from the post office for coins and items (Speed Snack, Training Ribbon, Egg Ticket), hatch eggs for faster pets (12 kinds, 4 rarities), train them (speed and bag). Co-op through the Atamus server (WebSocket /pets): rooms of 16, everyone sees each other, and big contracts the room works on together with the reward split by deliveries. Progress is kept in the browser. The cargo game is unchanged. See docs/PETS.md.
 
 ## 2026-11-06
