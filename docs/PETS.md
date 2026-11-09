@@ -349,7 +349,7 @@ Asked (owner): a web game on atamus.io (not Roblox), on its own page; the cargo 
   VIP and extra islands (E or ▼) bring you back to the plaza.
 - **Building (owner, 2026-11-09)** (Build, inside your own house; Done or ✕ stops): a bar of pieces with prices: Floor
   20, Wall 30, Window 50, Door 60, Roof 25, Slope roof 35, Stairs 80, Pet bed 400, Pet pen 800, Chair 60, Table 100,
-  Shelf 90, Cabinet 120, Plant 40, Rug 50, Poster 30; 12 colors. The chosen piece follows the pointer **on the floor
+  Shelf 90, Cabinet 120, Plant 40, Rug 50, Poster 30; 12 colors behind **one color circle** (a tap opens them, picking one closes them). Putting a piece where the same piece already is (same kind and floor, within half a meter, turned the same way) **doesn't add a second one**: it takes the new color (a window, the view) for free, or nothing happens. The chosen piece follows the pointer **on the floor
   you're on** (no level picker), shown **as it will look**, see-through (reddish when you can't afford it), anywhere and
   at any angle (**freeform**, no grid): R or ⟳ turns it 15° (Shift+R back); a wall brought within 0.9 m of another
   wall's end, or a tile of a tile's side, meets it. A tap puts it down. Floors, roofs, slopes and stairs are 4 x 4 m,

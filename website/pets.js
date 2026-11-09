@@ -2402,13 +2402,17 @@ function renderBuildBar() {
     tool(row1, "✕", false, closeBuild); el.append(row1); return;
   }
   for (const [k, name] of TOOLS) { const b = document.createElement("button"); b.type = "button"; b.className = "bbtool" + (building.tool === k ? " on" : ""); b.innerHTML = `<b>${name}</b><span><span class="coin"></span>${PIECES[k].p}</span>`; b.onclick = () => { building.tool = k; building.sel = -1; renderBuildBar(); }; row1.appendChild(b); }
-  for (let c = 0; c < COLORS.length; c++) { const b = document.createElement("button"); b.type = "button"; b.className = "swatch" + (building.color === c ? " on" : ""); b.style.background = COLORS[c]; b.onclick = () => { building.color = c; renderBuildBar(); }; row2.appendChild(b); }
+  let paletteRow = null;
+  // (owner, 2026-11-09) one colour circle; a tap opens the colours, picking one closes them
+  { const b = document.createElement("button"); b.type = "button"; b.className = "swatch on"; b.style.background = COLORS[building.color]; b.onclick = () => { building.palette = !building.palette; renderBuildBar(); }; row2.appendChild(b); }
+  if (building.palette) { const rowc = document.createElement("div"); rowc.className = "bbrow"; for (let c = 0; c < COLORS.length; c++) { const b = document.createElement("button"); b.type = "button"; b.className = "swatch" + (building.color === c ? " on" : ""); b.style.background = COLORS[c]; b.onclick = () => { building.color = c; building.palette = false; renderBuildBar(); }; rowc.appendChild(b); } paletteRow = rowc; } else paletteRow = null;
   const sel = building.sel >= 0 ? save.home.pieces[building.sel] : null;
   if (building.tool === "window" || (sel && sel.k === "window")) {   // the view out of a window
     const row3 = document.createElement("div"); row3.className = "bbrow";
     World.VIEWS.forEach((name, i) => tool(row3, name, (sel ? sel.w | 0 : building.w) === i, () => { if (sel) { sel.w = i; persist(); flushSave(true); refreshMyPlot(); } else building.w = i; renderBuildBar(); }));
     el.append(row1, row3, row2);
   } else el.append(row1, row2);
+  if (paletteRow) el.append(paletteRow);
   tool(row2, "Paint", building.tool === "paint", () => { building.tool = "paint"; building.sel = -1; renderBuildBar(); });
   tool(row2, "Delete", building.tool === "delete", () => { building.tool = "delete"; building.sel = -1; renderBuildBar(); }, "red");
   if (building.tool === "delete") tool(row2, "Del", false, deleteSel, "red").disabled = building.sel < 0;
@@ -2481,6 +2485,13 @@ function deleteSel() {
   if (t.k === "pen") collectPens(); ps.splice(building.sel, 1); save.coins += Math.floor(PIECES[t.k].p / 2); building.sel = -1; building.hover = -1;
   persist(); flushSave(true); refreshMyPlot(); hudKey = ""; markPieces(); renderBuildBar();
 }
+// is q the same piece as t in the same place? (the same kind on the same floor, within half a metre, turned the same way:
+// floors and roofs any quarter turn, walls, windows and doors either way round, slopes, stairs and furniture exactly)
+function samePlace(q, t) {
+  if (q.k !== t.k || q.l !== t.l || hyp(q.x - t.x, q.z - t.z) > 0.5) return false;
+  const d = (((q.a - t.a) % 360) + 360) % 360, sym = t.k === "floor" || t.k === "roof" ? 90 : PIECES[t.k].t === "wall" ? 180 : PIECES[t.k].t === "free" ? 360 : 360;
+  const m = d % sym; return m < 8 || m > sym - 8 || PIECES[t.k].t === "free";
+}
 function buildTap(px, py) {
   if (building.mode !== "in") return false;
   showGhost(px, py);   // a tap on a phone is where the pointer is
@@ -2489,8 +2500,11 @@ function buildTap(px, py) {
   if (building.tool === "delete") { building.sel = pieceAt(a); markPieces(); renderBuildBar(); return true; }
   if (building.tool === "paint") { const i = pieceAt(a); if (i < 0) return true; ps[i].c = building.color; }
   else {
-    const t = pieceFor(building.tool, a), price = PIECES[t.k].p; if (save.coins < price || ps.length >= World.MAX_PIECES) return true;
-    ps.push(t); save.coins -= price;
+    const t = pieceFor(building.tool, a), price = PIECES[t.k].p;
+    // (owner, 2026-11-09) the same piece already there: it takes the colour (and a window the view) instead of a second one
+    const same = ps.find((q) => samePlace(q, t));
+    if (same) { if (same.c === t.c && (t.k !== "window" || (same.w | 0) === (t.w | 0))) return true; same.c = t.c; if (t.k === "window") same.w = t.w; }
+    else { if (save.coins < price || ps.length >= World.MAX_PIECES) return true; ps.push(t); save.coins -= price; }
   }
   persist(); flushSave(true); refreshMyPlot(); hudKey = ""; emitSparks(me.x, me.y + 2, me.z, 8, 3, ["#ffffff", "#ffd35a"], 0.5, 1); return true;
 }
