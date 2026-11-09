@@ -163,7 +163,7 @@ const nearPlot = (x, z, m) => PLOTS.some((p) => Math.abs(p.x - x) < PLOT / 2 + m
 // the island's edge in waterfalls, and a stream stepping down the terraces into it (small falls at each step). WAT holds
 // the water's surface on the height grid (also a little past the shore, so it reads smoothly); water is wherever the
 // land is under it. Swimmers swim in it; everyone else can't wade in from the shore. ----
-const WAT = new Float32Array(GN * GN).fill(-1e9);
+const WAT = new Float32Array(GN * GN).fill(-1e9), WETN = new Uint8Array(GN * GN), BANK = new Float32Array(GN * GN).fill(Infinity);   // WETN: in the water itself; BANK: the lowest water surface within 2.5 m of a shore
 const polar = (a, r) => [Math.cos(a) * r, Math.sin(a) * r];
 export const LAKE = { x: polar(2.42, 208)[0], z: polar(2.42, 208)[1], r: 15, y: -0.4 };
 const lakeR = (a) => LAKE.r + 3 * Math.sin(2 * a + 1) + 2 * Math.sin(3 * a + 0.4);
@@ -192,6 +192,7 @@ export const RIVERS = [
       if (dl < 0) lower(k, LAKE.y - 3 * smooth(clamp(-dl / 7, 0, 1)) - 0.3);
       else lower(k, LAKE.y + 0.25 + dl * 1.1);
       if (dl < 5) wet(k, LAKE.y);
+      if (dl < 0.6) WETN[k] = 1; else if (dl < 2.5) BANK[k] = Math.min(BANK[k], LAKE.y);
     }
     for (const R of RIVERS) {
       let bd = 1e9, bi = 0; for (let n = 0; n < R.pts.length; n++) { const d = hyp(R.pts[n][0] - x, R.pts[n][1] - z); if (d < bd) { bd = d; bi = n; } }
@@ -200,18 +201,23 @@ export const RIVERS = [
       if (d < 0) lower(k, y - R.deep * smooth(clamp(-d / R.hw, 0, 1)) - 0.3);
       else lower(k, y + 0.25 + d * 1.1);
       if (d < 5) wet(k, y);
+      if (d < 0.6) WETN[k] = 1; else if (d < 2.5) BANK[k] = Math.min(BANK[k], y);
     }
   }
+  // (owner, 2026-11-09: water spilling over the land) the shore is always a little above the water beside it, so a
+  // stream stepping down the terraces runs in its own channel instead of spreading over the slope
+  for (let k = 0; k < GN * GN; k++) if (!WETN[k] && BANK[k] < Infinity) HGT[k] = Math.max(HGT[k], BANK[k] + 0.3);
 }
 // the water's surface here, or -Infinity on dry land
 export function waterAt(x, z) {
   const fx = (x - G0) / G, fz = (z - G0) / G; if (fx < 0 || fz < 0 || fx >= GN - 1 || fz >= GN - 1) return -Infinity;
   const i = Math.floor(fx), j = Math.floor(fz), k = j * GN + i;
   if (WAT[k] < -1e8 || WAT[k + 1] < -1e8 || WAT[k + GN] < -1e8 || WAT[k + GN + 1] < -1e8) return -Infinity;
+  if (!(WETN[k] | WETN[k + 1] | WETN[k + GN] | WETN[k + GN + 1])) return -Infinity;
   const y = sample(WAT, x, z); return terrain(x, z) < y - 0.05 ? y : -Infinity;
 }
 // the water grid, for drawing it: [x0, step, n, surface heights (-1e9 where there's none)]
-export const waterGrid = () => ({ x0: G0, step: G, n: GN, w: WAT });
+export const waterGrid = () => ({ x0: G0, step: G, n: GN, w: WAT, wet: WETN });
 const nearWater = (x, z, m) => { for (const [a, b] of [[0, 0], [-m, 0], [m, 0], [0, -m], [0, m], [-m, -m], [m, m], [-m, m], [m, -m]]) if (waterAt(x + a, z + b) > -Infinity) return true; return false; };
 for (const R of ROADS) {
   for (let s = 12; s < R.len - 8; s += 15) {

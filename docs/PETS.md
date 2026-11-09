@@ -17,15 +17,24 @@ Asked (owner): a web game on atamus.io (not Roblox), on its own page; the cargo 
   Ground pets can't climb anything steeper than about 39° (cliffs) and can't go past the edge; they can drop off
   ledges.
 - **Water (owner, 2026-11-09):** a small lake in the low ground out past the outer road (west-northwest of the plaza),
-  two rivers from it that run off the island's edge in waterfalls (a sheet pouring down and away under the island, spray
-  at the lip), and a stream that steps down the terraces into the lake, foaming white at each little fall. Deeper water
-  is darker. Houses, trees and rocks keep clear of it. In the water everyone floats (sunk about half a meter):
-  **swimmers** swim at 1.35× their speed and walk straight in from the shore; anyone else can't wade in from the shore
-  (they can jump in) and paddles at 0.4×, climbing out at the bank. Nobody goes over a waterfall. Fliers fly over it.
-- **Speed boosts (owner, 2026-11-09):** glowing orange arrow pads on the roads (about every 115 m, not in the plaza),
-  20 cyan rings in the air over town (16 to 82 m up), and 7 indigo rings on the lake, the rivers and the stream. Run, fly
-  or swim through one and your pet goes 1.6× for 5 s (on top of Speed Candy), leaving a trail in the boost's color; not
-  on foot or at home.
+  two rivers from it that run off the island's edge in waterfalls, and a stream that steps down the terraces into the
+  lake, foaming white at each little fall. Its banks always stand a little above the water beside them, so the stream
+  runs in its own channel. The water stops at the island's edge; the falls pour **down** from the lip, out and clear of
+  the rock (the rock under each fall is tucked in), with spray at the lip. Ripples drift slowly on the lake and **run
+  downstream** on the rivers and the stream, faster where it's steep. Deeper water is darker; the bed is sand. Houses,
+  trees and rocks keep clear of it.
+  - **Swimmers** walk straight in and **swim underwater** (owner, 2026-11-09): Space (or Swim ▲) rises, Shift (or Swim
+    ▼) dives, down to the bottom; with neither they drift up to the surface; Space at the surface leaps out. 1.35×
+    their speed in the water. Bubbles trail behind them under water; with the camera under water everything goes a
+    hazy blue.
+  - **Land and air pets never go in or on the water** (owner, 2026-11-09): they can't walk into it, and anyone who ends
+    up on it (a jump, a glide, a teleport) is put on the nearest shore. Fliers fly over it (low over it they hover and
+    don't land); nobody goes over a waterfall.
+- **Speed boosts (owner, 2026-11-09):** glowing orange arrow pads laid on the roads (following the road's surface;
+  about every 115 m, not in the plaza) for any pet; 20 cyan rings in the air over town (16 to 82 m up), there only for
+  fliers and gliders; and 7 small spinning whirlpools on the lake, the rivers and the stream, there only for swimmers
+  (surface or underwater). Rings and whirlpools fade out with distance (gone past 120 m). Going through one: 1.6× for
+  5 s (on top of Speed Candy), with a trail in the boost's color; not on foot or at home.
 - **Winding roads:** two winding rings and six winding spokes out from the plaza, 8 m wide with dashed center lines,
   cut into the slopes so they climb gently through the cliffs.
 - **The plaza** (flat, paved, in the middle): the **post office** (blue roof) with its **pickup ring** (gold) in front,
@@ -188,6 +197,8 @@ Asked (owner): a web game on atamus.io (not Roblox), on its own page; the cargo 
   - Epic: Deer 11.5/3, Sea Turtle ≈ 10.5/6, Bear 10/6, Horse 12.5/4, Owl ✈ 11/4, Triceratops 11/6, Raptor 13/3
   - Legendary: Dragon ✈ 15/5, Unicorn 16/4, Pegasus ✈ 15.5/4, Phoenix ✈ 17/3, T-Rex 14.5/7, Pterodactyl ✈ 15/5,
     Ice Dragon ✈ 16/5
+- **Riders stay their size (owner, 2026-11-09):** a pet grows with its level but the courier on it doesn't, so a
+  big pet looks big under its rider.
 - **Fliers (owner, 2026-11-08):** fly over houses and trucks and land on islands; they go up and down only as the
   player holds (see Riding). Shown with a wing by their name in the menus.
 - **Fliers and gliders are marked (owner, 2026-11-08):** a badge on every card (Flier: sky blue with flapping wings;
@@ -242,6 +253,11 @@ Asked (owner): a web game on atamus.io (not Roblox), on its own page; the cargo 
 - **Staying in the game while away (owner, 2026-11-09):** a tab that's put away (minimized, behind another window, another
   tab) stays connected: you stop where you are, your keys and joystick let go, and others keep seeing you there. If the
   connection does drop (a phone suspending the page), it reconnects as soon as it can and when the tab is back.
+- **What's New (owner, 2026-11-09):** after an update, a small panel in the middle of the screen shows the newest
+  entry of the front page's Updates list (its date and lines) until you close it (✕); it shows again only when that
+  entry changes. A browser that has never logged in doesn't get it.
+- **Coins (owner, 2026-11-09):** the coin pill sits at the top right (above the map), leaving the top left clear (as
+  Roblox's chat would).
 - **Updates (owner, 2026-11-08):** when a new build of the site goes live, the server tells every connected page and it
   reloads onto it ("Updating!"); a page that connects with an older build than the server last saw reloads too (at most
   once a minute). Progress is in the browser, so nothing's lost but the parcels in the bag. **Whose update (owner,
