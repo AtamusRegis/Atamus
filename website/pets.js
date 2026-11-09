@@ -211,6 +211,39 @@ function waterStep(dt) {
   waterTex.offset.x += dt * 0.015; waterTex.offset.y += dt * 0.01; fallTex.offset.y += dt * 1.6;
   for (const s of mists) { const u = s.userData; s.position.y = u.y + Math.sin(clock * 0.8 + u.ph) * 0.6; s.scale.setScalar(u.sz * (1 + Math.sin(clock * 1.3 + u.ph) * 0.12)); }
 }
+// ---- speed boosts (owner, 2026-11-09): glowing arrow pads on the roads, rings in the air and rings on the water; run,
+// fly or swim through one and your pet goes 1.6x for 5 s (with Speed Candy too) ----
+const PAD_BOOST = 1.6, PAD_TIME = 5000;
+const BOOSTS = [];
+{
+  for (const R of ROADS) for (let s = 45; s < R.len - 20; s += 115) { const p = World.roadAt(R, s); if (hyp(p.x, p.z) < PLAZA + 12) continue; BOOSTS.push({ k: "pad", x: p.x, y: terrain(p.x, p.z) + ROAD_LIFT, z: p.z, yaw: Math.atan2(p.fx, p.fz), r: 3 }); }
+  for (let n = 0; n < 14; n++) { const a = (n / 14) * TAU + 0.35, r = n % 2 ? 95 : 160, x = Math.cos(a) * r, z = Math.sin(a) * r; BOOSTS.push({ k: "air", x, y: terrain(x, z) + 16 + (n % 3) * 9, z, yaw: a, r: 4 }); }
+  for (const [x, z, y] of [[0, 8, 34], [0, 18, 48], [-40, -20, 60], [60, 40, 70], [-90, -70, 80], [20, 110, 82]]) BOOSTS.push({ k: "air", x, y, z, yaw: Math.atan2(x, z), r: 4 });
+  const L = World.LAKE; BOOSTS.push({ k: "water", x: L.x + 5, z: L.z - 4, r: 3 }, { k: "water", x: L.x - 6, z: L.z + 3, r: 3 });
+  for (const [ri, f] of [[0, 0.35], [0, 0.7], [1, 0.45], [2, 0.3], [2, 0.65]]) { const R = World.RIVERS[ri], q = R.pts[Math.floor(R.pts.length * f)], q2 = R.pts[Math.floor(R.pts.length * f) + 1]; BOOSTS.push({ k: "water", x: q[0], z: q[1], yaw: Math.atan2(q2[0] - q[0], q2[1] - q[1]), r: 3 }); }
+  for (const b of BOOSTS) if (b.k === "water") { b.y = World.waterAt(b.x, b.z); if (b.yaw === undefined) b.yaw = 0; }
+  const arrowTex = (() => { const c = document.createElement("canvas"); c.width = 64; c.height = 128; const g = c.getContext("2d"); g.fillStyle = "#ff9f1a"; g.fillRect(0, 0, 64, 128); g.fillStyle = "#fff4c2"; for (const y of [18, 58, 98]) { g.beginPath(); g.moveTo(8, y + 22); g.lineTo(32, y); g.lineTo(56, y + 22); g.lineTo(56, y + 34); g.lineTo(32, y + 12); g.lineTo(8, y + 34); g.fill(); } const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace; t.wrapT = THREE.RepeatWrapping; return t; })();
+  const padM = new THREE.MeshBasicMaterial({ map: arrowTex, polygonOffset: true, polygonOffsetFactor: -6, polygonOffsetUnits: -6 });
+  const ringM = { air: new THREE.MeshBasicMaterial({ color: "#5fe3ff" }), water: new THREE.MeshBasicMaterial({ color: "#8f9bff" }) };
+  const glowM = { air: new THREE.MeshBasicMaterial({ color: "#5fe3ff", transparent: true, opacity: 0.25, blending: THREE.AdditiveBlending, depthWrite: false }), water: new THREE.MeshBasicMaterial({ color: "#8f9bff", transparent: true, opacity: 0.25, blending: THREE.AdditiveBlending, depthWrite: false }) };
+  const padG = new THREE.PlaneGeometry(3.4, 5).rotateX(-Math.PI / 2), ringG = new THREE.TorusGeometry(3.2, 0.32, 8, 32), glowG = new THREE.TorusGeometry(3.2, 0.9, 8, 32), wringG = new THREE.TorusGeometry(2.4, 0.3, 8, 28);
+  for (const b of BOOSTS) {
+    const g = new THREE.Group(); g.position.set(b.x, b.y, b.z); g.rotation.y = b.yaw; scene.add(g); b.g = g;
+    if (b.k === "pad") { const m = new THREE.Mesh(padG, padM); m.position.y = 0.04; g.add(m); }
+    else { const big = b.k === "air", m = new THREE.Mesh(big ? ringG : wringG, ringM[b.k]), gl = new THREE.Mesh(big ? glowG : wringG, glowM[b.k]); if (!big) gl.scale.setScalar(1.25); m.position.y = gl.position.y = big ? 0 : 0.6; g.add(m, gl); }
+  }
+  BOOSTS.tex = arrowTex;
+}
+function boostStep(dt) { BOOSTS.tex.offset.y -= dt * 1.5; for (const b of BOOSTS) if (b.k !== "pad") b.g.children[1].material.opacity = 0.18 + Math.sin(clock * 4) * 0.1; }
+function boostTouch(now) {
+  for (const b of BOOSTS) {
+    const dy = b.k === "pad" ? me.y - b.y : b.k === "water" ? me.y - b.y + 0.4 : me.y + 0.8 - b.y;
+    if (hyp(me.x - b.x, me.z - b.z) < b.r && dy > -1.5 && dy < (b.k === "pad" ? 1.5 : 2.5)) {
+      if (me.padUntil < now - 600 || !me.padUntil) emitSparks(me.x, me.y + 1, me.z, 26, 6, b.k === "pad" ? ["#ff9f1a", "#fff4c2"] : b.k === "air" ? ["#5fe3ff", "#ffffff"] : ["#8f9bff", "#ffffff"], 0.7, 0);
+      me.padUntil = now + PAD_TIME; me.padC = b.k; return;
+    }
+  }
+}
 // houses as instances: walls (reaching down into the slope), roofs, doors, mailboxes; each faces its road
 function instanced(geo, color, n, each) { const m = new THREE.InstancedMesh(geo, mat(color), n); m.castShadow = true; m.receiveShadow = true; for (let i = 0; i < n; i++) { dummy.rotation.set(0, 0, 0); dummy.scale.set(1, 1, 1); each(i, dummy); dummy.updateMatrix(); m.setMatrixAt(i, dummy.matrix); } scene.add(m); return m; }
 const wallAt = (h, d) => { d.position.set(h.x, h.base + 2.2 - (h.sky ? 0 : 2), h.z); d.scale.set(9, 4.4 + (h.sky ? 0 : 4), 9); d.rotation.y = h.yaw; };
@@ -1888,7 +1921,8 @@ function step(dt) {
   const kind = me.foot ? "foot" : moveKind(), M = MOVE[kind], p = riding(), stunned = me.stunUntil > now;
   const floor0 = floorAt(me.x, me.z, me.y), grounded = me.y - floor0 < 0.08;
   if (grounded) me.flapped = false;
-  let sp = (kind === "foot" ? FOOT_SPEED : petSpeed(p)) * (me.boostUntil > now ? SNACK_BOOST : 1) * (grounded ? M.ground : M.air);
+  if (!me.inst && kind !== "foot") boostTouch(now);
+  let sp = (kind === "foot" ? FOOT_SPEED : petSpeed(p)) * (me.boostUntil > now ? SNACK_BOOST : 1) * (me.padUntil > now && kind !== "foot" ? PAD_BOOST : 1) * (grounded ? M.ground : M.air);
   if ((kind === "land" || kind === "foot") && !grounded && me.longJump) sp *= 1.6;
   const wNow = World.waterAt(me.x, me.z), wet = wNow > -Infinity && me.y < wNow - 0.2;
   if (wet && kind !== "foot") sp *= swims() ? SWIM_FAST : PADDLE;
@@ -1928,6 +1962,7 @@ function step(dt) {
     if (jumpQueued && jumpQueued < now) jumpQueued = 0;   // landed (and keeping to the ground going downhill)
     if (me.y < -150) { me.x = SPAWN.x; me.z = SPAWN.z; me.y = terrain(me.x, me.z); me.vy = 0; toast("Whoosh!"); }   // fell off into the clouds: back to the plaza
   }
+  if (me.padUntil > now && me.moving && Math.random() < dt * 24) emitSparks(me.x - Math.sin(me.yaw) * 0.8, me.y + 0.8, me.z - Math.cos(me.yaw) * 0.8, 2, 1.2, me.padC === "pad" ? ["#ff9f1a", "#fff4c2"] : me.padC === "air" ? ["#5fe3ff", "#ffffff"] : ["#8f9bff", "#ffffff"], 0.45, 0, 0.8);   // a boost's trail
   if (wet && me.moving && Math.random() < dt * 14) emitSparks(me.x, wNow + 0.1, me.z, 2, 1.6, ["#ffffff", "#bfe6ff"], 0.5, 5, 0.7);   // a splash
   // (owner, 2026-11-09) a strong wind (from 12 mph, most at 40) gently pushes a flier or glider in the air along with it
   // and bumps it about a little; never on the ground, at home or inside
@@ -1995,7 +2030,7 @@ function draw(dt) {
   const ti = me.bag.find((i) => houses[i].mx === tx && houses[i].mz === tz), ty = ti !== undefined ? houses[ti].my : 0;
   for (const b of beams.values()) { b.userData.parcel.rotation.y = clock * 2; b.userData.parcel.position.y = 3 + Math.sin(clock * 3) * 0.3; }
   pickRing.material.opacity = 0.55 + Math.sin(clock * 4) * 0.3; bigEgg.rotation.y = clock * 0.6;
-  cutaway(); poiStep(); waterStep(dt); placeCamera(dt); camera.updateMatrixWorld(); drawGuide(tx, ty, tz, loggedIn && !building && hyp(tx - me.x, tz - me.z) > 6); skyStep(dt, camera.position.x, camera.position.y, camera.position.z);
+  cutaway(); poiStep(); waterStep(dt); boostStep(dt); placeCamera(dt); camera.updateMatrixWorld(); drawGuide(tx, ty, tz, loggedIn && !building && hyp(tx - me.x, tz - me.z) > 6); skyStep(dt, camera.position.x, camera.position.y, camera.position.z);
   renderer.render(scene, camera);
 }
 function frame(now) {
