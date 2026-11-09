@@ -359,8 +359,8 @@ Asked (owner): a web game on atamus.io (not Roblox), on its own page; the cargo 
   removes it for half its price. **Paint** recolors what you tap. Up to 300 pieces. The floors above yours (and the
   roof) hide while you're inside, and a wall between the camera and you goes see-through. Everyone starts with a 12 x
   12 m room round the front door, two windows and a roof.
-- **On a player's lot** (owner, 2026-11-09: anyone's lot with a house, its yard too, up to 16 m over it; flying higher
-  you keep riding) and inside houses you're off your pet, walking (5.5 m/s); others see you walking too.
+- **Only inside a house** (owner, 2026-11-09: through its front door) you're off your pet, walking (5.5 m/s); others
+  see you walking too. Outside, lots included, you keep riding.
 - **Beds** (pet beds) each hold 2 more pets (6 + 2 per bed). **Playpens:** tap one in your house to choose its pet (not
   the one you ride, or — to empty it): it wanders there (others see it) and earns coins a minute (2 / 3.5 / 5.5 / 8 by
   rarity, +5% per level), up to 8 hours' worth, collected when you come into your house. A pet in a playpen can't be
