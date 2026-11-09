@@ -26,7 +26,7 @@ const SPECIES = {
   penguin: { name: "Penguin", r: 1, speed: 8.5, bag: 4, swim: true, c: "#2b3440", a: "#f4f4f4", body: "bird", size: 1 },
   goat: { name: "Goat", r: 1, speed: 9, bag: 4, c: "#e6e1d6", a: "#9b8f7a", body: "quad", ears: "horns", size: 1.05 },
   butterfly: { name: "Butterfly", r: 1, speed: 9, bag: 2, fly: "fly", c: "#3a8ee6", a: "#ffd84a", c2: "#e5534b", body: "butterfly", size: 1.1 },
-  parrot: { name: "Parrot", r: 1, speed: 9.5, bag: 3, fly: "glide", c: "#3fb36b", a: "#e5534b", body: "bird", wings: true, size: 1 },
+  parrot: { name: "Parrot", r: 1, speed: 9.5, bag: 3, fly: "fly", c: "#3fb36b", a: "#e5534b", body: "bird", wings: true, size: 1 },
   stego: { name: "Stegosaurus", r: 1, speed: 8.5, bag: 5, c: "#7fae5a", a: "#e08a3a", body: "quad", plates: true, tail: "long", size: 1.25 },
   deer: { name: "Deer", r: 2, speed: 11.5, bag: 3, c: "#b9824e", a: "#f3e3cc", body: "quad", ears: "antlers", size: 1.15 },
   turtle: { name: "Sea Turtle", r: 2, speed: 10.5, bag: 6, swim: true, c: "#7cb85a", a: "#8a6a3a", body: "quad", size: 1.15 },
@@ -37,10 +37,10 @@ const SPECIES = {
   raptor: { name: "Raptor", r: 2, speed: 13, bag: 3, c: "#8aa04a", a: "#5a6a2a", body: "biped", tail: "long", size: 1.05 },
   dragon: { name: "Dragon", r: 3, speed: 15, bag: 5, fly: "fly", c: "#3fb36b", a: "#ffd84a", body: "quad", wings: "big", ears: "horns", tail: "long", size: 1.35 },
   unicorn: { name: "Unicorn", r: 3, speed: 16, bag: 4, c: "#fbf7ff", a: "#ff7ac8", body: "quad", ears: "horn", legs: 1.4, size: 1.25 },
-  pegasus: { name: "Pegasus", r: 3, speed: 15.5, bag: 4, fly: "glide", c: "#f4f6ff", a: "#9ad0ff", body: "quad", wings: "big", ears: "point", legs: 1.4, size: 1.25 },
-  phoenix: { name: "Phoenix", r: 3, speed: 17, bag: 3, fly: "glide", c: "#ff6a2a", a: "#ffd84a", body: "bird", wings: "big", tail: "fire", size: 1.25 },
+  pegasus: { name: "Pegasus", r: 3, speed: 15.5, bag: 4, fly: "fly", c: "#f4f6ff", a: "#9ad0ff", body: "quad", wings: "big", ears: "point", legs: 1.4, size: 1.25 },
+  phoenix: { name: "Phoenix", r: 3, speed: 17, bag: 3, fly: "fly", c: "#ff6a2a", a: "#ffd84a", body: "bird", wings: "big", tail: "fire", size: 1.25 },
   trex: { name: "T-Rex", r: 3, speed: 14.5, bag: 7, c: "#4f7a3a", a: "#e5d9a8", body: "biped", tail: "long", big: true, size: 1.4 },
-  ptero: { name: "Pterodactyl", r: 3, speed: 15, bag: 5, fly: "glide", c: "#b07a5a", a: "#e8c9a0", body: "bird", wings: "big", ears: "crest", size: 1.25 },
+  ptero: { name: "Pterodactyl", r: 3, speed: 15, bag: 5, fly: "fly", c: "#b07a5a", a: "#e8c9a0", body: "bird", wings: "big", ears: "crest", size: 1.25 },
   icedragon: { name: "Ice Dragon", r: 3, speed: 16, bag: 5, fly: "fly", c: "#bfe6ff", a: "#3a8ee6", body: "quad", wings: "big", ears: "horns", tail: "long", size: 1.35 },
 };
 // eggs: chance of each rarity (percent); the pet is any of that rarity
@@ -1253,9 +1253,12 @@ const WING = `<svg class="ico" viewBox="0 0 14 12" style="width:14px;height:12px
 const GLIDE_ICO = `<svg class="ico" viewBox="0 0 24 14" style="width:20px;height:12px"><path d="M1 6c4-3 7-4 11-1 4-3 7-2 11 1-4 0-7 1-11 4C8 7 5 6 1 6z" fill="currentColor"/></svg>`;
 const FLY_ICO = `<svg class="ico" viewBox="0 0 24 16" style="width:20px;height:14px"><path d="M12 13C9 6 5 2 1 2c1 5 4 9 11 11zm0 0c3-7 7-11 11-11-1 5-4 9-11 11z" fill="currentColor"/></svg>`;
 const SWIM_ICO = `<svg class="ico" viewBox="0 0 24 14" style="width:20px;height:12px"><path d="M1 5c3-3 5-3 7 0s4 3 7 0 5-3 8 0M1 11c3-3 5-3 7 0s4 3 7 0 5-3 8 0" stroke="currentColor" stroke-width="2.2" fill="none" stroke-linecap="round"/></svg>`;
-const moveBadge = (sp) => { const s = SPECIES[sp], f = s.fly; return f === "fly" ? `<span class="mbadge fly">${FLY_ICO}Flier</span>` : f === "glide" ? `<span class="mbadge glide">${GLIDE_ICO}Glider</span>` : s.swim ? `<span class="mbadge swim">${SWIM_ICO}Swimmer</span>` : ""; };
+// (owner, 2026-11-09) every pet is one of three types: Ground, Air (all flying pets fly; gliders became fliers) or Water
+const GROUND_ICO = `<svg class="ico" viewBox="0 0 24 16" style="width:18px;height:12px"><path d="M1 15l7-11 4 6 3-4 8 9z" fill="currentColor"/></svg>`;
+const petType = (sp) => (SPECIES[sp].fly ? "air" : SPECIES[sp].swim ? "water" : "ground");
+const moveBadge = (sp) => { const t = petType(sp); return t === "air" ? `<span class="mbadge air">${FLY_ICO}Air</span>` : t === "water" ? `<span class="mbadge water">${SWIM_ICO}Water</span>` : `<span class="mbadge ground">${GROUND_ICO}Ground</span>`; };
 function card(sp, lines, on, onclick) {
-  const s = SPECIES[sp], d = document.createElement("div"); d.className = "card" + (on ? " on" : "") + (s.fly ? " " + s.fly : s.swim ? " swim" : "");
+  const s = SPECIES[sp], d = document.createElement("div"); d.className = "card" + (on ? " on" : "") + " " + petType(sp);
   d.innerHTML = `<img alt="" src="${portrait(sp)}" width="84" height="84">${moveBadge(sp)}<span class="nm">${s.name}</span><span class="rar" style="color:${RARITY[s.r].c}">${RARITY[s.r].name}</span>${lines}`;
   if (onclick) d.onclick = onclick; return d;
 }
@@ -1334,7 +1337,7 @@ function buyEgg(egg, ticket) {
 // (owner, 2026-11-08) hatching: the egg shakes harder and cracks, then bursts in a flash of fireworks to the pet, rays
 // behind it in its rarity's color
 function hatch(p, egg) {
-  const s = SPECIES[p.sp], rc = RARITY[s.r].c; $("hatchn").innerHTML = s.name + (s.fly || s.swim ? " " + moveBadge(p.sp) : ""); $("hatchr").textContent = RARITY[s.r].name; $("hatchr").style.color = rc;
+  const s = SPECIES[p.sp], rc = RARITY[s.r].c; $("hatchn").innerHTML = s.name + " " + moveBadge(p.sp); $("hatchr").textContent = RARITY[s.r].name; $("hatchr").style.color = rc;
   const c = $("hatchc"), g = c.getContext("2d"), img = new Image(); img.src = portrait(p.sp);
   $("hatch").style.display = "flex"; $("hatchok").style.visibility = "hidden"; $("hatchno").style.visibility = "hidden"; $("hatchn").style.visibility = "hidden"; $("hatchr").style.visibility = "hidden";
   const t0 = performance.now(), parts = []; let burst = 0, lastT = 0;
