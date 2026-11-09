@@ -6,6 +6,7 @@ and any rule decided. Use `git log` for the code detail (and for the older Atamu
 
 ## 2026-11-09
 
+- **Admin environment controls (owner).** Admins can set the weather for everyone to Auto, Clear, Rain, Snow, Storm or Fog and the time to Auto, Sunrise, Day, Sunset or Night from the Admin panel. Snow falls and covers the land; storms bring heavy rain, full wind and lightning; fog cuts visibility. New logins get the current setting; moderators and players can't change it.
 - **Fliers go up and down only by held keys (owner).** On a flapping flier, hold Space (or Fly ▲) to keep rising and hold Ctrl (or the new Fly ▼ button) to keep sinking; otherwise it holds its height. The camera's angle no longer makes it climb or dive. A "Space Up · Ctrl Down" strip shows at the bottom of the screen only while riding a flier (computers; phones have the two buttons). Land pets and gliders are unchanged.
 - **Speed boosts (owner).** Arrow pads on the roads, rings in the air and rings on the water give your pet a short burst of speed when you go through them.
 - **Water: a lake, rivers and waterfalls; swimmers (owner).** A small lake out past the outer road, two rivers running off the island's edge in waterfalls, and a stream stepping down the terraces into it. Swimmers (Duck, Penguin, and two new pets: Otter, Rare, and Sea Turtle, Epic) swim fast and walk straight in; other pets can't wade in from the shore and paddle slowly if they jump in. Swimmers have an indigo Swimmer badge.

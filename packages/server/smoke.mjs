@@ -62,7 +62,13 @@ try {
   a.send({ t: "chat", text: "hello" }); await b.wait((m) => m.t === "chat" && m.text === "hello", "chat");
   // (owner, 2026-11-09) admins' quick commands: by name on another player and on yourself; a player's are ignored
   const n = client("N"); await n.open; n.send({ t: "register", user: "Nyssary", pass: "pass1234", sp: "pup", lv: 1, x: 0, y: 0, z: 14 });
-  ok((await n.wait((m) => m.t === "welcome", "owner welcome")).role === "admin", "the owner is admin");
+  const wn = await n.wait((m) => m.t === "welcome", "owner welcome");
+  ok(wn.role === "admin" && wn.environment.weather === "auto" && wn.environment.time === "auto", "the owner is admin and sees the automatic environment");
+  n.send({ t: "admin", op: "environment", weather: "storm", time: "night" });
+  const env = await b.wait((m) => m.t === "environment", "admin environment change");
+  ok(env.environment.weather === "storm" && env.environment.time === "night", "an admin changes weather and time for everyone");
+  await n.wait((m) => m.t === "environment", "owner's environment change");
+  b.send({ t: "admin", op: "environment", weather: "clear", time: "day" });   // a player: ignored
   n.send({ t: "admin", op: "quick", cmd: "everything", name: "smokeB" });
   const db1 = (await b.wait((m) => m.t === "data", "B's data after Everything")).data;
   ok(db1.coins >= 1e6 && db1.pets.length >= 23 && db1.pets.every((p) => p.lv === 20) && db1.items.ticket >= 100 && db1.treats.dragon >= 100, "Everything gives coins, every pet at 20, items and Treats");
@@ -74,7 +80,8 @@ try {
   n.ws.close();
   // logging in again replaces the old connection
   const a2 = client("A2"); await a2.open; a2.send({ t: "resume", token: wa.token, sp: "pup" });
-  await a2.wait((m) => m.t === "welcome" && m.name === "smokeA", "resume");
+  const wa2 = await a2.wait((m) => m.t === "welcome" && m.name === "smokeA", "resume");
+  ok(wa2.environment.weather === "storm" && wa2.environment.time === "night", "a player's environment command is ignored and new logins see the admin setting");
   await a.wait((m) => m.t === "kicked", "old connection kicked");
   for (const c of [a2, b]) c.ws.close();
 } catch (e) { fail(e.message); }

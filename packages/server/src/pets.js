@@ -76,6 +76,8 @@ function finish(r, won) {
 }
 
 export function attachPets(server, { origins = [], allowLocal = false, store = memStore() } = {}) {
+  // Admins can override the clock-driven sky for everyone. It returns to the normal cycle when the server restarts.
+  let environment = { weather: "auto", time: "auto" };
   // ---- saving: changed accounts are written every few seconds (and when their player leaves) ----
   const dirty = new Set();
   const flush = async (acct) => { dirty.delete(acct); try { await store.save(acct.id, acct.data, acct.rev); } catch (e) { console.error("[pets] save", e.message); dirty.add(acct); } };
@@ -125,7 +127,18 @@ export function attachPets(server, { origins = [], allowLocal = false, store = m
     if (m.op === "list") {
       const list = [...online.values()].map((p) => staffView(p.acct, p));
       if (m.q && /^[A-Za-z0-9_]{1,16}$/.test(m.q)) for (const a of await store.search(m.q)) if (!online.has(a.id)) list.push(staffView(a, null));
-      send(me.ws, { t: "admin_list", list, q: m.q || "" }); return;
+      send(me.ws, { t: "admin_list", list, q: m.q || "", environment }); return;
+    }
+    if (m.op === "environment") {
+      if (my < 2) return reply("Not allowed");
+      const weather = ["auto", "clear", "rain", "snow", "storm", "fog"].includes(m.weather) ? m.weather : null;
+      const time = ["auto", "sunrise", "day", "sunset", "night"].includes(m.time) ? m.time : null;
+      if (!weather || !time) return reply("Unknown");
+      environment = { weather, time };
+      for (const p of online.values()) send(p.ws, { t: "environment", environment });
+      store.log(me.name, "World", "environment", `${weather}, ${time}`).catch(() => {});
+      console.log(`[pets] ${me.name} environment World ${weather}, ${time}`);
+      reply("Done"); return;
     }
     // the target: by account id (the panel) or by name (chat commands)
     const nm = typeof m.name === "string" && NAME_RE.test(m.name) ? m.name.toLowerCase() : null;
@@ -223,7 +236,7 @@ export function attachPets(server, { origins = [], allowLocal = false, store = m
           x: num(m.x, 6000), y: num(m.y, 300), z: num(m.z, 6000), yaw: 0, mv: 0, lastDel: 0, lastChat: 0, stars: old ? old.stars : 0, lastChased: 0, lastStar: 0, immuneUntil: 0, inst: 0, party: null, trade: null, plot: -1, ft: 0 };
         online.set(acct.id, me);
         assignPlot(room, me);
-        send(ws, { t: "welcome", web: websiteBuild(), by: websiteBy(), id: me.id, name: me.name, role: rankOf(acct) >= 2 ? "admin" : acct.role, token, data: acct.data, rev: acct.rev, players: [...room.players.values()].map(pub), contract: null, stars: me.stars, vip: !!acct.vip, plot: me.plot, plots: room.plots.map((p, i) => (p ? plotMsg(i, p) : null)).filter(Boolean) });
+        send(ws, { t: "welcome", web: websiteBuild(), by: websiteBy(), id: me.id, name: me.name, role: rankOf(acct) >= 2 ? "admin" : acct.role, token, data: acct.data, rev: acct.rev, players: [...room.players.values()].map(pub), contract: null, stars: me.stars, vip: !!acct.vip, plot: me.plot, plots: room.plots.map((p, i) => (p ? plotMsg(i, p) : null)).filter(Boolean), environment });
         room.players.set(me.id, me);
         all(room, { t: "join", p: pub(me) }, me);
         if (me.plot >= 0) all(room, plotMsg(me.plot, me), me);

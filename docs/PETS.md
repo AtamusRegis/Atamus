@@ -39,11 +39,14 @@ Asked (owner): a web game on atamus.io (not Roblox), on its own page; the cargo 
 - **Looks (owner, 2026-11-08):** the ground's colors blend smoothly (grass by height and in broad patches, fading into
   rock on steep slopes over a few metres) with a fine speckled texture; tall rocks and boulders stand on the cliffs
   and steep slopes (about 320).
-- **Sky (owner, 2026-11-08), the same for everyone (timed off the clock):** a day lasts 20 minutes (a little more day
-  than night): the sun moves, the sky and fog go through dusk to night (stars, house windows light up, lights dim).
-  Every 4 minutes the weather's decided: about 1 in 4 rain (streaks around you, a grey sky, shorter fog, easing in and
-  out). Wind (below); god rays slant down from the sun (strongest with it
-  low, none at night or in rain); 56 clouds in three layers (below the island, around it and high above).
+- **Sky (owner, 2026-11-08), the same for everyone:** normally a day lasts 20 minutes (a little more day than night):
+  the sun moves, and the sky and fog go through dusk to night (stars, house windows light up, lights dim). Every 4
+  minutes the automatic weather decides whether it rains (streaks around you, a gray sky, shorter fog, easing in and
+  out). **Admins can override it for everyone from the Admin panel (owner, 2026-11-09):** Weather is Auto, Clear,
+  Rain, Snow, Storm or Fog; time is Auto, Sunrise, Day, Sunset or Night. Snow falls and covers the land; storms bring
+  heavy rain, full wind and lightning; Fog shortens sight. Overrides last until an admin changes them or the server
+  restarts. Wind (below); god rays slant down from the sun (strongest with it low, none at night or in rain); 56 clouds
+  in three layers (below the island, around it and high above).
 - **Place labels (owner, 2026-11-09):** a speech bubble floats over each place saying what it is (Post Office: Pick up
   parcels here; Contract Board: Start a contract with your room; Egg Shop: Buy eggs to hatch new pets; Training Yard:
   Train the pet you ride; Animal Control: Where caught couriers end up; Sky Lift: Up to your plot / Down to the plaza),
@@ -275,6 +278,8 @@ Asked (owner): a web game on atamus.io (not Roblox), on its own page; the cargo 
   online, role, VIP, muted / banned (with time left), and: role (who's allowed), Mute (10m, 1h, 1d, 7d, 30d, Perma,
   Off), Ban (the same), Kick (online), Quick, VIP and Give (admins). Online players first; your own row has no mute,
   ban or kick. The search box keeps its focus while the list refreshes.
+- **Environment controls (owner, 2026-11-09, admins):** the top of the panel changes the shared weather (Auto, Clear,
+  Rain, Snow, Storm or Fog) and time of day (Auto, Sunrise, Day, Sunset or Night). Moderators don't get these controls.
 - **Quick commands (owner, 2026-11-09, admins):** a "Me" grid at the top of the panel runs them on yourself, each
   row's Quick menu on that player (anyone below you, online or not): +10K / +100K / +1M coins, All pets (one level-1
   pet of every kind they don't have), Max levels (every pet to 20), Items (+100 of each), Treats (+100 of every

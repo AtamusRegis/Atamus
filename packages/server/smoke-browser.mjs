@@ -7,6 +7,7 @@ process.env.ATAMUS_PTR = "1";   // no live website to watch
 import http from "node:http";
 import { existsSync, readdirSync } from "node:fs";
 import { homedir } from "node:os";
+import { fileURLToPath } from "node:url";
 import express from "express";
 import { chromium } from "playwright-core";
 
@@ -20,7 +21,7 @@ if (!chrome) {
 }
 
 const { attachPets } = await import("./src/pets.js");
-const app = express(); app.use(express.static(new URL("../../website/", import.meta.url).pathname));
+const app = express(); app.use(express.static(fileURLToPath(new URL("../../website/", import.meta.url))));
 const server = http.createServer(app);
 attachPets(server, { allowLocal: true });
 await new Promise((r) => server.listen(0, "127.0.0.1", r));
@@ -39,10 +40,18 @@ try {
   const user = page.locator("input[placeholder=Username]");
   await user.waitFor({ state: "visible", timeout: 20000 });
   step = "create an account";
-  await user.fill("smoke" + Date.now().toString(36).slice(-7));
+  await user.fill("Nyssary");
   await page.fill("input[placeholder=Password]", "smoke-check-1");
   await page.click("text=Create account");
   await user.waitFor({ state: "hidden", timeout: 20000 });
+  step = "change the weather from the admin panel";
+  await page.click("#btn-admin");
+  await page.selectOption("#admin-weather", "snow");
+  await page.selectOption("#admin-time", "night");
+  let changed = false;
+  for (let i = 0; i < 50 && !changed; i++) { await page.waitForTimeout(100); changed = await page.evaluate(() => window.Pets.environment.weather === "snow" && window.Pets.environment.time === "night" && window.Pets.sky.snow > 0.9); }
+  if (!changed) throw new Error("the snow and night settings did not reach the game");
+  await page.click("#p-admin .x");
   step = "ride for a moment";
   await page.keyboard.down("KeyW"); await page.waitForTimeout(1500); await page.keyboard.up("KeyW"); await page.waitForTimeout(500);
   if (!(await page.locator("canvas").count())) problems.push("no game canvas");
