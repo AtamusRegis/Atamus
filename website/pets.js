@@ -788,7 +788,12 @@ function banner(txt, color, sub) { const b = $("banner"); b.textContent = txt; i
 // ---- me ----
 const me = { inst: 0, vy: 0, longJump: false, x: SPAWN.x + (Math.random() - 0.5) * 8, y: 0, z: SPAWN.z + Math.random() * 3, yaw: Math.PI, moving: false, airborne: false, boostUntil: 0, bag: [], stunUntil: 0, stars: 0 };
 let mine = null, myBubble = null;
-function mount() { if (mine) scene.remove(mine.g); mine = petModel(riding().sp, save.shirt); const sc = petScale(riding().lv); mine.g.scale.setScalar(sc); mine.top *= sc; mine.g.traverse((o) => (o.castShadow = true)); scene.add(mine.g); if (myBubble) { mine.g.add(myBubble.s); myBubble.s.position.y = mine.top + 2.4; } }
+// (owner, 2026-11-09: others saw the wrong pet) what I ride is drawn and told to the room whenever it changes, however
+// it changed (riding another, training, a trade, my data coming back from the server at login or after a stale save)
+let mountKey = "", sentPet = "";
+const petKey = () => riding().sp + "|" + riding().lv;
+function petSync() { const k = petKey(); if (k !== mountKey) mount(); if (netOk && k !== sentPet) { sentPet = k; netSend({ t: "pet", sp: riding().sp, lv: riding().lv }); } }
+function mount() { mountKey = petKey(); if (mine) scene.remove(mine.g); mine = petModel(riding().sp, save.shirt); const sc = petScale(riding().lv); mine.g.scale.setScalar(sc); mine.top *= sc; mine.g.traverse((o) => (o.castShadow = true)); scene.add(mine.g); if (myBubble) { mine.g.add(myBubble.s); myBubble.s.position.y = mine.top + 2.4; } }
 mount();
 // the guide (owner, 2026-11-08): a long glowing arrow lying flat around my pet, turned toward where to go; it tilts up
 // only halfway toward a place above or below (fully when the place is well above me), so it never stands on end; a
@@ -1466,6 +1471,7 @@ function onNet(m) {
   switch (m.t) {
     case "welcome": {
       if (stale(m.web, false, m.by)) return;
+      sentPet = "";   // tell the room again what I ride once I'm in
       setTok(m.token); if (registering) { try { localStorage.setItem("petdelivery.claimed", "1"); } catch (e) { /* private mode */ } registering = false; }
       const again = loggedIn && myName === m.name; myName = m.name; myId = m.id; netOk = true; loggedIn = true; $("login").style.display = "none"; if (document.activeElement && document.activeElement.blur) document.activeElement.blur();
       if (again && saveDirty && m.rev === rev) { save.name = myName; flushSave(true); } else adopt(m.data, m.rev);   // back after a drop: my unsaved progress goes up
@@ -2212,7 +2218,7 @@ const SWIM_SINK = 0.55, SWIM_FAST = 1.35, PADDLE = 0.4;
 const swims = () => !!SPECIES[riding().sp].swim;
 function floorAt(x, z, y) { return Math.max(groundAt(x, z, y), houseSurface(x, z, y)); }
 function step(dt) {
-  clock += dt;
+  clock += dt; petSync();
   const now = performance.now();
   if (!loggedIn) { joy.x = joy.y = 0; }
   // where the joystick (or keys) point, turned by the camera
