@@ -6,6 +6,7 @@ and any rule decided. Use `git log` for the code detail (and for the older Atamu
 
 ## 2026-11-09
 
+- **Van headlights and helicopter searchlights (owner).** Animal control vans have headlights while they're moving (beams ahead and a pool of light on the road, brightest at night). Helicopters no longer chase: each sweeps a real searchlight over town that turns slowly and swings back the other way now and then, its spot moving in and out; it lights the ground and anything it lands on. A parcel carrier who stays in the beam for half a second is caught.
 - **Staying in the game while away (owner).** Minimizing the browser or switching to another window no longer takes you out of the game; you wait where you stopped.
 - **Pet Delivery Co.: fliers and gliders tip further nose-down going down (owner).** 1.4× the angle of the path, up to about 55° (was 40°); climbing unchanged.
 - **Working together: the two-player browser check no longer races a falling pet.** It now watches for the highest the second player is seen over a few seconds, not one look after 1.5 s (a land pet falls back from 40 m in under 2 s, so a slow CI runner could read only after the landing). It still fails when the #7 bug is put back. No player-facing change.
