@@ -124,11 +124,13 @@ try {
   step = "fly and pitch with the camera";
   const flightStart = await page.evaluate(() => { const P = window.Pets; P.teleport(0, 14, 40); P.cam.pitch = -0.5; return P.me.y; });
   await page.waitForTimeout(300);
-  await page.keyboard.down("KeyW"); await page.waitForTimeout(700);
-  const flightHigh = await page.evaluate(() => ({ y: window.Pets.me.y, pitch: window.Pets.mine.body.rotation.x }));
+  await page.keyboard.down("KeyW");
+  let flightHigh;
+  for (let i = 0; i < 50; i++) { flightHigh = await page.evaluate(() => ({ y: window.Pets.me.y, pitch: window.Pets.mine.body.rotation.x })); if (flightHigh.y > flightStart + 2 && flightHigh.pitch < -0.2) break; await page.waitForTimeout(100); }
   await page.evaluate(() => { window.Pets.cam.pitch = 1; });
-  await page.waitForTimeout(900); await page.keyboard.up("KeyW");
-  const flightLow = await page.evaluate(() => ({ y: window.Pets.me.y, pitch: window.Pets.mine.body.rotation.x }));
+  let flightLow;
+  for (let i = 0; i < 50; i++) { flightLow = await page.evaluate(() => ({ y: window.Pets.me.y, pitch: window.Pets.mine.body.rotation.x })); if (flightLow.y < flightHigh.y - 2 && flightLow.pitch > 0.2) break; await page.waitForTimeout(100); }
+  await page.keyboard.up("KeyW");
   if (!(flightHigh.y > flightStart + 2) || !(flightHigh.pitch < -0.2) || !(flightLow.y < flightHigh.y - 2) || !(flightLow.pitch > 0.2)) problems.push(`camera-directed flight is wrong (${JSON.stringify({ flightStart, flightHigh, flightLow })})`);
   await page.evaluate(() => { const P = window.Pets; P.teleport(0, 14); });
   // a second player joins and flies off: the first must see them move (issue #7: a joiner could look frozen)
