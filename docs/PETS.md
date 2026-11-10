@@ -107,7 +107,9 @@ Asked (owner): a web game on atamus.io (not Roblox), on its own page; the cargo 
 - **Sketch look (owner, 2026-11-09):** the world is drawn like a pencil sketch: a screen pass turns the rendered
   scene into off-white paper with dark outlines (from brightness and depth edges) and light diagonal hatching in the
   darker areas; nights are brightened so the drawing stays readable. Name tags, place labels and speech bubbles are
-  drawn after the pass, in color, still hidden behind buildings. The HUD keeps its colors; the minimap is drawn in
+  drawn after the pass, in color, still hidden behind buildings; so are the guides and interaction circles (owner,
+  2026-11-09): the guide arrow, the place rings (pickup, board, shops, training yard, lifts) and lift beams, the beams
+  over parcel houses, Package Rush beams and rings, and the arena's next-obstacle beam. The HUD keeps its colors; the minimap is drawn in
   ink too (below).
 - **Shadows are baked (owner, 2026-11-09):** no live shadows; the ground is darker under and a little to one side of
   every house, plaza building and tree (soft-edged, painted in once), and a soft dark spot lies on the ground under

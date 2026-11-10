@@ -106,6 +106,9 @@ const MATS = new Map(), mat = (c) => { if (!MATS.has(c)) MATS.set(c, new THREE.M
 const BOX = new THREE.BoxGeometry(1, 1, 1);
 function box(w, h, d, c, x, y, z, parent, shadow = true) { const m = new THREE.Mesh(BOX, mat(c)); m.scale.set(w, h, d); m.position.set(x, y, z); m.castShadow = shadow; m.receiveShadow = true; (parent || scene).add(m); return m; }
 let snowCover;
+// (owner, 2026-11-09) guides and interaction circles stay in color: drawn after the sketch pass (layer 1), still hidden
+// behind what stands in front of them
+const inColor = (o) => { o.traverse((c) => c.layers.set(1)); return o; };
 // the ground (owner, 2026-11-09: flat, on a grid): a square grid of 2 m over the island, grass, rock down the lake's sides
 {
   const NA = 360, GS = 2, GW = Math.round((World.R_TOWN * 2) / GS), pos = [], idx = [];
@@ -363,7 +366,7 @@ let arNext = 0, arPrev = null, arPanel = false, trainPill = "";
   // the next obstacle: a gold beam and a bobbing diamond over it
   const beam = new THREE.Mesh(new THREE.CylinderGeometry(1.6, 1.6, 14, 20, 1, true), new THREE.MeshBasicMaterial({ color: "#ffd35a", transparent: true, opacity: 0.22, side: THREE.DoubleSide, depthWrite: false, blending: THREE.AdditiveBlending }));
   const gem = new THREE.Mesh(new THREE.OctahedronGeometry(0.7, 0), new THREE.MeshBasicMaterial({ color: "#ffd35a" }));
-  scene.add(beam, gem); AR.beam = beam; AR.gem = gem;
+  scene.add(inColor(beam), inColor(gem)); AR.beam = beam; AR.gem = gem;
 }
 function enterArena() {
   const a = -0.35; me.x = AR.x + Math.cos(a) * TRM; me.z = AR.z + Math.sin(a) * TRM; me.y = AR.y; me.vy = 0; cam.y = me.y;
@@ -563,21 +566,21 @@ const toWorld = (b, lx, lz) => ({ x: b.x + lx * Math.cos(b.yaw) + lz * Math.sin(
   box(8, 1.6, 0.3, "#f2b01e", 0, 5.4, 5.1, g); box(1.6, 1.1, 0.35, "#e5534b", 0, 5.4, 5.2, g); }
 const RINGG = (r) => new THREE.RingGeometry(r - 0.35, r, 40).rotateX(-Math.PI / 2);
 const ringM = (c) => new THREE.MeshBasicMaterial({ color: c, transparent: true, opacity: 0.85 });
-const pickRing = new THREE.Mesh(RINGG(PICKUP.r), ringM("#f2b01e")); pickRing.position.set(PICKUP.x, 0.16, PICKUP.z); scene.add(pickRing);
+const pickRing = new THREE.Mesh(RINGG(PICKUP.r), ringM("#f2b01e")); pickRing.position.set(PICKUP.x, 0.16, PICKUP.z); scene.add(inColor(pickRing));
 box(2.6, 2, 0.25, "#8a5a3a", BOARD.x, 2.2, BOARD.z - 1.5); box(0.2, 1.4, 0.2, "#7a4f28", BOARD.x - 1, 0.7, BOARD.z - 1.5); box(0.2, 1.4, 0.2, "#7a4f28", BOARD.x + 1, 0.7, BOARD.z - 1.5); box(2.2, 1.5, 0.05, "#fbf3dc", BOARD.x, 2.25, BOARD.z - 1.35);
-const boardRing = new THREE.Mesh(RINGG(BOARD.r), ringM("#e5534b")); boardRing.position.set(BOARD.x, 0.16, BOARD.z); scene.add(boardRing);
+const boardRing = new THREE.Mesh(RINGG(BOARD.r), ringM("#e5534b")); boardRing.position.set(BOARD.x, 0.16, BOARD.z); scene.add(inColor(boardRing));
 // the egg shop, with a giant egg on top
 { const g = bldg(SHOP_B); box(12, 5, 8, "#f7cfd8", 0, 2.5, 0, g); box(13, 0.6, 9, "#e5739d", 0, 5.3, 0, g); box(3, 3, 0.2, "#7a4f28", 0, 1.5, 4.05, g); }
 const bigEgg = new THREE.Mesh(new THREE.SphereGeometry(2, 16, 12), mat("#fff3d6")); bigEgg.scale.set(1, 1.3, 1); bigEgg.position.set(SHOP_B.x, 8.3, SHOP_B.z); bigEgg.castShadow = true; scene.add(bigEgg);
-const shopRing = new THREE.Mesh(RINGG(SHOP.r), ringM("#e5739d")); shopRing.position.set(SHOP.x, 0.16, SHOP.z); scene.add(shopRing);
+const shopRing = new THREE.Mesh(RINGG(SHOP.r), ringM("#e5739d")); shopRing.position.set(SHOP.x, 0.16, SHOP.z); scene.add(inColor(shopRing));
 // the mount shop (owner, 2026-11-09), mirroring the egg shop, with a giant golden horseshoe on top
 { const g = bldg(MOUNT_B); box(12, 5, 8, "#cfeef1", 0, 2.5, 0, g); box(13, 0.6, 9, "#2bb3c0", 0, 5.3, 0, g); box(3, 3, 0.2, "#7a4f28", 0, 1.5, 4.05, g);
   const shoe = new THREE.Mesh(new THREE.TorusGeometry(1.7, 0.45, 10, 28, TAU * 0.7), mat("#f2b01e")); shoe.rotation.z = Math.PI * 1.5 - TAU * 0.35; shoe.position.set(0, 8, 0); shoe.castShadow = true; g.add(shoe); }
-const mountRing = new THREE.Mesh(RINGG(MOUNT.r), ringM("#2bb3c0")); mountRing.position.set(MOUNT.x, 0.16, MOUNT.z); scene.add(mountRing);
+const mountRing = new THREE.Mesh(RINGG(MOUNT.r), ringM("#2bb3c0")); mountRing.position.set(MOUNT.x, 0.16, MOUNT.z); scene.add(inColor(mountRing));
 // the training yard: a track with hurdles
 const track = new THREE.Mesh(new THREE.RingGeometry(9, 14, 48).rotateX(-Math.PI / 2), mat("#d98b5f")); track.position.set(TRAIN.x, 0.12, TRAIN.z); track.receiveShadow = true; scene.add(track);
 for (let k = 0; k < 6; k++) { const a = (k / 6) * TAU, x = TRAIN.x + Math.cos(a) * 11.5, z = TRAIN.z + Math.sin(a) * 11.5, g = new THREE.Group(); g.position.set(x, 0, z); g.rotation.y = -a; box(0.15, 1, 0.15, "#ffffff", 0, 0.5, -1.8, g); box(0.15, 1, 0.15, "#ffffff", 0, 0.5, 1.8, g); box(0.2, 0.25, 3.8, "#e5534b", 0, 1, 0, g); scene.add(g); }
-const trainRing = new THREE.Mesh(RINGG(TRAIN.r - 1), ringM("#3fb36b")); trainRing.position.set(TRAIN.x, 0.16, TRAIN.z); scene.add(trainRing);
+const trainRing = new THREE.Mesh(RINGG(TRAIN.r - 1), ringM("#3fb36b")); trainRing.position.set(TRAIN.x, 0.16, TRAIN.z); scene.add(inColor(trainRing));
 // the pound (animal control): a building with a striped front and a fenced yard in front where the caught are let out
 { const g = bldg(POUND);
   box(16, 6, 8, "#dfe6ec", 0, 3, -3, g); box(16.4, 0.7, 8.4, "#e08a00", 0, 4.6, -3, g); box(17, 0.6, 9, "#3d4650", 0, 6.3, -3, g);
@@ -929,6 +932,7 @@ const arrowGeo = new THREE.ShapeGeometry(arrowShape); arrowGeo.rotateX(Math.PI /
 const arrow = new THREE.Group(), arrowTilt = new THREE.Group(); arrow.add(arrowTilt); scene.add(arrow);
 { const core = new THREE.Mesh(arrowGeo, new THREE.MeshBasicMaterial({ color: "#ffe27a", side: THREE.DoubleSide, transparent: true, opacity: 0.95, depthWrite: false, fog: false })); core.position.z = 1.6; core.renderOrder = 4; arrowTilt.add(core);
   for (const [s2, o] of [[1.35, 0.35], [1.8, 0.16]]) { const g = new THREE.Mesh(arrowGeo, new THREE.MeshBasicMaterial({ color: "#ffb800", side: THREE.DoubleSide, transparent: true, opacity: o, depthWrite: false, blending: THREE.AdditiveBlending, fog: false })); g.scale.set(s2, s2, s2); g.position.z = 1.6 - 3.8 * (s2 - 1) * 0.4; g.renderOrder = 3; arrowTilt.add(g); } }
+inColor(arrow);
 function drawGuide(tx, ty, tz, on) {
   arrow.visible = on; if (!on) { pinEl.style.display = "none"; return; }
   const dx = tx - me.x, dz = tz - me.z, d = hyp(dx, dz), up = ty - me.y, el = Math.atan2(up, Math.max(1, d));
@@ -962,7 +966,7 @@ const beams = new Map();
 function syncBeams() {
   const want = new Set(me.bag);
   for (const [i, b] of beams) if (!want.has(i)) { scene.remove(b); beams.delete(i); }
-  for (const i of want) if (!beams.has(i)) { const h = houses[i], g = new THREE.Group(); const m = new THREE.Mesh(BEAMG, h.sky ? skyBeamM : beamM); m.position.y = 15; g.add(m); const p = box(0.9, 0.7, 0.9, "#c98b4f", 0, 3, 0, g, false); g.userData.parcel = p; g.position.set(h.mx, h.my, h.mz); scene.add(g); beams.set(i, g); }
+  for (const i of want) if (!beams.has(i)) { const h = houses[i], g = new THREE.Group(); const m = new THREE.Mesh(BEAMG, h.sky ? skyBeamM : beamM); m.position.y = 15; g.add(inColor(m)); const p = box(0.9, 0.7, 0.9, "#c98b4f", 0, 3, 0, g, false); g.userData.parcel = p; g.position.set(h.mx, h.my, h.mz); scene.add(g); beams.set(i, g); }
 }
 
 // Every ten minutes the room gets a Package Rush for a random one to two minutes. Packages are shared and the server
@@ -976,7 +980,7 @@ function prizePackage(at) {
   beam.position.y = 14; g.add(beam);
   const parcel = new THREE.Group(); box(1.5, 1.1, 1.35, "#d99a54", 0, 0.7, 0, parcel); box(0.22, 1.16, 1.42, "#ffd84a", 0, 0.72, 0, parcel); box(1.56, 0.22, 1.42, "#ffd84a", 0, 0.72, 0, parcel);
   const ring = new THREE.Mesh(new THREE.TorusGeometry(1.35, 0.12, 8, 28).rotateX(Math.PI / 2), prizeRingM); ring.position.y = 0.12; g.add(parcel, ring);
-  g.position.set(at.x, at.y, at.z); g.userData.parcel = parcel; g.userData.ring = ring; scene.add(g); return g;
+  g.position.set(at.x, at.y, at.z); g.userData.parcel = parcel; g.userData.ring = ring; inColor(beam); inColor(ring); scene.add(g); return g;
 }
 function dropPrize(id) { const g = packageMeshes.get(id); if (g) scene.remove(g); packageMeshes.delete(id); packageClaiming.delete(id); }
 function setPackageEvent(event, announce = false) {
@@ -1886,7 +1890,7 @@ plotIsland(VIP_ISLAND); const extraIsland = plotIsland(EXTRA_ISLAND); extraIslan
 // lifts: one at the plaza takes you to your plot; one on each plot island brings you back down
 const LIFT = { x: 0, z: 22 }, LIFTS = [{ x: LIFT.x, z: LIFT.z, y: 0, to: "plot" }, { x: VIP_ISLAND.x, z: VIP_ISLAND.z + 18, y: VIP_ISLAND.y, to: "plaza" }, { x: EXTRA_ISLAND.x, z: EXTRA_ISLAND.z + 30, y: EXTRA_ISLAND.y, to: "plaza" }];
 const liftBeamM = new THREE.MeshBasicMaterial({ color: "#7fd8ff", transparent: true, opacity: 0.28, depthWrite: false, side: THREE.DoubleSide });
-for (const l of LIFTS) { const r = new THREE.Mesh(RINGG(2.2), ringM("#2bb3c0")); r.position.set(l.x, l.y + 0.18, l.z); scene.add(r); const b = new THREE.Mesh(new THREE.CylinderGeometry(2, 2, 14, 20, 1, true), liftBeamM); b.position.set(l.x, l.y + 7, l.z); scene.add(b); l.ring = r; }
+for (const l of LIFTS) { const r = new THREE.Mesh(RINGG(2.2), ringM("#2bb3c0")); r.position.set(l.x, l.y + 0.18, l.z); scene.add(r); const b = new THREE.Mesh(new THREE.CylinderGeometry(2, 2, 14, 20, 1, true), liftBeamM); b.position.set(l.x, l.y + 7, l.z); scene.add(b); l.ring = r; inColor(r); inColor(b); }
 // (owner, 2026-11-09) a speech-bubble label floats over each place, saying what it is: clear up close, fading out with
 // distance (and hidden while building)
 const POIS = [
