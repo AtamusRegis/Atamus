@@ -4,7 +4,7 @@
 // its edge; animal control chases you. Co-op: everyone in a room rides the same town, works on contracts together and
 // chats. The server (packages/server/src/pets.js) shares players, runs animal control, contracts and chat.
 import * as THREE from "./vendor/three.module.min.js";
-import * as World from "./pets-world.js?v=1793100060";
+import * as World from "./pets-world.js?v=1793100061";
 
 const $ = (id) => document.getElementById(id);
 const TAU = Math.PI * 2, clamp = (v, a, b) => Math.max(a, Math.min(b, v)), hyp = Math.hypot;
@@ -83,7 +83,7 @@ const flies = () => !!SPECIES[riding().sp].fly;
 
 // ---- the world (shared with the server: pets-world.js): the town is a big floating island of plateaus and cliffs with
 // winding roads, houses along them and the plaza in the middle; small islands float off its edge ----
-const { terrain, smoothTerrain, inside, edgeR, ROADS, ROAD_HALF, houses, trees, ISLANDS, islandAt, blocked, PLAZA, POST, PICKUP, BOARD, SHOP, SHOP_B, MOUNT, MOUNT_B, TRAIN, POUND, RELEASE, SPAWN } = World;
+const { terrain, smoothTerrain, inside, edgeR, ROADS, ROAD_HALF, houses, trees, ISLANDS, islandAt, blocked, PLAZA, POST, PICKUP, BOARD, SHOP, SHOP_B, MOUNT, MOUNT_B, TRAIN, POUND, POUND_B, RELEASE, SPAWN } = World;
 let seed = 20261108; const srnd = () => ((seed = (seed * 16807) % 2147483647) / 2147483647);
 const pick2 = (a) => a[Math.floor(srnd() * a.length)];
 const HOUSE_C = ["#f6d9b8", "#cfe6f7", "#f7cfd8", "#d8f0c8", "#fbe7a8", "#e3d4f5", "#f9f4ea"], ROOF_C = ["#c8553d", "#3b6ea8", "#5a8f3e", "#8a5a3a", "#6b5b95"];
@@ -106,14 +106,11 @@ const MATS = new Map(), mat = (c) => { if (!MATS.has(c)) MATS.set(c, new THREE.M
 const BOX = new THREE.BoxGeometry(1, 1, 1);
 function box(w, h, d, c, x, y, z, parent, shadow = true) { const m = new THREE.Mesh(BOX, mat(c)); m.scale.set(w, h, d); m.position.set(x, y, z); m.castShadow = shadow; m.receiveShadow = true; (parent || scene).add(m); return m; }
 let snowCover;
-// the ground: rings out from the middle to the island's edge, grass on the flat, rock on the cliffs
+// the ground (owner, 2026-11-09: flat, on a grid): a square grid of 2 m over the island, grass, rock down the lake's sides
 {
-  const NA = 360, NR = 116, pos = [], idx = [];
-  pos.push(0, terrain(0, 0), 0);
-  for (let j = 1; j <= NR; j++) for (let i = 0; i < NA; i++) { const a = (i / NA) * TAU, r = (edgeR(a) * j) / NR, x = Math.cos(a) * r, z = Math.sin(a) * r; pos.push(x, terrain(x, z), z); }
-  const V = (j, i) => (j === 0 ? 0 : 1 + (j - 1) * NA + (((i % NA) + NA) % NA));
-  for (let i = 0; i < NA; i++) idx.push(0, V(1, i + 1), V(1, i));
-  for (let j = 1; j < NR; j++) for (let i = 0; i < NA; i++) { const a = V(j, i), b = V(j, i + 1), c = V(j + 1, i), d = V(j + 1, i + 1); idx.push(a, b, c, b, d, c); }
+  const NA = 360, GS = 2, GW = Math.round((World.R_TOWN * 2) / GS), pos = [], idx = [];
+  for (let j = 0; j <= GW; j++) for (let i = 0; i <= GW; i++) { const x = -World.R_TOWN + i * GS, z = -World.R_TOWN + j * GS; pos.push(x, terrain(x, z), z); }
+  for (let j = 0; j < GW; j++) for (let i = 0; i < GW; i++) { const a = j * (GW + 1) + i, b = a + 1, c = a + GW + 1, d = c + 1; idx.push(a, c, b, b, c, d); }
   const g = new THREE.BufferGeometry(); g.setAttribute("position", new THREE.Float32BufferAttribute(pos, 3)); g.setIndex(idx); g.computeVertexNormals();
   // (owner, 2026-11-08: smooth it out) colors blend gradually: by the slope of the land over a few metres (so cliffs
   // fade into rock), by height, and in broad patches; a fine speckled texture on top
@@ -123,7 +120,7 @@ let snowCover;
   const SH = new Map(), shKey = (x, z) => Math.floor(x / 10) + "," + Math.floor(z / 10), addSh = (o) => { for (let gx = Math.floor((o.x - o.r) / 10); gx <= Math.floor((o.x + o.r) / 10); gx++) for (let gz = Math.floor((o.z - o.r) / 10); gz <= Math.floor((o.z + o.r) / 10); gz++) { const k = gx + "," + gz; if (!SH.has(k)) SH.set(k, []); SH.get(k).push(o); } };
   for (const h of houses) if (!h.sky) addSh({ x: h.x + 1.6, z: h.z + 1.6, c: Math.cos(h.yaw), s: Math.sin(h.yaw), hw: 5.2, hd: 5.2, r: 9, k: 0.6 });
   for (const t of trees) addSh({ x: t.x + 1.1 * t.s, z: t.z + 1.1 * t.s, rr: 2.3 * t.s, r: 3 * t.s, k: 0.68 });
-  for (const [b, hw, hd] of [[POST, 9.5, 5.5], [SHOP_B, 6.5, 4.5], [MOUNT_B, 6.5, 4.5], [{ x: POUND.x, z: POUND.z + 3 }, 8.5, 4.5]]) addSh({ x: b.x + 2, z: b.z + 2, c: 1, s: 0, hw, hd, r: 12, k: 0.68 });
+  for (const [b, hw, hd] of [[POST, 9.5, 5.5], [SHOP_B, 6.5, 4.5], [MOUNT_B, 6.5, 4.5], [POUND_B, 8.5, 4.5]]) addSh({ x: b.x + 2, z: b.z + 2, c: Math.cos(b.yaw), s: Math.sin(b.yaw), hw, hd, r: 12, k: 0.68 });
   function bakedShade(x, z) {
     let f = 1;
     for (const o of SH.get(shKey(x, z)) || []) {
@@ -168,7 +165,7 @@ let snowCover;
   const RINGS = [[1, 0], [1.01, -9], [0.9, -30], [0.72, -62], [0.48, -98], [0.22, -132]], up = [], ui = [];
   for (let k = 0; k < RINGS.length; k++) for (let i = 0; i < NA; i += 3) {
     const a = (i / NA) * TAU, e = edgeR(a), top = terrain(Math.cos(a) * e, Math.sin(a) * e), atFall = World.RIVERS.some((R) => R.fall && Math.abs(Math.atan2(Math.sin(a - Math.atan2(R.pts[R.pts.length - 1][1], R.pts[R.pts.length - 1][0])), Math.cos(a - Math.atan2(R.pts[R.pts.length - 1][1], R.pts[R.pts.length - 1][0])))) < 0.1);
-    const j = k && !atFall ? 1 + (Math.sin(i * 1.7 + k * 3.1) * 0.5 + 0.5) * 0.08 : 1, r = e * (atFall && k === 1 ? 0.97 : RINGS[k][0]) * j;   // (owner, 2026-11-09) no rock bulging out under a waterfall
+    const j = k > 1 && !atFall ? 1 + (Math.sin(i * 1.7 + k * 3.1) * 0.5 + 0.5) * 0.08 : 1, r = e * (atFall && k === 1 ? 0.97 : RINGS[k][0]) * j;   // (owner, 2026-11-09) no rock bulging out under a waterfall
     up.push(Math.cos(a) * r, k ? Math.min(top - 2, 0) + RINGS[k][1] - (k > 1 ? Math.abs(Math.sin(i * 0.37 + k)) * 12 : 0) : top, Math.sin(a) * r);
   }
   up.push(0, -165, 0); const NU = NA / 3, apex = up.length / 3 - 1;
@@ -213,7 +210,7 @@ for (const R of World.RIVERS) if (R.fall) {
   // (so faster) where it's steep; the lake drifts gently
   for (const R of World.RIVERS) { R.V = [0]; for (let q = 1; q < R.pts.length; q++) { const ds = R.S[q] - R.S[q - 1], sl = Math.abs(R.y[q] - R.y[q - 1]) / (ds || 1); R.V.push(R.V[q - 1] + ds / (1 + 6 * sl)); } }
   const flowAt = (x, z) => {
-    const L = World.LAKE, dl = hyp(x - L.x, z - L.z) - L.r; let best = null, bd = Math.max(dl, 0) + 3;
+    const L = World.LAKE, dl = Math.max(Math.abs(x - L.x) - L.hw, Math.abs(z - L.z) - L.hd); let best = null, bd = Math.max(dl, 0) + 3;
     for (const R of World.RIVERS) for (let q = 0; q < R.pts.length; q++) { const d = hyp(R.pts[q][0] - x, R.pts[q][1] - z); if (d < bd) { bd = d; const nq = R.pts[Math.min(q + 1, R.pts.length - 1)], pq = R.pts[Math.max(q - 1, 0)], tx = nq[0] - pq[0], tz = nq[1] - pq[1], tl = hyp(tx, tz) || 1; best = { u: ((x - R.pts[q][0]) * -tz + (z - R.pts[q][1]) * tx) / tl / 8, v: R.V[q] / 8 }; } }
     return best;
   };
@@ -237,7 +234,7 @@ for (const R of World.RIVERS) if (R.fall) {
       const A = vert(i, j, fl(0, 0)), B = vert(i + 1, j, fl(G, 0)), C = vert(i, j + 1, fl(0, G)), D = vert(i + 1, j + 1, fl(G, G)); idx.push(A, C, B, B, C, D);
     }
     const g = new THREE.BufferGeometry(); g.setAttribute("position", new THREE.Float32BufferAttribute(pos, 3)); g.setAttribute("color", new THREE.Float32BufferAttribute(col, 3)); g.setAttribute("uv", new THREE.Float32BufferAttribute(uv, 2)); g.setIndex(idx); g.computeVertexNormals();
-    const m = new THREE.Mesh(g, new THREE.MeshLambertMaterial({ vertexColors: true, map: river ? riverTex : lakeTex, transparent: true, opacity: 0.86, depthWrite: false, side: THREE.DoubleSide })); m.receiveShadow = true; m.renderOrder = 1; scene.add(m);
+    const m = new THREE.Mesh(g, new THREE.MeshLambertMaterial({ vertexColors: true, map: river ? riverTex : lakeTex, transparent: true, opacity: 0.86, depthWrite: true, side: THREE.DoubleSide })); m.receiveShadow = true; m.renderOrder = 1; scene.add(m);
   };
   build(false); build(true);
   // the waterfalls: from the lip at the island's edge, a sheet of water pours out and down, clear of the rock below
@@ -265,11 +262,11 @@ function waterStep(dt) {
 const PAD_BOOST = 1.6, PAD_TIME = 5000, BOOST_SEE = 120, BOOST_FADE = 45;
 const BOOSTS = [];
 {
-  for (const R of ROADS) for (let s = 45; s < R.len - 20; s += 115) { const p = World.roadAt(R, s); if (hyp(p.x, p.z) < PLAZA + 12) continue; BOOSTS.push({ k: "pad", x: p.x, y: terrain(p.x, p.z) + ROAD_LIFT, z: p.z, yaw: Math.atan2(p.fx, p.fz), r: 3 }); }
+  for (const R of ROADS) for (const u of [-182, -102, 0, 102, 182]) { const p = World.roadAt(R, u + R.len / 2); if (hyp(p.x, p.z) < PLAZA + 12) continue; BOOSTS.push({ k: "pad", x: p.x, y: terrain(p.x, p.z) + ROAD_LIFT, z: p.z, yaw: Math.atan2(p.fx, p.fz), r: 3 }); }
   for (let n = 0; n < 14; n++) { const a = (n / 14) * TAU + 0.35, r = n % 2 ? 95 : 160, x = Math.cos(a) * r, z = Math.sin(a) * r; BOOSTS.push({ k: "air", x, y: terrain(x, z) + 16 + (n % 3) * 9, z, yaw: a, r: 4 }); }
-  for (const [x, z, y] of [[0, 8, 34], [0, 18, 48], [-40, -20, 60], [60, 40, 70], [-90, -70, 80], [20, 110, 82]]) BOOSTS.push({ k: "air", x, y, z, yaw: Math.atan2(x, z), r: 4 });
-  const L = World.LAKE; BOOSTS.push({ k: "water", x: L.x + 5, z: L.z - 4, r: 2.6 }, { k: "water", x: L.x - 6, z: L.z + 3, r: 2.6 });
-  for (const [ri, f] of [[0, 0.35], [0, 0.7], [1, 0.45], [2, 0.3], [2, 0.65]]) { const R = World.RIVERS[ri], q = R.pts[Math.floor(R.pts.length * f)]; BOOSTS.push({ k: "water", x: q[0], z: q[1], r: 2.6 }); }
+  for (const [x, z, y] of [[0, -20, 34], [0, 20, 34], [-20, 0, 48], [20, 0, 48], [-70, -70, 76], [70, -70, 76], [-70, 70, 76], [70, 70, 76]]) BOOSTS.push({ k: "air", x, y, z, yaw: Math.atan2(x, z), r: 4 });
+  const L = World.LAKE; for (const [a, b] of [[-1, -1], [1, -1], [-1, 1], [1, 1], [0, 0]]) BOOSTS.push({ k: "water", x: L.x + a * L.hw * 0.5, z: L.z + b * L.hd * 0.5, r: 2.6 });
+  BOOSTS.push({ k: "water", x: -208, z: 0, r: 2.6 });
   for (const b of BOOSTS) if (b.k === "water") { b.y = World.waterAt(b.x, b.z); b.yaw = 0; }
   const arrowTex = (() => { const c = document.createElement("canvas"); c.width = 64; c.height = 128; const g = c.getContext("2d"); g.fillStyle = "#ff9f1a"; g.fillRect(0, 0, 64, 128); g.fillStyle = "#fff4c2"; for (const y of [18, 58, 98]) { g.beginPath(); g.moveTo(8, y + 22); g.lineTo(32, y); g.lineTo(56, y + 22); g.lineTo(56, y + 34); g.lineTo(32, y + 12); g.lineTo(8, y + 34); g.fill(); } const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace; t.wrapT = THREE.RepeatWrapping; return t; })();
   const swirlTex = (() => { const c = document.createElement("canvas"); c.width = c.height = 128; const g = c.getContext("2d"); g.translate(64, 64); for (let arm = 0; arm < 3; arm++) { g.beginPath(); for (let t = 0; t < 1; t += 0.01) { const a = arm * (TAU / 3) + t * 7, r = 4 + t * 58; g.lineTo(Math.cos(a) * r, Math.sin(a) * r); } g.strokeStyle = "rgba(255,255,255,0.95)"; g.lineWidth = 7; g.lineCap = "round"; g.stroke(); } const rg = g.createRadialGradient(0, 0, 0, 0, 0, 62); rg.addColorStop(0, "rgba(40,60,190,0.9)"); rg.addColorStop(0.7, "rgba(110,130,255,0.5)"); rg.addColorStop(1, "rgba(150,170,255,0)"); g.globalCompositeOperation = "destination-over"; g.fillStyle = rg; g.beginPath(); g.arc(0, 0, 62, 0, TAU); g.fill(); return new THREE.CanvasTexture(c); })();
@@ -558,33 +555,37 @@ function skyStep(dt, cx, cy, cz) {
     r.m.material.opacity = rk * (0.6 + 0.4 * Math.sin(t * 0.3 + r.off.x));
   }
 }
+// the town square's buildings (owner, 2026-11-09: round the square), each drawn facing +z and turned to face the middle
+const bldg = (b) => { const g = new THREE.Group(); g.position.set(b.x, 0, b.z); g.rotation.y = b.yaw; scene.add(g); return g; };
+const toWorld = (b, lx, lz) => ({ x: b.x + lx * Math.cos(b.yaw) + lz * Math.sin(b.yaw), z: b.z - lx * Math.sin(b.yaw) + lz * Math.cos(b.yaw) });
 // the post office, its pickup ring and the contract board
-box(18, 7, 10, "#d9e4ee", POST.x, 3.5, POST.z); box(19, 0.8, 11, "#3a8ee6", POST.x, 7.4, POST.z); box(4, 3.6, 0.2, "#3a6ea8", POST.x, 1.8, POST.z + 5.05);
-box(8, 1.6, 0.3, "#f2b01e", POST.x, 5.4, POST.z + 5.1); box(1.6, 1.1, 0.35, "#e5534b", POST.x, 5.4, POST.z + 5.2);
+{ const g = bldg(POST); box(18, 7, 10, "#d9e4ee", 0, 3.5, 0, g); box(19, 0.8, 11, "#3a8ee6", 0, 7.4, 0, g); box(4, 3.6, 0.2, "#3a6ea8", 0, 1.8, 5.05, g);
+  box(8, 1.6, 0.3, "#f2b01e", 0, 5.4, 5.1, g); box(1.6, 1.1, 0.35, "#e5534b", 0, 5.4, 5.2, g); }
 const RINGG = (r) => new THREE.RingGeometry(r - 0.35, r, 40).rotateX(-Math.PI / 2);
 const ringM = (c) => new THREE.MeshBasicMaterial({ color: c, transparent: true, opacity: 0.85 });
 const pickRing = new THREE.Mesh(RINGG(PICKUP.r), ringM("#f2b01e")); pickRing.position.set(PICKUP.x, 0.16, PICKUP.z); scene.add(pickRing);
 box(2.6, 2, 0.25, "#8a5a3a", BOARD.x, 2.2, BOARD.z - 1.5); box(0.2, 1.4, 0.2, "#7a4f28", BOARD.x - 1, 0.7, BOARD.z - 1.5); box(0.2, 1.4, 0.2, "#7a4f28", BOARD.x + 1, 0.7, BOARD.z - 1.5); box(2.2, 1.5, 0.05, "#fbf3dc", BOARD.x, 2.25, BOARD.z - 1.35);
 const boardRing = new THREE.Mesh(RINGG(BOARD.r), ringM("#e5534b")); boardRing.position.set(BOARD.x, 0.16, BOARD.z); scene.add(boardRing);
 // the egg shop, with a giant egg on top
-box(12, 5, 8, "#f7cfd8", SHOP_B.x, 2.5, SHOP_B.z); box(13, 0.6, 9, "#e5739d", SHOP_B.x, 5.3, SHOP_B.z); box(3, 3, 0.2, "#7a4f28", SHOP_B.x, 1.5, SHOP_B.z + 4.05);
+{ const g = bldg(SHOP_B); box(12, 5, 8, "#f7cfd8", 0, 2.5, 0, g); box(13, 0.6, 9, "#e5739d", 0, 5.3, 0, g); box(3, 3, 0.2, "#7a4f28", 0, 1.5, 4.05, g); }
 const bigEgg = new THREE.Mesh(new THREE.SphereGeometry(2, 16, 12), mat("#fff3d6")); bigEgg.scale.set(1, 1.3, 1); bigEgg.position.set(SHOP_B.x, 8.3, SHOP_B.z); bigEgg.castShadow = true; scene.add(bigEgg);
 const shopRing = new THREE.Mesh(RINGG(SHOP.r), ringM("#e5739d")); shopRing.position.set(SHOP.x, 0.16, SHOP.z); scene.add(shopRing);
-// the mount shop (owner, 2026-11-09), facing the egg shop, with a giant golden horseshoe on top
-box(12, 5, 8, "#cfeef1", MOUNT_B.x, 2.5, MOUNT_B.z); box(13, 0.6, 9, "#2bb3c0", MOUNT_B.x, 5.3, MOUNT_B.z); box(3, 3, 0.2, "#7a4f28", MOUNT_B.x, 1.5, MOUNT_B.z - 4.05);
-{ const shoe = new THREE.Mesh(new THREE.TorusGeometry(1.7, 0.45, 10, 28, TAU * 0.7), mat("#f2b01e")); shoe.rotation.z = Math.PI * 1.5 - TAU * 0.35; shoe.position.set(MOUNT_B.x, 8, MOUNT_B.z); shoe.castShadow = true; scene.add(shoe); }
+// the mount shop (owner, 2026-11-09), mirroring the egg shop, with a giant golden horseshoe on top
+{ const g = bldg(MOUNT_B); box(12, 5, 8, "#cfeef1", 0, 2.5, 0, g); box(13, 0.6, 9, "#2bb3c0", 0, 5.3, 0, g); box(3, 3, 0.2, "#7a4f28", 0, 1.5, 4.05, g);
+  const shoe = new THREE.Mesh(new THREE.TorusGeometry(1.7, 0.45, 10, 28, TAU * 0.7), mat("#f2b01e")); shoe.rotation.z = Math.PI * 1.5 - TAU * 0.35; shoe.position.set(0, 8, 0); shoe.castShadow = true; g.add(shoe); }
 const mountRing = new THREE.Mesh(RINGG(MOUNT.r), ringM("#2bb3c0")); mountRing.position.set(MOUNT.x, 0.16, MOUNT.z); scene.add(mountRing);
 // the training yard: a track with hurdles
 const track = new THREE.Mesh(new THREE.RingGeometry(9, 14, 48).rotateX(-Math.PI / 2), mat("#d98b5f")); track.position.set(TRAIN.x, 0.12, TRAIN.z); track.receiveShadow = true; scene.add(track);
 for (let k = 0; k < 6; k++) { const a = (k / 6) * TAU, x = TRAIN.x + Math.cos(a) * 11.5, z = TRAIN.z + Math.sin(a) * 11.5, g = new THREE.Group(); g.position.set(x, 0, z); g.rotation.y = -a; box(0.15, 1, 0.15, "#ffffff", 0, 0.5, -1.8, g); box(0.15, 1, 0.15, "#ffffff", 0, 0.5, 1.8, g); box(0.2, 0.25, 3.8, "#e5534b", 0, 1, 0, g); scene.add(g); }
 const trainRing = new THREE.Mesh(RINGG(TRAIN.r - 1), ringM("#3fb36b")); trainRing.position.set(TRAIN.x, 0.16, TRAIN.z); scene.add(trainRing);
-// the pound (animal control): a building with a striped front and a fenced yard where the caught are let out
-box(16, 6, 8, "#dfe6ec", POUND.x, 3, POUND.z + 3); box(16.4, 0.7, 8.4, "#e08a00", POUND.x, 4.6, POUND.z + 3); box(17, 0.6, 9, "#3d4650", POUND.x, 6.3, POUND.z + 3);
-box(4, 3.4, 0.2, "#3d4650", POUND.x, 1.7, POUND.z - 1.05);
-for (let k = 0; k < 9; k++) box(0.12, 2.6, 0.12, "#3d4650", POUND.x - 7 + k * 0.5 + (k > 4 ? 9.5 : 0) - (k > 4 ? 2.5 : 0), 1.6, POUND.z - 1.1);
-for (let k = -4; k <= 4; k++) { box(0.15, 1.3, 0.15, "#9aa7b2", POUND.x + k * 2, 0.65, POUND.z - 9); }
-for (const sx of [-1, 1]) for (let k = 0; k < 4; k++) box(0.15, 1.3, 0.15, "#9aa7b2", POUND.x + sx * 8, 0.65, POUND.z - 9 + k * 2.4);
-box(16, 0.12, 0.12, "#9aa7b2", POUND.x, 1.2, POUND.z - 9);
+// the pound (animal control): a building with a striped front and a fenced yard in front where the caught are let out
+{ const g = bldg(POUND);
+  box(16, 6, 8, "#dfe6ec", 0, 3, -3, g); box(16.4, 0.7, 8.4, "#e08a00", 0, 4.6, -3, g); box(17, 0.6, 9, "#3d4650", 0, 6.3, -3, g);
+  box(4, 3.4, 0.2, "#3d4650", 0, 1.7, 1.05, g);
+  for (let k = 0; k < 9; k++) box(0.12, 2.6, 0.12, "#3d4650", -7 + k * 0.5 + (k > 4 ? 9.5 : 0) - (k > 4 ? 2.5 : 0), 1.6, 1.1, g);
+  for (let k = -4; k <= 4; k++) { box(0.15, 1.3, 0.15, "#9aa7b2", k * 2, 0.65, 9, g); }
+  for (const sx of [-1, 1]) for (let k = 0; k < 4; k++) box(0.15, 1.3, 0.15, "#9aa7b2", sx * 8, 0.65, 9 - k * 2.4, g);
+  box(16, 0.12, 0.12, "#9aa7b2", 0, 1.2, 9, g); }
 
 // ---- the courier (owner, 2026-11-09): a blocky R6-style figure, matched to the owner's reference. 1 stud = 0.4 m:
 // torso 2 x 2 x 1 studs, arms and legs 1 x 2 x 1 with softened edges, a rounded 1.25-stud head with two oval eyes and
@@ -1883,7 +1884,7 @@ function plotIsland(isl) {
 }
 plotIsland(VIP_ISLAND); const extraIsland = plotIsland(EXTRA_ISLAND); extraIsland.visible = false;
 // lifts: one at the plaza takes you to your plot; one on each plot island brings you back down
-const LIFT = { x: 18, z: 22 }, LIFTS = [{ x: LIFT.x, z: LIFT.z, y: 0, to: "plot" }, { x: VIP_ISLAND.x, z: VIP_ISLAND.z + 18, y: VIP_ISLAND.y, to: "plaza" }, { x: EXTRA_ISLAND.x, z: EXTRA_ISLAND.z + 30, y: EXTRA_ISLAND.y, to: "plaza" }];
+const LIFT = { x: 0, z: 22 }, LIFTS = [{ x: LIFT.x, z: LIFT.z, y: 0, to: "plot" }, { x: VIP_ISLAND.x, z: VIP_ISLAND.z + 18, y: VIP_ISLAND.y, to: "plaza" }, { x: EXTRA_ISLAND.x, z: EXTRA_ISLAND.z + 30, y: EXTRA_ISLAND.y, to: "plaza" }];
 const liftBeamM = new THREE.MeshBasicMaterial({ color: "#7fd8ff", transparent: true, opacity: 0.28, depthWrite: false, side: THREE.DoubleSide });
 for (const l of LIFTS) { const r = new THREE.Mesh(RINGG(2.2), ringM("#2bb3c0")); r.position.set(l.x, l.y + 0.18, l.z); scene.add(r); const b = new THREE.Mesh(new THREE.CylinderGeometry(2, 2, 14, 20, 1, true), liftBeamM); b.position.set(l.x, l.y + 7, l.z); scene.add(b); l.ring = r; }
 // (owner, 2026-11-09) a speech-bubble label floats over each place, saying what it is: clear up close, fading out with
@@ -1894,7 +1895,7 @@ const POIS = [
   { x: SHOP.x, y: 4.6, z: SHOP.z, name: "Egg Shop", what: "Buy eggs to hatch new pets" },
   { x: MOUNT.x, y: 4.6, z: MOUNT.z, name: "Mount Shop", what: "Buy pets to ride" },
   { x: TRAIN.x, y: 4.5, z: TRAIN.z, name: "Training Yard", what: "Train the pet you ride" },
-  { x: POUND.x, y: 4.4, z: POUND.z - 3, name: "Animal Control", what: "Where caught couriers end up" },
+  { x: toWorld(POUND, 0, 3).x, y: 4.4, z: toWorld(POUND, 0, 3).z, name: "Animal Control", what: "Where caught couriers end up" },
   { x: LIFT.x, y: 6, z: LIFT.z, name: "Sky Lift", what: "Up to your plot" },
   { x: LIFTS[1].x, y: LIFTS[1].y + 6, z: LIFTS[1].z, name: "Sky Lift", what: "Down to the plaza" },
   { x: LIFTS[2].x, y: LIFTS[2].y + 6, z: LIFTS[2].z, name: "Sky Lift", what: "Down to the plaza", extra: true },
@@ -2007,10 +2008,10 @@ function rpsGo(n, i) {
 const fastest = () => Object.values(SPECIES).reduce((a, b) => (b.speed > a.speed ? b : a)).name;
 let hopFor = 0;
 // where Penny hides in hide and seek: around the plaza, clear of the buildings and rings
-const HIDES = [[-14, -16], [16, -16], [22, -4], [-22, 20], [12, 33], [-12, 31], [-40, -14], [24, -19], [-18, -2], [40, 12]];
+const HIDES = [-54, 18, 90, 162, 234].flatMap((d) => [[Math.cos((d * Math.PI) / 180) * 50, Math.sin((d * Math.PI) / 180) * 50], [Math.cos(((d + 36) * Math.PI) / 180) * 16, Math.sin(((d + 36) * Math.PI) / 180) * 16]]);
 const TOWN = [
   {
-    id: "hazel", name: "Hazel", color: "#e5739d", x: SHOP_B.x - 3.4, z: SHOP_B.z + 5.3, yaw: 0, s: 1, idle: "shop", cps: 42,
+    id: "hazel", name: "Hazel", color: "#e5739d", x: toWorld(SHOP_B, -3.4, 5.3).x, z: toWorld(SHOP_B, -3.4, 5.3).z, yaw: SHOP_B.yaw, s: 1, idle: "shop", cps: 42,
     look: { skin: "#e3b089", shirt: "#e5739d", pants: "#7a5a6a", blush: true },
     more: ["Anything else, dear?", "What else can I do for you?"],
     menu: [["Show me the eggs", () => openShop("egg")], ["Which egg is best?", "best"], ["Where do the eggs come from?", "where"], ["Bye", "bye"]],
@@ -2023,7 +2024,7 @@ const TOWN = [
     },
   },
   {
-    id: "rusty", name: "Rusty", color: "#2bb3c0", x: World.MOUNT_B ? World.MOUNT_B.x + 3.7 : 0, z: World.MOUNT_B ? World.MOUNT_B.z - 5.4 : 0, yaw: Math.PI, s: 1, idle: "shop", cps: 36,
+    id: "rusty", name: "Rusty", color: "#2bb3c0", x: toWorld(MOUNT_B, -3.7, 5.4).x, z: toWorld(MOUNT_B, -3.7, 5.4).z, yaw: MOUNT_B.yaw, s: 1, idle: "shop", cps: 36,
     only: () => !!World.MOUNT_B && !!SHOP_OPEN.mount,   // the mount shop's keeper, once there's a mount shop
     look: { skin: "#b9805a", shirt: "#e9dcc0", sleeve: "#e9dcc0", pants: "#3b5b8a" },
     more: ["What else, partner?", "Anything else on your mind?"],
@@ -2037,7 +2038,7 @@ const TOWN = [
     },
   },
   {
-    id: "mabel", name: "Mabel", color: "#3a8ee6", x: -6.2, z: -2.8, yaw: 0.35, s: 1, idle: "sort", cps: 48,
+    id: "mabel", name: "Mabel", color: "#3a8ee6", x: POST.x - 6.2, z: POST.z + 7.2, yaw: 0.35, s: 1, idle: "sort", cps: 48,
     look: { skin: "#8d5a3b", shirt: "#2f5d9e", sleeve: "#2f5d9e", pants: "#23395e" },
     more: ["Anything else? Quickly now!", "What else, {name}?"],
     menu: [["Any tips?", "tips"], ["Tell me a joke", "joke"], ["Can I have a raise?", "raise"], ["Bye", "bye"]],
@@ -2051,7 +2052,7 @@ const TOWN = [
     },
   },
   {
-    id: "gus", name: "Gus", color: "#5a8f3e", x: 7.5, z: -2.6, yaw: -0.4, s: 1, idle: "sweep", wander: 2.5, speed: 0.6, cps: 30,
+    id: "gus", name: "Gus", color: "#5a8f3e", x: POST.x + 7.5, z: POST.z + 7.4, yaw: -0.4, s: 1, idle: "sweep", wander: 2.5, speed: 0.6, cps: 30,
     look: { skin: "#f0c8a8", shirt: "#4f7f3a", sleeve: "#e8dcc0", pants: "#4f7f3a" },
     more: ["Anything else, young one?", "Hm? Something else?"],
     menu: [["How's the weather?", "weather"], ["Tell me a story", "story"], ["Need a hand?", "help"], ["Bye", "bye"]],
@@ -2065,7 +2066,7 @@ const TOWN = [
     },
   },
   {
-    id: "ziggy", name: "Ziggy", color: "#a352e0", x: -13, z: 9, yaw: 1.2, s: 1, idle: "groove", wander: 3.5, speed: 1.6, cps: 60,
+    id: "ziggy", name: "Ziggy", color: "#a352e0", x: -14, z: 10, yaw: 1.2, s: 1, idle: "groove", wander: 3.5, speed: 1.6, cps: 60,
     look: { skin: "#c99070", shirt: "#8e44c9", sleeve: "#8e44c9", pants: "#2b2f36" },
     more: ["What else, what else?", "Yo, anything else?"],
     menu: [["Dance with me!", "dance"], ["Rock, paper, scissors", "rps"], ["What are you listening to?", "music"], ["Bye", "bye"]],
@@ -2080,7 +2081,7 @@ const TOWN = [
     },
   },
   {
-    id: "penny", name: "Penny", color: "#e5534b", x: 7, z: 16, yaw: -2.6, s: 0.72, idle: "bounce", wander: 5, speed: 2.4, cps: 55,
+    id: "penny", name: "Penny", color: "#e5534b", x: 9, z: 12, yaw: -2.6, s: 0.72, idle: "bounce", wander: 5, speed: 2.4, cps: 55,
     look: { skin: "#f3d2b5", shirt: "#ffd35a", pants: "#3a8ee6", blush: true },
     more: ["What now? What now?", "Wanna do something else?"],
     menu: [["High five!", "high5"], ["Hide and seek!", "hide"], ["What's your favorite pet?", "fav"], ["Bye", "bye"]],
@@ -2687,12 +2688,13 @@ const mapPlotLine = (g, p, c, w) => { g.save(); g.setLineDash([2, 1.5]); g.strok
   for (const p of PLOTS) if (p.kind === "center" || p.kind === "random") { g.fillStyle = "rgba(255,255,255,.14)"; g.fillRect(p.x - PLOT / 2, p.z - PLOT / 2, PLOT, PLOT); mapPlotLine(g, p, "rgba(255,255,255,.75)", 0.6); }
   // the plaza's buildings and rings: post office, egg shop, training track, pound, contract board, the lift
   g.fillStyle = "#d98b5f"; g.beginPath(); g.arc(TRAIN.x, TRAIN.z, 14, 0, TAU); g.arc(TRAIN.x, TRAIN.z, 9, 0, TAU, true); g.fill();
-  g.fillStyle = "#3a8ee6"; g.fillRect(POST.x - 9.5, POST.z - 5.5, 19, 11); g.fillStyle = "#d9e4ee"; g.fillRect(POST.x - 7.5, POST.z - 3.5, 15, 7); g.fillStyle = "#f2b01e"; g.fillRect(POST.x - 4, POST.z + 4.6, 8, 0.9);
-  g.fillStyle = "#e5739d"; g.fillRect(SHOP_B.x - 6.5, SHOP_B.z - 4.5, 13, 9); g.fillStyle = "#fff3d6"; g.beginPath(); g.ellipse(SHOP_B.x, SHOP_B.z, 2, 2.6, 0, 0, TAU); g.fill();
-  g.fillStyle = "#3d4650"; g.fillRect(POUND.x - 8.5, POUND.z - 1.5, 17, 9); g.fillStyle = "#e08a00"; g.fillRect(POUND.x - 8.2, POUND.z - 1.2, 16.4, 1.2);
-  g.strokeStyle = "#9aa7b2"; g.lineWidth = 0.4; g.strokeRect(POUND.x - 8, POUND.z - 9, 16, 7.9);
+  const inFrame = (b, f) => { g.save(); g.translate(b.x, b.z); g.rotate(-b.yaw); f(); g.restore(); };   // a building drawn facing +z, turned as it stands
+  inFrame(POST, () => { g.fillStyle = "#3a8ee6"; g.fillRect(-9.5, -5.5, 19, 11); g.fillStyle = "#d9e4ee"; g.fillRect(-7.5, -3.5, 15, 7); g.fillStyle = "#f2b01e"; g.fillRect(-4, 4.6, 8, 0.9); });
+  inFrame(SHOP_B, () => { g.fillStyle = "#e5739d"; g.fillRect(-6.5, -4.5, 13, 9); g.fillStyle = "#fff3d6"; g.beginPath(); g.ellipse(0, 0, 2, 2.6, 0, 0, TAU); g.fill(); });
+  inFrame(MOUNT_B, () => { g.fillStyle = "#2bb3c0"; g.fillRect(-6.5, -4.5, 13, 9); g.fillStyle = "#f2b01e"; g.beginPath(); g.arc(0, 0, 1.8, 0, TAU); g.fill(); });
+  inFrame(POUND, () => { g.fillStyle = "#3d4650"; g.fillRect(-8.5, -7.5, 17, 9); g.fillStyle = "#e08a00"; g.fillRect(-8.2, 0.0, 16.4, 1.2); g.strokeStyle = "#9aa7b2"; g.lineWidth = 0.4; g.strokeRect(-8, 1.1, 16, 7.9); });
   g.fillStyle = "#8a5a3a"; g.fillRect(BOARD.x - 1.3, BOARD.z - 1.8, 2.6, 0.6);
-  mapRing(g, PICKUP.x, PICKUP.z, PICKUP.r, "#f2b01e"); mapRing(g, BOARD.x, BOARD.z, BOARD.r, "#e5534b"); mapRing(g, SHOP.x, SHOP.z, SHOP.r, "#e5739d"); mapRing(g, TRAIN.x, TRAIN.z, TRAIN.r - 1, "#3fb36b"); mapRing(g, LIFTS[0].x, LIFTS[0].z, 2.2, "#2bb3c0");
+  mapRing(g, PICKUP.x, PICKUP.z, PICKUP.r, "#f2b01e"); mapRing(g, BOARD.x, BOARD.z, BOARD.r, "#e5534b"); mapRing(g, SHOP.x, SHOP.z, SHOP.r, "#e5739d"); mapRing(g, MOUNT.x, MOUNT.z, MOUNT.r, "#2bb3c0"); mapRing(g, TRAIN.x, TRAIN.z, TRAIN.r - 1, "#3fb36b"); mapRing(g, LIFTS[0].x, LIFTS[0].z, 2.2, "#2bb3c0");
   for (const h of houses) if (h.base < SKY_Y) mapHouse(g, h);
   for (const t of trees) if (t.y < SKY_Y) mapTree(g, t);
   // above the town: the high islands and the VIP island (its plots and lift)

@@ -6,6 +6,7 @@ and any rule decided. Use `git log` for the code detail (and for the older Atamu
 
 ## 2026-11-09
 
+- **The town rebuilt flat, symmetric and on a grid (owner).** A flat square island with straight streets in a grid and houses evenly along them; the round town square with the contract board in the middle and the post office, egg shop, training yard, pound and mount shop evenly round it, facing in; one big deep lake on the west side with a river running off the edge in a waterfall; a symmetric ring of floating islands (the VIP island now over the square). Plots sit in the middle of city blocks (same plot ids). Hills, cliffs, winding roads, the old lake, rivers and stream are gone.
 - **Sketch look (owner).** The world is drawn like a pencil sketch, white paper with black outlines and light hatching, for a prototype feel; labels and bubbles stay in color and readable.
 - **Admin: edit a player's inventory (owner).** Edit in the admin panel shows a player's coins, items, Treats and pets; admins change the numbers or take pets away and save (server ops `inspect` and `edit`).
 - **Tap people; phone buttons in one row (owner).** The name buttons for players and townsfolk and the player panel are gone: tap a townsperson to talk, tap a player for Trade / Party right by them. Held sideways on a phone, the buttons stay in one row along the bottom instead of stacking into the map.

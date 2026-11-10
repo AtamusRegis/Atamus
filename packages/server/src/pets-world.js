@@ -1,8 +1,8 @@
 // Pet Delivery Co.: the world, shared by the page (website/pets-world.js) and the server
 // (packages/server/src/pets-world.js). The two copies must stay identical (scripts/check.sh compares them).
-// (owner, 2026-11-08) The town is a big floating island: plateaus with cliffs, winding roads cut into the slopes, houses
-// along the roads, the plaza in the middle; small islands float off its edge. Animal control vans patrol the roads and
-// chase whoever they spot for a short while, and a player who keeps getting away gets a wanted level that makes them
+// (owner, 2026-11-08; rebuilt flat on a grid 2026-11-09) The town is a flat, square floating island: straight streets in a
+// grid, houses along them, the round town square in the middle, a deep lake on the west side; islands float round it.
+// Animal control vans patrol the roads and chase whoever they spot for a short while, and a player who keeps getting away gets a wanted level that makes them
 // easier to spot and chased harder; helicopters circle the sky sweeping searchlights that catch whoever they light.
 
 export const TAU = Math.PI * 2;
@@ -24,41 +24,26 @@ function noise(x, z) {
 function fbm(x, z) { let s = 0, amp = 0.5, f = 1; for (let o = 0; o < 4; o++) { s += noise(x * f, z * f) * amp; amp *= 0.5; f *= 2; } return s / 0.9375; }
 export function rng(seed) { let s = seed; return () => ((s = (s * 16807) % 2147483647) / 2147483647); }
 
-// ---- the island's outline ----
-export const R_TOWN = 232;
-export const edgeR = (a) => R_TOWN + 16 * Math.sin(3 * a + 1) + 9 * Math.sin(7 * a + 2.3) + 4 * Math.sin(13 * a + 0.7);
-export const inside = (x, z, margin = 0) => hyp(x, z) < edgeR(Math.atan2(z, x)) - margin;
+// ---- the island (owner, 2026-11-09: flat, symmetric, on a grid): a flat square of land 448 m across ----
+export const R_TOWN = 224;
+export const edgeR = (a) => R_TOWN / Math.max(Math.abs(Math.cos(a)), Math.abs(Math.sin(a)));
+export const inside = (x, z, margin = 0) => Math.max(Math.abs(x), Math.abs(z)) < R_TOWN - margin;
 
-// ---- the plaza and its buildings ----
-export const PLAZA = 50;
-export const POST = { x: 0, z: -10 }, PICKUP = { x: 0, z: 4, r: 4 }, BOARD = { x: 11, z: 4, r: 3 };
-export const SHOP = { x: 32, z: 2, r: 5 }, SHOP_B = { x: 32, z: -9 }, TRAIN = { x: -31, z: 2, r: 9 };
-export const MOUNT = { x: 28, z: 15, r: 5 }, MOUNT_B = { x: 28, z: 26 };   // the mount shop (owner, 2026-11-09)
-export const POUND = { x: 0, z: 36 }, RELEASE = { x: 0, z: 26 }, SPAWN = { x: 0, z: 14 };
+// ---- the town square (owner, 2026-11-09): a round paved square in the middle with the Contract Board at its center,
+// and the five main buildings evenly round it (72° apart, mirrored left and right), each facing the middle with its
+// ring in front. yaw turns a building's front (+z) toward the middle ----
+export const PLAZA = 60;
+const around = (deg, r) => { const a = (deg * Math.PI) / 180, c = Math.cos(a), s = Math.sin(a); return { x: Math.round(c * r * 100) / 100, z: Math.round(s * r * 100) / 100, yaw: Math.atan2(-c, -s) }; };
+export const BOARD = { x: 0, z: 0, r: 3 }, SPAWN = { x: 0, z: -12 };
+export const POST = around(-90, 44), PICKUP = { ...around(-90, 30), r: 4 };
+export const SHOP_B = around(-18, 44), SHOP = { ...around(-18, 31), r: 5 };
+export const TRAIN = { ...around(54, 40), r: 9 };
+export const POUND = around(126, 44), POUND_B = around(126, 47), RELEASE = around(126, 33);
+export const MOUNT_B = around(198, 44), MOUNT = { ...around(198, 31), r: 5 };   // the mount shop (owner, 2026-11-09)
 
-// ---- the land: rolling ground stepped into plateaus (the steps are cliffs), two big hills, flat at the plaza ----
-const PEAKS = [[128, -64, 16, 24], [-118, 96, 15, 22], [-30, -205, 14, 20], [205, 40, 12, 18]];
-function rawH(x, z) {
-  let h = Math.max(0, fbm(x / 95 + 3.1, z / 95 - 7.7) - 0.36) * 75;
-  for (const [px, pz, a, s] of PEAKS) h += a * Math.exp(-((x - px) ** 2 + (z - pz) ** 2) / (2 * s * s));
-  const step = 8, L = Math.floor(h / step), f = h / step - L; h = (L + smooth(clamp((f - 0.74) / 0.26, 0, 1))) * step;
-  h += (fbm(x / 13, z / 13) - 0.5) * 1.4;
-  return Math.max(0, h * smooth(clamp((hyp(x, z) - PLAZA) / 30, 0, 1)));
-}
-
-// ---- roads: two winding rings and six winding spokes from the plaza (Catmull-Rom through the points) ----
-const ringR = (r0, wob, ph) => (a) => r0 + wob * Math.sin(3 * a + ph) + wob * 0.5 * Math.sin(5 * a + ph * 2);
-const RING1 = ringR(100, 13, 0.5), RING2 = ringR(168, 12, 2.0);
-function ring(fr, n) { const p = []; for (let i = 0; i < n; i++) { const a = (i / n) * TAU; p.push([Math.cos(a) * fr(a), Math.sin(a) * fr(a)]); } return p; }
-function spoke(k) {
-  const a0 = (k / 6) * TAU + 0.26, p = [];
-  for (const r of [PLAZA - 2, 72, null, 132, null]) {
-    const a = a0 + 0.2 * Math.sin(k * 1.7 + (r || 0) * 0.04);
-    const rr = r === null ? (p.length === 2 ? RING1(a) : RING2(a)) : r;
-    p.push([Math.cos(a) * rr, Math.sin(a) * rr]);
-  }
-  return p;
-}
+// ---- streets (owner, 2026-11-09): a grid of straight streets edge to edge, two each way on either side of the square,
+// making city blocks ----
+export const STREETS = [-140, -64, 64, 140];
 function sampleRoad(pts, loop) {
   const n = pts.length, P = (i) => pts[loop ? (i + n) % n : clamp(i, 0, n - 1)], out = [];
   const segs = loop ? n : n - 1;
@@ -75,8 +60,8 @@ function sampleRoad(pts, loop) {
   const len = S[S.length - 1] + (loop ? hyp(out[0][0] - out[out.length - 1][0], out[0][1] - out[out.length - 1][1]) : 0);
   return { pts: out, S, len, loop };
 }
-export const ROADS = [sampleRoad(ring(RING1, 14), true), sampleRoad(ring(RING2, 22), true)];
-for (let k = 0; k < 6; k++) ROADS.push(sampleRoad(spoke(k), false));
+const STREET_END = R_TOWN - 2;
+export const ROADS = [...STREETS.map((c) => sampleRoad([[c, -STREET_END], [c, STREET_END]], false)), ...STREETS.map((c) => sampleRoad([[-STREET_END, c], [STREET_END, c]], false))];
 export const ROAD_HALF = 4;
 // where along a road (s metres from its start) and which way it runs there
 export function roadAt(R, s) {
@@ -89,124 +74,59 @@ export function roadAt(R, s) {
   return { x: a[0] + (b[0] - a[0]) * t, z: a[1] + (b[1] - a[1]) * t, fx: fx / fl, fz: fz / fl };
 }
 
-// ---- the height grid (2 m): land under roads follows a blurred copy of the land, so roads climb gently and cut ramps
-// through the cliffs; the plaza and every house sit flat ----
+// ---- the height grid (2 m): flat land at 0 everywhere, lower only under the water ----
 const G = 2, GN = 320, G0 = -320;
-const RAW = new Float32Array(GN * GN), BLUR = new Float32Array(GN * GN), HGT = new Float32Array(GN * GN), DIST = new Float32Array(GN * GN).fill(99);
-for (let j = 0; j < GN; j++) for (let i = 0; i < GN; i++) RAW[j * GN + i] = rawH(G0 + i * G, G0 + j * G);
-{ // three box blurs, 54 m wide
-  BLUR.set(RAW); const tmp = new Float32Array(GN * GN), r = 13;
-  for (let pass = 0; pass < 3; pass++) {
-    for (let j = 0; j < GN; j++) { let s = 0; for (let i = -r; i <= r; i++) s += BLUR[j * GN + clamp(i, 0, GN - 1)]; for (let i = 0; i < GN; i++) { tmp[j * GN + i] = s / (2 * r + 1); s += BLUR[j * GN + Math.min(GN - 1, i + r + 1)] - BLUR[j * GN + Math.max(0, i - r)]; } }
-    for (let i = 0; i < GN; i++) { let s = 0; for (let j = -r; j <= r; j++) s += tmp[clamp(j, 0, GN - 1) * GN + i]; for (let j = 0; j < GN; j++) { BLUR[j * GN + i] = s / (2 * r + 1); s += tmp[Math.min(GN - 1, j + r + 1) * GN + i] - tmp[Math.max(0, j - r) * GN + i]; } }
-  }
-}
+const HGT = new Float32Array(GN * GN), DIST = new Float32Array(GN * GN).fill(99);
 for (const R of ROADS) for (let k = 0; k < R.pts.length; k++) {
   const [x, z] = R.pts[k], ci = Math.round((x - G0) / G), cj = Math.round((z - G0) / G);
   for (let j = cj - 7; j <= cj + 7; j++) for (let i = ci - 7; i <= ci + 7; i++) { if (i < 0 || j < 0 || i >= GN || j >= GN) continue; const d = hyp(G0 + i * G - x, G0 + j * G - z); if (d < DIST[j * GN + i]) DIST[j * GN + i] = d; }
-}
-for (let j = 0; j < GN; j++) for (let i = 0; i < GN; i++) {
-  const k = j * GN + i, w = 1 - smooth(clamp((DIST[k] - 5.5) / 7, 0, 1)), d = hyp(G0 + i * G, G0 + j * G);
-  HGT[k] = (RAW[k] + (BLUR[k] - RAW[k]) * w) * smooth(clamp((d - PLAZA + 4) / 40, 0, 1));
 }
 function sample(A, x, z) {
   const fx = clamp((x - G0) / G, 0, GN - 1.001), fz = clamp((z - G0) / G, 0, GN - 1.001), i = Math.floor(fx), j = Math.floor(fz), u = fx - i, v = fz - j, k = j * GN + i;
   return A[k] * (1 - u) * (1 - v) + A[k + 1] * u * (1 - v) + A[k + GN] * (1 - u) * v + A[k + GN + 1] * u * v;
 }
 export const terrain = (x, z) => sample(HGT, x, z);
-export const smoothTerrain = (x, z) => sample(BLUR, x, z);
+export const smoothTerrain = (x, z) => Math.max(0, sample(HGT, x, z));
 export const roadDist = (x, z) => sample(DIST, x, z);
 
-// ---- houses: along the roads, both sides, facing them, each with a mailbox at the roadside; 3 on each small island ----
 export const houses = [], solids = [], trees = [];
 // solids: { x, z, c, s (cos / sin of its turn), hw, hd (half sizes), y0, y1 }
 const solid = (x, z, yaw, hw, hd, y0, y1) => solids.push({ x, z, c: Math.cos(yaw), s: Math.sin(yaw), hw, hd, y0, y1 });
 const rand = rng(20261108);
-function flatten(x, z, yaw, hw, hd, h) {
-  const c = Math.cos(yaw), s = Math.sin(yaw), r = Math.max(hw, hd) + 4;
-  for (let j = Math.floor((z - r - G0) / G); j <= Math.ceil((z + r - G0) / G); j++) for (let i = Math.floor((x - r - G0) / G); i <= Math.ceil((x + r - G0) / G); i++) {
-    if (i < 0 || j < 0 || i >= GN || j >= GN) continue;
-    const wx = G0 + i * G - x, wz = G0 + j * G - z, lx = Math.abs(wx * c - wz * s), lz = Math.abs(wx * s + wz * c);
-    const out = Math.max(lx - hw - 1, lz - hd - 1, 0), w = 1 - smooth(clamp(out / 3, 0, 1)), k = j * GN + i;
-    HGT[k] += (h - HGT[k]) * w;
-  }
-}
-// ---- housing plots (owner, 2026-11-08): 20 x 20 m (5 x 5 squares of 4 m) where players build their own houses,
-// seen by everyone: 3 near the middle of town (first come, first served), 5 around town (given out at random), 2 on
-// an island above the middle (VIP), and 6 on an island off the edge that appears when a room has more than 10 players.
-// The land under a town plot is flattened and kept clear of houses and trees. ----
+// ---- housing plots (owner, 2026-11-08; placed on the grid 2026-11-09): 20 x 20 m (5 x 5 squares of 4 m) where
+// players build their own houses, seen by everyone, each in the middle of a city block: 3 in blocks diagonal to the
+// square (first come, first served), 5 around town (given out at random: the fourth diagonal block and the four corner
+// blocks), 2 on an island above the square (VIP), and 6 on an island off the edge that appears when a room has more
+// than 10 players ----
 export const PLOT = 20, CELL = 4, GRID = 5, LEVELS = 3, LEVEL_H = 5.5;   // (owner, 2026-11-09) taller walls, so the camera fits
 export const PLOTS = [];
 {
-  const clear = (x, z, r) => { for (const [a, b] of [[-1, -1], [1, -1], [-1, 1], [1, 1], [0, -1], [0, 1], [-1, 0], [1, 0]]) if (roadDist(x + a * r, z + b * r) < 5.6 || !inside(x + a * r, z + b * r, 6)) return false; return roadDist(x, z) > 12; };
-  const flatness = (x, z) => { const hs = [[-11, -11], [11, -11], [-11, 11], [11, 11], [0, 0]].map(([a, b]) => terrain(x + a, z + b)); return Math.max(...hs) - Math.min(...hs); };
-  const pickPlots = (n, r0, r1, apart, kind) => {
-    const cands = [];
-    for (let a = 0; a < TAU; a += 0.035) for (let r = r0; r <= r1; r += 4) { const x = Math.cos(a) * r, z = Math.sin(a) * r; if (clear(x, z, 11.5)) { const f = flatness(x, z); if (f < 7) cands.push({ x, z, f: f + Math.abs(r - (r0 + r1) / 2) * 0.05 }); } }
-    cands.sort((p, q) => p.f - q.f);
-    const got = [];
-    for (const c of cands) { if (got.length >= n) break; if ([...PLOTS, ...got].some((p) => hyp(p.x - c.x, p.z - c.z) < apart)) continue; got.push(c); }
-    for (const c of got) PLOTS.push({ id: PLOTS.length, x: Math.round(c.x), z: Math.round(c.z), y: 0, kind });
-  };
-  pickPlots(3, PLAZA + 16, PLAZA + 44, 40, "center");
-  // ids 3 and 4: the VIP island; 5-9 around town; 10-15 the extra island
-  PLOTS.push({ id: 3, x: -12, z: 30, y: 62, kind: "vip" }, { id: 4, x: 12, z: 30, y: 62, kind: "vip" });
-  pickPlots(5, 118, 196, 55, "random");
-  for (let k = 0; k < 6; k++) PLOTS.push({ id: 10 + k, x: 400 + ((k % 3) - 1) * 24, z: (Math.floor(k / 3) - 0.5) * 24, y: 8, kind: "extra" });
+  const D = 102, C = 182;   // the middles of the diagonal blocks and the corner blocks
+  for (const [x, z] of [[D, -D], [-D, -D], [D, D]]) PLOTS.push({ x, z, y: 0, kind: "center" });
+  PLOTS.push({ x: -12, z: 0, y: 62, kind: "vip" }, { x: 12, z: 0, y: 62, kind: "vip" });
+  for (const [x, z] of [[-D, D], [C, -C], [-C, -C], [C, C], [-C, C]]) PLOTS.push({ x, z, y: 0, kind: "random" });
+  for (let k = 0; k < 6; k++) PLOTS.push({ x: 400 + ((k % 3) - 1) * 24, z: (Math.floor(k / 3) - 0.5) * 24, y: 8, kind: "extra" });
   PLOTS.forEach((p, i) => (p.id = i));
-  for (const p of PLOTS) if (p.kind === "center" || p.kind === "random") { const hs = [[-10, -10], [10, -10], [-10, 10], [10, 10], [0, 0]].map(([a, b]) => terrain(p.x + a, p.z + b)); p.y = Math.round((hs.reduce((a, b) => a + b, 0) / hs.length) * 10) / 10; }
 }
-export const VIP_ISLAND = { x: 0, z: 30, y: 62, r: 30 }, EXTRA_ISLAND = { x: 400, z: 0, y: 8, r: 48 };
+export const VIP_ISLAND = { x: 0, z: 0, y: 62, r: 30 }, EXTRA_ISLAND = { x: 400, z: 0, y: 8, r: 48 };
 export const plotAt = (x, z) => PLOTS.find((p) => Math.abs(x - p.x) < PLOT / 2 && Math.abs(z - p.z) < PLOT / 2) || null;
 const nearPlot = (x, z, m) => PLOTS.some((p) => Math.abs(p.x - x) < PLOT / 2 + m && Math.abs(p.z - z) < PLOT / 2 + m);
-// ---- water (owner, 2026-11-09): a small lake in the low ground out past the outer road, two rivers from it running off
-// the island's edge in waterfalls, and a stream stepping down the terraces into it (small falls at each step). WAT holds
-// the water's surface on the height grid (also a little past the shore, so it reads smoothly); water is wherever the
-// land is under it. Swimmers swim in it; everyone else can't wade in from the shore. ----
-const WAT = new Float32Array(GN * GN).fill(-1e9), WETN = new Uint8Array(GN * GN), BANK = new Float32Array(GN * GN).fill(Infinity);   // WETN: in the water itself; BANK: the lowest water surface within 2.5 m of a shore
-const polar = (a, r) => [Math.cos(a) * r, Math.sin(a) * r];
-export const LAKE = { x: polar(2.42, 208)[0], z: polar(2.42, 208)[1], r: 15, y: -0.4 };
-const lakeR = (a) => LAKE.r + 3 * Math.sin(2 * a + 1) + 2 * Math.sin(3 * a + 0.4);
+// ---- water (owner, 2026-11-09: one big lake on one side): a deep, square-edged lake in the middle block of the west
+// side, and a river from it running straight off the island's edge in a waterfall. WAT holds the water's surface on
+// the height grid (also a little past the shore, so it reads smoothly); water is wherever the land is under it.
+// Swimmers swim (and dive) in it; everyone else can't wade in from the shore ----
+const WAT = new Float32Array(GN * GN).fill(-1e9), WETN = new Uint8Array(GN * GN);   // WETN: in the water itself
+export const LAKE = { x: -172, z: 0, hw: 24, hd: 52, r: 24, y: -0.4, deep: 8 };
 // each: the path (downstream), its half width and depth; outflows end past the edge
-export const RIVERS = [
-  { pts: [polar(2.4, 196), polar(2.3, 206), polar(2.22, 218), polar(2.17, 232), polar(2.15, 252)], hw: 4.2, deep: 2, fall: true },
-  { pts: [polar(2.4, 216), polar(2.37, 228), polar(2.32, 238), polar(2.29, 262)], hw: 3.6, deep: 1.8, fall: true },
-  { pts: [polar(2.84, 204), polar(2.75, 209), polar(2.66, 210), polar(2.56, 211), polar(2.47, 209), polar(2.43, 208)], hw: 3, deep: 1.2 },
-].map((R) => Object.assign(R, sampleRoad(R.pts, false)));
-{
-  const ORIG = HGT.slice(), at = (A, x, z) => sample(A, x, z);
-  // the surface along each river: it never rises going downstream; outflows leave at the lake's level
-  for (const R of RIVERS) {
-    let y = R.fall ? LAKE.y : at(ORIG, R.pts[0][0], R.pts[0][1]) - 0.4;
-    R.y = R.pts.map(([x, z]) => (y = Math.min(y, Math.max(LAKE.y, at(ORIG, x, z) - 0.4))));
-    if (!R.fall) R.y[R.y.length - 1] = LAKE.y;
-    if (!R.fall) R.y = R.y.map((_, n) => { let t = 0, c = 0; for (let m = n - 2; m <= n + 2; m++) if (m >= 0 && m < R.y.length) { t += R.y[m]; c++; } return t / c; });   // falls spread over a few metres
-  }
-  const lower = (k, v) => { if (v < HGT[k]) HGT[k] = v; };
-  const wet = (k, y) => { if (WAT[k] < -1e8 || y < WAT[k]) WAT[k] = y; };
-  for (let j = 0; j < GN; j++) for (let i = 0; i < GN; i++) {
-    const x = G0 + i * G, z = G0 + j * G, k = j * GN + i;
-    // the lake: a bowl, its banks sloping down to the water
-    const dl = hyp(x - LAKE.x, z - LAKE.z) - lakeR(Math.atan2(z - LAKE.z, x - LAKE.x));
-    if (dl < 14) {
-      if (dl < 0) lower(k, LAKE.y - 3 * smooth(clamp(-dl / 7, 0, 1)) - 0.3);
-      else lower(k, LAKE.y + 0.25 + dl * 1.1);
-      if (dl < 5) wet(k, LAKE.y);
-      if (dl < 0.6) WETN[k] = 1; else if (dl < 2.5) BANK[k] = Math.min(BANK[k], LAKE.y);
-    }
-    for (const R of RIVERS) {
-      let bd = 1e9, bi = 0; for (let n = 0; n < R.pts.length; n++) { const d = hyp(R.pts[n][0] - x, R.pts[n][1] - z); if (d < bd) { bd = d; bi = n; } }
-      if (bd > R.hw + 14) continue;
-      const y = R.y[bi], d = bd - R.hw;
-      if (d < 0) lower(k, y - R.deep * smooth(clamp(-d / R.hw, 0, 1)) - 0.3);
-      else lower(k, y + 0.25 + d * 1.1);
-      if (d < 5) wet(k, y);
-      if (d < 0.6) WETN[k] = 1; else if (d < 2.5) BANK[k] = Math.min(BANK[k], y);
-    }
-  }
-  // (owner, 2026-11-09: water spilling over the land) the shore is always a little above the water beside it, so a
-  // stream stepping down the terraces runs in its own channel instead of spreading over the slope
-  for (let k = 0; k < GN * GN; k++) if (!WETN[k] && BANK[k] < Infinity) HGT[k] = Math.max(HGT[k], BANK[k] + 0.3);
+export const RIVERS = [{ pts: [[-190, 0], [-205, 0], [-220, 0], [-236, 0]], hw: 5, deep: 3, fall: true }].map((R) => Object.assign(R, sampleRoad(R.pts, false), { y: null }));
+for (const R of RIVERS) R.y = R.pts.map(() => LAKE.y);
+const sdRect = (x, z, cx, cz, hw, hd) => { const dx = Math.abs(x - cx) - hw, dz = Math.abs(z - cz) - hd; return dx < 0 && dz < 0 ? Math.max(dx, dz) : hyp(Math.max(dx, 0), Math.max(dz, 0)); };
+for (let j = 0; j < GN; j++) for (let i = 0; i < GN; i++) {
+  const x = G0 + i * G, z = G0 + j * G, k = j * GN + i;
+  const dl = sdRect(x, z, LAKE.x, LAKE.z, LAKE.hw, LAKE.hd), R = RIVERS[0], dr = sdRect(x, z, (R.pts[0][0] + R.pts[R.pts.length - 1][0]) / 2, 0, Math.abs(R.pts[R.pts.length - 1][0] - R.pts[0][0]) / 2, R.hw);
+  if (dl < 0) { HGT[k] = LAKE.y - LAKE.deep; WETN[k] = 1; }
+  else if (dr < 0) { HGT[k] = Math.min(HGT[k], LAKE.y - R.deep); WETN[k] = 1; }
+  if (Math.min(dl, dr) < 3) WAT[k] = LAKE.y;
 }
 // the water's surface here, or -Infinity on dry land
 export function waterAt(x, z) {
@@ -219,51 +139,57 @@ export function waterAt(x, z) {
 // the water grid, for drawing it: [x0, step, n, surface heights (-1e9 where there's none)]
 export const waterGrid = () => ({ x0: G0, step: G, n: GN, w: WAT, wet: WETN });
 const nearWater = (x, z, m) => { for (const [a, b] of [[0, 0], [-m, 0], [m, 0], [0, -m], [0, m], [-m, -m], [m, m], [-m, m], [m, -m]]) if (waterAt(x + a, z + b) > -Infinity) return true; return false; };
-for (const R of ROADS) {
-  for (let s = 12; s < R.len - 8; s += 15) {
-    const p = roadAt(R, s);
-    for (const side of [-1, 1]) {
-      const rx = -p.fz * side, rz = p.fx * side, x = p.x + rx * 13.5, z = p.z + rz * 13.5;
-      if (!inside(x, z, 9) || hyp(x, z) < PLAZA + 9) continue;
-      if (houses.some((h) => hyp(h.x - x, h.z - z) < 12.5) || nearPlot(x, z, 7)) continue;
-      const yaw = Math.atan2(-rx, -rz), c = Math.cos(yaw), sn = Math.sin(yaw), corners = [[-5, -5], [5, -5], [-5, 5], [5, 5], [0, 0]].map(([lx, lz]) => [x + lx * c + lz * sn, z - lx * sn + lz * c]);
-      if (corners.some(([cx, cz]) => roadDist(cx, cz) < 5.2)) continue;
-      if (nearWater(x, z, 9) || nearWater(p.x + rx * 6, p.z + rz * 6, 3)) continue;   // (owner, 2026-11-09) not by the water
-      const hs = corners.map(([cx, cz]) => terrain(cx, cz)), lo = Math.min(...hs);
-      if (Math.max(...hs) - lo > 5) continue;
-      const mx = p.x + rx * 6, mz = p.z + rz * 6;
-      houses.push({ x, z, yaw, base: lo, mx, mz, my: 0, sky: false, r: rand() });
+// ---- houses (owner, 2026-11-09: on the grid): along both sides of every street, facing it, evenly spaced in each
+// stretch between cross streets (clear of the corners), each with a mailbox at the roadside; none in the square or by
+// the water ----
+{
+  const cuts = [-R_TOWN, ...STREETS, R_TOWN];
+  for (const [ri, R] of ROADS.entries()) {
+    const c = STREETS[ri % 4], alongZ = ri < 4;
+    for (let q = 0; q < cuts.length - 1; q++) {
+      const a = cuts[q], b = cuts[q + 1], lo = a + (q === 0 ? 14 : 19.5), hi = b - (q === cuts.length - 2 ? 14 : 19.5), n = Math.floor((hi - lo) / 13) + 1, mid = (lo + hi) / 2;
+      for (let m = 0; m < n; m++) {
+        const u = mid + (m - (n - 1) / 2) * 13;
+        for (const side of [-1, 1]) {
+          const x = alongZ ? c + side * 13.5 : u, z = alongZ ? u : c + side * 13.5, rx = alongZ ? side : 0, rz = alongZ ? 0 : side;
+          if (!inside(x, z, 9) || (Math.abs(x) < PLAZA + 4 && Math.abs(z) < PLAZA + 4) || nearPlot(x, z, 3)) continue;
+          const mx = x - rx * 7.5, mz = z - rz * 7.5;
+          if (nearWater(x, z, 9) || nearWater(mx, mz, 3)) continue;
+          houses.push({ x, z, yaw: Math.atan2(-rx, -rz), base: 0, mx, mz, my: 0, sky: false, r: rand() });
+        }
+      }
     }
   }
 }
-for (const h of houses) { flatten(h.x, h.z, h.yaw, 4.5, 4.5, h.base); }
-for (const p of PLOTS) if (p.kind === "center" || p.kind === "random") flatten(p.x, p.z, 0, PLOT / 2 + 0.5, PLOT / 2 + 0.5, p.y);
-for (const h of houses) { h.my = terrain(h.mx, h.mz); h.d = hyp(h.mx - POST.x, h.mz - POST.z); solid(h.x, h.z, h.yaw, 4.5, 4.5, h.base - 4, h.base + 4.4); }   // up to the eaves: the roof above is walked on (owner, 2026-11-09)
-// the small floating islands, off the town's edge; only fliers get there
-// (owner, 2026-11-08: more, some above the town) off the edge, low enough to glide down to, and a ring high above
-// the town that only flapping fliers reach
-const OFF = [[0.5, 300, -4, 16], [1.15, 335, 10, 13], [1.75, 300, 6, 15], [2.4, 330, -10, 14], [3.0, 300, -8, 17], [3.6, 335, 14, 13], [4.2, 300, 2, 14], [4.8, 330, -2, 13], [5.4, 300, 10, 13], [5.95, 335, 16, 12]];
-const HIGH = [[-60, -40, 84, 15], [95, 70, 96, 14], [-125, -110, 88, 13], [20, 150, 92, 14], [150, -120, 100, 12], [-150, 60, 106, 13], [40, -170, 112, 12], [0, 20, 124, 11]];
-export const ISLANDS = [...OFF.map(([a, r, y, rr]) => ({ x: Math.cos(a) * r, z: Math.sin(a) * r, y, r: rr })), ...HIGH.map(([x, z, y, r]) => ({ x, z, y, r, high: true }))];
+for (const h of houses) { h.d = hyp(h.mx - POST.x, h.mz - POST.z); solid(h.x, h.z, h.yaw, 4.5, 4.5, h.base - 4, h.base + 4.4); }   // up to the eaves: the roof above is walked on (owner, 2026-11-09)
+// the floating islands (owner, 2026-11-09: a symmetric ring): eight off the edge (one off each side, one off each
+// corner), low enough to glide down to, eight in a ring high above the town and one over the middle that only
+// flapping fliers reach
+const OFF = [[0, 290, 6, 16], [90, 290, 6, 16], [180, 290, 6, 16], [270, 290, 6, 16], [45, 400, 14, 14], [135, 400, 14, 14], [225, 400, 14, 14], [315, 400, 14, 14]];
+export const ISLANDS = [
+  ...OFF.map(([d, r, y, rr]) => ({ x: Math.round(Math.cos((d * Math.PI) / 180) * r), z: Math.round(Math.sin((d * Math.PI) / 180) * r), y, r: rr })),
+  ...[0, 1, 2, 3, 4, 5, 6, 7].map((k) => { const a = ((22.5 + 45 * k) * Math.PI) / 180; return { x: Math.round(Math.cos(a) * 125), z: Math.round(Math.sin(a) * 125), y: 90 + (k % 2) * 16, r: 13, high: true }; }),
+  { x: 0, z: 0, y: 124, r: 11, high: true },
+];
 export const islandAt = (x, z) => ISLANDS.find((i) => hyp(x - i.x, z - i.z) < i.r - 0.6) || [VIP_ISLAND, EXTRA_ISLAND].find((i) => hyp(x - i.x, z - i.z) < i.r - 0.6) || null;
 for (const isl of ISLANDS) {
+  const out = isl.x || isl.z ? Math.atan2(isl.z, isl.x) : 0;
   for (let k = 0; k < 3; k++) {
-    const a = (k * TAU) / 3 + isl.x * 0.01, hr = isl.r * 0.36, x = isl.x + Math.cos(a) * hr, z = isl.z + Math.sin(a) * hr;
+    const a = (k * TAU) / 3 + out, hr = isl.r * 0.36, x = isl.x + Math.cos(a) * hr, z = isl.z + Math.sin(a) * hr;
     const mr = Math.min(isl.r - 1.5, hr + 6.5), mx = isl.x + Math.cos(a) * mr, mz = isl.z + Math.sin(a) * mr, yaw = Math.atan2(Math.cos(a), Math.sin(a));
     houses.push({ x, z, yaw, base: isl.y, mx, mz, my: isl.y, sky: true, r: rand(), d: hyp(mx - POST.x, mz - POST.z) });
     solid(x, z, yaw, 4.5, 4.5, isl.y - 1, isl.y + 4.4);
   }
-  for (let k = 0; k < 3; k++) { const a = (k * TAU) / 3 + 1, x = isl.x + Math.cos(a) * isl.r * 0.75, z = isl.z + Math.sin(a) * isl.r * 0.75; trees.push({ x, z, y: isl.y, s: 0.7 + rand() * 0.4 }); }
+  for (let k = 0; k < 3; k++) { const a = (k * TAU) / 3 + out + Math.PI / 3, x = isl.x + Math.cos(a) * isl.r * 0.75, z = isl.z + Math.sin(a) * isl.r * 0.75; trees.push({ x, z, y: isl.y, s: 0.7 + rand() * 0.4 }); }
 }
-// the plaza's buildings
-solid(POST.x, POST.z, 0, 9, 5, -1, 8); solid(SHOP_B.x, SHOP_B.z, 0, 6, 4, -1, 9); solid(MOUNT_B.x, MOUNT_B.z, 0, 6, 4, -1, 9); solid(POUND.x, POUND.z + 3, 0, 8, 4, -1, 7);
-// trees on open ground
-for (let n = 0; n < 1400 && trees.length < 340; n++) {
-  const a = rand() * TAU, r = Math.sqrt(rand()) * R_TOWN, x = Math.cos(a) * r, z = Math.sin(a) * r;
-  if (!inside(x, z, 5) || r < PLAZA + 4 || roadDist(x, z) < 7.5 || nearWater(x, z, 3)) continue;
-  if (houses.some((h) => !h.sky && hyp(h.x - x, h.z - z) < 8.5) || nearPlot(x, z, 3)) continue;
-  const y = terrain(x, z); if (Math.abs(terrain(x + 2, z) - y) + Math.abs(terrain(x, z + 2) - y) > 1.6) continue;
-  trees.push({ x, z, y, s: 0.8 + rand() * 0.6 });
+// the square's buildings
+solid(POST.x, POST.z, POST.yaw, 9, 5, -1, 8); solid(SHOP_B.x, SHOP_B.z, SHOP_B.yaw, 6, 4, -1, 9); solid(MOUNT_B.x, MOUNT_B.z, MOUNT_B.yaw, 6, 4, -1, 9); solid(POUND_B.x, POUND_B.z, POUND_B.yaw, 8, 4, -1, 7);
+// trees on open ground, on an 8 m grid, the same on both sides of the town (mirrored)
+for (let i = 0; i < 56; i++) for (let j = 0; j < 56; j++) {
+  const x = -220 + i * 8, z = -220 + j * 8;
+  if (hash(Math.abs(x) + 7, Math.abs(z) + 13) > 0.3 || !inside(x, z, 5) || hyp(x, z) < PLAZA + 3 || roadDist(x, z) < 7.5 || nearWater(x, z, 3)) continue;
+  if (houses.some((h) => !h.sky && Math.abs(h.x - x) < 8.5 && Math.abs(h.z - z) < 8.5) || nearPlot(x, z, 3)) continue;
+  trees.push({ x, z, y: 0, s: 0.8 + hash(Math.abs(z), Math.abs(x)) * 0.6 });
 }
 const RIDER_R = 0.7;
 export function blocked(x, z, y) {

@@ -10,19 +10,14 @@ Asked (owner): a web game on atamus.io (not Roblox), on its own page; the cargo 
 
 ## The town
 
-- **A big floating island (owner, 2026-11-08)**, about 465 m across with a ragged edge and rock tapering away beneath it;
-  clouds above and below. Built from `website/pets-world.js`, which the server uses too (the two copies must match;
-  `scripts/check.sh` compares them).
-- **Terrain:** rolling ground stepped into plateaus whose steps are cliffs (up to about 48 m high), and four big hills.
-  Ground pets can't climb anything steeper than about 39° (cliffs) and can't go past the edge; they can drop off
-  ledges.
-- **Water (owner, 2026-11-09):** a small lake in the low ground out past the outer road (west-northwest of the plaza),
-  two rivers from it that run off the island's edge in waterfalls, and a stream that steps down the terraces into the
-  lake, foaming white at each little fall. Its banks always stand a little above the water beside them, so the stream
-  runs in its own channel. The water stops at the island's edge; the falls pour **down** from the lip, out and clear of
-  the rock (the rock under each fall is tucked in), with spray at the lip. Ripples drift slowly on the lake and **run
-  downstream** on the rivers and the stream, faster where it's steep. Deeper water is darker; the bed is sand. Houses,
-  trees and rocks keep clear of it.
+- **A flat, square floating island (owner, 2026-11-09: flat, symmetric and grid-based)**, 448 m across with straight
+  edges and rock tapering away beneath it; clouds above and below. Built from `website/pets-world.js`, which the server
+  uses too (the two copies must match; `scripts/check.sh` compares them).
+- **Terrain:** flat everywhere (no hills or cliffs), lower only under the water. Ground pets can't go past the edge.
+- **Water (owner, 2026-11-09):** one big, deep (8 m), square-edged lake filling the middle block of the west side, and
+  a river from it running straight west off the island's edge in a waterfall. The water stops at the edge; the fall
+  pours **down** from the lip, out and clear of the rock, with spray at the lip. Ripples drift slowly on the lake and
+  **run downstream** on the river. Deeper water is darker; the bed is sand. Houses and trees keep clear of it.
   - **Swimmers** walk straight in and **swim underwater** (owner, 2026-11-09): Space (or Swim ▲) rises, Shift (or Swim
     ▼) dives, down to the bottom; with neither they drift up to the surface; Space at the surface leaps out. 1.35×
     their speed in the water. Bubbles trail behind them under water; with the camera under water everything goes a
@@ -31,24 +26,27 @@ Asked (owner): a web game on atamus.io (not Roblox), on its own page; the cargo 
     up on it (a jump, a glide, a teleport) is put on the nearest shore. Fliers fly over it (low over it they hover and
     don't land); nobody goes over a waterfall.
 - **Speed boosts (owner, 2026-11-09):** glowing orange arrow pads laid on the roads (following the road's surface;
-  about every 115 m, not in the plaza) for any pet; 20 cyan rings in the air over town (16 to 82 m up), there only for
-  fliers and gliders; and 7 small spinning whirlpools on the lake, the rivers and the stream, there only for swimmers
+  at the same spots along every street, not by the square) for any pet; 22 cyan rings in the air over town (16 to 76 m
+  up), there only for fliers; and 6 small spinning whirlpools on the lake and the river, there only for swimmers
   (surface or underwater). Rings and whirlpools fade out with distance (gone past 120 m). Going through one: 1.6× for
   5 s (on top of Speed Candy), with a trail in the boost's color; not on foot or at home.
-- **Winding roads:** two winding rings and six winding spokes out from the plaza, 8 m wide with dashed center lines,
-  cut into the slopes so they climb gently through the cliffs.
-- **The plaza** (flat, paved, in the middle): the **post office** (blue roof) with its **pickup ring** (gold) in front,
-  the **contract board** (red ring), the **egg shop** (pink, a giant egg on top, pink ring), the **mount shop** (teal,
-  a giant golden horseshoe on top, teal ring, facing the egg shop; owner, 2026-11-09), the **training yard**
-  (a running track with hurdles, green ring) and the **pound** (animal control, striped front, a fenced yard).
-- **Houses** (about 130) line the roads on both sides, facing them, each with a red mailbox at the roadside; trees on
-  open ground.
-- **Floating islands (owner, 2026-11-08: more, some above the town):** 10 off the town's edge, low (−10 to 16 m) so
-  gliders can reach them, and 8 high above the town (84–124 m) that only flapping fliers reach; each has 3 houses and
-  trees. Falling off into the clouds brings you back to the plaza.
-- **Looks (owner, 2026-11-08):** the ground's colors blend smoothly (grass by height and in broad patches, fading into
-  rock on steep slopes over a few metres) with a fine speckled texture; tall rocks and boulders stand on the cliffs
-  and steep slopes (about 320).
+- **Streets (owner, 2026-11-09: a grid):** straight streets edge to edge, two running north-south and two east-west on
+  each side of the square (64 m and 140 m out), 8 m wide with dashed center lines, making square city blocks.
+- **The town square** (owner, 2026-11-09: round, the buildings evenly round it, mirrored left and right): flat and
+  paved, 60 m across the middle, with the **contract board** (red ring) at its center and the five main buildings
+  evenly round it, each facing the middle with its ring in front: the **post office** (north; blue roof, its **pickup
+  ring**, gold, in front), the **egg shop** (pink, a giant egg on top, pink ring), the **training yard** (a running
+  track with hurdles, green ring), the **pound** (animal control, striped front, a fenced yard in front) and the
+  **mount shop** (teal, a giant golden horseshoe on top, teal ring), mirroring the egg shop. The lift stands south of
+  the center, under the VIP island.
+- **Houses** (about 290) line every street on both sides, facing it, evenly spaced between the cross streets, each with
+  a red mailbox at the roadside; trees stand on an 8 m grid on open ground, mirrored across the town.
+- **Floating islands (owner, 2026-11-09: a symmetric ring):** 8 off the town's edge, one off each side (6 m up) and one
+  off each corner (14 m up), low enough to glide to; 8 in a ring high above the town (90 and 106 m, alternating) and
+  one over the middle (124 m) that only fliers reach; each has 3 houses and trees. Falling off into the clouds brings
+  you back to the square.
+- **Looks (owner, 2026-11-08):** the ground's colors blend smoothly (grass in broad patches, rock down the lake's
+  sides) with a fine speckled texture.
 - **Sky (owner, 2026-11-08), the same for everyone:** normally a day lasts 20 minutes (a little more day than night):
   the sun moves, and the sky and fog go through dusk to night (stars, house windows light up, lights dim). Every 4
   minutes the automatic weather decides whether it rains (streaks around you, a gray sky, shorter fog, easing in and
@@ -345,8 +343,9 @@ Asked (owner): a web game on atamus.io (not Roblox), on its own page; the cargo 
 
 ## Houses on plots (owner, 2026-11-08)
 
-- **Plots** (20 x 20 m, `PLOTS` in pets-world.js): 3 near the middle of town, 2 on the **VIP island** floating above
-  the middle (60 m up), 5 around town, and 6 on an **extra island** off the town's edge (400 m out) that appears when a
+- **Plots** (20 x 20 m, `PLOTS` in pets-world.js): each in the middle of a city block (owner, 2026-11-09): 3 in the blocks
+  diagonal to the square, 2 on the **VIP island** floating over the square (62 m up), 5 around town (the fourth diagonal
+  block and the four corner blocks), and 6 on an **extra island** off the town's edge (400 m out) that appears when a
   room has more than 10 players. Town plots are flattened and kept clear of houses and trees; each shows a pale outline
   and, when someone has it, a sign with their name.
 - Each player in a room gets a plot when they join (the server decides): VIPs one of the VIP island's two; then the
@@ -431,6 +430,8 @@ Asked (owner): a web game on atamus.io (not Roblox), on its own page; the cargo 
 ## Rejected / removed
 
 - Live (dynamic) shadows (owner, 2026-11-09): replaced by baked ones.
+- The hilly town (owner, 2026-11-09): plateaus and cliffs, four big hills, winding ring roads and spokes, the small lake
+  with two rivers and a terraced stream, standing rocks, and the scattered islands: replaced by the flat grid town.
 - Gliders (owner, 2026-11-09): Parrot, Pegasus, Phoenix and Pterodactyl fly like the other fliers; the Flier / Glider / Swimmer badges became the Ground / Air / Water types.
 - Building on the lot itself on a 5 x 5 grid with a level picker (owner, 2026-11-09): replaced by the 5 houses outside and freeform building inside.
 - Training for coins (owner, 2026-11-09): replaced by the training arena's obstacle course.
