@@ -104,10 +104,9 @@ Asked (owner): a web game on atamus.io (not Roblox), on its own page; the cargo 
   2026-11-08):** the more of you it hides (5 points on you), the more see-through it gets (down to 18%), easing in and
   out.
 - Roads are laid on the land vertex by vertex (5 across, every ~2 m) just above it, and pets stand on the road surface.
-- **Sketch look (owner, 2026-11-09):** the world is drawn like a prototype sketch: a screen pass turns the rendered
-  scene into flat, clear grays on off-white paper (by brightness; no hatching, no ground speckle) with dark outlines
-  (from brightness, and from depth only where it breaks, so flat ground at a slant draws no lines; full-precision
-  depth, owner 2026-11-09: phones showed stripes); nights are brightened so it stays readable. Name tags, place labels and speech
+- **Gray look (owner, 2026-11-09: no outlines, no hatching):** the world is drawn in plain shades of gray: a screen pass
+  turns each pixel into its brightness, keeping textures and shading; nights are brightened so it stays readable.
+  Name tags, place labels and speech
   bubbles are drawn after the pass, in color, still hidden behind buildings; so are the guides and interaction circles (owner,
   2026-11-09): the guide arrow, the place rings (pickup, board, shops, training yard, lifts) and lift beams, the beams
   over parcel houses, Package Rush beams and rings, and the arena's next-obstacle beam; and **animal control is red** (vans and helicopters, red with a white stripe;
@@ -435,6 +434,8 @@ Asked (owner): a web game on atamus.io (not Roblox), on its own page; the cargo 
 - Live (dynamic) shadows (owner, 2026-11-09): replaced by baked ones.
 - The Epic rarity and 16 pets (owner, 2026-11-09): Kitten, Bunny, Fox, Otter, Penguin, Goat, Butterfly, Stegosaurus, Deer,
   Bear, Horse, Triceratops, Unicorn, Pegasus, Phoenix, Pterodactyl, Ice Dragon (moved to the new pets, above).
+- Ink outlines and pencil hatching in the gray look (owner, 2026-11-09): they drew lines over flat ground on phones;
+  replaced by plain shades of gray.
 - The hilly town (owner, 2026-11-09): plateaus and cliffs, four big hills, winding ring roads and spokes, the small lake
   with two rivers and a terraced stream, standing rocks, and the scattered islands: replaced by the flat grid town.
 - Gliders (owner, 2026-11-09): Parrot, Pegasus, Phoenix and Pterodactyl fly like the other fliers; the Flier / Glider / Swimmer badges became the Ground / Air / Water types.

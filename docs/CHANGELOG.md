@@ -6,6 +6,7 @@ and any rule decided. Use `git log` for the code detail (and for the older Atamu
 
 ## 2026-11-09
 
+- **Plain grays (owner).** No outlines or hatching at all: the world is shades of gray, textures kept; labels, guides, rings and animal control stay in color.
 - **No stripes on phones; red animal control (owner).** Flat ground no longer shows lines on phones (full-precision depth, and outlines only where depth breaks); animal control vans and helicopters are red, in color.
 - **Flat grays (owner).** The sketch look drops its hatching and the ground's speckle: clear, flat grayscale with ink outlines.
 - **Nine pets (owner).** A Common, Rare and Legendary of each type: Pup, Raptor, T-Rex; Parrot, Owl, Dragon; Duck, Sea Turtle and the new Sea Serpent (a snake-dragon). The Epic rarity is gone; every retired pet became the new one of its type and rarity, keeping levels, training and Treats. Eggs, prices, Package Rush prizes and pen earnings follow the three rarities.
