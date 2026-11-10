@@ -360,7 +360,7 @@ export const HOME = { baseCap: 6, perBed: 2, price: 2500, skyPrice: 5000, room: 
 export const petCap = (d) => HOME.baseCap + HOME.perBed * (d.home ? d.home.pieces.filter((t) => t.k === "bed").length : 0);
 export const penPets = (d) => new Set(d.home ? d.home.pieces.filter((t) => t.k === "pen" && t.pet).map((t) => t.pet) : []);
 // coins a minute a pet earns in a playpen: by rarity, more with level; it banks up to 8 hours
-export const PEN_RATE = [2, 3.5, 5.5, 8], PEN_MAX_H = 8;
+export const PEN_RATE = [2, 4, 8], PEN_MAX_H = 8;   // coins a minute in a pen, by rarity (Common, Rare, Legendary)
 // a house to start with: a 12 x 12 m room round the front door, two windows, a roof
 export function starterHouse() {
   const ps = [];
@@ -377,14 +377,18 @@ function fromGrid(t) {
   if (ty === "wall") { const [dx, dz] = [[-1, 0], [1, 0], [0, -1], [0, 1]][(t.s | 0) % 4]; return { ...t, x: (t.x | 0) * 4 + 2 + dx * 2, z: (t.z | 0) * 4 + 2 + dz * 2, a: dx ? 90 : 0 }; }
   return { ...t, a: ((t.r | 0) % 4) * 90 };
 }
+// (owner, 2026-11-09: nine pets) the kinds that were retired, and what each became: the new pet of the same type
+// (ground, air, water) and rarity (Epic counts as Rare); levels, training and Treats carry over
+export const PET_MOVED = { kitten: "pup", bunny: "pup", fox: "raptor", goat: "raptor", stego: "raptor", deer: "raptor", bear: "raptor", horse: "raptor", trike: "raptor", unicorn: "trex",
+  butterfly: "owl", pegasus: "dragon", phoenix: "dragon", ptero: "dragon", icedragon: "dragon", otter: "turtle", penguin: "turtle" };
 const int = (v, lo, hi, d = lo) => (Number.isFinite(+v) ? Math.max(lo, Math.min(hi, Math.floor(+v))) : d);
 export function cleanData(d, species) {
   d = d && typeof d === "object" ? d : {};
-  const pets = (Array.isArray(d.pets) ? d.pets : []).filter((p) => p && species.has(p.sp)).slice(0, 400).map((p) => Object.assign({ id: int(p.id, 1, 1e9), sp: p.sp, lv: int(p.lv, 1, 20, 1) }, int(p.tp, 0, 999, 0) ? { tp: int(p.tp, 0, 999, 0) } : {}));   // tp: training points toward the next level (owner, 2026-11-09)
+  const pets = (Array.isArray(d.pets) ? d.pets : []).map((p) => (p && PET_MOVED[p.sp] ? { ...p, sp: PET_MOVED[p.sp] } : p)).filter((p) => p && species.has(p.sp)).slice(0, 400).map((p) => Object.assign({ id: int(p.id, 1, 1e9), sp: p.sp, lv: int(p.lv, 1, 20, 1) }, int(p.tp, 0, 999, 0) ? { tp: int(p.tp, 0, 999, 0) } : {}));   // tp: training points toward the next level (owner, 2026-11-09)
   const ids = new Set(); const uniq = pets.filter((p) => !ids.has(p.id) && ids.add(p.id));
   if (!uniq.length) uniq.push({ id: 1, sp: "pup", lv: 1 });
   const items = d.items || {}, treats = {};
-  for (const [k, v] of Object.entries(d.treats || {})) if (species.has(k)) treats[k] = int(v, 0, 1e6);
+  for (const [k0, v] of Object.entries(d.treats || {})) { const k = PET_MOVED[k0] || k0; if (species.has(k)) treats[k] = Math.min(1e6, (treats[k] || 0) + int(v, 0, 1e6)); }
   // the house: pieces checked one by one; a home from before plots becomes the starter house (its beds and pens kept
   // inside it, what was paid for the rest given back)
   let pieces = [], refund = 0;

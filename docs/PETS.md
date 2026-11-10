@@ -138,8 +138,7 @@ Asked (owner): a web game on atamus.io (not Roblox), on its own page; the cargo 
     flier, where it's held (below).
   - **Land pets** jump: straight up when not moving, far on the run (1.6× speed in the air); a jump gets them up a
     ledge.
-  - **Fliers** (Butterfly, Parrot, Owl, Dragon, Pegasus, Phoenix, Pterodactyl, Ice Dragon; the gliders became fliers,
-    owner 2026-11-09): **on the ground they walk** (like a
+  - **Fliers** (Parrot, Owl, Dragon; the gliders became fliers, owner 2026-11-09): **on the ground they walk** (like a
     land pet: no climbing cliffs, no jumping) **until Space (or Fly ▲) takes them up**; back down on the ground (sinking
     to it, or flying into rising ground) they walk again; off the ground (walking off a ledge too) they're flying. Fly ▼
     shows only while flying. In the air, hold Space (or Fly ▲) to rise straight up and hold Shift (or Fly ▼, shown
@@ -148,15 +147,10 @@ Asked (owner): a web game on atamus.io (not Roblox), on its own page; the cargo 
     Vertical speed is 0.85× their flying speed. They fly at 0.75× and walk at 0.7× their speed. On a computer, a
     "Space Up · Shift Down" key strip shows at the bottom of the screen only while riding one (not while building).
 - **Every kind has its own build (owner, 2026-11-08):** body shape and size (boxy, round, upright birds, two-legged
-  dinosaurs), leg length, a neck on horses, deer and dragons, head and snout, ears, tail and extras: floppy ears and a
-  wagging tail (Pup), cat ears, whiskers and a curled tail (Kitten), a round body, long ears, a puff tail and a hop
-  (Bunny), a long snout and bushy white-tipped tail (Fox), curled horns and a beard (Goat), antlers and spots (Deer),
-  a big round body (Bear), a mane and hair tail (Horse; rainbow ones and a horn for the Unicorn; wings for the
-  Pegasus), plates and a spiked tail (Stegosaurus), a frill and horns (Triceratops), bat wings, back horns, spikes and a
-  spade tail (Dragons; ice-white spikes and a crest on the Ice Dragon), a flat bill (Duck), an upright body with
-  flippers (Penguin), a hooked beak and long tail (Parrot), big eyes and tufts (Owl), a crest and fire tail (Phoenix), a
-  long beak, back crest and bat wings (Pterodactyl), stripes, claws and a crest (Raptor), a huge head and tiny arms
-  (T-Rex). Upright birds waddle.
+  dinosaurs, a serpent), legs, neck, head and extras: floppy ears and a wagging tail (Pup), stripes, claws and a crest
+  (Raptor), a huge head and tiny arms (T-Rex), a hooked beak and long tail (Parrot), big eyes and tufts (Owl), a neck,
+  bat wings, back horns, spikes and a spade tail (Dragon), a flat bill (Duck), a patterned shell (Sea Turtle), and the
+  Sea Serpent's waving segmented body (above). Upright birds waddle.
 - A pet grows 1.5% bigger with each level (owner, 2026-11-08), so a level 20 pet is about 29% bigger; others see it too.
 
 ## Animal control (owner, 2026-11-08)
@@ -218,37 +212,40 @@ Asked (owner): a web game on atamus.io (not Roblox), on its own page; the cargo 
   event pill shows how many remain and the time left.
 - Riding over a package claims it once for the whole room. Its server-owned random prize is **40–100 training points**
   (which can cross several levels), **1,500–6,000 coins**, **3–10** of a random item, or a **12% chance of a random
-  pet** when there is room. Pet rarity is 50% Common, 32% Rare, 14% Epic and 4% Legendary. A training-points prize for
+  pet** when there is room. Pet rarity is 50% Common, 46% Rare and 4% Legendary. A training-points prize for
   a level-20 pet becomes coins.
 - The start and each prize use a large purple-and-gold announcement in the middle of the screen, confetti and
   fireworks. The server checks proximity, removes claimed packages and owns all rewards.
 
 ## Pets
 
-- Start: a Pup. 25 kinds in 4 rarities (speed m/s / bag; ✈ flies; ≈ swims):
-  - Common: Pup 7/2, Kitten 7.5/2, Bunny 8/2, Duck ≈ 6.5/3
-  - Rare: Fox 9.5/3, Otter ≈ 9/3, Penguin ≈ 8.5/4, Goat 9/4, Butterfly ✈ 9/2, Parrot ✈ 9.5/3, Stegosaurus 8.5/5
-  - Epic: Deer 11.5/3, Sea Turtle ≈ 10.5/6, Bear 10/6, Horse 12.5/4, Owl ✈ 11/4, Triceratops 11/6, Raptor 13/3
-  - Legendary: Dragon ✈ 15/5, Unicorn 16/4, Pegasus ✈ 15.5/4, Phoenix ✈ 17/3, T-Rex 14.5/7, Pterodactyl ✈ 15/5,
-    Ice Dragon ✈ 16/5
+- Start: a Pup. **Nine pets (owner, 2026-11-09): a Common, a Rare and a Legendary of each type, the rarer the
+  cooler** (speed m/s / bag; ✈ flies; ≈ swims):
+  - Ground: Pup 7.5/2 (Common), Raptor 12/4 (Rare), T-Rex 15.5/7 (Legendary)
+  - Air: Parrot ✈ 8.5/2 (Common), Owl ✈ 12/4 (Rare), Dragon ✈ 16/5 (Legendary)
+  - Water: Duck ≈ 7/3 (Common), Sea Turtle ≈ 11.5/5 (Rare), **Sea Serpent** ≈ 16.5/6 (Legendary): a long snake-dragon,
+    its body a chain of segments that waves as it moves, with a horned dragon head, whiskers, ear fins and a fin down its
+    back; coiled up in its picture.
+- **Retired pets (owner, 2026-11-09):** every other kind became the new pet of its type and rarity (Epic counted as
+  Rare), keeping its level, training points and Treats (`PET_MOVED` in pets-world.js, applied whenever data is
+  cleaned): Kitten, Bunny → Pup; Fox, Goat, Stegosaurus, Deer, Bear, Horse, Triceratops → Raptor; Unicorn → T-Rex;
+  Butterfly → Owl; Pegasus, Phoenix, Pterodactyl, Ice Dragon → Dragon; Otter, Penguin → Sea Turtle.
 - **Riders stay their size (owner, 2026-11-09):** a pet grows with its level but the courier on it doesn't, so a
   big pet looks big under its rider.
 - **Fliers (owner, 2026-11-08):** fly over houses and trucks and land on islands; they go up and down only as the
   player holds (see Riding). Shown with a wing by their name in the menus.
 - **Three types (owner, 2026-11-09):** every pet is **Ground**, **Air** or **Water**, with a badge on every card (and
   when an egg hatches) and the card's frame and tint in its color: Ground brown with a peak, Air sky blue with flapping
-  wings (every flying pet), Water indigo with waves (Duck, Otter, Penguin, Sea Turtle). The
-  Otter is long and low with a thick tail and whiskers; the Sea Turtle has a brown patterned shell over a green body.
+  wings (every flying pet), Water indigo with waves (Duck, Sea Turtle, Sea Serpent). The Sea Turtle has a brown patterned shell over a
+  green body.
 - **Pets** (button) lists yours (best first) with level, speed and bag; tap one to ride it.
 - **Shops (owner, 2026-11-09):** riding into a shop's ring opens its window in the middle of the screen, with your coins
   at the top and each item's price on its buy button (grayed out when you can't afford it; Full at the pet limit).
 - **Mount shop** (ride into its ring): every pet, any number of times, at level 1; buying one puts you on it (with
-  confetti). Legendary pets cost $2,500; each rarity below costs a random 500–750 less than the one above, drawn once per
-  pet: Pup $775, Kitten $625, Bunny $675, Duck $800; Fox $1,250, Penguin $1,300, Goat $1,325, Butterfly $1,150, Parrot
-  $1,325, Stegosaurus $1,200; Deer $1,925, Bear $1,775, Horse $1,775, Owl $1,850, Triceratops $1,975, Raptor $1,925; every
-  Legendary $2,500.
-- **Egg shop** (ride into its ring): Basic Egg $150 (Common 72%, Rare 24%, Epic 4%), Golden Egg $1,500 (Rare 60%, Epic 32%,
-  Legendary 8%); the pet is any of that rarity. The egg shakes harder and cracks, then bursts in a flash and fireworks (more for Epic and Legendary) with rays
+  confetti). Pup $775, Duck $800, Parrot $850; Raptor $1,750, Sea Turtle $1,700, Owl $1,800; T-Rex, Dragon and Sea
+  Serpent $2,500.
+- **Egg shop** (ride into its ring): Basic Egg $150 (Common 75%, Rare 22%, Legendary 3%), Golden Egg $1,500 (Rare 75%,
+  Legendary 25%); the pet is any of that rarity. The egg shakes harder and cracks, then bursts in a flash and fireworks (more for Rare and Legendary) with rays
   in the rarity's color; Ride puts you on it (with fireworks and confetti around you), **Not now** (owner, 2026-11-09)
   keeps you on the pet you're riding and the new one waits in your Pets list (the same celebration).
 - **Pet Farm and Treats (owner, 2026-11-08, like a kind's candy):** a spare pet (you have another of its kind, and
@@ -381,7 +378,7 @@ Asked (owner): a web game on atamus.io (not Roblox), on its own page; the cargo 
 - **Only inside a house** (owner, 2026-11-09: through its front door) you're off your pet, walking (5.5 m/s); others
   see you walking too. Outside, lots included, you keep riding.
 - **Beds** (pet beds) each hold 2 more pets (6 + 2 per bed). **Playpens:** tap one in your house to choose its pet (not
-  the one you ride, or — to empty it): it wanders there (others see it) and earns coins a minute (2 / 3.5 / 5.5 / 8 by
+  the one you ride, or — to empty it): it wanders there (others see it) and earns coins a minute (2 / 4 / 8 by
   rarity, +5% per level), up to 8 hours' worth, collected when you come into your house. A pet in a playpen can't be
   ridden, traded or sent to the farm.
 - Houses built on the old 5 x 5 grid (before 2026-11-09) moved inside as they were (each piece where it stood, turned as it was), behind the front door; their lot shows the Cottage.
@@ -434,6 +431,8 @@ Asked (owner): a web game on atamus.io (not Roblox), on its own page; the cargo 
 ## Rejected / removed
 
 - Live (dynamic) shadows (owner, 2026-11-09): replaced by baked ones.
+- The Epic rarity and 16 pets (owner, 2026-11-09): Kitten, Bunny, Fox, Otter, Penguin, Goat, Butterfly, Stegosaurus, Deer,
+  Bear, Horse, Triceratops, Unicorn, Pegasus, Phoenix, Pterodactyl, Ice Dragon (moved to the new pets, above).
 - The hilly town (owner, 2026-11-09): plateaus and cliffs, four big hills, winding ring roads and spokes, the small lake
   with two rivers and a terraced stream, standing rocks, and the scattered islands: replaced by the flat grid town.
 - Gliders (owner, 2026-11-09): Parrot, Pegasus, Phoenix and Pterodactyl fly like the other fliers; the Flier / Glider / Swimmer badges became the Ground / Air / Water types.
