@@ -119,7 +119,7 @@ try {
   b.send({ t: "admin", op: "environment", weather: "clear", time: "day" });   // a player: ignored
   n.send({ t: "admin", op: "quick", cmd: "everything", name: "smokeB" });
   const db1 = (await b.wait((m) => m.t === "data", "B's data after Everything")).data;
-  ok(db1.coins >= 1e6 && db1.pets.length >= 9 && db1.pets.every((p) => p.lv === 20) && db1.items.ticket >= 100 && db1.treats.dragon >= 100, "Everything gives coins, every pet at 20, items and Treats");
+  ok(db1.coins >= 1e6 && db1.pets.length >= 6 && db1.pets.every((p) => p.lv === 20) && db1.items.ticket >= 100 && db1.treats.dragon >= 100, "Everything gives coins, every pet at 20, items and Treats");
   b.send({ t: "admin", op: "quick", cmd: "coins", n: 5000, name: "smokeB" });   // a player: nothing happens
   n.send({ t: "admin", op: "quick", cmd: "coins", n: 2500, name: "Nyssary" });
   ok((await n.wait((m) => m.t === "data", "owner's own coins")).data.coins === 2500, "quick coins on yourself");

@@ -13,13 +13,13 @@
 // everyone onto it.
 import { WebSocketServer } from "ws";
 import { makeVehicles, stepVehicles, cleanData, petCap, penPets } from "./pets-world.js";
-import { PACKAGE_EVENT_EVERY_MS, makePackageEvent, packageEventView, packageReward, takePackage } from "./package-events.js";
+import { makePackageEvent, packageEventView, packageReward, takePackage } from "./package-events.js";
 import { onWebsiteUpdate, websiteBuild, websiteBy } from "./build.js";
 import { hashSecret, verifySecret } from "./hash.js";
 import { memStore } from "./petstore.js";
 
 const ROOM_MAX = 16, SNAP_MS = 50, DEL_GAP_MS = 900, CHAT_GAP_MS = 1200, BEAT_MS = 10000, SAVE_MS = 3000, INVITE_MS = 30000, PARTY_MAX = 6;
-const SPECIES = new Set(["pup", "raptor", "trex", "parrot", "owl", "dragon", "duck", "turtle", "serpent"]);   // (owner, 2026-11-09) nine pets
+const SPECIES = new Set(["pup", "raptor", "trex", "parrot", "owl", "dragon"]);   // (owner, 2026-11-09) six pets: ground and air (water scrapped; their pets dropped)
 const AIR_MOUNTS = new Set(["parrot", "owl", "dragon"]);
 // (owner, 2026-11-08) three kinds of contract: the goal grows with the room; the reward is per parcel of the goal
 const CONTRACTS = { rush: { time: 150, base: 3, per: 3, pay: 22 }, quick: { time: 240, base: 5, per: 4, pay: 26 }, big: { time: 420, base: 10, per: 8, pay: 30 } };   // (owner, 2026-11-08: more time)
@@ -76,7 +76,7 @@ function finish(r, won) {
   sendContract(r);
 }
 
-export function attachPets(server, { origins = [], allowLocal = false, store = memStore(), packageEveryMs = PACKAGE_EVENT_EVERY_MS } = {}) {
+export function attachPets(server, { origins = [], allowLocal = false, store = memStore(), packageEveryMs = 0 } = {}) {   // (owner, 2026-11-09) Package Rush off for now (0); tests pass a period
   // Admins can override the clock-driven sky for everyone. It returns to the normal cycle when the server restarts.
   let environment = { weather: "auto", time: "auto" };
   // ---- saving: changed accounts are written every few seconds (and when their player leaves) ----
@@ -378,7 +378,7 @@ export function attachPets(server, { origins = [], allowLocal = false, store = m
       if (players.length > 1) { const ps = players.filter((p) => p.fresh || r.tick).map((p) => { p.fresh = false; return [p.id, p.x, p.z, p.yaw, p.mv, p.y, p.stars, p.inst, p.ct || 0, p.ft]; }); if (ps.length) all(r, { t: "snap", ts: now, ps }); }
       if (r.contract && now > r.contract.ends) finish(r, false);
       if (r.packageEvent && (now > r.packageEvent.ends || !r.packageEvent.boxes.size)) { r.packageEvent = null; all(r, { t: "package_event", event: null }); }
-      if (!r.packageEvent && now >= r.nextPackageEvent) {
+      if (!r.packageEvent && r.packageEveryMs > 0 && now >= r.nextPackageEvent) {
         r.packageEvent = makePackageEvent(now, players.length); r.nextPackageEvent = now + r.packageEveryMs;
         all(r, { t: "package_event", event: packageEventView(r.packageEvent, now) });
       }

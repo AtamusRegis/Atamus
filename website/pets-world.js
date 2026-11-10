@@ -30,16 +30,15 @@ export const edgeR = (a) => R_TOWN / Math.max(Math.abs(Math.cos(a)), Math.abs(Ma
 export const inside = (x, z, margin = 0) => Math.max(Math.abs(x), Math.abs(z)) < R_TOWN - margin;
 
 // ---- the town square (owner, 2026-11-09): a round paved square in the middle with the Contract Board at its center,
-// and the five main buildings evenly round it (72° apart, mirrored left and right), each facing the middle with its
-// ring in front. yaw turns a building's front (+z) toward the middle ----
+// and the main buildings evenly round it (90° apart since the mount shop closed), each facing the middle with its ring
+// in front. yaw turns a building's front (+z) toward the middle ----
 export const PLAZA = 60;
 const around = (deg, r) => { const a = (deg * Math.PI) / 180, c = Math.cos(a), s = Math.sin(a); return { x: Math.round(c * r * 100) / 100, z: Math.round(s * r * 100) / 100, yaw: Math.atan2(-c, -s) }; };
 export const BOARD = { x: 0, z: 0, r: 3 }, SPAWN = { x: 0, z: -12 };
 export const POST = around(-90, 44), PICKUP = { ...around(-90, 30), r: 4 };
-export const SHOP_B = around(-18, 44), SHOP = { ...around(-18, 31), r: 5 };
-export const TRAIN = { ...around(54, 40), r: 9 };
-export const POUND = around(126, 44), POUND_B = around(126, 47), RELEASE = around(126, 33);
-export const MOUNT_B = around(198, 44), MOUNT = { ...around(198, 31), r: 5 };   // the mount shop (owner, 2026-11-09)
+export const SHOP_B = around(0, 44), SHOP = { ...around(0, 31), r: 5 };
+export const TRAIN = { ...around(180, 40), r: 9 };
+export const POUND = around(90, 44), POUND_B = around(90, 47), RELEASE = around(90, 33);
 
 // ---- streets (owner, 2026-11-09): a grid of straight streets edge to edge, two each way on either side of the square,
 // making city blocks ----
@@ -183,7 +182,7 @@ for (const isl of ISLANDS) {
   for (let k = 0; k < 3; k++) { const a = (k * TAU) / 3 + out + Math.PI / 3, x = isl.x + Math.cos(a) * isl.r * 0.75, z = isl.z + Math.sin(a) * isl.r * 0.75; trees.push({ x, z, y: isl.y, s: 0.7 + rand() * 0.4 }); }
 }
 // the square's buildings
-solid(POST.x, POST.z, POST.yaw, 9, 5, -1, 8); solid(SHOP_B.x, SHOP_B.z, SHOP_B.yaw, 6, 4, -1, 9); solid(MOUNT_B.x, MOUNT_B.z, MOUNT_B.yaw, 6, 4, -1, 9); solid(POUND_B.x, POUND_B.z, POUND_B.yaw, 8, 4, -1, 7);
+solid(POST.x, POST.z, POST.yaw, 9, 5, -1, 8); solid(SHOP_B.x, SHOP_B.z, SHOP_B.yaw, 6, 4, -1, 9); solid(POUND_B.x, POUND_B.z, POUND_B.yaw, 8, 4, -1, 7);
 // trees on open ground, on an 8 m grid, the same on both sides of the town (mirrored)
 for (let i = 0; i < 56; i++) for (let j = 0; j < 56; j++) {
   const x = -220 + i * 8, z = -220 + j * 8;
@@ -380,7 +379,7 @@ function fromGrid(t) {
 // (owner, 2026-11-09: nine pets) the kinds that were retired, and what each became: the new pet of the same type
 // (ground, air, water) and rarity (Epic counts as Rare); levels, training and Treats carry over
 export const PET_MOVED = { kitten: "pup", bunny: "pup", fox: "raptor", goat: "raptor", stego: "raptor", deer: "raptor", bear: "raptor", horse: "raptor", trike: "raptor", unicorn: "trex",
-  butterfly: "owl", pegasus: "dragon", phoenix: "dragon", ptero: "dragon", icedragon: "dragon", otter: "turtle", penguin: "turtle" };
+  butterfly: "owl", pegasus: "dragon", phoenix: "dragon", ptero: "dragon", icedragon: "dragon", otter: "duck", penguin: "duck" };   // (water pets were scrapped too, 2026-11-09: dropped)
 const int = (v, lo, hi, d = lo) => (Number.isFinite(+v) ? Math.max(lo, Math.min(hi, Math.floor(+v))) : d);
 export function cleanData(d, species) {
   d = d && typeof d === "object" ? d : {};

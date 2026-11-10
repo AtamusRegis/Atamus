@@ -6,6 +6,7 @@ and any rule decided. Use `git log` for the code detail (and for the older Atamu
 
 ## 2026-11-09
 
+- **Trimmed (owner).** Water pets scrapped (Duck, Sea Turtle and Sea Serpent deleted from saves), the mount shop closed (the square now has four buildings, 90° apart), Package Rush turned off for now, and animal control is red on the minimap too.
 - **Plain grays (owner).** No outlines or hatching at all: the world is shades of gray, textures kept; labels, guides, rings and animal control stay in color.
 - **No stripes on phones; red animal control (owner).** Flat ground no longer shows lines on phones (full-precision depth, and outlines only where depth breaks); animal control vans and helicopters are red, in color.
 - **Flat grays (owner).** The sketch look drops its hatching and the ground's speckle: clear, flat grayscale with ink outlines.
