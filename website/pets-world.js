@@ -323,7 +323,7 @@ export function stepVehicles(vs, players, dt, now, daylightOverride) {
         if (d < 0.01) { best = p; bd = 0; continue; }
         const forward = (dx * Math.sin(v.yaw) + dz * Math.cos(v.yaw)) / d;
         const sideways = Math.abs(dx * Math.cos(v.yaw) - dz * Math.sin(v.yaw)) / d;
-        const sight = C.spot + Math.max(0, forward) * C.front + sideways * C.side - Math.max(0, -forward) * C.rear + 7 * p.stars;
+        const sight = vanSight(forward, sideways, p.stars);
         if (d < sight && d < bd) { bd = d; best = p; }
       }
       if (best) { v.mode = 1; v.target = best.id; v.t = C.time + C.timeStar * best.stars; ev.push({ k: "chase", id: best.id }); }
@@ -332,6 +332,9 @@ export function stepVehicles(vs, players, dt, now, daylightOverride) {
   return ev;
 }
 const insideWorld = (p) => hyp(p.x, p.z) < 360;
+// how far a van sees a courier: farther ahead, a little to the sides, less behind, and 7 m more per wanted star
+// (forward / sideways: the unit direction to them along and across the van's heading)
+export const vanSight = (forward, sideways, stars) => VAN.spot + Math.max(0, forward) * VAN.front + sideways * VAN.side - Math.max(0, -forward) * VAN.rear + 7 * (stars || 0);
 function nearestS(R, x, z) { let best = 0, bd = 1e9; for (let i = 0; i < R.pts.length; i++) { const d = hyp(R.pts[i][0] - x, R.pts[i][1] - z); if (d < bd) { bd = d; best = R.S[i]; } } return best; }
 
 // ---- a player's data (owner, 2026-11-08: saved on the server) and house rules, the same on both sides ----
