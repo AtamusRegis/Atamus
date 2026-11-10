@@ -98,8 +98,8 @@ Asked (owner): a web game on atamus.io (not Roblox), on its own page; the cargo 
   the mailman, who lost his helper and asks you and your pet to help deliver mail. He warns about animal control, over
   two short scenes with the camera 45° above, circling the nearest van, then a helicopter. Back with Walt, he gives you
   **two parcels** (the two houses nearest the post office; caught, they come back) and the camera moves to the first
-  one's mailbox; he promises a voucher for a free egg. Delivering both gives an **Egg Ticket**; the arrow points to the
-  egg shop, where the ticket's button glows. Once the egg hatches (Ride or Not now) the camera goes back to Walt, who
+  one's mailbox; he promises a voucher for a free egg. Delivering both sends the arrow back to Walt (owner, 2026-11-09), who congratulates you and gives
+  you an **Egg Ticket**; then the arrow points to the egg shop, where the ticket's button glows. Once the egg hatches (Ride or Not now) the camera goes back to Walt, who
   tells you about contracts and wishes you luck. With no room for another pet the egg part is skipped. Walking away
   from Walt (Escape) skips the rest. Black bars and Walt's lines work as in any talk (a tap goes on).
 - **Townsfolk and talking (owner, 2026-11-09):** six visibly different people live around the shops and post office,
@@ -107,8 +107,8 @@ Asked (owner): a web game on atamus.io (not Roblox), on its own page; the cargo 
   Walt the mailman (owner, 2026-11-09) stands by the pickup ring, Mabel sorts mail, Gus sweeps and wanders, Ziggy dances and Penny runs around. They wave
   when a courier approaches and pets bump against them instead of passing through them. Close by, tap the person (or press E;
   no name button, owner 2026-11-09) to talk: movement stops, black bars come in and the camera moves to a close-up of them. A line types in no
-  more than 1.5 seconds and waits 2.5 seconds before the next one (about 4 seconds total); click, tap, Space, Enter or
-  F finishes or advances it, number keys pick an answer, and Escape ends it. Hazel and Rusty can open their shop;
+  more than 1.5 seconds and stays until you go on (owner, 2026-11-09: no timer); click, tap, Space, Enter or
+  F finishes or advances it, number keys pick an answer, and Escape ends it. Hazel can open her shop;
   conversations also include tips, stories and jokes, dancing, rock-paper-scissors, high fives and hide-and-seek.
 - Houses and buildings are solid (you slide along their walls). **Roofs (owner, 2026-11-09):** a pet that jumps or flies up onto a town house stands and walks on its roof (a pyramid over the walls; that house doesn't fade while you're on it). **A house between the camera and you fades (owner,
   2026-11-08):** the more of you it hides (5 points on you), the more see-through it gets (down to 18%), easing in and
@@ -165,9 +165,11 @@ Asked (owner): a web game on atamus.io (not Roblox), on its own page; the cargo 
 
 ## Animal control (owner, 2026-11-08)
 
-- **Sight lines (owner, 2026-11-09):** round each van that's looking, red lines run out along the ground to how far it
-  can see you (farther ahead, less behind, more per wanted star of yours: `vanSight` in pets-world.js), fading the
-  further they are from the van; hidden while it chases. Drawn in color.
+- **Telegraphs (owner, 2026-11-09, like an MMO's ground shapes):** animal control's reach is drawn on the ground as red
+  shapes, in color: a translucent fill, lighter toward its edge, a bright rim and a ring pulsing out from the middle.
+  Round each van that's looking (hidden while it chases): the shape of how far it can see you (farther ahead, less
+  behind, more per wanted star of yours: `vanSight` in pets-world.js). Under each helicopter's searchlight: the circle
+  it catches you in. Helicopters are red with a white stripe, and the searchlight is red.
 - 8 animal control cars (red, owner 2026-11-09) with light bars patrol the roads (driving on the right, turning round at a road's end) and 2
   helicopters circle over town. Online the server runs them for the whole room; offline the page does.
 - They only go after players carrying parcels (owner, 2026-11-08); a chase ends if the bag empties (no star).

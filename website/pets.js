@@ -1002,7 +1002,7 @@ const beamMat = (c) => new THREE.ShaderMaterial({
   vertexShader: "varying vec3 vN; varying vec3 vV; varying float vT; void main() { vT = -position.y; vec4 mv = modelViewMatrix * vec4(position, 1.0); vN = normalMatrix * normal; vV = -mv.xyz; gl_Position = projectionMatrix * mv; }",
   fragmentShader: "uniform vec3 c; uniform float o; varying vec3 vN; varying vec3 vV; varying float vT; void main() { float e = abs(dot(normalize(vN), normalize(vV))); gl_FragColor = vec4(c * o * pow(e, 2.5) * (1.0 - 0.8 * clamp(vT, 0.0, 1.0)), 1.0);\n#include <colorspace_fragment>\n}",
 });
-const headBeamM = beamMat("#fff1c8"), searchBeamM = beamMat("#f4f7ff");
+const headBeamM = beamMat("#fff1c8"), searchBeamM = beamMat("#ff5a5a");   // (owner, 2026-11-09) the searchlight is red
 const POOL_G = new THREE.PlaneGeometry(5.5, 11).rotateX(-Math.PI / 2);
 const headPoolM = new THREE.MeshBasicMaterial({ color: "#fff1c8", transparent: true, opacity: 0, depthWrite: false, blending: THREE.AdditiveBlending, map: (() => { const cv = document.createElement("canvas"); cv.width = cv.height = 64; const x = cv.getContext("2d"), gr = x.createRadialGradient(32, 32, 0, 32, 32, 32); gr.addColorStop(0, "rgba(255,255,255,1)"); gr.addColorStop(1, "rgba(255,255,255,0)"); x.fillStyle = gr; x.fillRect(0, 0, 64, 64); return new THREE.CanvasTexture(cv); })(), polygonOffset: true, polygonOffsetFactor: -2 });
 function vanModel(style = 1) {
@@ -1040,30 +1040,38 @@ function heliModel() {
   // (owner, 2026-11-09) the searchlight (pets-world.js aims it): a lamp under the nose, a real light where it lands and
   // the beam down to it; the light is always there (only its strength changes) so nothing has to recompile
   box(0.6, 0.45, 0.6, "#2b3440", 0, -1.15, 1.6, body); const lens = new THREE.Mesh(new THREE.CircleGeometry(0.26, 16).rotateX(Math.PI / 2), new THREE.MeshBasicMaterial({ color: "#35363a" })); lens.position.set(0, -1.39, 1.6); body.add(lens);
-  const spot = new THREE.SpotLight("#f4f7ff", 0, 0, World.BEAM.half * 1.15, 0.45, 0); spot.layers.enableAll(); scene.add(spot, spot.target);
+  const spot = new THREE.SpotLight("#ff6a6a", 0, 0, World.BEAM.half * 1.15, 0.45, 0); spot.layers.enableAll(); scene.add(spot, spot.target);
   const beam = new THREE.Mesh(BEAM_CONE, searchBeamM); beam.frustumCulled = false; scene.add(beam);
+  inColor(g); inColor(beam);   // (owner, 2026-11-09) red, in color in the gray look
   return { g, body, red, blue, rotor, tail, lens, spot, beam, ba: 0, bd: 15 };
 }
 const localVs = World.makeVehicles();
 const vehs = localVs.map((v) => { const m = v.kind ? heliModel() : vanModel(v.style); scene.add(m.g); blobUnder(m.g, v.kind ? 7 : 5); return Object.assign(m, { kind: v.kind, buf: [], x: v.x, y: v.y, z: v.z, yaw: v.yaw, mode: 0, target: 0, pitch: 0 }); });
-// (owner, 2026-11-09) each van's sight on the ground: red lines out to how far it sees you (your wanted stars count),
-// fading the further they are from the van; shown while it's looking (not while it chases)
-function losLines(stars) {
-  const pos = [], col = [], idx = [], N = 40, r0 = 2.6, w = 0.09;
-  for (let n = 0; n < N; n++) {
-    const a = (n / N) * TAU, f = Math.cos(a), sd = Math.abs(Math.sin(a)), r1 = World.vanSight(f, sd, stars), dx = Math.sin(a), dz = Math.cos(a), px = dz * w, pz = -dx * w, b = pos.length / 3;
-    for (const [r, al] of [[r0, 0.75], [r1, 0]]) for (const s2 of [-1, 1]) { pos.push(dx * r + px * s2, 0, dz * r + pz * s2); col.push(0.86, 0.13, 0.13, al); }
-    idx.push(b, b + 2, b + 1, b + 1, b + 2, b + 3);
-  }
-  const g = new THREE.BufferGeometry(); g.setAttribute("position", new THREE.Float32BufferAttribute(pos, 3)); g.setAttribute("color", new THREE.Float32BufferAttribute(col, 4)); g.setIndex(idx); return g;
+// (owner, 2026-11-09, like an MMO's ground telegraphs) animal control's reach drawn on the ground as red shapes: a
+// translucent fill, lighter toward its edge, a bright rim, and a ring pulsing out from the middle. A van's is the shape
+// of how far it sees you (your wanted stars count), shown while it's looking (not while it chases); a helicopter's is
+// the circle its searchlight catches you in.
+const telM = new THREE.ShaderMaterial({
+  uniforms: { t: { value: 0 }, c: { value: new THREE.Color("#ff2b2b") } }, transparent: true, depthWrite: false, side: THREE.DoubleSide, polygonOffset: true, polygonOffsetFactor: -6, polygonOffsetUnits: -6,
+  vertexShader: "attribute float f; varying float vF; void main() { vF = f; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }",
+  fragmentShader: "uniform float t; uniform vec3 c; varying float vF; void main() { float fill = mix(0.26, 0.12, vF); float rim = smoothstep(0.9, 0.965, vF) * (1.0 - smoothstep(0.985, 1.0, vF)) * 0.9; float p = fract(t * 0.55); float pulse = (1.0 - smoothstep(0.0, 0.06, abs(vF - p))) * 0.35 * (1.0 - p); gl_FragColor = vec4(c, clamp(fill + rim + pulse, 0.0, 1.0)); }",
+});
+function telegraphGeo(rOf, N = 72) {   // a fan from the middle out to rOf(angle) (angle 0 = +z, ahead); f: 0 in the middle, 1 at the edge
+  const pos = [0, 0, 0], f = [0], idx = [];
+  for (let n = 0; n < N; n++) { const a = (n / N) * TAU, r = rOf(a); pos.push(Math.sin(a) * r, 0, Math.cos(a) * r); f.push(1); idx.push(0, 1 + n, 1 + ((n + 1) % N)); }
+  const g = new THREE.BufferGeometry(); g.setAttribute("position", new THREE.Float32BufferAttribute(pos, 3)); g.setAttribute("f", new THREE.Float32BufferAttribute(f, 1)); g.setIndex(idx); return g;
 }
-const losM = new THREE.MeshBasicMaterial({ vertexColors: true, transparent: true, depthWrite: false, side: THREE.DoubleSide, polygonOffset: true, polygonOffsetFactor: -6, polygonOffsetUnits: -6 });
-for (const m of vehs) if (!m.kind) { m.los = new THREE.Mesh(losLines(0), losM); m.los.position.y = -0.1; m.los.renderOrder = 2; m.losStars = 0; m.g.add(inColor(m.los)); }
+const losLines = (stars) => telegraphGeo((a) => World.vanSight(Math.cos(a), Math.abs(Math.sin(a)), stars));
+const DISC_G = telegraphGeo(() => 1);
+for (const m of vehs) {
+  if (!m.kind) { m.los = new THREE.Mesh(losLines(0), telM); m.los.position.y = -0.1; m.los.renderOrder = 2; m.losStars = 0; m.g.add(inColor(m.los)); }
+  else { m.disc = new THREE.Mesh(DISC_G, telM); m.disc.renderOrder = 2; scene.add(inColor(m.disc)); }
+}
 const meP = { id: 0, x: 0, y: 0, z: 0, stars: 0, lastChased: 0, lastStar: 0, immuneUntil: 0 };   // me, for running them offline
 const tmpS = {}, beamB = {}, DOWN = new THREE.Vector3(0, -1, 0);
 function vehiclesDraw(dt) {
   const online = netOk, rt = renderTime(), flash = Math.floor(performance.now() / 120) % 2 === 0, lightsOn = !me.inst && skyNow.day < 0.5;
-  headBeamM.uniforms.o.value = 0.09; headPoolM.opacity = 0.54; searchBeamM.uniforms.o.value = 0.15;
+  headBeamM.uniforms.o.value = 0.09; headPoolM.opacity = 0.54; searchBeamM.uniforms.o.value = 0.15; telM.uniforms.t.value = performance.now() / 1000;
   vehs.forEach((m, i) => {
     const px = m.x, pz = m.z;
     if (online) { if (sampleAt(m.buf, rt, tmpS)) { m.x = tmpS.x; m.y = tmpS.y; m.z = tmpS.z; m.yaw = tmpS.yaw; if (tmpS.ba !== undefined) { m.ba = tmpS.ba; m.bd = tmpS.bd; } } }
@@ -1081,6 +1089,7 @@ function vehiclesDraw(dt) {
       const beamHalf = SPECIES[riding().sp].fly ? World.BEAM.flyHalf : World.BEAM.half;
       tmpV.set(b.dx, b.dy, b.dz); m.beam.position.set(b.lx, b.ly, b.lz); m.beam.quaternion.setFromUnitVectors(DOWN, tmpV); const r = len * Math.tan(beamHalf); m.beam.scale.set(r, len, r);
       m.spot.position.set(b.lx, b.ly, b.lz); m.spot.target.position.set(b.lx + b.dx * len, b.ly + b.dy * len, b.lz + b.dz * len); m.spot.target.updateMatrixWorld();
+      { const gx = m.x + Math.sin(m.ba) * m.bd, gz = m.z + Math.cos(m.ba) * m.bd, gy = terrain(gx, gz), rr = hyp(gx - b.lx, gy - b.ly, gz - b.lz) * Math.tan(beamHalf) + 0.8; m.disc.position.set(gx, gy + 0.14, gz); m.disc.scale.set(rr, 1, rr); m.disc.visible = !me.inst; }   // where its light catches you
       m.spot.angle = beamHalf * 1.15; m.beam.visible = lightsOn; m.spot.intensity = lightsOn ? 8 : 0; m.lens.material.color.set(lightsOn ? "#fffdf2" : "#35363a");
     }
     m.g.position.set(m.x, m.y, m.z); m.g.rotation.y = m.yaw;
@@ -1909,7 +1918,7 @@ function introGo(stage) {
   } else if (stage === "bye") { closePanels(); introSay("i6"); }
   else if (stage === "done") { intro = null; save.intro = 1; persist(); }
 }
-function introGuide() { return intro && intro.stage === "egg" ? [SHOP.x, 0, SHOP.z] : null; }
+function introGuide() { if (!intro) return null; if (intro.stage === "back") { const w = walt(); return [w.x, w.y, w.z]; } return intro.stage === "egg" ? [SHOP.x, 0, SHOP.z] : null; }
 function introStep(dt) {
   if (!intro) {
     let skip = false; try { skip = !!localStorage.getItem("petdelivery.nointro"); } catch (e) { /* none */ }
@@ -1922,6 +1931,7 @@ function introStep(dt) {
     return;
   }
   intro.t += dt;
+  if (intro.stage === "back" && !talk && !building && !me.inst) { const w = walt(); if (hyp(me.x - w.x, me.z - w.z) < 7) introSay("i7"); }   // back at Walt: he gives the voucher
   const orbit = (m, r) => { const a = intro.t * 0.45; cine.lx = m.x; cine.ly = m.y; cine.lz = m.z; cine.cx = m.x + Math.cos(a) * r; cine.cz = m.z + Math.sin(a) * r; cine.cy = m.y + r; };   // 45° above, going round
   if (intro.stage === "van" || intro.stage === "heli") {
     if (!intro.m) intro.m = {};
@@ -1931,17 +1941,17 @@ function introStep(dt) {
   }
   if (intro.stage === "deliver") {
     const rest = intro.parcels.filter((i) => !intro.dl.includes(i));
-    if (!rest.length) introGo("egg");
+    if (!rest.length) introGo("back");
     else if (rest.every((i) => !me.bag.includes(i))) { me.bag.push(...rest); syncBeams(); hudKey = ""; }   // caught: the parcels still to go come back
   }
 }
 // ---- townsfolk (owner, 2026-11-09): people who live in town: a keeper at each shop and a few folk around the post
 // office, each dressed their own way, standing about their own way, with their own things to talk about. Their name
 // shows in their colour with a speech bubble over it. F next to one (or a tap on them) talks: the camera moves in on
-// them, black bars slide in, and what they say types out a line at a time; a typed line waits 2.5 s, then the next (a
+// them, black bars slide in, and what they say types out a line at a time; a typed line stays until you go on (a
 // click or tap finishes the line, or goes straight on to the next); after their last line, answers to pick. They live
 // on this page only, the same people in the same places for everyone. ----
-const TALK_RANGE = 4.5, LINE_WAIT = 2.5, TYPE_MAX = 1.5;
+const TALK_RANGE = 4.5, TYPE_MAX = 1.5;   // (owner, 2026-11-09) a typed line stays until a click or tap
 function cyl(r, h, c, x, y, z, parent, rx = 0, rz = 0) { const m = new THREE.Mesh(CYL, mat(c)); m.scale.set(r, h, r); m.position.set(x, y, z); m.rotation.set(rx, 0, rz); m.castShadow = true; parent.add(m); return m; }
 const GLASS_M = new THREE.MeshLambertMaterial({ color: "#d6eeff", transparent: true, opacity: 0.4 });
 // what each one wears (on the courier's build: head 0.5 m at 1.84, its front at z 0.25; torso 0.8 x 0.8 x 0.4 at 1.2)
@@ -2055,6 +2065,7 @@ const TOWN = [
       i3: { say: ["And their helicopters sweep the town with searchlights. Stay out of the light!"], then: () => introGo("parcels") },
       i4: { say: ["Right then. Here are two parcels for you."], then: () => introGo("mailbox") },
       i5: { say: ["Take them to the highlighted mailboxes, like that one, to earn some coins.", "Deliver both and I'll give you a voucher for a free egg!"], then: () => introGo("deliver") },
+      i7: { say: ["Both delivered! You're a natural, {name}.", "As promised, here's a voucher for a free egg.", "Take it to the Egg Shop and see what hatches!"], then: () => introGo("egg") },
       i6: { say: ["Look at that! A brand-new pet.", "One more thing: the Contract Board in the middle of the square. Start a contract and everyone in your room delivers together, for a big reward.", "That's everything. Good luck out there, {name}!"], then: () => introGo("done") },
     },
   },
@@ -2218,7 +2229,6 @@ function talkStep(dt) {
   const t = talk; if (!t || t.i < 0 || t.i >= t.q.length) return;
   const line = t.q[t.i];
   if (t.shown < line.length) { const was = Math.floor(t.shown); t.shown = Math.min(line.length, t.shown + dt * t.cps); if (Math.floor(t.shown) !== was) talkText.textContent = line.slice(0, Math.floor(t.shown)); if (t.shown >= line.length) lineDone(); return; }
-  if (t.i < t.q.length - 1 || !t.opts) { t.hold += dt; if (t.hold >= LINE_WAIT) nextLine(); }
 }
 function talkNext() {   // a click or tap: finish the line, or on to the next
   const t = talk; if (!t || t.i < 0 || t.i >= t.q.length) return;
