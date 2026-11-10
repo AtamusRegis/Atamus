@@ -5,11 +5,10 @@ export const PACKAGE_EVENT_EVERY_MS = 10 * 60_000;
 export const PACKAGE_EVENT_MIN_MS = 60_000;
 export const PACKAGE_EVENT_MAX_MS = 120_000;
 
-const PETS = [
-  ["pup", "kitten", "bunny", "duck"],
-  ["otter", "fox", "penguin", "goat", "butterfly", "parrot", "stego"],
-  ["turtle", "deer", "bear", "horse", "owl", "trike", "raptor"],
-  ["dragon", "unicorn", "pegasus", "phoenix", "trex", "ptero", "icedragon"],
+const PETS = [   // by rarity (owner, 2026-11-09: nine pets): Common, Rare, Legendary
+  ["pup", "parrot", "duck"],
+  ["raptor", "owl", "turtle"],
+  ["dragon", "trex", "serpent"],
 ];
 
 const whole = (rng, lo, hi) => lo + Math.floor(rng() * (hi - lo + 1));
@@ -49,7 +48,7 @@ function addTraining(pet, points) {
 export function packageReward(data, cap, rng = Math.random) {
   const roll = rng();
   if (roll < 0.12 && data.pets.length < cap) {
-    const rarityRoll = rng(), rarity = rarityRoll < 0.5 ? 0 : rarityRoll < 0.82 ? 1 : rarityRoll < 0.96 ? 2 : 3;
+    const rarityRoll = rng(), rarity = rarityRoll < 0.5 ? 0 : rarityRoll < 0.96 ? 1 : 2;
     const choices = PETS[rarity], sp = choices[Math.floor(rng() * choices.length)], lv = whole(rng, 1, rarity + 1);
     data.pets.push({ id: data.nextId++, sp, lv });
     return { kind: "pet", sp, lv };

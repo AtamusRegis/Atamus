@@ -6,6 +6,7 @@ and any rule decided. Use `git log` for the code detail (and for the older Atamu
 
 ## 2026-11-09
 
+- **Nine pets (owner).** A Common, Rare and Legendary of each type: Pup, Raptor, T-Rex; Parrot, Owl, Dragon; Duck, Sea Turtle and the new Sea Serpent (a snake-dragon). The Epic rarity is gone; every retired pet became the new one of its type and rarity, keeping levels, training and Treats. Eggs, prices, Package Rush prizes and pen earnings follow the three rarities.
 - **Guides and circles in color (owner).** In the sketch look the guide arrow, the place rings, the lift beams and the delivery, Package Rush and arena beams stay in color.
 - **Minimap in black and white (owner).** The minimap is drawn like the world, white paper and black ink with the water hatched; markers keep their colors.
 - **The town rebuilt flat, symmetric and on a grid (owner).** A flat square island with straight streets in a grid and houses evenly along them; the round town square with the contract board in the middle and the post office, egg shop, training yard, pound and mount shop evenly round it, facing in; one big deep lake on the west side with a river running off the edge in a waterfall; a symmetric ring of floating islands (the VIP island now over the square). Plots sit in the middle of city blocks (same plot ids). Hills, cliffs, winding roads, the old lake, rivers and stream are gone.

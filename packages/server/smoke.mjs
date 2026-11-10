@@ -19,6 +19,8 @@ ok(W.petCap(fresh) === W.HOME.baseCap, "pet cap");
 ok(W.PLOTS.length === 16 && W.PLOTS.every((p) => Number.isFinite(p.x) && Number.isFinite(p.y)), "16 plots");
 ok(W.houses.length > 50 && W.ROADS.length >= 8, "town generated");
 const again = W.cleanData(fresh, SPECIES); ok(JSON.stringify(again) === JSON.stringify(fresh), "cleanData is stable");
+const moved = W.cleanData({ pets: [{ id: 1, sp: "kitten", lv: 3 }, { id: 2, sp: "unicorn", lv: 7, tp: 5 }], treats: { kitten: 4, bunny: 6, unicorn: 2 } }, new Set(["pup", "trex"]));
+ok(moved.pets[0].sp === "pup" && moved.pets[1].sp === "trex" && moved.pets[1].lv === 7 && moved.pets[1].tp === 5 && moved.treats.pup === 10 && moved.treats.trex === 2, "retired pets and their Treats become the new pet of their type and rarity");
 const vs = W.makeVehicles(), player = { id: 1, x: vs[0].x + 3, y: W.terrain(vs[0].x + 3, vs[0].z), z: vs[0].z, bag: 2, stars: 0, lastChased: 0, lastStar: 0, immuneUntil: 0 };
 const vans = vs.filter((v) => v.kind === 0);
 ok(new Set(vans.map((v) => v.style)).size === 3 && new Set(vans.map((v) => v.speed)).size === 3, "animal control has three vehicle styles and speeds");
@@ -117,7 +119,7 @@ try {
   b.send({ t: "admin", op: "environment", weather: "clear", time: "day" });   // a player: ignored
   n.send({ t: "admin", op: "quick", cmd: "everything", name: "smokeB" });
   const db1 = (await b.wait((m) => m.t === "data", "B's data after Everything")).data;
-  ok(db1.coins >= 1e6 && db1.pets.length >= 23 && db1.pets.every((p) => p.lv === 20) && db1.items.ticket >= 100 && db1.treats.dragon >= 100, "Everything gives coins, every pet at 20, items and Treats");
+  ok(db1.coins >= 1e6 && db1.pets.length >= 9 && db1.pets.every((p) => p.lv === 20) && db1.items.ticket >= 100 && db1.treats.dragon >= 100, "Everything gives coins, every pet at 20, items and Treats");
   b.send({ t: "admin", op: "quick", cmd: "coins", n: 5000, name: "smokeB" });   // a player: nothing happens
   n.send({ t: "admin", op: "quick", cmd: "coins", n: 2500, name: "Nyssary" });
   ok((await n.wait((m) => m.t === "data", "owner's own coins")).data.coins === 2500, "quick coins on yourself");

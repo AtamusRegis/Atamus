@@ -4,7 +4,7 @@
 // its edge; animal control chases you. Co-op: everyone in a room rides the same town, works on contracts together and
 // chats. The server (packages/server/src/pets.js) shares players, runs animal control, contracts and chat.
 import * as THREE from "./vendor/three.module.min.js";
-import * as World from "./pets-world.js?v=1793100061";
+import * as World from "./pets-world.js?v=1793100062";
 
 const $ = (id) => document.getElementById(id);
 const TAU = Math.PI * 2, clamp = (v, a, b) => Math.max(a, Math.min(b, v)), hyp = Math.hypot;
@@ -13,44 +13,27 @@ const smooth = (t) => t * t * (3 - 2 * t);
 const touchy = matchMedia("(pointer: coarse)").matches;
 
 // ---- pets ----
-const RARITY = [{ name: "Common", c: "#6f7d8a" }, { name: "Rare", c: "#3a8ee6" }, { name: "Epic", c: "#a352e0" }, { name: "Legendary", c: "#e08a00" }];
-// speed in m/s, bag in parcels, fly: "fly" (flaps: goes anywhere, slower) or "glide" (fast, can't climb) (owner, 2026-11-08); body: how it's built; ears: what's on
-// its head; c / a: its colors
+const RARITY = [{ name: "Common", c: "#6f7d8a" }, { name: "Rare", c: "#3a8ee6" }, { name: "Legendary", c: "#e08a00" }];
+// (owner, 2026-11-09) nine pets: a Common, a Rare and a Legendary of each type (ground, air, water), the rarer the
+// cooler. speed in m/s, bag in parcels, fly: flies, swim: swims; c / a: its colors
 const SPECIES = {
-  pup: { name: "Pup", r: 0, speed: 7, bag: 2, c: "#c98b4f", a: "#7a4f28", body: "quad", ears: "flop", size: 1 },
-  kitten: { name: "Kitten", r: 0, speed: 7.5, bag: 2, c: "#f2a65a", a: "#fff1e0", body: "quad", ears: "point", size: 0.9 },
-  bunny: { name: "Bunny", r: 0, speed: 8, bag: 2, c: "#f4f1ee", a: "#f3a7b5", body: "quad", ears: "long", size: 0.9 },
-  duck: { name: "Duck", r: 0, speed: 6.5, bag: 3, swim: true, c: "#ffd84a", a: "#f08a24", body: "bird", size: 0.9 },
-  fox: { name: "Fox", r: 1, speed: 9.5, bag: 3, c: "#e8722c", a: "#fff4ea", body: "quad", ears: "point", size: 1 },
-  otter: { name: "Otter", r: 1, speed: 9, bag: 3, swim: true, c: "#7a5232", a: "#e2c29a", body: "quad", ears: "round", size: 1 },
-  penguin: { name: "Penguin", r: 1, speed: 8.5, bag: 4, swim: true, c: "#2b3440", a: "#f4f4f4", body: "bird", size: 1 },
-  goat: { name: "Goat", r: 1, speed: 9, bag: 4, c: "#e6e1d6", a: "#9b8f7a", body: "quad", ears: "horns", size: 1.05 },
-  butterfly: { name: "Butterfly", r: 1, speed: 9, bag: 2, fly: "fly", c: "#3a8ee6", a: "#ffd84a", c2: "#e5534b", body: "butterfly", size: 1.1 },
-  parrot: { name: "Parrot", r: 1, speed: 9.5, bag: 3, fly: "fly", c: "#3fb36b", a: "#e5534b", body: "bird", wings: true, size: 1 },
-  stego: { name: "Stegosaurus", r: 1, speed: 8.5, bag: 5, c: "#7fae5a", a: "#e08a3a", body: "quad", plates: true, tail: "long", size: 1.25 },
-  deer: { name: "Deer", r: 2, speed: 11.5, bag: 3, c: "#b9824e", a: "#f3e3cc", body: "quad", ears: "antlers", size: 1.15 },
-  turtle: { name: "Sea Turtle", r: 2, speed: 10.5, bag: 6, swim: true, c: "#7cb85a", a: "#8a6a3a", body: "quad", size: 1.15 },
-  bear: { name: "Bear", r: 2, speed: 10, bag: 6, c: "#6b4a32", a: "#c9a27e", body: "quad", ears: "round", size: 1.3 },
-  horse: { name: "Horse", r: 2, speed: 12.5, bag: 4, c: "#8a5a3a", a: "#2b1d14", body: "quad", ears: "point", legs: 1.4, size: 1.2 },
-  owl: { name: "Owl", r: 2, speed: 11, bag: 4, fly: "fly", c: "#9b7a55", a: "#f3e3cc", body: "bird", wings: true, ears: "tufts", size: 1.15 },
-  trike: { name: "Triceratops", r: 2, speed: 11, bag: 6, c: "#5a8fb0", a: "#f3e3cc", body: "quad", frill: true, tail: "long", size: 1.3 },
-  raptor: { name: "Raptor", r: 2, speed: 13, bag: 3, c: "#8aa04a", a: "#5a6a2a", body: "biped", tail: "long", size: 1.05 },
-  dragon: { name: "Dragon", r: 3, speed: 15, bag: 5, fly: "fly", c: "#3fb36b", a: "#ffd84a", body: "quad", wings: "big", ears: "horns", tail: "long", size: 1.35 },
-  unicorn: { name: "Unicorn", r: 3, speed: 16, bag: 4, c: "#fbf7ff", a: "#ff7ac8", body: "quad", ears: "horn", legs: 1.4, size: 1.25 },
-  pegasus: { name: "Pegasus", r: 3, speed: 15.5, bag: 4, fly: "fly", c: "#f4f6ff", a: "#9ad0ff", body: "quad", wings: "big", ears: "point", legs: 1.4, size: 1.25 },
-  phoenix: { name: "Phoenix", r: 3, speed: 17, bag: 3, fly: "fly", c: "#ff6a2a", a: "#ffd84a", body: "bird", wings: "big", tail: "fire", size: 1.25 },
-  trex: { name: "T-Rex", r: 3, speed: 14.5, bag: 7, c: "#4f7a3a", a: "#e5d9a8", body: "biped", tail: "long", big: true, size: 1.4 },
-  ptero: { name: "Pterodactyl", r: 3, speed: 15, bag: 5, fly: "fly", c: "#b07a5a", a: "#e8c9a0", body: "bird", wings: "big", ears: "crest", size: 1.25 },
-  icedragon: { name: "Ice Dragon", r: 3, speed: 16, bag: 5, fly: "fly", c: "#bfe6ff", a: "#3a8ee6", body: "quad", wings: "big", ears: "horns", tail: "long", size: 1.35 },
+  pup: { name: "Pup", r: 0, speed: 7.5, bag: 2, c: "#c98b4f", a: "#7a4f28", size: 1 },
+  raptor: { name: "Raptor", r: 1, speed: 12, bag: 4, c: "#8aa04a", a: "#5a6a2a", size: 1.1 },
+  trex: { name: "T-Rex", r: 2, speed: 15.5, bag: 7, c: "#4f7a3a", a: "#e5d9a8", size: 1.4 },
+  parrot: { name: "Parrot", r: 0, speed: 8.5, bag: 2, fly: "fly", c: "#3fb36b", a: "#e5534b", size: 1 },
+  owl: { name: "Owl", r: 1, speed: 12, bag: 4, fly: "fly", c: "#9b7a55", a: "#f3e3cc", size: 1.15 },
+  dragon: { name: "Dragon", r: 2, speed: 16, bag: 5, fly: "fly", c: "#3fb36b", a: "#ffd84a", size: 1.35 },
+  duck: { name: "Duck", r: 0, speed: 7, bag: 3, swim: true, c: "#ffd84a", a: "#f08a24", size: 0.9 },
+  turtle: { name: "Sea Turtle", r: 1, speed: 11.5, bag: 5, swim: true, c: "#7cb85a", a: "#8a6a3a", size: 1.15 },
+  serpent: { name: "Sea Serpent", r: 2, speed: 16.5, bag: 6, swim: true, c: "#1f8fa8", a: "#9af0e6", size: 1.3 },
 };
 // eggs: chance of each rarity (percent); the pet is any of that rarity
 const EGGS = [
-  { id: "basic", name: "Basic Egg", price: 150, odds: [72, 24, 4, 0], c: "#f4ead8", s: "#d8c39c" },
-  { id: "gold", name: "Golden Egg", price: 1500, odds: [0, 60, 32, 8], c: "#ffd35a", s: "#e89a10" },
+  { id: "basic", name: "Basic Egg", price: 150, odds: [75, 22, 3], c: "#f4ead8", s: "#d8c39c" },
+  { id: "gold", name: "Golden Egg", price: 1500, odds: [0, 75, 25], c: "#ffd35a", s: "#e89a10" },
 ];
-// (owner, 2026-11-09) the mount shop sells every pet: Legendary 2,500, and each rarity below a random 500-750 less
-// than the one above (drawn once per pet, so each pet keeps its price)
-const MOUNT_PRICE = { pup: 775, kitten: 625, bunny: 675, duck: 800, fox: 1250, penguin: 1300, goat: 1325, butterfly: 1150, parrot: 1325, stego: 1200, deer: 1925, bear: 1775, horse: 1775, owl: 1850, trike: 1975, raptor: 1925, dragon: 2500, unicorn: 2500, pegasus: 2500, phoenix: 2500, trex: 2500, ptero: 2500, icedragon: 2500 };
+// (owner, 2026-11-09) the mount shop sells every pet
+const MOUNT_PRICE = { pup: 775, duck: 800, parrot: 850, raptor: 1750, turtle: 1700, owl: 1800, trex: 2500, dragon: 2500, serpent: 2500 };
 // training: each level +5% speed (up to level 20), every 5 levels one more parcel in the bag
 const MAXLV = 20;
 const petSpeed = (p) => SPECIES[p.sp].speed * (1 + 0.05 * (p.lv - 1));
@@ -72,7 +55,7 @@ const SAVE = "petdelivery.v1";
 const N1 = ["Swift", "Sunny", "Brave", "Zippy", "Lucky", "Happy", "Mighty", "Cozy", "Speedy", "Jolly", "Rapid", "Breezy"];
 const N2 = ["Otter", "Robin", "Badger", "Panda", "Comet", "Pebble", "Maple", "Biscuit", "Rocket", "Clover", "Sparrow", "Mochi"];
 function fresh() { return { coins: 0, pets: [{ id: 1, sp: "pup", lv: 1 }], ride: 1, items: { snack: 0, ribbon: 0, ticket: 0 }, treats: {}, settings: { followArrowWhenEmpty: true }, name: pick(N1) + " " + pick(N2), delivered: 0, nextId: 2, shirt: pick(["#3a8ee6", "#e5534b", "#3fb36b", "#a352e0", "#f2b01e", "#2bb3c0"]) }; }
-function load() { try { const s = JSON.parse(localStorage.getItem(SAVE)); if (s && Array.isArray(s.pets) && s.pets.length) { const f = Object.assign(fresh(), s); f.pets = f.pets.filter((p) => SPECIES[p.sp]); if (!f.pets.length) f.pets = fresh().pets; return f; } } catch (e) { /* none yet */ } return fresh(); }
+function load() { try { const s = JSON.parse(localStorage.getItem(SAVE)); if (s && Array.isArray(s.pets) && s.pets.length) { const f = Object.assign(fresh(), s); f.pets = f.pets.map((p) => ({ ...p, sp: World.PET_MOVED[p.sp] || p.sp })).filter((p) => SPECIES[p.sp]); if (!f.pets.length) f.pets = fresh().pets; return f; } } catch (e) { /* none yet */ } return fresh(); }
 // (owner, 2026-11-08) since accounts, the server keeps the data; what was in this browser before seeds the first account
 let save = load(), saveDirty = false;
 const SPECIES_SET = new Set(Object.keys(SPECIES));
@@ -671,30 +654,14 @@ function strut(w, t, c, y0, z0, y1, z1, parent, x = 0) { const len = hyp(y1 - y0
 // neck length, head size, snout length, ears, tail and extras
 const LOOK = {
   pup: { plan: "quad", body: [0.8, 0.62, 1.25], leg: 0.55, head: 0.62, snout: 0.32, ears: "flop", tail: "wag", nose: "#2b1d14" },
-  kitten: { plan: "quad", body: [0.55, 0.5, 1.1], leg: 0.5, head: 0.58, roundHead: true, snout: 0.06, ears: "cat", tail: "curl", whiskers: true, nose: "#f3a7b5" },
-  bunny: { plan: "quad", round: true, body: [0.9, 0.82, 1.0], leg: 0.22, head: 0.6, roundHead: true, snout: 0.05, ears: "long", tail: "puff", nose: "#f3a7b5", hop: true },
-  fox: { plan: "quad", body: [0.62, 0.55, 1.35], leg: 0.6, head: 0.55, snout: 0.5, snoutC: "a", ears: "big", tail: "bushy", nose: "#1d232a", socks: "#2b1d14" },
-  goat: { plan: "quad", body: [0.85, 0.75, 1.25], leg: 0.72, head: 0.5, snout: 0.35, ears: "side", horns: "curl", beard: true, tail: "stub", hooves: "#4a3a2a" },
-  deer: { plan: "quad", body: [0.72, 0.68, 1.35], leg: 1.05, neck: 0.65, head: 0.48, snout: 0.38, ears: "side", antlers: true, tail: "stub", spots: true, hooves: "#3a2a1a" },
-  otter: { plan: "quad", body: [0.62, 0.5, 1.5], leg: 0.28, head: 0.5, roundHead: true, snout: 0.18, snoutC: "a", ears: "round", tail: "thick", nose: "#1d232a", whiskers: true, low: true },
   turtle: { plan: "quad", round: true, body: [1.25, 0.7, 1.45], leg: 0.3, legW: 0.34, head: 0.46, roundHead: true, snout: 0.08, ears: "none", tail: "stub", shell: true, low: true },
-  bear: { plan: "quad", round: true, body: [1.3, 1.1, 1.65], leg: 0.48, legW: 0.42, head: 0.85, roundHead: true, snout: 0.3, snoutC: "a", ears: "round", tail: "none", nose: "#1d232a" },
-  horse: { plan: "quad", body: [0.82, 0.85, 1.7], leg: 1.25, neck: 0.95, head: 0.45, snout: 0.6, ears: "point", mane: "a", tail: "hair", hooves: "#2b1d14" },
-  unicorn: { plan: "quad", body: [0.82, 0.85, 1.7], leg: 1.25, neck: 0.95, head: 0.45, snout: 0.6, ears: "point", mane: "rainbow", tail: "rainbow", horn: true, hooves: "#e0c070" },
-  pegasus: { plan: "quad", body: [0.82, 0.85, 1.7], leg: 1.25, neck: 0.95, head: 0.45, snout: 0.6, ears: "point", mane: "a", tail: "hair", wings: "feather", hooves: "#8aa6c8" },
-  stego: { plan: "quad", body: [1.05, 0.95, 1.9], leg: 0.55, legW: 0.38, head: 0.42, snout: 0.25, ears: "none", plates: true, tail: "spike", low: true },
-  trike: { plan: "quad", body: [1.2, 1.0, 1.8], leg: 0.6, legW: 0.42, head: 0.75, snout: 0.35, ears: "none", frill: true, tail: "thick" },
   dragon: { plan: "quad", body: [0.95, 0.8, 1.6], leg: 0.7, neck: 0.85, head: 0.55, snout: 0.5, ears: "none", horns: "back", tail: "spade", wings: "bat", spikes: true },
-  icedragon: { plan: "quad", body: [0.95, 0.8, 1.6], leg: 0.7, neck: 0.85, head: 0.55, snout: 0.5, ears: "none", horns: "back", tail: "spade", wings: "bat", spikes: "ice", crest: true },
   duck: { plan: "bird", round: true, body: [0.85, 0.7, 1.05], leg: 0.32, head: 0.48, bill: "flat", tail: "tuft" },
-  penguin: { plan: "upright", body: [0.85, 1.3, 0.75], leg: 0.18, head: 0.5, bill: "small", belly: "front", wings: "flipper" },
   parrot: { plan: "upright", body: [0.6, 0.95, 0.6], leg: 0.32, head: 0.45, bill: "hook", wings: "feather", tail: "long", crest: true },
   owl: { plan: "upright", round: true, body: [1.0, 1.1, 0.9], leg: 0.22, head: 0.0, bill: "small", eyes: "big", ears: "tufts", wings: "feather" },
-  phoenix: { plan: "bird", body: [0.55, 0.55, 1.1], leg: 0.6, neck: 0.55, head: 0.42, bill: "point", wings: "feather", tail: "fire", crest: true },
-  ptero: { plan: "bird", body: [0.5, 0.45, 0.9], leg: 0.5, neck: 0.45, head: 0.4, bill: "long", crest: "back", wings: "bat", tail: "none" },
   raptor: { plan: "biped", body: [0.7, 0.75, 1.5], leg: 0.95, head: 0.6, snout: 0.45, tail: "long", claws: true, stripes: true },
   trex: { plan: "biped", body: [1.1, 1.05, 1.9], leg: 1.05, legW: 0.5, head: 1.15, snout: 0.6, tail: "long", tiny: true },
-  butterfly: { plan: "butterfly" },
+  serpent: { plan: "serpent", segs: 9 },   // (owner, 2026-11-09) a long snake-dragon: horned head, whiskers, a fin down its back
 };
 const RAINBOW = ["#ff6b6b", "#ffb84d", "#ffe66b", "#7ee08a", "#6bb8ff", "#b48cff"];
 // (owner, 2026-11-09) a pet grows with its level but its rider stays the same size, so a big pet feels big
@@ -824,6 +791,30 @@ function petModel(sp, rider) {
     for (const x of [-1, 1]) box(0.11 * k, (L.tiny ? 0.3 : 0.45) * k, 0.11 * k, C, x * bw * 0.48, by - bh * 0.05, bl * 0.42, body);
     tail("long", by + bh * 0.1, -bl / 2);
     seat = legH + bh; seatZ = -0.2 * k;
+  } else if (L.plan === "serpent") {
+    // a chain of body segments, each hung off the one before so the whole body waves; the rider sits on the second
+    const segL = 0.62 * k, r0 = 0.42 * k, y0 = 0.55 * k; let prev = body, sy = y0;
+    head.position.set(0, y0 + 0.35 * k, segL * 0.9); body.add(head);
+    for (let n = 0; n < L.segs; n++) {
+      const sg = new THREE.Group(), r = r0 * (1 - (n / L.segs) * 0.7); sg.position.set(0, n ? 0 : sy, n ? -segL : 0); prev.add(sg); if (n) tails.push(sg);
+      ball(1, C, 0, 0, -segL / 2, sg, r, r * 0.9, segL * 0.62);
+      ball(1, A, 0, -r * 0.45, -segL / 2, sg, r * 0.75, r * 0.45, segL * 0.55);   // the pale belly
+      const fin = box(0.05 * k, r * 0.9, segL * 0.7, A, 0, r * 0.95, -segL / 2, sg); fin.rotation.x = 0.25;
+      if (n === L.segs - 1) { const f = box(0.06 * k, r * 3, r * 2.4, A, 0, 0, -segL, sg); f.rotation.x = 0.6; }
+      prev = sg;
+    }
+    const hs = 0.62 * k;
+    box(hs * 0.85, hs * 0.7, hs * 1.0, C, 0, 0, 0, head); box(hs * 0.7, hs * 0.32, hs * 0.75, C, 0, -hs * 0.12, hs * 0.75, head);
+    box(hs * 0.6, hs * 0.18, hs * 0.6, A, 0, -hs * 0.32, hs * 0.65, head);   // the jaw
+    for (let t = -1; t <= 1; t += 1) box(0.05 * k, 0.12 * k, 0.05 * k, "#ffffff", t * hs * 0.22, -hs * 0.22, hs * 1.08, head);
+    eyes(hs, hs * 0.48, true);
+    for (const x of [-1, 1]) {
+      cone(0.07 * k, 0.6 * k, "#f4e6c0", x * hs * 0.3, hs * 0.45, -hs * 0.3, head, -0.9);   // horns swept back
+      const w = box(0.7 * k, 0.03, 0.03, A, x * hs * 0.55, -hs * 0.15, hs * 1.0, head); w.rotation.z = x * -0.35; w.rotation.y = x * 0.3;   // whiskers
+      const f = box(0.04 * k, hs * 0.55, hs * 0.5, A, x * hs * 0.48, hs * 0.05, -hs * 0.25, head); f.rotation.y = x * 0.5;   // ear fins
+    }
+    for (let n = 0; n < 3; n++) cone(0.06 * k, 0.32 * k, A, 0, hs * 0.42, -n * 0.16 * k, head, -0.6);
+    seat = y0 + r0 * 0.9; seatZ = -segL * 0.9;
   } else {   // butterfly
     const legH = 0.6 * k, bh = 0.38 * k, bl = 1.5 * k, bw = 0.4 * k;
     box(bw, bh, bl, "#2b2b35", 0, legH + bh / 2, 0, body);
@@ -849,7 +840,7 @@ function animatePet(m, t, moving, speed, airborne) {
   if (m.plan === "upright" && moving && !airborne) m.body.rotation.z = Math.sin(t * f) * 0.08; else m.body.rotation.z = 0;   // a waddle
   const flap = m.butterfly ? 0.25 + Math.sin(t * (airborne ? 14 : 5)) * 0.7 : m.fly ? 0.15 + Math.sin(t * (airborne ? 9 : 3)) * (airborne ? 0.6 : 0.25) : 0.1 + Math.sin(t * (moving ? 12 : 3)) * 0.2;
   for (const [i, w] of m.wings.entries()) w.rotation.z = (i ? -1 : 1) * flap;
-  m.tails.forEach((tl, i) => (tl.rotation.y = Math.sin(t * 4 - i * 0.8) * 0.35));
+  m.tails.forEach((tl, i) => (tl.rotation.y = m.plan === "serpent" ? Math.sin(t * (moving ? 6 : 2) - i * 0.9) * (moving ? 0.28 : 0.12) : Math.sin(t * 4 - i * 0.8) * 0.35));
   m.head.rotation.y = Math.sin(t * 0.7) * 0.12;
 }
 // pet portraits for the menus, drawn once per species
@@ -859,8 +850,8 @@ const pCam = new THREE.PerspectiveCamera(32, 1, 0.1, 60);
 const PORTRAITS = {};
 function portrait(sp) {
   if (PORTRAITS[sp]) return PORTRAITS[sp];
-  const m = petModel(sp); m.g.rotation.y = 0.7; pScene.add(m.g);
-  const L = LOOK[sp] || {}, k = SPECIES[sp].size, wide = L.wings === "bat" || L.wings === "feather" && L.plan === "quad" || L.plan === "butterfly" ? 1.35 : 1, tall = (L.neck || 0) + (L.leg || 0.5) > 1.5 ? 1.3 : 1;
+  const m = petModel(sp); m.g.rotation.y = 0.7; pScene.add(m.g); if (m.plan === "serpent") m.tails.forEach((t) => (t.rotation.y = 0.62));   // coiled up for its picture
+  const L = LOOK[sp] || {}, k = SPECIES[sp].size, wide = L.wings === "bat" || L.wings === "feather" && L.plan === "quad" || L.plan === "butterfly" ? 1.35 : L.plan === "serpent" ? 1.25 : 1, tall = (L.neck || 0) + (L.leg || 0.5) > 1.5 ? 1.3 : 1;
   pCam.position.set(0, 2.4 * k * wide * tall, 5.6 * k * wide * tall); pCam.lookAt(0, 1.0 * k * tall, 0);
   portraitR.render(pScene, pCam); pScene.remove(m.g);
   return (PORTRAITS[sp] = portraitR.domElement.toDataURL());
@@ -1421,7 +1412,7 @@ function buyEgg(egg, ticket) {
   if (ticket ? save.items.ticket <= 0 : save.coins < egg.price) return;
   if (save.pets.length >= World.petCap(save)) return;   // (owner, 2026-11-08) beds hold more pets
   if (ticket) save.items.ticket--; else save.coins -= egg.price;
-  let roll = Math.random() * 100, r = 0; while (r < 3 && roll >= egg.odds[r]) { roll -= egg.odds[r]; r++; }
+  let roll = Math.random() * 100, r = 0; while (r < RARITY.length - 1 && roll >= egg.odds[r]) { roll -= egg.odds[r]; r++; }
   const sp = pick(Object.keys(SPECIES).filter((k) => SPECIES[k].r === r)), p = { id: save.nextId++, sp, lv: 1 };
   save.pets.push(p); persist(); hatch(p, egg);
 }
@@ -1433,7 +1424,7 @@ function hatch(p, egg) {
   $("hatch").style.display = "flex"; $("hatchok").style.visibility = "hidden"; $("hatchno").style.visibility = "hidden"; $("hatchn").style.visibility = "hidden"; $("hatchr").style.visibility = "hidden";
   const t0 = performance.now(), parts = []; let burst = 0, lastT = 0;
   const pop = (x, y, n, sp, cols) => { for (let i = 0; i < n; i++) { const a = Math.random() * TAU, v = sp * (0.3 + Math.random() * 0.7); parts.push({ x, y, vx: Math.cos(a) * v, vy: Math.sin(a) * v, life: 1 + Math.random() * 0.6, c: pick(cols), r: 3 + Math.random() * 5, star: Math.random() < 0.3 }); } };
-  const cols = s.r === 3 ? ["#ffd35a", "#ffb020", "#fff4c0", "#ff7ac8"] : s.r === 2 ? ["#c58bff", "#a352e0", "#fff", "#ff7ac8"] : s.r === 1 ? ["#7fc0ff", "#3a8ee6", "#fff", "#3fb36b"] : PARTY;
+  const cols = s.r === 2 ? ["#ffd35a", "#ffb020", "#fff4c0", "#ff7ac8"] : s.r === 1 ? ["#7fc0ff", "#3a8ee6", "#fff", "#3fb36b"] : PARTY;
   const anim = () => {
     const t = (performance.now() - t0) / 1000, dt = t - lastT; lastT = t; g.clearRect(0, 0, 440, 440);
     if (t < 1.6) {   // shaking harder and harder, cracks spreading
@@ -1444,7 +1435,7 @@ function hatch(p, egg) {
     }
     if (!burst) { burst = 1; pop(220, 240, 160, 520, cols); pop(220, 240, 40, 260, ["#ffffff"]); }
     if (burst === 1 && t > 1.95) { burst = 2; pop(110, 140, 70, 360, cols); pop(330, 120, 70, 360, cols); }
-    if (burst === 2 && t > 2.3 && s.r >= 2) { burst = 3; pop(220, 90, 90, 420, cols); pop(80, 300, 50, 300, cols); pop(360, 320, 50, 300, cols); }
+    if (burst === 2 && t > 2.3 && s.r >= 1) { burst = 3; pop(220, 90, 90, 420, cols); pop(80, 300, 50, 300, cols); pop(360, 320, 50, 300, cols); }
     // rays
     g.save(); g.translate(220, 230); g.rotate(t * 0.6); g.globalAlpha = Math.min(0.55, (t - 1.6) * 2); g.fillStyle = rc;
     for (let i = 0; i < 12; i++) { g.rotate(TAU / 12); g.beginPath(); g.moveTo(0, 0); g.lineTo(-22, -260); g.lineTo(22, -260); g.fill(); }
@@ -1467,7 +1458,7 @@ function hatch(p, egg) {
   // (owner, 2026-11-09) Not now keeps you on the pet you're riding; the new one waits in your Pets list
   const done = (go) => {
     $("hatch").style.display = "none"; if (go) ride(p.id); if (openPanel === "p-shop") renderShop();
-    emitConfetti(me.x, me.y + 3, me.z, 90, 6, 9); firework(me.x - 4, me.y + 2, me.z); if (s.r >= 2) { firework(me.x + 4, me.y + 2, me.z, 0.3); firework(me.x, me.y + 2, me.z - 4, 0.6, [rc, "#ffffff"]); }
+    emitConfetti(me.x, me.y + 3, me.z, 90, 6, 9); firework(me.x - 4, me.y + 2, me.z); if (s.r >= 1) { firework(me.x + 4, me.y + 2, me.z, 0.3); firework(me.x, me.y + 2, me.z - 4, 0.6, [rc, "#ffffff"]); }
   };
   $("hatchok").onclick = () => done(true); $("hatchno").onclick = () => done(false);
 }
