@@ -74,10 +74,11 @@ Asked (owner): a web game on atamus.io (not Roblox), on its own page; the cargo 
   camera), its speed in mph, and the active flight speed percentage in green or red; hidden in a home.
 - **Minimap (owner, 2026-11-09):** a square map in the top right corner (the bag, wanted, players and contract pills
   sit under it), turned with the camera so up on it is always the way the camera looks; N marks north (−z) on its edge.
-  It shows the land (shaded by height and slope, as on the ground), roads, the plaza (post office, egg shop, training
-  track, pound, board and the rings), houses (roof, door, mailbox), trees, the town plots and the islands; the islands
+  **Drawn like the world (owner, 2026-11-09): white paper and black ink**, the water hatched; only the markers (you,
+  others, bag houses, the guide, vans, home) keep their colors. It shows the land, the lake and river, roads, the square
+  (post office, egg shop, mount shop, training track, pound, board and the rings), houses (roof, door, mailbox), trees, the town plots and the islands; the islands
   above the town (and the VIP island) are faint until you climb (fully shown from about 50 m), the extra island only
-  while it's in use. Live on it: everyone's built houses (each square's top piece in its colour; your plot outlined gold),
+  while it's in use. Live on it: everyone's built houses (each square's top piece, roofs white, floors gray; your plot outlined gold),
   the houses in your bag (gold, pink for an island) and where the guide points (a glowing dot, or a chevron on the edge
   pointing the way when it's off the map), vans (lights flashing while they chase), helicopters (rotors turning) and
   their searchlight beams and spots, the other players in your world (a dot in their shirt colour with a notch the way
@@ -106,7 +107,8 @@ Asked (owner): a web game on atamus.io (not Roblox), on its own page; the cargo 
 - **Sketch look (owner, 2026-11-09):** the world is drawn like a pencil sketch: a screen pass turns the rendered
   scene into off-white paper with dark outlines (from brightness and depth edges) and light diagonal hatching in the
   darker areas; nights are brightened so the drawing stays readable. Name tags, place labels and speech bubbles are
-  drawn after the pass, in color, still hidden behind buildings. The minimap and HUD keep their colors.
+  drawn after the pass, in color, still hidden behind buildings. The HUD keeps its colors; the minimap is drawn in
+  ink too (below).
 - **Shadows are baked (owner, 2026-11-09):** no live shadows; the ground is darker under and a little to one side of
   every house, plaza building and tree (soft-edged, painted in once), and a soft dark spot lies on the ground under
   every pet, person, walker and van (smaller and fainter the higher they are). The vans' overlapping faces are offset
