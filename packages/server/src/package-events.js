@@ -6,9 +6,9 @@ export const PACKAGE_EVENT_MIN_MS = 60_000;
 export const PACKAGE_EVENT_MAX_MS = 120_000;
 
 const PETS = [   // by rarity (owner, 2026-11-09: nine pets): Common, Rare, Legendary
-  ["pup", "parrot", "duck"],
-  ["raptor", "owl", "turtle"],
-  ["dragon", "trex", "serpent"],
+  ["pup", "parrot"],
+  ["raptor", "owl"],
+  ["dragon", "trex"],
 ];
 
 const whole = (rng, lo, hi) => lo + Math.floor(rng() * (hi - lo + 1));

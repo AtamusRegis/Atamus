@@ -18,6 +18,8 @@ Asked (owner): a web game on atamus.io (not Roblox), on its own page; the cargo 
   a river from it running straight west off the island's edge in a waterfall. The water stops at the edge; the fall
   pours **down** from the lip, out and clear of the rock, with spray at the lip. Ripples drift slowly on the lake and
   **run downstream** on the river. Deeper water is darker; the bed is sand. Houses and trees keep clear of it.
+  - (owner, 2026-11-09: water pets scrapped) nobody swims now; the lake is scenery. The swimming rules below are kept
+    in the code for any future swimmer.
   - **Swimmers** walk straight in and **swim underwater** (owner, 2026-11-09): Space (or Swim ▲) rises, Shift (or Swim
     ▼) dives, down to the bottom; with neither they drift up to the surface; Space at the surface leaps out. 1.35×
     their speed in the water. Bubbles trail behind them under water; with the camera under water everything goes a
@@ -27,18 +29,16 @@ Asked (owner): a web game on atamus.io (not Roblox), on its own page; the cargo 
     don't land); nobody goes over a waterfall.
 - **Speed boosts (owner, 2026-11-09):** glowing orange arrow pads laid on the roads (following the road's surface;
   at the same spots along every street, not by the square) for any pet; 22 cyan rings in the air over town (16 to 76 m
-  up), there only for fliers; and 6 small spinning whirlpools on the lake and the river, there only for swimmers
-  (surface or underwater). Rings and whirlpools fade out with distance (gone past 120 m). Going through one: 1.6× for
+  up), there only for fliers. Rings fade out with distance (gone past 120 m). Going through one: 1.6× for
   5 s (on top of Speed Candy), with a trail in the boost's color; not on foot or at home.
 - **Streets (owner, 2026-11-09: a grid):** straight streets edge to edge, two running north-south and two east-west on
   each side of the square (64 m and 140 m out), 8 m wide with dashed center lines, making square city blocks.
 - **The town square** (owner, 2026-11-09: round, the buildings evenly round it, mirrored left and right): flat and
-  paved, 60 m across the middle, with the **contract board** (red ring) at its center and the five main buildings
-  evenly round it, each facing the middle with its ring in front: the **post office** (north; blue roof, its **pickup
-  ring**, gold, in front), the **egg shop** (pink, a giant egg on top, pink ring), the **training yard** (a running
-  track with hurdles, green ring), the **pound** (animal control, striped front, a fenced yard in front) and the
-  **mount shop** (teal, a giant golden horseshoe on top, teal ring), mirroring the egg shop. The lift stands south of
-  the center, under the VIP island.
+  paved, 60 m across the middle, with the **contract board** (red ring) at its center and the four main buildings
+  evenly round it (owner, 2026-11-09: the mount shop closed), each facing the middle with its ring in front: the **post
+  office** (north; blue roof, its **pickup ring**, gold, in front), the **egg shop** (east; pink, a giant egg on top,
+  pink ring), the **pound** (south; animal control, striped front, a fenced yard in front) and the **training yard**
+  (west; a running track with hurdles, green ring). The lift stands south of the center, under the VIP island.
 - **Houses** (about 290) line every street on both sides, facing it, evenly spaced between the cross streets, each with
   a red mailbox at the roadside; trees stand on an 8 m grid on open ground, mirrored across the town.
 - **Floating islands (owner, 2026-11-09: a symmetric ring):** 8 off the town's edge, one off each side (6 m up) and one
@@ -57,9 +57,9 @@ Asked (owner): a web game on atamus.io (not Roblox), on its own page; the cargo 
   from the sun (strongest with it low, none at night or in rain); 56 clouds
   in three layers (below the island, around it and high above).
 - **Place labels (owner, 2026-11-09):** a speech bubble floats over each place saying what it is (Post Office: Pick up
-  parcels here; Contract Board: Start a contract with your room; Egg Shop: Buy eggs to hatch new pets; Mount Shop: Buy pets to ride; Training Yard:
+  parcels here; Contract Board: Start a contract with your room; Egg Shop: Buy eggs to hatch new pets; Training Yard:
   Train the pet you ride; Animal Control: Where caught couriers end up; Sky Lift: Up to your plot / Down to the plaza;
-  the Egg Shop's and Mount Shop's over their circles, Animal Control's in front of its door, owner 2026-11-09),
+  the Egg Shop's over its circle, Animal Control's in front of its door, owner 2026-11-09),
   clear within 10 m and fainter the further you are (owner, 2026-11-09), gone past 45 m, so you mostly see them in the
   middle of town; growing a little with distance; hidden while building.
 - **Wind (owner, 2026-11-09), the same for everyone (timed off the clock):** 3 to 40 mph, easing to a new strength
@@ -76,7 +76,7 @@ Asked (owner): a web game on atamus.io (not Roblox), on its own page; the cargo 
   sit under it), turned with the camera so up on it is always the way the camera looks; N marks north (−z) on its edge.
   **Drawn like the world (owner, 2026-11-09): white paper and black ink**, the water hatched; only the markers (you,
   others, bag houses, the guide, vans, home) keep their colors. It shows the land, the lake and river, roads, the square
-  (post office, egg shop, mount shop, training track, pound, board and the rings), houses (roof, door, mailbox), trees, the town plots and the islands; the islands
+  (post office, egg shop, training track, pound, board and the rings), houses (roof, door, mailbox), trees, the town plots and the islands; the islands
   above the town (and the VIP island) are faint until you climb (fully shown from about 50 m), the extra island only
   while it's in use. Live on it: everyone's built houses (each square's top piece, roofs white, floors gray; your plot outlined gold),
   the houses in your bag (gold, pink for an island) and where the guide points (a glowing dot, or a chevron on the edge
@@ -92,9 +92,9 @@ Asked (owner): a web game on atamus.io (not Roblox), on its own page; the cargo 
 - **Interaction (owner, 2026-11-09):** nearby townsfolk, players, lifts and pet pens show a circular E prompt and can
   be activated with E; F remains an alias for the same interaction. Tapping an NPC or object still activates it.
   On a computer, jumping uses Space rather than a right-side Jump button; touch controls keep the button.
-- **Townsfolk and talking (owner, 2026-11-09):** six visibly different people live around the shops and post office,
+- **Townsfolk and talking (owner, 2026-11-09):** five visibly different people live around the shops and post office,
   with their names above them, individual clothes, skin tones, idle movements and voices: Hazel keeps the Egg Shop,
-  Rusty keeps the Mount Shop, Mabel sorts mail, Gus sweeps and wanders, Ziggy dances and Penny runs around. They wave
+  Mabel sorts mail, Gus sweeps and wanders, Ziggy dances and Penny runs around. They wave
   when a courier approaches and pets bump against them instead of passing through them. Close by, tap the person (or press E;
   no name button, owner 2026-11-09) to talk: movement stops, black bars come in and the camera moves to a close-up of them. A line types in no
   more than 1.5 seconds and waits 2.5 seconds before the next one (about 4 seconds total); click, tap, Space, Enter or
@@ -148,10 +148,9 @@ Asked (owner): a web game on atamus.io (not Roblox), on its own page; the cargo 
     Vertical speed is 0.85× their flying speed. They fly at 0.75× and walk at 0.7× their speed. On a computer, a
     "Space Up · Shift Down" key strip shows at the bottom of the screen only while riding one (not while building).
 - **Every kind has its own build (owner, 2026-11-08):** body shape and size (boxy, round, upright birds, two-legged
-  dinosaurs, a serpent), legs, neck, head and extras: floppy ears and a wagging tail (Pup), stripes, claws and a crest
+  dinosaurs), legs, neck, head and extras: floppy ears and a wagging tail (Pup), stripes, claws and a crest
   (Raptor), a huge head and tiny arms (T-Rex), a hooked beak and long tail (Parrot), big eyes and tufts (Owl), a neck,
-  bat wings, back horns, spikes and a spade tail (Dragon), a flat bill (Duck), a patterned shell (Sea Turtle), and the
-  Sea Serpent's waving segmented body (above). Upright birds waddle.
+  bat wings, back horns, spikes and a spade tail (Dragon). Upright birds waddle.
 - A pet grows 1.5% bigger with each level (owner, 2026-11-08), so a level 20 pet is about 29% bigger; others see it too.
 
 ## Animal control (owner, 2026-11-08)
@@ -208,6 +207,8 @@ Asked (owner): a web game on atamus.io (not Roblox), on its own page; the cargo 
 
 ## Package Rush
 
+- **Off for now (owner, 2026-11-09):** the server starts no Package Rush (its period defaults to 0; the browser smoke
+  test still runs one). As it worked:
 - Every room starts a **Package Rush** every 10 minutes. It lasts a random 1–2 minutes and scatters shared prize
   packages at random town mailboxes: 8 plus 3 per player, up to 28. A purple beam and gold ring mark each one, and the
   event pill shows how many remain and the time left.
@@ -220,31 +221,26 @@ Asked (owner): a web game on atamus.io (not Roblox), on its own page; the cargo 
 
 ## Pets
 
-- Start: a Pup. **Nine pets (owner, 2026-11-09): a Common, a Rare and a Legendary of each type, the rarer the
-  cooler** (speed m/s / bag; ✈ flies; ≈ swims):
+- Start: a Pup. **Six pets (owner, 2026-11-09): a Common, a Rare and a Legendary of each type, the rarer the cooler;
+  water pets scrapped** (speed m/s / bag; ✈ flies):
   - Ground: Pup 7.5/2 (Common), Raptor 12/4 (Rare), T-Rex 15.5/7 (Legendary)
   - Air: Parrot ✈ 8.5/2 (Common), Owl ✈ 12/4 (Rare), Dragon ✈ 16/5 (Legendary)
-  - Water: Duck ≈ 7/3 (Common), Sea Turtle ≈ 11.5/5 (Rare), **Sea Serpent** ≈ 16.5/6 (Legendary): a long snake-dragon,
-    its body a chain of segments that waves as it moves, with a horned dragon head, whiskers, ear fins and a fin down its
-    back; coiled up in its picture.
+- **Water pets deleted (owner, 2026-11-09):** Duck, Sea Turtle and Sea Serpent (and the older Otter and Penguin) are
+  dropped from saves and their Treats with them; a player left with no pet gets a Pup.
 - **Retired pets (owner, 2026-11-09):** every other kind became the new pet of its type and rarity (Epic counted as
   Rare), keeping its level, training points and Treats (`PET_MOVED` in pets-world.js, applied whenever data is
   cleaned): Kitten, Bunny → Pup; Fox, Goat, Stegosaurus, Deer, Bear, Horse, Triceratops → Raptor; Unicorn → T-Rex;
-  Butterfly → Owl; Pegasus, Phoenix, Pterodactyl, Ice Dragon → Dragon; Otter, Penguin → Sea Turtle.
+  Butterfly → Owl; Pegasus, Phoenix, Pterodactyl, Ice Dragon → Dragon.
 - **Riders stay their size (owner, 2026-11-09):** a pet grows with its level but the courier on it doesn't, so a
   big pet looks big under its rider.
 - **Fliers (owner, 2026-11-08):** fly over houses and trucks and land on islands; they go up and down only as the
   player holds (see Riding). Shown with a wing by their name in the menus.
-- **Three types (owner, 2026-11-09):** every pet is **Ground**, **Air** or **Water**, with a badge on every card (and
+- **Two types (owner, 2026-11-09; Water scrapped):** every pet is **Ground** or **Air**, with a badge on every card (and
   when an egg hatches) and the card's frame and tint in its color: Ground brown with a peak, Air sky blue with flapping
-  wings (every flying pet), Water indigo with waves (Duck, Sea Turtle, Sea Serpent). The Sea Turtle has a brown patterned shell over a
-  green body.
+  wings (every flying pet).
 - **Pets** (button) lists yours (best first) with level, speed and bag; tap one to ride it.
 - **Shops (owner, 2026-11-09):** riding into a shop's ring opens its window in the middle of the screen, with your coins
   at the top and each item's price on its buy button (grayed out when you can't afford it; Full at the pet limit).
-- **Mount shop** (ride into its ring): every pet, any number of times, at level 1; buying one puts you on it (with
-  confetti). Pup $775, Duck $800, Parrot $850; Raptor $1,750, Sea Turtle $1,700, Owl $1,800; T-Rex, Dragon and Sea
-  Serpent $2,500.
 - **Egg shop** (ride into its ring): Basic Egg $150 (Common 75%, Rare 22%, Legendary 3%), Golden Egg $1,500 (Rare 75%,
   Legendary 25%); the pet is any of that rarity. The egg shakes harder and cracks, then bursts in a flash and fireworks (more for Rare and Legendary) with rays
   in the rarity's color; Ride puts you on it (with fireworks and confetti around you), **Not now** (owner, 2026-11-09)
@@ -436,6 +432,8 @@ Asked (owner): a web game on atamus.io (not Roblox), on its own page; the cargo 
   Bear, Horse, Triceratops, Unicorn, Pegasus, Phoenix, Pterodactyl, Ice Dragon (moved to the new pets, above).
 - Ink outlines and pencil hatching in the gray look (owner, 2026-11-09): they drew lines over flat ground on phones;
   replaced by plain shades of gray.
+- The mount shop and its keeper Rusty (owner, 2026-11-09); the Water type and its pets (Duck, Sea Turtle, Sea
+  Serpent; deleted from saves); whirlpool boosts; Package Rush (off, the code kept).
 - The hilly town (owner, 2026-11-09): plateaus and cliffs, four big hills, winding ring roads and spokes, the small lake
   with two rivers and a terraced stream, standing rocks, and the scattered islands: replaced by the flat grid town.
 - Gliders (owner, 2026-11-09): Parrot, Pegasus, Phoenix and Pterodactyl fly like the other fliers; the Flier / Glider / Swimmer badges became the Ground / Air / Water types.

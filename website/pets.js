@@ -4,7 +4,7 @@
 // its edge; animal control chases you. Co-op: everyone in a room rides the same town, works on contracts together and
 // chats. The server (packages/server/src/pets.js) shares players, runs animal control, contracts and chat.
 import * as THREE from "./vendor/three.module.min.js";
-import * as World from "./pets-world.js?v=1793100062";
+import * as World from "./pets-world.js?v=1793100063";
 
 const $ = (id) => document.getElementById(id);
 const TAU = Math.PI * 2, clamp = (v, a, b) => Math.max(a, Math.min(b, v)), hyp = Math.hypot;
@@ -14,7 +14,7 @@ const touchy = matchMedia("(pointer: coarse)").matches;
 
 // ---- pets ----
 const RARITY = [{ name: "Common", c: "#6f7d8a" }, { name: "Rare", c: "#3a8ee6" }, { name: "Legendary", c: "#e08a00" }];
-// (owner, 2026-11-09) nine pets: a Common, a Rare and a Legendary of each type (ground, air, water), the rarer the
+// (owner, 2026-11-09) six pets: a Common, a Rare and a Legendary of each type (ground, air; water scrapped), the rarer the
 // cooler. speed in m/s, bag in parcels, fly: flies, swim: swims; c / a: its colors
 const SPECIES = {
   pup: { name: "Pup", r: 0, speed: 7.5, bag: 2, c: "#c98b4f", a: "#7a4f28", size: 1 },
@@ -23,17 +23,12 @@ const SPECIES = {
   parrot: { name: "Parrot", r: 0, speed: 8.5, bag: 2, fly: "fly", c: "#3fb36b", a: "#e5534b", size: 1 },
   owl: { name: "Owl", r: 1, speed: 12, bag: 4, fly: "fly", c: "#9b7a55", a: "#f3e3cc", size: 1.15 },
   dragon: { name: "Dragon", r: 2, speed: 16, bag: 5, fly: "fly", c: "#3fb36b", a: "#ffd84a", size: 1.35 },
-  duck: { name: "Duck", r: 0, speed: 7, bag: 3, swim: true, c: "#ffd84a", a: "#f08a24", size: 0.9 },
-  turtle: { name: "Sea Turtle", r: 1, speed: 11.5, bag: 5, swim: true, c: "#7cb85a", a: "#8a6a3a", size: 1.15 },
-  serpent: { name: "Sea Serpent", r: 2, speed: 16.5, bag: 6, swim: true, c: "#1f8fa8", a: "#9af0e6", size: 1.3 },
 };
 // eggs: chance of each rarity (percent); the pet is any of that rarity
 const EGGS = [
   { id: "basic", name: "Basic Egg", price: 150, odds: [75, 22, 3], c: "#f4ead8", s: "#d8c39c" },
   { id: "gold", name: "Golden Egg", price: 1500, odds: [0, 75, 25], c: "#ffd35a", s: "#e89a10" },
 ];
-// (owner, 2026-11-09) the mount shop sells every pet
-const MOUNT_PRICE = { pup: 775, duck: 800, parrot: 850, raptor: 1750, turtle: 1700, owl: 1800, trex: 2500, dragon: 2500, serpent: 2500 };
 // training: each level +5% speed (up to level 20), every 5 levels one more parcel in the bag
 const MAXLV = 20;
 const petSpeed = (p) => SPECIES[p.sp].speed * (1 + 0.05 * (p.lv - 1));
@@ -66,7 +61,7 @@ const flies = () => !!SPECIES[riding().sp].fly;
 
 // ---- the world (shared with the server: pets-world.js): the town is a big floating island of plateaus and cliffs with
 // winding roads, houses along them and the plaza in the middle; small islands float off its edge ----
-const { terrain, smoothTerrain, inside, edgeR, ROADS, ROAD_HALF, houses, trees, ISLANDS, islandAt, blocked, PLAZA, POST, PICKUP, BOARD, SHOP, SHOP_B, MOUNT, MOUNT_B, TRAIN, POUND, POUND_B, RELEASE, SPAWN } = World;
+const { terrain, smoothTerrain, inside, edgeR, ROADS, ROAD_HALF, houses, trees, ISLANDS, islandAt, blocked, PLAZA, POST, PICKUP, BOARD, SHOP, SHOP_B, TRAIN, POUND, POUND_B, RELEASE, SPAWN } = World;
 let seed = 20261108; const srnd = () => ((seed = (seed * 16807) % 2147483647) / 2147483647);
 const pick2 = (a) => a[Math.floor(srnd() * a.length)];
 const HOUSE_C = ["#f6d9b8", "#cfe6f7", "#f7cfd8", "#d8f0c8", "#fbe7a8", "#e3d4f5", "#f9f4ea"], ROOF_C = ["#c8553d", "#3b6ea8", "#5a8f3e", "#8a5a3a", "#6b5b95"];
@@ -107,7 +102,7 @@ const inColor = (o) => { o.traverse((c) => c.layers.set(1)); return o; };
   const SH = new Map(), shKey = (x, z) => Math.floor(x / 10) + "," + Math.floor(z / 10), addSh = (o) => { for (let gx = Math.floor((o.x - o.r) / 10); gx <= Math.floor((o.x + o.r) / 10); gx++) for (let gz = Math.floor((o.z - o.r) / 10); gz <= Math.floor((o.z + o.r) / 10); gz++) { const k = gx + "," + gz; if (!SH.has(k)) SH.set(k, []); SH.get(k).push(o); } };
   for (const h of houses) if (!h.sky) addSh({ x: h.x + 1.6, z: h.z + 1.6, c: Math.cos(h.yaw), s: Math.sin(h.yaw), hw: 5.2, hd: 5.2, r: 9, k: 0.6 });
   for (const t of trees) addSh({ x: t.x + 1.1 * t.s, z: t.z + 1.1 * t.s, rr: 2.3 * t.s, r: 3 * t.s, k: 0.68 });
-  for (const [b, hw, hd] of [[POST, 9.5, 5.5], [SHOP_B, 6.5, 4.5], [MOUNT_B, 6.5, 4.5], [POUND_B, 8.5, 4.5]]) addSh({ x: b.x + 2, z: b.z + 2, c: Math.cos(b.yaw), s: Math.sin(b.yaw), hw, hd, r: 12, k: 0.68 });
+  for (const [b, hw, hd] of [[POST, 9.5, 5.5], [SHOP_B, 6.5, 4.5], [POUND_B, 8.5, 4.5]]) addSh({ x: b.x + 2, z: b.z + 2, c: Math.cos(b.yaw), s: Math.sin(b.yaw), hw, hd, r: 12, k: 0.68 });
   function bakedShade(x, z) {
     let f = 1;
     for (const o of SH.get(shKey(x, z)) || []) {
@@ -252,8 +247,6 @@ const BOOSTS = [];
   for (const R of ROADS) for (const u of [-182, -102, 0, 102, 182]) { const p = World.roadAt(R, u + R.len / 2); if (hyp(p.x, p.z) < PLAZA + 12) continue; BOOSTS.push({ k: "pad", x: p.x, y: terrain(p.x, p.z) + ROAD_LIFT, z: p.z, yaw: Math.atan2(p.fx, p.fz), r: 3 }); }
   for (let n = 0; n < 14; n++) { const a = (n / 14) * TAU + 0.35, r = n % 2 ? 95 : 160, x = Math.cos(a) * r, z = Math.sin(a) * r; BOOSTS.push({ k: "air", x, y: terrain(x, z) + 16 + (n % 3) * 9, z, yaw: a, r: 4 }); }
   for (const [x, z, y] of [[0, -20, 34], [0, 20, 34], [-20, 0, 48], [20, 0, 48], [-70, -70, 76], [70, -70, 76], [-70, 70, 76], [70, 70, 76]]) BOOSTS.push({ k: "air", x, y, z, yaw: Math.atan2(x, z), r: 4 });
-  const L = World.LAKE; for (const [a, b] of [[-1, -1], [1, -1], [-1, 1], [1, 1], [0, 0]]) BOOSTS.push({ k: "water", x: L.x + a * L.hw * 0.5, z: L.z + b * L.hd * 0.5, r: 2.6 });
-  BOOSTS.push({ k: "water", x: -208, z: 0, r: 2.6 });
   for (const b of BOOSTS) if (b.k === "water") { b.y = World.waterAt(b.x, b.z); b.yaw = 0; }
   const arrowTex = (() => { const c = document.createElement("canvas"); c.width = 64; c.height = 128; const g = c.getContext("2d"); g.fillStyle = "#ff9f1a"; g.fillRect(0, 0, 64, 128); g.fillStyle = "#fff4c2"; for (const y of [18, 58, 98]) { g.beginPath(); g.moveTo(8, y + 22); g.lineTo(32, y); g.lineTo(56, y + 22); g.lineTo(56, y + 34); g.lineTo(32, y + 12); g.lineTo(8, y + 34); g.fill(); } const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace; t.wrapT = THREE.RepeatWrapping; return t; })();
   const swirlTex = (() => { const c = document.createElement("canvas"); c.width = c.height = 128; const g = c.getContext("2d"); g.translate(64, 64); for (let arm = 0; arm < 3; arm++) { g.beginPath(); for (let t = 0; t < 1; t += 0.01) { const a = arm * (TAU / 3) + t * 7, r = 4 + t * 58; g.lineTo(Math.cos(a) * r, Math.sin(a) * r); } g.strokeStyle = "rgba(255,255,255,0.95)"; g.lineWidth = 7; g.lineCap = "round"; g.stroke(); } const rg = g.createRadialGradient(0, 0, 0, 0, 0, 62); rg.addColorStop(0, "rgba(40,60,190,0.9)"); rg.addColorStop(0.7, "rgba(110,130,255,0.5)"); rg.addColorStop(1, "rgba(150,170,255,0)"); g.globalCompositeOperation = "destination-over"; g.fillStyle = rg; g.beginPath(); g.arc(0, 0, 62, 0, TAU); g.fill(); return new THREE.CanvasTexture(c); })();
@@ -557,10 +550,6 @@ const boardRing = new THREE.Mesh(RINGG(BOARD.r), ringM("#e5534b")); boardRing.po
 { const g = bldg(SHOP_B); box(12, 5, 8, "#f7cfd8", 0, 2.5, 0, g); box(13, 0.6, 9, "#e5739d", 0, 5.3, 0, g); box(3, 3, 0.2, "#7a4f28", 0, 1.5, 4.05, g); }
 const bigEgg = new THREE.Mesh(new THREE.SphereGeometry(2, 16, 12), mat("#fff3d6")); bigEgg.scale.set(1, 1.3, 1); bigEgg.position.set(SHOP_B.x, 8.3, SHOP_B.z); bigEgg.castShadow = true; scene.add(bigEgg);
 const shopRing = new THREE.Mesh(RINGG(SHOP.r), ringM("#e5739d")); shopRing.position.set(SHOP.x, 0.16, SHOP.z); scene.add(inColor(shopRing));
-// the mount shop (owner, 2026-11-09), mirroring the egg shop, with a giant golden horseshoe on top
-{ const g = bldg(MOUNT_B); box(12, 5, 8, "#cfeef1", 0, 2.5, 0, g); box(13, 0.6, 9, "#2bb3c0", 0, 5.3, 0, g); box(3, 3, 0.2, "#7a4f28", 0, 1.5, 4.05, g);
-  const shoe = new THREE.Mesh(new THREE.TorusGeometry(1.7, 0.45, 10, 28, TAU * 0.7), mat("#f2b01e")); shoe.rotation.z = Math.PI * 1.5 - TAU * 0.35; shoe.position.set(0, 8, 0); shoe.castShadow = true; g.add(shoe); }
-const mountRing = new THREE.Mesh(RINGG(MOUNT.r), ringM("#2bb3c0")); mountRing.position.set(MOUNT.x, 0.16, MOUNT.z); scene.add(inColor(mountRing));
 // the training yard: a track with hurdles
 const track = new THREE.Mesh(new THREE.RingGeometry(9, 14, 48).rotateX(-Math.PI / 2), mat("#d98b5f")); track.position.set(TRAIN.x, 0.12, TRAIN.z); track.receiveShadow = true; scene.add(track);
 for (let k = 0; k < 6; k++) { const a = (k / 6) * TAU, x = TRAIN.x + Math.cos(a) * 11.5, z = TRAIN.z + Math.sin(a) * 11.5, g = new THREE.Group(); g.position.set(x, 0, z); g.rotation.y = -a; box(0.15, 1, 0.15, "#ffffff", 0, 0.5, -1.8, g); box(0.15, 1, 0.15, "#ffffff", 0, 0.5, 1.8, g); box(0.2, 0.25, 3.8, "#e5534b", 0, 1, 0, g); scene.add(g); }
@@ -655,14 +644,11 @@ function strut(w, t, c, y0, z0, y1, z1, parent, x = 0) { const len = hyp(y1 - y0
 // neck length, head size, snout length, ears, tail and extras
 const LOOK = {
   pup: { plan: "quad", body: [0.8, 0.62, 1.25], leg: 0.55, head: 0.62, snout: 0.32, ears: "flop", tail: "wag", nose: "#2b1d14" },
-  turtle: { plan: "quad", round: true, body: [1.25, 0.7, 1.45], leg: 0.3, legW: 0.34, head: 0.46, roundHead: true, snout: 0.08, ears: "none", tail: "stub", shell: true, low: true },
   dragon: { plan: "quad", body: [0.95, 0.8, 1.6], leg: 0.7, neck: 0.85, head: 0.55, snout: 0.5, ears: "none", horns: "back", tail: "spade", wings: "bat", spikes: true },
-  duck: { plan: "bird", round: true, body: [0.85, 0.7, 1.05], leg: 0.32, head: 0.48, bill: "flat", tail: "tuft" },
   parrot: { plan: "upright", body: [0.6, 0.95, 0.6], leg: 0.32, head: 0.45, bill: "hook", wings: "feather", tail: "long", crest: true },
   owl: { plan: "upright", round: true, body: [1.0, 1.1, 0.9], leg: 0.22, head: 0.0, bill: "small", eyes: "big", ears: "tufts", wings: "feather" },
   raptor: { plan: "biped", body: [0.7, 0.75, 1.5], leg: 0.95, head: 0.6, snout: 0.45, tail: "long", claws: true, stripes: true },
   trex: { plan: "biped", body: [1.1, 1.05, 1.9], leg: 1.05, legW: 0.5, head: 1.15, snout: 0.6, tail: "long", tiny: true },
-  serpent: { plan: "serpent", segs: 9 },   // (owner, 2026-11-09) a long snake-dragon: horned head, whiskers, a fin down its back
 };
 const RAINBOW = ["#ff6b6b", "#ffb84d", "#ffe66b", "#7ee08a", "#6bb8ff", "#b48cff"];
 // (owner, 2026-11-09) a pet grows with its level but its rider stays the same size, so a big pet feels big
@@ -792,30 +778,6 @@ function petModel(sp, rider) {
     for (const x of [-1, 1]) box(0.11 * k, (L.tiny ? 0.3 : 0.45) * k, 0.11 * k, C, x * bw * 0.48, by - bh * 0.05, bl * 0.42, body);
     tail("long", by + bh * 0.1, -bl / 2);
     seat = legH + bh; seatZ = -0.2 * k;
-  } else if (L.plan === "serpent") {
-    // a chain of body segments, each hung off the one before so the whole body waves; the rider sits on the second
-    const segL = 0.62 * k, r0 = 0.42 * k, y0 = 0.55 * k; let prev = body, sy = y0;
-    head.position.set(0, y0 + 0.35 * k, segL * 0.9); body.add(head);
-    for (let n = 0; n < L.segs; n++) {
-      const sg = new THREE.Group(), r = r0 * (1 - (n / L.segs) * 0.7); sg.position.set(0, n ? 0 : sy, n ? -segL : 0); prev.add(sg); if (n) tails.push(sg);
-      ball(1, C, 0, 0, -segL / 2, sg, r, r * 0.9, segL * 0.62);
-      ball(1, A, 0, -r * 0.45, -segL / 2, sg, r * 0.75, r * 0.45, segL * 0.55);   // the pale belly
-      const fin = box(0.05 * k, r * 0.9, segL * 0.7, A, 0, r * 0.95, -segL / 2, sg); fin.rotation.x = 0.25;
-      if (n === L.segs - 1) { const f = box(0.06 * k, r * 3, r * 2.4, A, 0, 0, -segL, sg); f.rotation.x = 0.6; }
-      prev = sg;
-    }
-    const hs = 0.62 * k;
-    box(hs * 0.85, hs * 0.7, hs * 1.0, C, 0, 0, 0, head); box(hs * 0.7, hs * 0.32, hs * 0.75, C, 0, -hs * 0.12, hs * 0.75, head);
-    box(hs * 0.6, hs * 0.18, hs * 0.6, A, 0, -hs * 0.32, hs * 0.65, head);   // the jaw
-    for (let t = -1; t <= 1; t += 1) box(0.05 * k, 0.12 * k, 0.05 * k, "#ffffff", t * hs * 0.22, -hs * 0.22, hs * 1.08, head);
-    eyes(hs, hs * 0.48, true);
-    for (const x of [-1, 1]) {
-      cone(0.07 * k, 0.6 * k, "#f4e6c0", x * hs * 0.3, hs * 0.45, -hs * 0.3, head, -0.9);   // horns swept back
-      const w = box(0.7 * k, 0.03, 0.03, A, x * hs * 0.55, -hs * 0.15, hs * 1.0, head); w.rotation.z = x * -0.35; w.rotation.y = x * 0.3;   // whiskers
-      const f = box(0.04 * k, hs * 0.55, hs * 0.5, A, x * hs * 0.48, hs * 0.05, -hs * 0.25, head); f.rotation.y = x * 0.5;   // ear fins
-    }
-    for (let n = 0; n < 3; n++) cone(0.06 * k, 0.32 * k, A, 0, hs * 0.42, -n * 0.16 * k, head, -0.6);
-    seat = y0 + r0 * 0.9; seatZ = -segL * 0.9;
   } else {   // butterfly
     const legH = 0.6 * k, bh = 0.38 * k, bl = 1.5 * k, bw = 0.4 * k;
     box(bw, bh, bl, "#2b2b35", 0, legH + bh / 2, 0, body);
@@ -841,7 +803,7 @@ function animatePet(m, t, moving, speed, airborne) {
   if (m.plan === "upright" && moving && !airborne) m.body.rotation.z = Math.sin(t * f) * 0.08; else m.body.rotation.z = 0;   // a waddle
   const flap = m.butterfly ? 0.25 + Math.sin(t * (airborne ? 14 : 5)) * 0.7 : m.fly ? 0.15 + Math.sin(t * (airborne ? 9 : 3)) * (airborne ? 0.6 : 0.25) : 0.1 + Math.sin(t * (moving ? 12 : 3)) * 0.2;
   for (const [i, w] of m.wings.entries()) w.rotation.z = (i ? -1 : 1) * flap;
-  m.tails.forEach((tl, i) => (tl.rotation.y = m.plan === "serpent" ? Math.sin(t * (moving ? 6 : 2) - i * 0.9) * (moving ? 0.28 : 0.12) : Math.sin(t * 4 - i * 0.8) * 0.35));
+  m.tails.forEach((tl, i) => (tl.rotation.y = Math.sin(t * 4 - i * 0.8) * 0.35));
   m.head.rotation.y = Math.sin(t * 0.7) * 0.12;
 }
 // pet portraits for the menus, drawn once per species
@@ -851,8 +813,8 @@ const pCam = new THREE.PerspectiveCamera(32, 1, 0.1, 60);
 const PORTRAITS = {};
 function portrait(sp) {
   if (PORTRAITS[sp]) return PORTRAITS[sp];
-  const m = petModel(sp); m.g.rotation.y = 0.7; pScene.add(m.g); if (m.plan === "serpent") m.tails.forEach((t) => (t.rotation.y = 0.62));   // coiled up for its picture
-  const L = LOOK[sp] || {}, k = SPECIES[sp].size, wide = L.wings === "bat" || L.wings === "feather" && L.plan === "quad" || L.plan === "butterfly" ? 1.35 : L.plan === "serpent" ? 1.25 : 1, tall = (L.neck || 0) + (L.leg || 0.5) > 1.5 ? 1.3 : 1;
+  const m = petModel(sp); m.g.rotation.y = 0.7; pScene.add(m.g);
+  const L = LOOK[sp] || {}, k = SPECIES[sp].size, wide = L.wings === "bat" || L.wings === "feather" && L.plan === "quad" || L.plan === "butterfly" ? 1.35 : 1, tall = (L.neck || 0) + (L.leg || 0.5) > 1.5 ? 1.3 : 1;
   pCam.position.set(0, 2.4 * k * wide * tall, 5.6 * k * wide * tall); pCam.lookAt(0, 1.0 * k * tall, 0);
   portraitR.render(pScene, pCam); pScene.remove(m.g);
   return (PORTRAITS[sp] = portraitR.domElement.toDataURL());
@@ -1361,21 +1323,11 @@ function ride(id) {
   syncBeams(); if (openPanel === "p-pets") renderPets(); hudKey = "";
 }
 // (owner, 2026-11-09) the shops share one window in the middle of the screen, showing your coins and each item's price
-const SHOPS = { egg: "Egg Shop", mount: "Mount Shop" };
+const SHOPS = { egg: "Egg Shop" };
 let shopKind = "egg", shopCoins = -1;
 function renderShop() {
   $("shopname").textContent = SHOPS[shopKind]; shopCoins = Math.floor(save.coins); $("shopcash").textContent = fmt(save.coins);
   const el = $("shopitems"); el.innerHTML = "";
-  if (shopKind === "mount") {
-    const full = save.pets.length >= World.petCap(save);
-    for (const sp of Object.keys(SPECIES)) {
-      const s = SPECIES[sp], price = MOUNT_PRICE[sp], d = card(sp, `<span class="stats"><span>${s.speed.toFixed(1)} m/s</span><span>${s.bag} bag</span></span>`, false, null);
-      const b = document.createElement("button"); b.className = "btn gold"; b.type = "button"; b.innerHTML = `<span class="coin" style="display:inline-block;vertical-align:-3px"></span> ${fmt(price)}`; b.disabled = full || save.coins < price; b.onclick = (ev) => { ev.stopPropagation(); buyMount(sp); };
-      if (full) b.textContent = "Full";
-      d.appendChild(b); el.appendChild(d);
-    }
-    return;
-  }
   for (const egg of EGGS) {
     const d = document.createElement("div"); d.className = "card";
     d.innerHTML = `<svg width="84" height="84" viewBox="0 0 84 84"><ellipse cx="42" cy="46" rx="24" ry="31" fill="${egg.c}" stroke="${egg.s}" stroke-width="4"/><circle cx="34" cy="38" r="4" fill="${egg.s}"/><circle cx="50" cy="52" r="5" fill="${egg.s}"/></svg><span class="nm">${egg.name}</span>`
@@ -1385,13 +1337,6 @@ function renderShop() {
     if (egg.id === "basic" && save.items.ticket > 0) { const t = document.createElement("button"); t.className = "btn"; t.type = "button"; t.textContent = ITEMS.ticket.name + " ×" + save.items.ticket; t.onclick = (ev) => { ev.stopPropagation(); buyEgg(egg, true); }; d.appendChild(t); }
     el.appendChild(d);
   }
-}
-function buyMount(sp) {
-  const price = MOUNT_PRICE[sp];
-  if (!price || save.coins < price || save.pets.length >= World.petCap(save)) return;
-  save.coins -= price; const p = { id: save.nextId++, sp, lv: 1 }; save.pets.push(p); persist();
-  toast(SPECIES[sp].name, RARITY[SPECIES[sp].r].c); emitConfetti(me.x, me.y + 3, me.z, 50, 4, 7);
-  ride(p.id); hudKey = ""; renderShop();
 }
 function buyEgg(egg, ticket) {
   if (ticket ? save.items.ticket <= 0 : save.coins < egg.price) return;
@@ -1873,7 +1818,6 @@ const POIS = [
   { x: PICKUP.x, y: 7.5, z: PICKUP.z - 1, name: "Post Office", what: "Pick up parcels here" },
   { x: BOARD.x, y: 4.6, z: BOARD.z - 1.5, name: "Contract Board", what: "Start a contract with your room" },
   { x: SHOP.x, y: 4.6, z: SHOP.z, name: "Egg Shop", what: "Buy eggs to hatch new pets" },
-  { x: MOUNT.x, y: 4.6, z: MOUNT.z, name: "Mount Shop", what: "Buy pets to ride" },
   { x: TRAIN.x, y: 4.5, z: TRAIN.z, name: "Training Yard", what: "Train the pet you ride" },
   { x: toWorld(POUND, 0, 3).x, y: 4.4, z: toWorld(POUND, 0, 3).z, name: "Animal Control", what: "Where caught couriers end up" },
   { x: LIFT.x, y: 6, z: LIFT.z, name: "Sky Lift", what: "Up to your plot" },
@@ -2004,20 +1948,6 @@ const TOWN = [
     },
   },
   {
-    id: "rusty", name: "Rusty", color: "#2bb3c0", x: toWorld(MOUNT_B, -3.7, 5.4).x, z: toWorld(MOUNT_B, -3.7, 5.4).z, yaw: MOUNT_B.yaw, s: 1, idle: "shop", cps: 36,
-    only: () => !!World.MOUNT_B && !!SHOP_OPEN.mount,   // the mount shop's keeper, once there's a mount shop
-    look: { skin: "#b9805a", shirt: "#e9dcc0", sleeve: "#e9dcc0", pants: "#3b5b8a" },
-    more: ["What else, partner?", "Anything else on your mind?"],
-    menu: [["Show me the pets", () => openShop("mount")], ["Which pet is fastest?", "fast"], ["Got any stories?", "story"], ["Bye", "bye"]],
-    says: {
-      hello: { say: ["Well, howdy there, partner!", "Every critter in this town, right here. Pick one and ride it out the door."], opts: "menu" },
-      again: { say: [() => pick(["Howdy again, {name}!", "Back in the saddle, I see.", "Well, look who it is!"])], opts: "menu" },
-      fast: { say: [() => `Fastest one I've got is the ${fastest()}.`, "Though a well-trained Pup has surprised me more than once."], opts: "menu" },
-      story: { say: () => pick([["Once rode a T-Rex clear across town.", "Animal control took one look and turned their van right around."], ["Had a Goat once that ate my hat.", "This here's my third hat."], ["They say there's an island so high up only the bravest fliers reach it.", "Never been myself. I get dizzy on a ladder."]]), opts: "menu" },
-      bye: { say: [() => pick(["Happy trails!", "Ride safe, partner.", "See you down the road!"])] },
-    },
-  },
-  {
     id: "mabel", name: "Mabel", color: "#3a8ee6", x: POST.x - 6.2, z: POST.z + 7.2, yaw: 0.35, s: 1, idle: "sort", cps: 48,
     look: { skin: "#8d5a3b", shirt: "#2f5d9e", sleeve: "#2f5d9e", pants: "#23395e" },
     more: ["Anything else? Quickly now!", "What else, {name}?"],
@@ -2080,7 +2010,6 @@ const TOWN = [
 // opening a shop from its keeper uses the same centered shop window as riding into its ring
 const SHOP_OPEN = {
   egg: () => { shopKind = "egg"; show("p-shop"); },
-  mount: () => { shopKind = "mount"; show("p-shop"); },
 };
 function openShop(kind) { endTalk(); SHOP_OPEN[kind](); return null; }
 for (const n of TOWN) {
@@ -2676,10 +2605,9 @@ const mapPlotLine = (g, p, c, w) => { g.save(); g.setLineDash([2, 1.5]); g.strok
   const bx = (x, z, w, h) => { g.fillStyle = PAPER; g.fillRect(x, z, w, h); g.strokeStyle = INK; g.lineWidth = 0.6; g.strokeRect(x, z, w, h); };
   inFrame(POST, () => { bx(-9.5, -5.5, 19, 11); bx(-7.5, -3.5, 15, 7); g.fillStyle = INK; g.fillRect(-4, 4.6, 8, 0.9); });
   inFrame(SHOP_B, () => { bx(-6.5, -4.5, 13, 9); g.beginPath(); g.ellipse(0, 0, 2, 2.6, 0, 0, TAU); g.stroke(); });
-  inFrame(MOUNT_B, () => { bx(-6.5, -4.5, 13, 9); g.beginPath(); g.arc(0, 0, 1.8, 0, TAU); g.stroke(); });
   inFrame(POUND, () => { bx(-8.5, -7.5, 17, 9); g.fillStyle = INK; g.fillRect(-8.2, 0.0, 16.4, 0.8); g.lineWidth = 0.4; g.setLineDash([1, 1]); g.strokeRect(-8, 1.1, 16, 7.9); g.setLineDash([]); });
   g.fillStyle = INK; g.fillRect(BOARD.x - 1.3, BOARD.z - 1.8, 2.6, 0.6);
-  for (const [x, z, r] of [[PICKUP.x, PICKUP.z, PICKUP.r], [BOARD.x, BOARD.z, BOARD.r], [SHOP.x, SHOP.z, SHOP.r], [MOUNT.x, MOUNT.z, MOUNT.r], [TRAIN.x, TRAIN.z, TRAIN.r - 1], [LIFTS[0].x, LIFTS[0].z, 2.2]]) mapRing(g, x, z, r, INK, 0.6);
+  for (const [x, z, r] of [[PICKUP.x, PICKUP.z, PICKUP.r], [BOARD.x, BOARD.z, BOARD.r], [SHOP.x, SHOP.z, SHOP.r], [TRAIN.x, TRAIN.z, TRAIN.r - 1], [LIFTS[0].x, LIFTS[0].z, 2.2]]) mapRing(g, x, z, r, INK, 0.6);
   for (const h of houses) if (h.base < SKY_Y) mapHouse(g, h);
   for (const t of trees) if (t.y < SKY_Y) mapTree(g, t);
   // above the town: the high islands and the VIP island (its plots and lift)
@@ -2747,11 +2675,11 @@ function drawMap(now, tx, tz, tsky, guide) {
     const [x, y] = toMap(m.x, m.z); if (x < -10 || y < -10 || x > px + 10 || y > px + 10) continue; const chasing = m.mode === 1;
     g.save(); g.translate(x, y); g.rotate(ang(m.yaw));
     if (!m.kind) {
-      g.fillStyle = "#f4f4f0"; g.strokeStyle = chasing ? (flash ? "#ff3a3a" : "#3a7aff") : "#3d4650"; g.lineWidth = (chasing ? 2 : 1.2) * u;
-      g.fillRect(-3 * u, -5 * u, 6 * u, 10 * u); g.strokeRect(-3 * u, -5 * u, 6 * u, 10 * u); g.fillStyle = "#e08a00"; g.fillRect(-3 * u, 0, 6 * u, 1.5 * u);
+      g.fillStyle = "#d63a3a"; g.strokeStyle = chasing ? (flash ? "#ffffff" : "#3a7aff") : "#7a1a1a"; g.lineWidth = (chasing ? 2 : 1.2) * u;   // (owner, 2026-11-09) red, as in town
+      g.fillRect(-3 * u, -5 * u, 6 * u, 10 * u); g.strokeRect(-3 * u, -5 * u, 6 * u, 10 * u); g.fillStyle = "#ffffff"; g.fillRect(-3 * u, 0, 6 * u, 1.5 * u);
       g.fillStyle = chasing && flash ? "#ff3a3a" : "#7a2020"; g.fillRect(-2.4 * u, -3 * u, 2.2 * u, 1.3 * u); g.fillStyle = chasing && !flash ? "#3a7aff" : "#203a7a"; g.fillRect(0.2 * u, -3 * u, 2.2 * u, 1.3 * u);
     } else {
-      g.fillStyle = "#f4f4f0"; g.strokeStyle = "#3d4650"; g.lineWidth = 1.2 * u; g.beginPath(); g.ellipse(0, -1 * u, 3.2 * u, 4.6 * u, 0, 0, TAU); g.fill(); g.stroke();
+      g.fillStyle = "#d63a3a"; g.strokeStyle = "#7a1a1a"; g.lineWidth = 1.2 * u; g.beginPath(); g.ellipse(0, -1 * u, 3.2 * u, 4.6 * u, 0, 0, TAU); g.fill(); g.stroke();
       g.fillRect(-0.8 * u, 3 * u, 1.6 * u, 5 * u); g.strokeRect(-0.8 * u, 3 * u, 1.6 * u, 5 * u);
       g.rotate(now / 60); g.strokeStyle = "rgba(43,52,64,.75)"; g.lineWidth = 1.3 * u; g.beginPath(); g.moveTo(-7 * u, 0); g.lineTo(7 * u, 0); g.moveTo(0, -7 * u); g.lineTo(0, 7 * u); g.stroke();
     }
@@ -3130,7 +3058,7 @@ function step(dt) {
     for (const e of World.stepVehicles(localVs, [meP], dt, now / 1000, daylight)) onVehEvent(e.k, e.stars || 0);
   }
   // the shops, the training yard and the board open their panel when I ride in
-  const z = !low || me.inst ? null : hyp(me.x - SHOP.x, me.z - SHOP.z) < SHOP.r ? "p-shop:egg" : hyp(me.x - MOUNT.x, me.z - MOUNT.z) < MOUNT.r ? "p-shop:mount" : hyp(me.x - TRAIN.x, me.z - TRAIN.z) < TRAIN.r ? "p-train" : hyp(me.x - BOARD.x, me.z - BOARD.z) < BOARD.r ? "p-board" : null;
+  const z = !low || me.inst ? null : hyp(me.x - SHOP.x, me.z - SHOP.z) < SHOP.r ? "p-shop:egg" : hyp(me.x - TRAIN.x, me.z - TRAIN.z) < TRAIN.r ? "p-train" : hyp(me.x - BOARD.x, me.z - BOARD.z) < BOARD.r ? "p-board" : null;
   if (z !== zone) { if (zone && openPanel === zone.split(":")[0]) closePanels(); zone = z; if (z) { const [id, kind] = z.split(":"); if (kind) shopKind = kind; show(id); } }
   contractStep(); fxStep(dt);
   const cs = (0.5 + windNow.mph * 0.08) * dt;   // clouds drift with the wind
@@ -3190,4 +3118,4 @@ syncBeams(); hud(); requestAnimationFrame(frame); connect();
 $("lgo").disabled = $("lnew").disabled = true;
 
 // for tests
-window.Pets = { get save() { return save; }, enterHouse, leaveHouse, get inter() { return inter; }, lotDoor, nearDoor, deleteSel, turnBuild, get myPlotId() { return myPlot; }, INT, get mine() { return mine; }, BOOSTS, nearestDry, get arena() { return { AR, OBS, next: arNext, TRM, obsSpot }; }, me, houses, get contract() { return contract; }, get packageEvent() { return packageEvent; }, get packageMeshes() { return packageMeshes; }, get online() { return online; }, get netOk() { return netOk; }, get loggedIn() { return loggedIn; }, get others() { return others; }, get myPlot() { return myPlot; }, plotState, get party() { return party; }, get trading() { return trading; }, step, deliver, fillBag, buyEgg, buyMount, folk, startTalk, talkNext, talkPick, endTalk, get talk() { return talk; }, train, startContract, ride, setPen, collectPens, openBuild, closeBuild, get building() { return building; }, buildTap, showGhost, runAct, netSend, setPackageEvent, eventFlash, EGGS, MOUNT_PRICE, SPECIES, PICKUP, SHOP, MOUNT, TRAIN, BOARD, ISLANDS, World, vehs, localVs, cam, terrain, contractOver, houseSurface, houseWall, refreshTest: () => refreshMyPlot(), emitConfetti, firework, caught, trade, persist, flushSave, set skyOffset(v) { skyOffset = v; }, get daylight() { return skyNow.day; }, get environment() { return { ...environment }; }, get sky() { return { day: skyNow.day, rain: skyNow.rain, snow: skyNow.snow, storm: skyNow.storm, fog: skyNow.fog }; }, get wind() { return { mph: windNow.mph, x: WIND.x, z: WIND.z }; }, windRideFactor, reach, camera, V3: THREE.Vector3, teleport: (x, z, y) => { me.x = x; me.z = z; me.y = y === undefined ? terrain(x, z) : y; me.vy = 0; } };
+window.Pets = { get save() { return save; }, enterHouse, leaveHouse, get inter() { return inter; }, lotDoor, nearDoor, deleteSel, turnBuild, get myPlotId() { return myPlot; }, INT, get mine() { return mine; }, BOOSTS, nearestDry, get arena() { return { AR, OBS, next: arNext, TRM, obsSpot }; }, me, houses, get contract() { return contract; }, get packageEvent() { return packageEvent; }, get packageMeshes() { return packageMeshes; }, get online() { return online; }, get netOk() { return netOk; }, get loggedIn() { return loggedIn; }, get others() { return others; }, get myPlot() { return myPlot; }, plotState, get party() { return party; }, get trading() { return trading; }, step, deliver, fillBag, buyEgg, folk, startTalk, talkNext, talkPick, endTalk, get talk() { return talk; }, train, startContract, ride, setPen, collectPens, openBuild, closeBuild, get building() { return building; }, buildTap, showGhost, runAct, netSend, setPackageEvent, eventFlash, EGGS, SPECIES, PICKUP, SHOP, TRAIN, BOARD, ISLANDS, World, vehs, localVs, cam, terrain, contractOver, houseSurface, houseWall, refreshTest: () => refreshMyPlot(), emitConfetti, firework, caught, trade, persist, flushSave, set skyOffset(v) { skyOffset = v; }, get daylight() { return skyNow.day; }, get environment() { return { ...environment }; }, get sky() { return { day: skyNow.day, rain: skyNow.rain, snow: skyNow.snow, storm: skyNow.storm, fog: skyNow.fog }; }, get wind() { return { mph: windNow.mph, x: WIND.x, z: WIND.z }; }, windRideFactor, reach, camera, V3: THREE.Vector3, teleport: (x, z, y) => { me.x = x; me.z = z; me.y = y === undefined ? terrain(x, z) : y; me.vy = 0; } };

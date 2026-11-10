@@ -110,16 +110,13 @@ try {
     P.endTalk(); await wait(100); return P.talk ? "the talk didn't end" : "";
   });
   if (talked) problems.push(talked);
-  // the mount shop: riding into its ring opens it, showing your coins; buying a pet takes its price and rides it
-  step = "buy a pet in the mount shop";
-  await page.evaluate(() => { const P = window.Pets; P.save.coins = 3000; P.teleport(P.MOUNT.x, P.MOUNT.z); });
-  await page.locator("#shopname", { hasText: "Mount Shop" }).waitFor({ timeout: 5000 });
+  // the egg shop: riding into its ring opens it, showing your coins (owner, 2026-11-09: the mount shop closed)
+  step = "open the egg shop";
+  await page.evaluate(() => { const P = window.Pets; P.save.coins = 3000; P.teleport(P.SHOP.x, P.SHOP.z); });
+  await page.locator("#shopname", { hasText: "Egg Shop" }).waitFor({ timeout: 5000 });
   await page.locator("#shopcash", { hasText: "3,000" }).waitFor({ timeout: 5000 });
-  const shop = await page.evaluate(() => [document.getElementById("shopname").textContent, document.getElementById("shopcash").textContent]);
-  if (shop[0] !== "Mount Shop" || shop[1] !== "3,000") problems.push(`the mount shop didn't open with the coins shown (${shop.join(", ")})`);
-  await page.locator("#shopitems .card", { hasText: "Dragon" }).first().locator("button").click({ timeout: 5000 });
-  const bought = await page.evaluate(() => { const s = window.Pets.save; return { coins: s.coins, sp: s.pets.find((p) => p.id === s.ride).sp, cash: document.getElementById("shopcash").textContent }; });
-  if (bought.coins !== 500 || bought.sp !== "dragon" || bought.cash !== "500") problems.push("buying a Dragon for 2,500: " + JSON.stringify(bought));
+  await page.evaluate(() => { const P = window.Pets; const s = P.save, p = { id: s.nextId++, sp: "dragon", lv: 1 }; s.pets.push(p); P.ride(p.id); });
+  if ((await page.evaluate(() => { const s = window.Pets.save; return s.pets.find((p) => p.id === s.ride).sp; })) !== "dragon") problems.push("couldn't ride a Dragon");
   step = "fly and pitch with the camera";
   const flightStart = await page.evaluate(() => { const P = window.Pets; P.teleport(0, 14, 40); P.cam.pitch = -0.5; return P.me.y; });
   await page.waitForTimeout(300);
