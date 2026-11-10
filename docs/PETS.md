@@ -27,8 +27,9 @@ Asked (owner): a web game on atamus.io (not Roblox), on its own page; the cargo 
   - **Land and air pets never go in or on the water** (owner, 2026-11-09): they can't walk into it, and anyone who ends
     up on it (a jump, a glide, a teleport) is put on the nearest shore. Fliers fly over it (low over it they hover and
     don't land); nobody goes over a waterfall.
-- **Speed boosts (owner, 2026-11-09):** glowing orange arrow pads laid on the roads (following the road's surface;
-  at the same spots along every street, not by the square) for any pet; 22 cyan rings in the air over town (16 to 76 m
+- **Speed boosts (owner, 2026-11-09):** see-through orange chevrons laid on the roads (following the road's surface;
+  at the same spots along every street, not by the square) for any pet; they always point, and run, away from you along
+  the road (owner, 2026-11-09); 22 cyan rings in the air over town (16 to 76 m
   up), there only for fliers. Rings fade out with distance (gone past 120 m). Going through one: 1.6× for
   5 s (on top of Speed Candy), with a trail in the boost's color; not on foot or at home.
 - **Streets (owner, 2026-11-09: a grid):** straight streets edge to edge, two running north-south and two east-west on
@@ -155,6 +156,9 @@ Asked (owner): a web game on atamus.io (not Roblox), on its own page; the cargo 
 
 ## Animal control (owner, 2026-11-08)
 
+- **Sight lines (owner, 2026-11-09):** round each van that's looking, red lines run out along the ground to how far it
+  can see you (farther ahead, less behind, more per wanted star of yours: `vanSight` in pets-world.js), fading the
+  further they are from the van; hidden while it chases. Drawn in color.
 - 8 white animal control cars with light bars patrol the roads (driving on the right, turning round at a road's end) and 2
   helicopters circle over town. Online the server runs them for the whole room; offline the page does.
 - They only go after players carrying parcels (owner, 2026-11-08); a chase ends if the bag empties (no star).

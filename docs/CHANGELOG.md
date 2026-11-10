@@ -6,6 +6,7 @@ and any rule decided. Use `git log` for the code detail (and for the older Atamu
 
 ## 2026-11-09
 
+- **Chevron boosts and van sight lines (owner).** Road boosts are see-through chevrons that point and run away from you; animal control vans show red sight lines on the ground, fading with distance.
 - **Trimmed (owner).** Water pets scrapped (Duck, Sea Turtle and Sea Serpent deleted from saves), the mount shop closed (the square now has four buildings, 90° apart), Package Rush turned off for now, and animal control is red on the minimap too.
 - **Plain grays (owner).** No outlines or hatching at all: the world is shades of gray, textures kept; labels, guides, rings and animal control stay in color.
 - **No stripes on phones; red animal control (owner).** Flat ground no longer shows lines on phones (full-precision depth, and outlines only where depth breaks); animal control vans and helicopters are red, in color.

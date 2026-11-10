@@ -4,7 +4,7 @@
 // its edge; animal control chases you. Co-op: everyone in a room rides the same town, works on contracts together and
 // chats. The server (packages/server/src/pets.js) shares players, runs animal control, contracts and chat.
 import * as THREE from "./vendor/three.module.min.js";
-import * as World from "./pets-world.js?v=1793100063";
+import * as World from "./pets-world.js?v=1793100064";
 
 const $ = (id) => document.getElementById(id);
 const TAU = Math.PI * 2, clamp = (v, a, b) => Math.max(a, Math.min(b, v)), hyp = Math.hypot;
@@ -248,9 +248,9 @@ const BOOSTS = [];
   for (let n = 0; n < 14; n++) { const a = (n / 14) * TAU + 0.35, r = n % 2 ? 95 : 160, x = Math.cos(a) * r, z = Math.sin(a) * r; BOOSTS.push({ k: "air", x, y: terrain(x, z) + 16 + (n % 3) * 9, z, yaw: a, r: 4 }); }
   for (const [x, z, y] of [[0, -20, 34], [0, 20, 34], [-20, 0, 48], [20, 0, 48], [-70, -70, 76], [70, -70, 76], [-70, 70, 76], [70, 70, 76]]) BOOSTS.push({ k: "air", x, y, z, yaw: Math.atan2(x, z), r: 4 });
   for (const b of BOOSTS) if (b.k === "water") { b.y = World.waterAt(b.x, b.z); b.yaw = 0; }
-  const arrowTex = (() => { const c = document.createElement("canvas"); c.width = 64; c.height = 128; const g = c.getContext("2d"); g.fillStyle = "#ff9f1a"; g.fillRect(0, 0, 64, 128); g.fillStyle = "#fff4c2"; for (const y of [18, 58, 98]) { g.beginPath(); g.moveTo(8, y + 22); g.lineTo(32, y); g.lineTo(56, y + 22); g.lineTo(56, y + 34); g.lineTo(32, y + 12); g.lineTo(8, y + 34); g.fill(); } const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace; t.wrapT = THREE.RepeatWrapping; return t; })();
+  // (owner, 2026-11-09) see-through chevrons, no background
+  const arrowTex = (() => { const c = document.createElement("canvas"); c.width = 64; c.height = 128; const g = c.getContext("2d"); g.lineJoin = "round"; g.lineCap = "round"; for (const y of [22, 62, 102]) { g.beginPath(); g.moveTo(10, y + 20); g.lineTo(32, y); g.lineTo(54, y + 20); g.strokeStyle = "rgba(255,159,26,0.95)"; g.lineWidth = 11; g.stroke(); g.strokeStyle = "rgba(255,244,194,0.95)"; g.lineWidth = 5; g.stroke(); } const t = new THREE.CanvasTexture(c); t.wrapS = t.wrapT = THREE.RepeatWrapping; t.colorSpace = THREE.SRGBColorSpace; t.anisotropy = 4; return t; })();
   const swirlTex = (() => { const c = document.createElement("canvas"); c.width = c.height = 128; const g = c.getContext("2d"); g.translate(64, 64); for (let arm = 0; arm < 3; arm++) { g.beginPath(); for (let t = 0; t < 1; t += 0.01) { const a = arm * (TAU / 3) + t * 7, r = 4 + t * 58; g.lineTo(Math.cos(a) * r, Math.sin(a) * r); } g.strokeStyle = "rgba(255,255,255,0.95)"; g.lineWidth = 7; g.lineCap = "round"; g.stroke(); } const rg = g.createRadialGradient(0, 0, 0, 0, 0, 62); rg.addColorStop(0, "rgba(40,60,190,0.9)"); rg.addColorStop(0.7, "rgba(110,130,255,0.5)"); rg.addColorStop(1, "rgba(150,170,255,0)"); g.globalCompositeOperation = "destination-over"; g.fillStyle = rg; g.beginPath(); g.arc(0, 0, 62, 0, TAU); g.fill(); return new THREE.CanvasTexture(c); })();
-  const padM = new THREE.MeshBasicMaterial({ map: arrowTex, polygonOffset: true, polygonOffsetFactor: -8, polygonOffsetUnits: -8 });
   const ringG = new THREE.TorusGeometry(3.2, 0.32, 8, 32), glowG = new THREE.TorusGeometry(3.2, 0.9, 8, 32), swirlG = new THREE.CircleGeometry(2.6, 32).rotateX(-Math.PI / 2);
   for (const b of BOOSTS) {
     if (b.k === "pad") {   // (owner, 2026-11-09: pads cut through the road) laid on the road itself, vertex by vertex
@@ -258,20 +258,24 @@ const BOOSTS = [];
       for (let zi = 0; zi <= NZ; zi++) for (let xi = 0; xi <= NX; xi++) { const lx = (xi / NX - 0.5) * 3.4, lz = (zi / NZ - 0.5) * 5, x = b.x + lx * c + lz * sn, z = b.z - lx * sn + lz * c; pos.push(x, terrain(x, z) + ROAD_LIFT + 0.05, z); uv.push(xi / NX, zi / NZ); }
       for (let zi = 0; zi < NZ; zi++) for (let xi = 0; xi < NX; xi++) { const a = zi * (NX + 1) + xi, bb = a + 1, cc = a + NX + 1, d = cc + 1; idx.push(a, cc, bb, bb, cc, d); }
       const g = new THREE.BufferGeometry(); g.setAttribute("position", new THREE.Float32BufferAttribute(pos, 3)); g.setAttribute("uv", new THREE.Float32BufferAttribute(uv, 2)); g.setIndex(idx);
-      b.g = new THREE.Mesh(g, padM); scene.add(b.g); continue;
+      b.tex = arrowTex.clone(); b.tex.needsUpdate = true; b.dir = 1;   // each pad scrolls its own way: away from me
+      b.g = new THREE.Mesh(g, new THREE.MeshBasicMaterial({ map: b.tex, transparent: true, opacity: 0.8, depthWrite: false, polygonOffset: true, polygonOffsetFactor: -8, polygonOffsetUnits: -8 })); b.g.renderOrder = 2; scene.add(inColor(b.g)); continue;
     }
     const g = new THREE.Group(); g.position.set(b.x, b.y, b.z); g.rotation.y = b.yaw; scene.add(g); b.g = g;
     if (b.k === "air") { b.m = [new THREE.MeshBasicMaterial({ color: "#5fe3ff", transparent: true }), new THREE.MeshBasicMaterial({ color: "#5fe3ff", transparent: true, opacity: 0.25, blending: THREE.AdditiveBlending, depthWrite: false })]; g.add(new THREE.Mesh(ringG, b.m[0]), new THREE.Mesh(glowG, b.m[1])); }
     else { b.m = [new THREE.MeshBasicMaterial({ map: swirlTex, transparent: true, depthWrite: false, side: THREE.DoubleSide })]; const w = new THREE.Mesh(swirlG, b.m[0]); w.position.y = 0.06; w.renderOrder = 3; g.add(w); b.spin = w; }
   }
-  BOOSTS.tex = arrowTex;
 }
 // which boosts this pet can use: road pads any pet riding; rings fliers and gliders; whirlpools swimmers
 const boostFor = (b, kind) => kind !== "foot" && (b.k === "pad" || (b.k === "air" ? kind === "fly" || kind === "glide" : swims()));
 function boostStep(dt) {
-  BOOSTS.tex.offset.y -= dt * 1.5; const kind = me.foot ? "foot" : moveKind();
+  const kind = me.foot ? "foot" : moveKind();
   for (const b of BOOSTS) {
-    if (b.k === "pad") continue;
+    if (b.k === "pad") {   // (owner, 2026-11-09) the chevrons always point, and run, away from me along the road
+      const dir = (me.x - b.x) * Math.sin(b.yaw) + (me.z - b.z) * Math.cos(b.yaw) > 0 ? -1 : 1;
+      if (dir !== b.dir) { b.dir = dir; b.tex.repeat.y = dir; }
+      b.tex.offset.y -= dt * 1.5 * dir; continue;
+    }
     const a = boostFor(b, kind) ? clamp((BOOST_SEE - hyp(b.x - me.x, b.z - me.z, (b.y - me.y) * 0.6)) / BOOST_FADE, 0, 1) : 0;
     b.g.visible = a > 0.01; if (!b.g.visible) continue;
     if (b.k === "air") { b.m[0].opacity = a; b.m[1].opacity = (0.18 + Math.sin(clock * 4) * 0.1) * a; } else { b.m[0].opacity = a; b.spin.rotation.y -= dt * 2.5; }
@@ -1042,6 +1046,19 @@ function heliModel() {
 }
 const localVs = World.makeVehicles();
 const vehs = localVs.map((v) => { const m = v.kind ? heliModel() : vanModel(v.style); scene.add(m.g); blobUnder(m.g, v.kind ? 7 : 5); return Object.assign(m, { kind: v.kind, buf: [], x: v.x, y: v.y, z: v.z, yaw: v.yaw, mode: 0, target: 0, pitch: 0 }); });
+// (owner, 2026-11-09) each van's sight on the ground: red lines out to how far it sees you (your wanted stars count),
+// fading the further they are from the van; shown while it's looking (not while it chases)
+function losLines(stars) {
+  const pos = [], col = [], idx = [], N = 40, r0 = 2.6, w = 0.09;
+  for (let n = 0; n < N; n++) {
+    const a = (n / N) * TAU, f = Math.cos(a), sd = Math.abs(Math.sin(a)), r1 = World.vanSight(f, sd, stars), dx = Math.sin(a), dz = Math.cos(a), px = dz * w, pz = -dx * w, b = pos.length / 3;
+    for (const [r, al] of [[r0, 0.75], [r1, 0]]) for (const s2 of [-1, 1]) { pos.push(dx * r + px * s2, 0, dz * r + pz * s2); col.push(0.86, 0.13, 0.13, al); }
+    idx.push(b, b + 2, b + 1, b + 1, b + 2, b + 3);
+  }
+  const g = new THREE.BufferGeometry(); g.setAttribute("position", new THREE.Float32BufferAttribute(pos, 3)); g.setAttribute("color", new THREE.Float32BufferAttribute(col, 4)); g.setIndex(idx); return g;
+}
+const losM = new THREE.MeshBasicMaterial({ vertexColors: true, transparent: true, depthWrite: false, side: THREE.DoubleSide, polygonOffset: true, polygonOffsetFactor: -6, polygonOffsetUnits: -6 });
+for (const m of vehs) if (!m.kind) { m.los = new THREE.Mesh(losLines(0), losM); m.los.position.y = -0.1; m.los.renderOrder = 2; m.losStars = 0; m.g.add(inColor(m.los)); }
 const meP = { id: 0, x: 0, y: 0, z: 0, stars: 0, lastChased: 0, lastStar: 0, immuneUntil: 0 };   // me, for running them offline
 const tmpS = {}, beamB = {}, DOWN = new THREE.Vector3(0, -1, 0);
 function vehiclesDraw(dt) {
@@ -1067,6 +1084,7 @@ function vehiclesDraw(dt) {
       m.spot.angle = beamHalf * 1.15; m.beam.visible = lightsOn; m.spot.intensity = lightsOn ? 8 : 0; m.lens.material.color.set(lightsOn ? "#fffdf2" : "#35363a");
     }
     m.g.position.set(m.x, m.y, m.z); m.g.rotation.y = m.yaw;
+    if (m.los) { m.los.visible = !chasing && !me.inst; if (m.losStars !== (me.stars | 0)) { m.losStars = me.stars | 0; m.los.geometry.dispose(); m.los.geometry = losLines(m.losStars); } }
     m.red.material.color.set(!lightsOn ? "#4a2929" : chasing ? (flash ? "#ff3a3a" : "#5a1010") : "#7a2020");
     m.blue.material.color.set(!lightsOn ? "#293447" : chasing ? (flash ? "#1a2a5a" : "#3a7aff") : "#203a7a");
   });
