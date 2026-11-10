@@ -81,8 +81,8 @@ renderer.shadowMap.enabled = false;   // (owner, 2026-11-09) baked shadows inste
 const scene = new THREE.Scene();
 scene.background = new THREE.Color("#8fd3ff"); scene.fog = new THREE.Fog("#bfe6ff", 150, 560);
 const camera = new THREE.PerspectiveCamera(55, 1, 0.5, 1000);
-scene.add(new THREE.HemisphereLight("#ffffff", "#7aa35a", 1.1));
-const sun = new THREE.DirectionalLight("#fff6e0", 1.6); sun.castShadow = true; sun.shadow.mapSize.set(1024, 1024); sun.shadow.bias = -0.0006; sun.shadow.normalBias = 0.05;   // (owner, 2026-11-08: flickering) no shadow acne
+{ const hemi = new THREE.HemisphereLight("#ffffff", "#7aa35a", 1.1); hemi.layers.enableAll(); scene.add(hemi); }   // (lights reach the in-color layer too)
+const sun = new THREE.DirectionalLight("#fff6e0", 1.6); sun.layers.enableAll(); sun.castShadow = true; sun.shadow.mapSize.set(1024, 1024); sun.shadow.bias = -0.0006; sun.shadow.normalBias = 0.05;   // (owner, 2026-11-08: flickering) no shadow acne
 Object.assign(sun.shadow.camera, { left: -45, right: 45, top: 45, bottom: -45, near: 1, far: 200 }); scene.add(sun, sun.target);
 const dummy = new THREE.Object3D();
 const MATS = new Map(), mat = (c) => { if (!MATS.has(c)) MATS.set(c, new THREE.MeshLambertMaterial({ color: c })); return MATS.get(c); };
@@ -1041,8 +1041,8 @@ const POOL_G = new THREE.PlaneGeometry(5.5, 11).rotateX(-Math.PI / 2);
 const headPoolM = new THREE.MeshBasicMaterial({ color: "#fff1c8", transparent: true, opacity: 0, depthWrite: false, blending: THREE.AdditiveBlending, map: (() => { const cv = document.createElement("canvas"); cv.width = cv.height = 64; const x = cv.getContext("2d"), gr = x.createRadialGradient(32, 32, 0, 32, 32, 32); gr.addColorStop(0, "rgba(255,255,255,1)"); gr.addColorStop(1, "rgba(255,255,255,0)"); x.fillStyle = gr; x.fillRect(0, 0, 64, 64); return new THREE.CanvasTexture(cv); })(), polygonOffset: true, polygonOffsetFactor: -2 });
 function vanModel(style = 1) {
   const g = new THREE.Group(), body = new THREE.Group(); g.add(body);
-  box(2.4, 1.8, 3.2, "#f4f4f0", 0, 1.5, -0.6, body); box(2.34, 1.4, 1.6, "#f4f4f0", 0, 1.3, 1.72, body); box(2.1, 0.7, 0.1, "#3a5a7a", 0, 1.6, 2.58, body);
-  box(2.46, 0.35, 3.24, "#e08a00", 0, 1.2, -0.6, body); box(2.5, 0.3, 4.9, "#3d4650", 0, 0.55, 0.2, body);
+  box(2.4, 1.8, 3.2, "#d63a3a", 0, 1.5, -0.6, body); box(2.34, 1.4, 1.6, "#d63a3a", 0, 1.3, 1.72, body); box(2.1, 0.7, 0.1, "#3a5a7a", 0, 1.6, 2.58, body);
+  box(2.46, 0.35, 3.24, "#ffffff", 0, 1.2, -0.6, body); box(2.5, 0.3, 4.9, "#3d4650", 0, 0.55, 0.2, body);
   for (const [x, z] of [[-1.1, 1.5], [1.1, 1.5], [-1.1, -1.4], [1.1, -1.4]]) { const w = new THREE.Mesh(new THREE.CylinderGeometry(0.45, 0.45, 0.35, 12), mat("#1d232a")); w.rotation.z = Math.PI / 2; w.position.set(x, 0.45, z); body.add(w); }
   for (let k = 0; k < 4; k++) { box(0.06, 1.1, 0.06, "#1d232a", -1.21, 1.5, -1.9 + k * 0.7, body); box(0.06, 1.1, 0.06, "#1d232a", 1.21, 1.5, -1.9 + k * 0.7, body); }
   const red = new THREE.Mesh(BOX, lightR.clone()); red.scale.set(0.8, 0.25, 0.35); red.position.set(-0.45, 2.15, 1.6); body.add(red);
@@ -1058,12 +1058,13 @@ function vanModel(style = 1) {
   // Three animal-control silhouettes share the same equipment: a compact car, the standard van and a taller SUV.
   if (style === 0) body.scale.set(0.86, 0.8, 0.84);
   else if (style === 2) { body.scale.set(1.05, 1.1, 0.92); box(2.1, 0.12, 2.5, "#3d4650", 0, 2.28, -0.25, body); }
+  inColor(g);   // (owner, 2026-11-09) animal control is red, in color in the sketch look
   return { g, body, red, blue, lamp, lit, spd: 0 };
 }
 function heliModel() {
   const g = new THREE.Group(), body = new THREE.Group(); g.add(body);
-  box(2.4, 2, 4, "#f4f4f0", 0, 0, 0, body); box(2.2, 1.2, 1.4, "#3a5a7a", 0, 0.2, 1.9, body); box(2.46, 0.4, 4.05, "#e08a00", 0, -0.3, 0, body);
-  box(0.5, 0.5, 4.5, "#f4f4f0", 0, 0.4, -4, body); box(0.15, 1.5, 0.9, "#e08a00", 0, 0.9, -6.1, body);
+  box(2.4, 2, 4, "#d63a3a", 0, 0, 0, body); box(2.2, 1.2, 1.4, "#3a5a7a", 0, 0.2, 1.9, body); box(2.46, 0.4, 4.05, "#ffffff", 0, -0.3, 0, body);
+  box(0.5, 0.5, 4.5, "#d63a3a", 0, 0.4, -4, body); box(0.15, 1.5, 0.9, "#ffffff", 0, 0.9, -6.1, body);
   for (const x of [-1, 1]) { box(0.15, 0.15, 4, "#3d4650", x * 1.2, -1.5, 0, body); box(0.12, 0.6, 0.12, "#3d4650", x * 1.1, -1.2, 1, body); box(0.12, 0.6, 0.12, "#3d4650", x * 1.1, -1.2, -1, body); }
   const rotor = new THREE.Group(); rotor.position.y = 1.25; body.add(rotor); box(0.3, 0.4, 0.3, "#3d4650", 0, -0.1, 0, rotor); box(11, 0.08, 0.5, "#2b3440", 0, 0.1, 0, rotor); box(0.5, 0.08, 11, "#2b3440", 0, 0.1, 0, rotor);
   const tail = new THREE.Group(); tail.position.set(0.3, 0.9, -6.1); body.add(tail); box(0.05, 2, 0.25, "#2b3440", 0, 0, 0, tail);
@@ -1073,7 +1074,7 @@ function heliModel() {
   // (owner, 2026-11-09) the searchlight (pets-world.js aims it): a lamp under the nose, a real light where it lands and
   // the beam down to it; the light is always there (only its strength changes) so nothing has to recompile
   box(0.6, 0.45, 0.6, "#2b3440", 0, -1.15, 1.6, body); const lens = new THREE.Mesh(new THREE.CircleGeometry(0.26, 16).rotateX(Math.PI / 2), new THREE.MeshBasicMaterial({ color: "#35363a" })); lens.position.set(0, -1.39, 1.6); body.add(lens);
-  const spot = new THREE.SpotLight("#f4f7ff", 0, 0, World.BEAM.half * 1.15, 0.45, 0); scene.add(spot, spot.target);
+  const spot = new THREE.SpotLight("#f4f7ff", 0, 0, World.BEAM.half * 1.15, 0.45, 0); spot.layers.enableAll(); scene.add(spot, spot.target);
   const beam = new THREE.Mesh(BEAM_CONE, searchBeamM); beam.frustumCulled = false; scene.add(beam);
   return { g, body, red, blue, rotor, tail, lens, spot, beam, ba: 0, bd: 15 };
 }
@@ -1193,7 +1194,7 @@ function placeCamera(dt) {
 // ---- the sketch look (owner, 2026-11-09: like a pencil drawing, to feel like a prototype): the world is drawn as usual
 // into a texture, then one pass over the screen turns it to white paper: light grey shading by brightness, pencil
 // hatching in the darker parts, and black outlines where the depth or the brightness changes sharply ----
-const sketchRT = new THREE.WebGLRenderTarget(1, 1, { depthTexture: new THREE.DepthTexture(1, 1) });
+const sketchRT = new THREE.WebGLRenderTarget(1, 1, { depthTexture: new THREE.DepthTexture(1, 1, THREE.UnsignedIntType) });   // (owner, 2026-11-09: lines on phones) full-precision depth
 const sketchMat = new THREE.ShaderMaterial({
   uniforms: { tColor: { value: sketchRT.texture }, tDepth: { value: sketchRT.depthTexture }, texel: { value: new THREE.Vector2(1, 1) }, near: { value: camera.near }, far: { value: camera.far }, gain: { value: 1 } },
   vertexShader: "varying vec2 vUv; void main() { vUv = uv; gl_Position = vec4(position.xy, 0.0, 1.0); }",
@@ -1204,15 +1205,20 @@ const sketchMat = new THREE.ShaderMaterial({
     float dep(vec2 uv) { return lin(texture2D(tDepth, uv).r); }
     void main() {
       float L = min(1.0, lum(vUv) * gain), dc = dep(vUv);   // gain: the night drawn a little lighter
-      float gx = 0.0, gy = 0.0, dx = 0.0, dy = 0.0;
+      float gx = 0.0, gy = 0.0;
       for (int i = -1; i <= 1; i++) for (int j = -1; j <= 1; j++) {
         if (i == 0 && j == 0) continue;
         vec2 o = vec2(float(i), float(j)) * texel; float w = (i == 0 || j == 0) ? 2.0 : 1.0;
-        float l = lum(vUv + o), d = dep(vUv + o);
-        gx += float(i) * w * l; gy += float(j) * w * l; dx += float(i) * w * d; dy += float(j) * w * d;
+        float l = lum(vUv + o);
+        gx += float(i) * w * l; gy += float(j) * w * l;
       }
+      // depth edges: where the depth bends (second difference across each axis), so flat ground seen at a slant
+      // (whose depth changes evenly) draws no lines
+      vec2 tx = vec2(texel.x, 0.0), ty = vec2(0.0, texel.y);
+      float bend = max(max(abs(dep(vUv + tx) + dep(vUv - tx) - 2.0 * dc), abs(dep(vUv + ty) + dep(vUv - ty) - 2.0 * dc)),
+        max(abs(dep(vUv + tx + ty) + dep(vUv - tx - ty) - 2.0 * dc), abs(dep(vUv + tx - ty) + dep(vUv - tx + ty) - 2.0 * dc)));
       float eL = smoothstep(0.22, 0.5, length(vec2(gx, gy)));
-      float eD = smoothstep(0.035, 0.09, length(vec2(dx, dy)) / max(dc, 0.5)) * step(dc, far * 0.9);
+      float eD = smoothstep(0.03, 0.08, bend / max(dc, 0.5)) * step(dc, far * 0.9);
       float edge = max(eL, eD);
       // (owner, 2026-11-09: no hatching) flat grays by brightness, on off-white paper
       vec3 paper = vec3(0.985, 0.978, 0.955);
