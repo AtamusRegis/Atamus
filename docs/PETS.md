@@ -106,10 +106,12 @@ Asked (owner): a web game on atamus.io (not Roblox), on its own page; the cargo 
 - Roads are laid on the land vertex by vertex (5 across, every ~2 m) just above it, and pets stand on the road surface.
 - **Sketch look (owner, 2026-11-09):** the world is drawn like a prototype sketch: a screen pass turns the rendered
   scene into flat, clear grays on off-white paper (by brightness; no hatching, no ground speckle) with dark outlines
-  (from brightness and depth edges); nights are brightened so it stays readable. Name tags, place labels and speech
+  (from brightness, and from depth only where it breaks, so flat ground at a slant draws no lines; full-precision
+  depth, owner 2026-11-09: phones showed stripes); nights are brightened so it stays readable. Name tags, place labels and speech
   bubbles are drawn after the pass, in color, still hidden behind buildings; so are the guides and interaction circles (owner,
   2026-11-09): the guide arrow, the place rings (pickup, board, shops, training yard, lifts) and lift beams, the beams
-  over parcel houses, Package Rush beams and rings, and the arena's next-obstacle beam. The HUD keeps its colors; the minimap is drawn in
+  over parcel houses, Package Rush beams and rings, and the arena's next-obstacle beam; and **animal control is red** (vans and helicopters, red with a white stripe;
+  owner, 2026-11-09). The lights reach that layer too. The HUD keeps its colors; the minimap is drawn in
   ink too (below).
 - **Shadows are baked (owner, 2026-11-09):** no live shadows; the ground is darker under and a little to one side of
   every house, plaza building and tree (soft-edged, painted in once), and a soft dark spot lies on the ground under
