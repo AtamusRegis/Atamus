@@ -104,10 +104,10 @@ Asked (owner): a web game on atamus.io (not Roblox), on its own page; the cargo 
   2026-11-08):** the more of you it hides (5 points on you), the more see-through it gets (down to 18%), easing in and
   out.
 - Roads are laid on the land vertex by vertex (5 across, every ~2 m) just above it, and pets stand on the road surface.
-- **Sketch look (owner, 2026-11-09):** the world is drawn like a pencil sketch: a screen pass turns the rendered
-  scene into off-white paper with dark outlines (from brightness and depth edges) and light diagonal hatching in the
-  darker areas; nights are brightened so the drawing stays readable. Name tags, place labels and speech bubbles are
-  drawn after the pass, in color, still hidden behind buildings; so are the guides and interaction circles (owner,
+- **Sketch look (owner, 2026-11-09):** the world is drawn like a prototype sketch: a screen pass turns the rendered
+  scene into flat, clear grays on off-white paper (by brightness; no hatching, no ground speckle) with dark outlines
+  (from brightness and depth edges); nights are brightened so it stays readable. Name tags, place labels and speech
+  bubbles are drawn after the pass, in color, still hidden behind buildings; so are the guides and interaction circles (owner,
   2026-11-09): the guide arrow, the place rings (pickup, board, shops, training yard, lifts) and lift beams, the beams
   over parcel houses, Package Rush beams and rings, and the arena's next-obstacle beam. The HUD keeps its colors; the minimap is drawn in
   ink too (below).
