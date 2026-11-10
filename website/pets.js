@@ -4,7 +4,7 @@
 // its edge; animal control chases you. Co-op: everyone in a room rides the same town, works on contracts together and
 // chats. The server (packages/server/src/pets.js) shares players, runs animal control, contracts and chat.
 import * as THREE from "./vendor/three.module.min.js";
-import * as World from "./pets-world.js?v=1793100064";
+import * as World from "./pets-world.js?v=1793100065";
 
 const $ = (id) => document.getElementById(id);
 const TAU = Math.PI * 2, clamp = (v, a, b) => Math.max(a, Math.min(b, v)), hyp = Math.hypot;
@@ -1167,6 +1167,8 @@ function placeCamera(dt) {
   let lx = me.x, ly = cam.y + 1.8, lz = me.z;
   shot.k += ((talk ? 1 : 0) - shot.k) * Math.min(1, dt * 3.2);
   if (shot.n && shot.k > 0.002) { const k = smooth(clamp(shot.k, 0, 1)); shotAt(shot.n); cx += (SH.cx - cx) * k; cy += (SH.cy - cy) * k; cz += (SH.cz - cz) * k; lx += (SH.lx - lx) * k; ly += (SH.ly - ly) * k; lz += (SH.lz - lz) * k; }
+  cine.k += ((cine.on ? 1 : 0) - cine.k) * Math.min(1, dt * 2.2);
+  if (cine.k > 0.002) { const k = smooth(clamp(cine.k, 0, 1)); cx += (cine.cx - cx) * k; cy += (cine.cy - cy) * k; cz += (cine.cz - cz) * k; lx += (cine.lx - lx) * k; ly += (cine.ly - ly) * k; lz += (cine.lz - lz) * k; }
   camera.position.set(cx, cy, cz); camera.lookAt(lx, ly, lz);
   sun.position.set(me.x + skyNow.sun.x * 90, me.y + Math.max(20, skyNow.sun.y * 90), me.z + skyNow.sun.z * 90); sun.target.position.set(me.x, me.y, me.z);
   fadeHouses(dt, cx, cy, cz);
@@ -1352,7 +1354,7 @@ function renderShop() {
       + `<span class="stats">${egg.odds.map((o, r) => (o ? `<span style="color:${RARITY[r].c}">${o}%</span>` : "")).join("")}</span>`;
     const b = document.createElement("button"); b.className = "btn gold"; b.type = "button"; b.innerHTML = `<span class="coin" style="display:inline-block;vertical-align:-3px"></span> ${fmt(egg.price)}`; b.disabled = save.coins < egg.price; b.onclick = (ev) => { ev.stopPropagation(); buyEgg(egg, false); }; d.appendChild(b);
     if (save.pets.length >= World.petCap(save)) { b.disabled = true; b.textContent = "Full"; }
-    if (egg.id === "basic" && save.items.ticket > 0) { const t = document.createElement("button"); t.className = "btn"; t.type = "button"; t.textContent = ITEMS.ticket.name + " ×" + save.items.ticket; t.onclick = (ev) => { ev.stopPropagation(); buyEgg(egg, true); }; d.appendChild(t); }
+    if (egg.id === "basic" && save.items.ticket > 0) { const t = document.createElement("button"); t.className = "btn"; t.type = "button"; t.textContent = ITEMS.ticket.name + " ×" + save.items.ticket; t.onclick = (ev) => { ev.stopPropagation(); buyEgg(egg, true); }; if (intro && intro.stage === "egg") t.classList.add("glow"); d.appendChild(t); }
     el.appendChild(d);
   }
 }
@@ -1405,7 +1407,7 @@ function hatch(p, egg) {
   anim();
   // (owner, 2026-11-09) Not now keeps you on the pet you're riding; the new one waits in your Pets list
   const done = (go) => {
-    $("hatch").style.display = "none"; if (go) ride(p.id); if (openPanel === "p-shop") renderShop();
+    $("hatch").style.display = "none"; if (go) ride(p.id); if (openPanel === "p-shop") renderShop(); if (intro && intro.stage === "egg") introGo("bye");
     emitConfetti(me.x, me.y + 3, me.z, 90, 6, 9); firework(me.x - 4, me.y + 2, me.z); if (s.r >= 1) { firework(me.x + 4, me.y + 2, me.z, 0.3); firework(me.x, me.y + 2, me.z - 4, 0.6, [rc, "#ffffff"]); }
   };
   $("hatchok").onclick = () => done(true); $("hatchno").onclick = () => done(false);
@@ -1501,7 +1503,7 @@ function reach(air) {
   return air ? 90 + Math.max(0, best - 9) * 40 : 75 + Math.max(0, best - 7) * 32;
 }
 function deliver(i) {
-  const h = houses[i]; me.bag.splice(me.bag.indexOf(i), 1); syncBeams(); deliveryNotice(me.bag.length);
+  const h = houses[i]; me.bag.splice(me.bag.indexOf(i), 1); syncBeams(); deliveryNotice(me.bag.length); if (intro && intro.parcels && intro.parcels.includes(i)) intro.dl.push(i);
   const coins = Math.round((8 + Math.round(h.d / 10)) * (h.sky ? 2 : 1) * (1 + STAR_PAY * me.stars)); save.coins += coins; save.delivered++;
   toast("+" + coins, "#e08a00");
   emitConfetti(h.mx, h.my + 1.8, h.mz, h.sky ? 80 : 45, 4, 7); emitSparks(h.mx, h.my + 1.5, h.mz, 14, 5, ["#ffd35a", "#fff4c0"], 0.8, 2);
@@ -1880,6 +1882,59 @@ function poiStep() {
   }
   homeStep();
 }
+// ---- the walk-through (owner, 2026-11-09): once, for every courier (new or not, `intro` in their data), after the
+// What's New panel: Walt the mailman asks for help; two short scenes circle an animal control van, then a helicopter
+// (the camera 45° above, going round them); back with Walt, he hands over two parcels and the camera moves to the
+// nearest one's mailbox; delivering both earns an Egg Ticket and the arrow points to the egg shop, where the ticket
+// button glows; once the egg hatches the camera goes back to Walt, who tells about contracts and wishes you luck.
+// Walking away from Walt (Escape) skips the rest. ----
+let intro = null, introWait = 0;
+const cine = { on: false, k: 0, cx: 0, cy: 0, cz: 0, lx: 0, ly: 0, lz: 0 };
+const walt = () => TOWN.find((n) => n.id === "walt");
+function introSay(node) { const w = walt(); w.cool = 0; intro.talking = true; startTalk(w, node); }
+function introGo(stage) {
+  if (!intro) return;
+  intro.stage = stage; intro.t = 0; intro.talking = false; cine.on = false;
+  if (stage === "van" || stage === "heli") { cine.on = true; introSay(stage === "van" ? "i2" : "i3"); }
+  else if (stage === "parcels") introSay("i4");
+  else if (stage === "mailbox") {
+    // two parcels for the nearest houses to the post office; the camera goes to the first one's mailbox
+    const near = houses.map((h, i) => i).filter((i) => !houses[i].sky).sort((a, b) => houses[a].d - houses[b].d).slice(0, 2);
+    me.bag = near.slice(); intro.parcels = near; intro.dl = []; syncBeams(); hudKey = ""; toast("+2");
+    const h = houses[near[0]]; cine.on = true; cine.lx = h.mx; cine.ly = h.my + 1; cine.lz = h.mz; const a = Math.atan2(walt().x - h.mx, walt().z - h.mz); cine.cx = h.mx + Math.sin(a) * 11; cine.cz = h.mz + Math.cos(a) * 11; cine.cy = h.my + 6;
+    introSay("i5");
+  } else if (stage === "egg") {
+    save.items.ticket++; persist(); toast(ITEMS.ticket.name, ITEMS.ticket.c); emitConfetti(me.x, me.y + 3, me.z, 60, 4, 7); hudKey = "";
+    if (save.pets.length >= World.petCap(save)) introGo("bye");   // no room for an egg: straight on
+  } else if (stage === "bye") { closePanels(); introSay("i6"); }
+  else if (stage === "done") { intro = null; save.intro = 1; persist(); }
+}
+function introGuide() { return intro && intro.stage === "egg" ? [SHOP.x, 0, SHOP.z] : null; }
+function introStep(dt) {
+  if (!intro) {
+    let skip = false; try { skip = !!localStorage.getItem("petdelivery.nointro"); } catch (e) { /* none */ }
+    const ready = loggedIn && !save.intro && !skip && !talk && !building && !me.inst && $("news").style.display !== "block" && $("login").style.display === "none";
+    introWait = ready ? introWait + dt : 0;
+    if (introWait > 1.2) {   // begin by the post office, facing Walt
+      intro = { stage: "meet", t: 0 }; const w = walt(); me.x = w.x + 1.5; me.z = w.z + 7; me.y = terrain(me.x, me.z); me.vy = 0; cam.y = me.y; cam.yaw = 0; me.flying = false;
+      introSay("i1");
+    }
+    return;
+  }
+  intro.t += dt;
+  const orbit = (m, r) => { const a = intro.t * 0.45; cine.lx = m.x; cine.ly = m.y; cine.lz = m.z; cine.cx = m.x + Math.cos(a) * r; cine.cz = m.z + Math.sin(a) * r; cine.cy = m.y + r; };   // 45° above, going round
+  if (intro.stage === "van" || intro.stage === "heli") {
+    if (!intro.m) intro.m = {};
+    const want = intro.stage === "heli" ? 1 : 0;
+    if (!intro.m[intro.stage]) intro.m[intro.stage] = vehs.filter((m) => (m.kind ? 1 : 0) === want).sort((a, b) => hyp(a.x - me.x, a.z - me.z) - hyp(b.x - me.x, b.z - me.z))[0];
+    const m = intro.m[intro.stage]; if (m) orbit(m, want ? 24 : 12);
+  }
+  if (intro.stage === "deliver") {
+    const rest = intro.parcels.filter((i) => !intro.dl.includes(i));
+    if (!rest.length) introGo("egg");
+    else if (rest.every((i) => !me.bag.includes(i))) { me.bag.push(...rest); syncBeams(); hudKey = ""; }   // caught: the parcels still to go come back
+  }
+}
 // ---- townsfolk (owner, 2026-11-09): people who live in town: a keeper at each shop and a few folk around the post
 // office, each dressed their own way, standing about their own way, with their own things to talk about. Their name
 // shows in their colour with a speech bubble over it. F next to one (or a tap on them) talks: the camera moves in on
@@ -1901,6 +1956,12 @@ const DRESS = {
     box(0.84, 0.08, 0.44, "#2b1d12", 0, 0.84, 0, g); box(0.16, 0.11, 0.04, "#f2b01e", 0, 0.84, 0.22, g);
     cyl(0.5, 0.04, "#8a5a3a", 0, 2.1, 0, g); cyl(0.27, 0.28, "#8a5a3a", 0, 2.25, 0, g); cyl(0.275, 0.06, "#2b1d12", 0, 2.15, 0, g);
     box(0.28, 0.06, 0.04, "#4a2f1c", 0, 1.76, 0.26, g);
+  },
+  walt(w, g) {   // the mailman: postal cap, a big mustache, a mail bag on a strap
+    cyl(0.27, 0.16, "#2f5d9e", 0, 2.13, 0, g); box(0.42, 0.04, 0.2, "#1d3a66", 0, 2.07, 0.3, g); box(0.1, 0.08, 0.02, "#f2b01e", 0, 2.15, 0.27, g);
+    box(0.24, 0.06, 0.04, "#6b4a32", 0, 1.76, 0.265, g);
+    const strap = box(0.06, 1.05, 0.03, "#7a4f28", 0, 1.2, 0.215, g); strap.rotation.z = -0.62;
+    box(0.4, 0.34, 0.18, "#8a5a3a", 0.32, 0.86, 0.12, g); box(0.42, 0.1, 0.2, "#6b4428", 0.32, 1.02, 0.12, g);
   },
   mabel(w, g) {   // postal cap and badge, glasses, a mail bag, a letter in hand
     cyl(0.27, 0.16, "#23395e", 0, 2.13, 0, g); box(0.42, 0.04, 0.2, "#16263f", 0, 2.07, 0.3, g); box(0.1, 0.08, 0.02, "#f2b01e", 0, 2.15, 0.27, g);
@@ -1977,6 +2038,24 @@ const TOWN = [
       joke: { say: () => pick([["What do you call a dinosaur that delivers mail?", "A Postosaurus!"], ["What did the stamp say to the envelope?", "Stick with me and we'll go places!"], ["What's a cat's favorite thing to deliver?", "Purr-cels!"], ["Why did the parcel go to school?", "To get a little more address-ucation!"]]), opts: "menu" },
       raise: { say: ["A raise? Ha!", "Train that pet of yours and deliver faster. There's your raise."], opts: "menu" },
       bye: { say: [() => pick(["Off you go!", "Mind the mailboxes!", "Deliver safely!"])] },
+    },
+  },
+  {   // (owner, 2026-11-09) the mailman, who walks new couriers through the job
+    id: "walt", name: "Walt", color: "#2f6fd0", x: PICKUP.x - 4.6, z: PICKUP.z - 1.2, yaw: 0.25, s: 1, idle: "sort", cps: 44,
+    look: { skin: "#e0a77f", shirt: "#8fb8e8", sleeve: "#8fb8e8", pants: "#23395e" },
+    more: ["What else, {name}?", "Anything else before you head out?"],
+    menu: [["Any tips?", "tips"], ["Bye", "bye"]],
+    says: {
+      hello: { say: ["Ah, {name}! Good to see you."], opts: "menu" },
+      again: { say: [() => pick(["Back again, {name}?", "Mail never sleeps!", "How's the route treating you?"])], opts: "menu" },
+      tips: { say: () => [pick(["Grab parcels from the gold ring here, then follow the arrow.", "Faster pets get the far houses, and far houses pay more.", "Animal control can't see past those red lines on the ground. Mostly."])], opts: "menu" },
+      bye: { say: [() => pick(["Off you go!", "Deliver safely!", "See you around, {name}!"])] },
+      i1: { say: ["Oh! There you are, {name}!", "My helper ran off chasing a squirrel, and the mail is piling up to the ceiling.", "You and your pet look quick. Could you help me deliver some mail?"], then: () => introGo("van") },
+      i2: { say: ["Careful out there, though. Animal control roams the streets, taking pets back to the animal shelter.", "Their vans patrol every road, and if one spots you carrying parcels, it gives chase!", "Those red lines on the ground show how far it can see."], then: () => introGo("heli") },
+      i3: { say: ["And their helicopters sweep the town with searchlights. Stay out of the light!"], then: () => introGo("parcels") },
+      i4: { say: ["Right then. Here are two parcels for you."], then: () => introGo("mailbox") },
+      i5: { say: ["Take them to the highlighted mailboxes, like that one, to earn some coins.", "Deliver both and I'll give you a voucher for a free egg!"], then: () => introGo("deliver") },
+      i6: { say: ["Look at that! A brand-new pet.", "One more thing: the Contract Board in the middle of the square. Start a contract and everyone in your room delivers together, for a big reward.", "That's everything. Good luck out there, {name}!"], then: () => introGo("done") },
     },
   },
   {
@@ -2092,7 +2171,7 @@ function folkStep(dt) {
 // the talk: what they say, a line at a time, then the answers
 let talk = null;
 const talkEl = $("talk"), talkWho = $("tkwho"), talkText = $("tktext"), talkOpts = $("tkopts"), shot = { k: 0, n: null, side: 1 }, SH = {};
-function startTalk(n) {
+function startTalk(n, open) {
   if (talk || building || !loggedIn || n.cool > 0) return;
   closePanels(); closeChat();
   joy.x = joy.y = 0; keys.clear(); hopFor = 0;
@@ -2103,7 +2182,7 @@ function startTalk(n) {
   const c = camera.position, side = (k) => hyp(n.x + Math.sin(toMe + 0.75 * k) * 3 - c.x, n.z + Math.cos(toMe + 0.75 * k) * 3 - c.z); shot.side = side(1) < side(-1) ? 1 : -1;
   talkWho.textContent = n.name; talkWho.style.background = n.color;
   document.body.classList.add("talking"); talkEl.style.display = "block";
-  const first = n.hidden ? "found" : n.talks++ ? "again" : "hello";
+  const first = open || (n.hidden ? "found" : n.talks++ ? "again" : "hello");
   if (n.hidden) { n.hidden = false; n.hx = n.home[0]; n.hz = n.home[1]; }
   goTalk(first);
 }
@@ -2151,7 +2230,7 @@ function talkPick(k) { if (talk && talk.opts && talkOpts.children[k]) talkOpts.c
 function endTalk(then) {
   const t = talk; if (!t) return; talk = null; t.n.cool = 0.6;
   document.body.classList.remove("talking"); talkEl.style.display = "none"; talkOpts.innerHTML = ""; talkText.textContent = "";
-  if (then) then(t.n);
+  if (then) then(t.n); else if (intro && intro.talking) introGo("done");   // walked away (Escape): the walk-through is skipped
 }
 talkEl.addEventListener("click", talkNext);
 // the screen blinks to black and back (Penny hiding)
@@ -3118,7 +3197,7 @@ function draw(dt) {
   for (const b of beams.values()) { b.userData.parcel.rotation.y = clock * 2; b.userData.parcel.position.y = 3 + Math.sin(clock * 3) * 0.3; }
   drawPackages();
   pickRing.material.opacity = 0.55 + Math.sin(clock * 4) * 0.3; bigEgg.rotation.y = clock * 0.6;
-  folkStep(dt); talkStep(dt); cutaway(); poiStep(); waterStep(dt); boostStep(dt); placeCamera(dt); camera.updateMatrixWorld(); const gd = inArena() ? [obsSpot(OBS[arNext])[0], AR.y, obsSpot(OBS[arNext])[1]] : [tx, ty, tz]; drawGuide(gd[0], gd[1], gd[2], loggedIn && !building && !talk && (me.bag.length > 0 || save.settings.followArrowWhenEmpty) && hyp(gd[0] - me.x, gd[2] - me.z) > 6); drawMap(now, gd[0], gd[2], ti !== undefined && houses[ti].sky, loggedIn && !building && !talk); skyStep(dt, camera.position.x, camera.position.y, camera.position.z); underwater();
+  folkStep(dt); talkStep(dt); introStep(dt); cutaway(); poiStep(); waterStep(dt); boostStep(dt); placeCamera(dt); camera.updateMatrixWorld(); const ig = introGuide(), gd = ig || (inArena() ? [obsSpot(OBS[arNext])[0], AR.y, obsSpot(OBS[arNext])[1]] : [tx, ty, tz]); drawGuide(gd[0], gd[1], gd[2], loggedIn && !building && !talk && (!!ig || me.bag.length > 0 || save.settings.followArrowWhenEmpty) && hyp(gd[0] - me.x, gd[2] - me.z) > 6); drawMap(now, gd[0], gd[2], ti !== undefined && houses[ti].sky, loggedIn && !building && !talk); skyStep(dt, camera.position.x, camera.position.y, camera.position.z); underwater();
   nightGlow = me.inst ? 0 : clamp((1 - skyNow.day) * 0.85, 0, 0.85); for (const m of CHAR_MATS.values()) m.emissiveIntensity = nightGlow; blobStep();
   renderFrame();
 }
@@ -3136,4 +3215,4 @@ syncBeams(); hud(); requestAnimationFrame(frame); connect();
 $("lgo").disabled = $("lnew").disabled = true;
 
 // for tests
-window.Pets = { get save() { return save; }, enterHouse, leaveHouse, get inter() { return inter; }, lotDoor, nearDoor, deleteSel, turnBuild, get myPlotId() { return myPlot; }, INT, get mine() { return mine; }, BOOSTS, nearestDry, get arena() { return { AR, OBS, next: arNext, TRM, obsSpot }; }, me, houses, get contract() { return contract; }, get packageEvent() { return packageEvent; }, get packageMeshes() { return packageMeshes; }, get online() { return online; }, get netOk() { return netOk; }, get loggedIn() { return loggedIn; }, get others() { return others; }, get myPlot() { return myPlot; }, plotState, get party() { return party; }, get trading() { return trading; }, step, deliver, fillBag, buyEgg, folk, startTalk, talkNext, talkPick, endTalk, get talk() { return talk; }, train, startContract, ride, setPen, collectPens, openBuild, closeBuild, get building() { return building; }, buildTap, showGhost, runAct, netSend, setPackageEvent, eventFlash, EGGS, SPECIES, PICKUP, SHOP, TRAIN, BOARD, ISLANDS, World, vehs, localVs, cam, terrain, contractOver, houseSurface, houseWall, refreshTest: () => refreshMyPlot(), emitConfetti, firework, caught, trade, persist, flushSave, set skyOffset(v) { skyOffset = v; }, get daylight() { return skyNow.day; }, get environment() { return { ...environment }; }, get sky() { return { day: skyNow.day, rain: skyNow.rain, snow: skyNow.snow, storm: skyNow.storm, fog: skyNow.fog }; }, get wind() { return { mph: windNow.mph, x: WIND.x, z: WIND.z }; }, windRideFactor, reach, camera, V3: THREE.Vector3, teleport: (x, z, y) => { me.x = x; me.z = z; me.y = y === undefined ? terrain(x, z) : y; me.vy = 0; } };
+window.Pets = { get save() { return save; }, get intro() { return intro; }, talkNext, enterHouse, leaveHouse, get inter() { return inter; }, lotDoor, nearDoor, deleteSel, turnBuild, get myPlotId() { return myPlot; }, INT, get mine() { return mine; }, BOOSTS, nearestDry, get arena() { return { AR, OBS, next: arNext, TRM, obsSpot }; }, me, houses, get contract() { return contract; }, get packageEvent() { return packageEvent; }, get packageMeshes() { return packageMeshes; }, get online() { return online; }, get netOk() { return netOk; }, get loggedIn() { return loggedIn; }, get others() { return others; }, get myPlot() { return myPlot; }, plotState, get party() { return party; }, get trading() { return trading; }, step, deliver, fillBag, buyEgg, folk, startTalk, talkNext, talkPick, endTalk, get talk() { return talk; }, train, startContract, ride, setPen, collectPens, openBuild, closeBuild, get building() { return building; }, buildTap, showGhost, runAct, netSend, setPackageEvent, eventFlash, EGGS, SPECIES, PICKUP, SHOP, TRAIN, BOARD, ISLANDS, World, vehs, localVs, cam, terrain, contractOver, houseSurface, houseWall, refreshTest: () => refreshMyPlot(), emitConfetti, firework, caught, trade, persist, flushSave, set skyOffset(v) { skyOffset = v; }, get daylight() { return skyNow.day; }, get environment() { return { ...environment }; }, get sky() { return { day: skyNow.day, rain: skyNow.rain, snow: skyNow.snow, storm: skyNow.storm, fog: skyNow.fog }; }, get wind() { return { mph: windNow.mph, x: WIND.x, z: WIND.z }; }, windRideFactor, reach, camera, V3: THREE.Vector3, teleport: (x, z, y) => { me.x = x; me.z = z; me.y = y === undefined ? terrain(x, z) : y; me.vy = 0; } };

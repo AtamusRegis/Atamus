@@ -29,6 +29,7 @@ const base = `http://127.0.0.1:${server.address().port}`;
 
 const browser = await chromium.launch({ executablePath: chrome, args: ["--use-angle=swiftshader", "--enable-unsafe-swiftshader"] });
 const page = await browser.newPage({ viewport: { width: 1280, height: 800 } });
+await page.addInitScript(() => { try { localStorage.setItem("petdelivery.nointro", "1"); } catch (e) { /* none */ } });   // the walk-through has its own check
 const problems = [];
 page.on("pageerror", (e) => problems.push("page error: " + e.message));
 page.on("console", (m) => { if (m.type() === "error" && !m.text().startsWith("Failed to load resource")) problems.push("console error: " + m.text()); });
