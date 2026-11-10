@@ -2646,18 +2646,20 @@ const MAP_PX = 2, MAP_R = 460, MAP_N = MAP_R * 2 * MAP_PX;   // the drawn world:
 function mapLayer() { const c = document.createElement("canvas"); c.width = c.height = MAP_N; const g = c.getContext("2d"); g.setTransform(MAP_PX, 0, 0, MAP_PX, MAP_R * MAP_PX, MAP_R * MAP_PX); g.lineJoin = g.lineCap = "round"; return [c, g]; }
 const [mapGround, mgG] = mapLayer(), [mapSky, mgS] = mapLayer();
 const SKY_Y = 60;   // above this, the sky layer (the town tops out under 50 m; the VIP island is at 62)
+// (owner, 2026-11-09) the map is drawn like the world: white paper, black ink; only the markers keep their colors
+const INK = "#1d1d22", PAPER = "#faf8f2", PAPER2 = "#e9e7e1";
 function mapHouse(g, h) {   // seen from above: its roof (a pyramid), the door at the front, the mailbox
   g.save(); g.translate(h.x, h.z); g.rotate(-h.yaw);
-  g.fillStyle = h.roof; g.fillRect(-4.5, -4.5, 9, 9); g.strokeStyle = "rgba(0,0,0,.35)"; g.lineWidth = 0.5; g.strokeRect(-4.5, -4.5, 9, 9);
-  g.strokeStyle = "rgba(255,255,255,.35)"; g.lineWidth = 0.4; g.beginPath(); g.moveTo(-4.5, -4.5); g.lineTo(4.5, 4.5); g.moveTo(4.5, -4.5); g.lineTo(-4.5, 4.5); g.stroke();
-  g.fillStyle = "#7a4f28"; g.fillRect(-0.9, 4.3, 1.8, 0.9);
-  g.restore(); g.fillStyle = "#e5534b"; g.fillRect(h.mx - 0.6, h.mz - 0.6, 1.2, 1.2);
+  g.fillStyle = PAPER; g.fillRect(-4.5, -4.5, 9, 9); g.strokeStyle = INK; g.lineWidth = 0.55; g.strokeRect(-4.5, -4.5, 9, 9);
+  g.strokeStyle = "rgba(29,29,34,.45)"; g.lineWidth = 0.3; g.beginPath(); g.moveTo(-4.5, -4.5); g.lineTo(4.5, 4.5); g.moveTo(4.5, -4.5); g.lineTo(-4.5, 4.5); g.stroke();
+  g.fillStyle = INK; g.fillRect(-0.9, 4.3, 1.8, 0.9);
+  g.restore(); g.fillStyle = INK; g.fillRect(h.mx - 0.5, h.mz - 0.5, 1, 1);
 }
-function mapTree(g, t) { g.fillStyle = "#3f8f3c"; g.beginPath(); g.arc(t.x, t.z, 1.7 * t.s, 0, TAU); g.fill(); g.fillStyle = "#5cb855"; g.beginPath(); g.arc(t.x - 0.4 * t.s, t.z - 0.4 * t.s, 1.05 * t.s, 0, TAU); g.fill(); }
+function mapTree(g, t) { g.fillStyle = PAPER; g.strokeStyle = INK; g.lineWidth = 0.35; g.beginPath(); g.arc(t.x, t.z, 1.7 * t.s, 0, TAU); g.fill(); g.stroke(); }
 function mapIsland(g, isl, shadow) {
-  g.save(); if (shadow) { g.shadowColor = "rgba(10,30,60,.45)"; g.shadowBlur = 14; g.shadowOffsetX = 6; g.shadowOffsetY = 8; }
-  g.fillStyle = "#8a7f72"; g.beginPath(); g.arc(isl.x, isl.z, isl.r, 0, TAU); g.fill(); g.restore();
-  g.fillStyle = "#86c95f"; g.beginPath(); g.arc(isl.x, isl.z, isl.r - 1.2, 0, TAU); g.fill();
+  g.save(); if (shadow) { g.shadowColor = "rgba(0,0,0,.18)"; g.shadowBlur = 10; g.shadowOffsetX = 5; g.shadowOffsetY = 6; }
+  g.fillStyle = PAPER; g.beginPath(); g.arc(isl.x, isl.z, isl.r, 0, TAU); g.fill(); g.restore();
+  g.strokeStyle = INK; g.lineWidth = 0.8; g.beginPath(); g.arc(isl.x, isl.z, isl.r, 0, TAU); g.stroke();
 }
 const mapRing = (g, x, z, r, c, w = 0.9) => { g.strokeStyle = c; g.lineWidth = w; g.beginPath(); g.arc(x, z, r, 0, TAU); g.stroke(); };
 const mapPlotLine = (g, p, c, w) => { g.save(); g.setLineDash([2, 1.5]); g.strokeStyle = c; g.lineWidth = w; g.strokeRect(p.x - PLOT / 2, p.z - PLOT / 2, PLOT, PLOT); g.restore(); };
@@ -2666,7 +2668,7 @@ const mapPlotLine = (g, p, c, w) => { g.save(); g.setLineDash([2, 1.5]); g.strok
   for (const isl of ISLANDS) if (isl.y < SKY_Y) mapIsland(g, isl, true);
   // the town's rock rim (and its shadow over the clouds), then the land: grass by height and in broad patches, rock on
   // steep slopes (as on the ground itself), lit from the north-west
-  g.save(); g.shadowColor = "rgba(10,30,60,.5)"; g.shadowBlur = 24; g.shadowOffsetX = 10; g.shadowOffsetY = 14; g.fillStyle = "#8a7a68";
+  g.save(); g.shadowColor = "rgba(0,0,0,.2)"; g.shadowBlur = 18; g.shadowOffsetX = 8; g.shadowOffsetY = 10; g.fillStyle = PAPER;
   g.beginPath(); for (let i = 0; i <= 360; i++) { const a = (i / 360) * TAU, r = edgeR(a) + 1; g.lineTo(Math.cos(a) * r, Math.sin(a) * r); } g.fill(); g.restore();
   const n = MAP_R, cv = document.createElement("canvas"); cv.width = cv.height = n; const cx = cv.getContext("2d"), img = cx.createImageData(n, n), d = img.data;
   const GRASS = [[127, 194, 90], [150, 207, 99], [169, 212, 110]], ROCK = [160, 143, 122], ROCK2 = [138, 122, 104], mix = (a, b, k) => a + (b - a) * k;
@@ -2676,32 +2678,35 @@ const mapPlotLine = (g, p, c, w) => { g.save(); g.setLineDash([2, 1.5]); g.strok
     const slope = hyp(terrain(x + 3, z) - terrain(x - 3, z), terrain(x, z + 3) - terrain(x, z - 3)) / 6;
     const patch = 0.5 + 0.25 * Math.sin(x / 23 + Math.cos(z / 31)) + 0.25 * Math.sin(z / 19 - x / 41), up = smooth(clamp(y / 45, 0, 1)) * 0.7, rk = smooth(clamp((slope - 0.3) / 0.7, 0, 1));
     const lit = clamp(1 + (hx + hz) * 0.11, 0.55, 1.3), k = (j * n + i) * 4;
-    for (let c = 0; c < 3; c++) d[k + c] = clamp(mix(mix(mix(GRASS[0][c], GRASS[1][c], patch), GRASS[2][c], up), mix(ROCK[c], ROCK2[c], patch), rk) * lit, 0, 255);
-    d[k + 3] = 255;
+    const wet = World.waterAt(x, z) > -Infinity, v = wet ? ((i + j) % 4 === 0 ? 120 : 214) : 250 - rk * 30;   // paper; water hatched
+    d[k] = v; d[k + 1] = v - (wet ? 0 : 2); d[k + 2] = v - (wet ? -4 : 8); d[k + 3] = 255;
   }
   cx.putImageData(img, 0, 0); g.imageSmoothingEnabled = true; g.drawImage(cv, -MAP_R, -MAP_R, MAP_R * 2, MAP_R * 2);
+  g.strokeStyle = INK; g.lineWidth = 1; g.beginPath(); for (let i = 0; i <= 360; i++) { const a = (i / 360) * TAU, r = edgeR(a); g.lineTo(Math.cos(a) * r, Math.sin(a) * r); } g.stroke();   // the island's edge
+  { const L = World.LAKE, R = World.RIVERS[0]; g.lineWidth = 0.7; g.strokeRect(L.x - L.hw, L.z - L.hd, L.hw * 2, L.hd * 2); if (R) { const x0 = L.x - L.hw, x1 = Math.max(-World.R_TOWN, R.pts[R.pts.length - 1][0]); g.beginPath(); for (const sz of [-1, 1]) { g.moveTo(x0, sz * R.hw); g.lineTo(x1, sz * R.hw); } g.stroke(); } }   // the lake and the river's banks
   // the plaza, the roads (with their dashed middle), the plots in town
-  g.fillStyle = "#e8dcc4"; g.beginPath(); g.arc(0, 0, PLAZA - 4, 0, TAU); g.fill();
-  for (const R of ROADS) { g.beginPath(); for (const [x, z] of R.pts) g.lineTo(x, z); if (R.loop) g.closePath(); g.strokeStyle = "#4f5861"; g.lineWidth = ROAD_HALF * 2 + 0.6; g.stroke(); g.strokeStyle = "#5c6670"; g.lineWidth = ROAD_HALF * 2 - 0.6; g.stroke(); }
-  g.save(); g.setLineDash([3.75, 4.25]); g.strokeStyle = "#f4f1e6"; g.lineWidth = 0.45; g.lineCap = "butt";
+  g.fillStyle = PAPER2; g.strokeStyle = INK; g.lineWidth = 0.7; g.beginPath(); g.arc(0, 0, PLAZA - 4, 0, TAU); g.fill(); g.stroke();
+  for (const R of ROADS) { g.beginPath(); for (const [x, z] of R.pts) g.lineTo(x, z); if (R.loop) g.closePath(); g.strokeStyle = INK; g.lineWidth = ROAD_HALF * 2 + 0.8; g.stroke(); g.strokeStyle = PAPER2; g.lineWidth = ROAD_HALF * 2 - 0.6; g.stroke(); }
+  g.save(); g.setLineDash([3.75, 4.25]); g.strokeStyle = INK; g.lineWidth = 0.45; g.lineCap = "butt";
   for (const R of ROADS) { g.beginPath(); for (const [x, z] of R.pts) g.lineTo(x, z); if (R.loop) g.closePath(); g.stroke(); } g.restore();
-  for (const p of PLOTS) if (p.kind === "center" || p.kind === "random") { g.fillStyle = "rgba(255,255,255,.14)"; g.fillRect(p.x - PLOT / 2, p.z - PLOT / 2, PLOT, PLOT); mapPlotLine(g, p, "rgba(255,255,255,.75)", 0.6); }
+  for (const p of PLOTS) if (p.kind === "center" || p.kind === "random") mapPlotLine(g, p, INK, 0.6);
   // the plaza's buildings and rings: post office, egg shop, training track, pound, contract board, the lift
-  g.fillStyle = "#d98b5f"; g.beginPath(); g.arc(TRAIN.x, TRAIN.z, 14, 0, TAU); g.arc(TRAIN.x, TRAIN.z, 9, 0, TAU, true); g.fill();
+  g.fillStyle = PAPER2; g.strokeStyle = INK; g.lineWidth = 0.6; g.beginPath(); g.arc(TRAIN.x, TRAIN.z, 14, 0, TAU); g.arc(TRAIN.x, TRAIN.z, 9, 0, TAU, true); g.fill(); g.stroke();
   const inFrame = (b, f) => { g.save(); g.translate(b.x, b.z); g.rotate(-b.yaw); f(); g.restore(); };   // a building drawn facing +z, turned as it stands
-  inFrame(POST, () => { g.fillStyle = "#3a8ee6"; g.fillRect(-9.5, -5.5, 19, 11); g.fillStyle = "#d9e4ee"; g.fillRect(-7.5, -3.5, 15, 7); g.fillStyle = "#f2b01e"; g.fillRect(-4, 4.6, 8, 0.9); });
-  inFrame(SHOP_B, () => { g.fillStyle = "#e5739d"; g.fillRect(-6.5, -4.5, 13, 9); g.fillStyle = "#fff3d6"; g.beginPath(); g.ellipse(0, 0, 2, 2.6, 0, 0, TAU); g.fill(); });
-  inFrame(MOUNT_B, () => { g.fillStyle = "#2bb3c0"; g.fillRect(-6.5, -4.5, 13, 9); g.fillStyle = "#f2b01e"; g.beginPath(); g.arc(0, 0, 1.8, 0, TAU); g.fill(); });
-  inFrame(POUND, () => { g.fillStyle = "#3d4650"; g.fillRect(-8.5, -7.5, 17, 9); g.fillStyle = "#e08a00"; g.fillRect(-8.2, 0.0, 16.4, 1.2); g.strokeStyle = "#9aa7b2"; g.lineWidth = 0.4; g.strokeRect(-8, 1.1, 16, 7.9); });
-  g.fillStyle = "#8a5a3a"; g.fillRect(BOARD.x - 1.3, BOARD.z - 1.8, 2.6, 0.6);
-  mapRing(g, PICKUP.x, PICKUP.z, PICKUP.r, "#f2b01e"); mapRing(g, BOARD.x, BOARD.z, BOARD.r, "#e5534b"); mapRing(g, SHOP.x, SHOP.z, SHOP.r, "#e5739d"); mapRing(g, MOUNT.x, MOUNT.z, MOUNT.r, "#2bb3c0"); mapRing(g, TRAIN.x, TRAIN.z, TRAIN.r - 1, "#3fb36b"); mapRing(g, LIFTS[0].x, LIFTS[0].z, 2.2, "#2bb3c0");
+  const bx = (x, z, w, h) => { g.fillStyle = PAPER; g.fillRect(x, z, w, h); g.strokeStyle = INK; g.lineWidth = 0.6; g.strokeRect(x, z, w, h); };
+  inFrame(POST, () => { bx(-9.5, -5.5, 19, 11); bx(-7.5, -3.5, 15, 7); g.fillStyle = INK; g.fillRect(-4, 4.6, 8, 0.9); });
+  inFrame(SHOP_B, () => { bx(-6.5, -4.5, 13, 9); g.beginPath(); g.ellipse(0, 0, 2, 2.6, 0, 0, TAU); g.stroke(); });
+  inFrame(MOUNT_B, () => { bx(-6.5, -4.5, 13, 9); g.beginPath(); g.arc(0, 0, 1.8, 0, TAU); g.stroke(); });
+  inFrame(POUND, () => { bx(-8.5, -7.5, 17, 9); g.fillStyle = INK; g.fillRect(-8.2, 0.0, 16.4, 0.8); g.lineWidth = 0.4; g.setLineDash([1, 1]); g.strokeRect(-8, 1.1, 16, 7.9); g.setLineDash([]); });
+  g.fillStyle = INK; g.fillRect(BOARD.x - 1.3, BOARD.z - 1.8, 2.6, 0.6);
+  for (const [x, z, r] of [[PICKUP.x, PICKUP.z, PICKUP.r], [BOARD.x, BOARD.z, BOARD.r], [SHOP.x, SHOP.z, SHOP.r], [MOUNT.x, MOUNT.z, MOUNT.r], [TRAIN.x, TRAIN.z, TRAIN.r - 1], [LIFTS[0].x, LIFTS[0].z, 2.2]]) mapRing(g, x, z, r, INK, 0.6);
   for (const h of houses) if (h.base < SKY_Y) mapHouse(g, h);
   for (const t of trees) if (t.y < SKY_Y) mapTree(g, t);
   // above the town: the high islands and the VIP island (its plots and lift)
   const s = mgS;
   for (const isl of [...ISLANDS.filter((i) => i.y >= SKY_Y), VIP_ISLAND]) mapIsland(s, isl, true);
-  for (const p of PLOTS) if (p.kind === "vip") mapPlotLine(s, p, "rgba(255,255,255,.8)", 0.6);
-  mapRing(s, LIFTS[1].x, LIFTS[1].z, 2.2, "#2bb3c0");
+  for (const p of PLOTS) if (p.kind === "vip") mapPlotLine(s, p, INK, 0.6);
+  mapRing(s, LIFTS[1].x, LIFTS[1].z, 2.2, INK, 0.6);
   for (const h of houses) if (h.base >= SKY_Y) mapHouse(s, h);
   for (const t of trees) if (t.y >= SKY_Y) mapTree(s, t);
 }
@@ -2728,29 +2733,29 @@ function drawMap(now, tx, tz, tsky, guide) {
   const edge = (p, m) => { const ex = p[0] - H, ey = p[1] - H, k = (H - m) / Math.max(Math.abs(ex), Math.abs(ey), 1e-6); return k < 1 ? [H + ex * k, H + ey * k, true] : [p[0], p[1], false]; };
   const ang = (a) => Math.PI + cam.yaw - a;   // a heading in the world -> turn on the map (0: up)
   g.setTransform(1, 0, 0, 1, 0, 0); g.globalAlpha = 1;
-  g.fillStyle = mapLerp([111, 182, 224], [22, 40, 70], dark * 0.85); g.fillRect(0, 0, px, px);
+  g.fillStyle = mapLerp([214, 212, 206], [150, 150, 154], dark * 0.6); g.fillRect(0, 0, px, px);
   // the world, turned with the camera
   g.setTransform(1, 0, 0, 1, H, H); g.rotate(cam.yaw); g.scale(s, s); g.translate(-me.x, -me.z);
   const rr = mapHalf * 1.45 + 4, sub = (img) => { const x0 = clamp(me.x - rr, -MAP_R, MAP_R), z0 = clamp(me.z - rr, -MAP_R, MAP_R), x1 = clamp(me.x + rr, -MAP_R, MAP_R), z1 = clamp(me.z + rr, -MAP_R, MAP_R); if (x1 > x0 && z1 > z0) g.drawImage(img, (x0 + MAP_R) * MAP_PX, (z0 + MAP_R) * MAP_PX, (x1 - x0) * MAP_PX, (z1 - z0) * MAP_PX, x0, z0, x1 - x0, z1 - z0); };
   g.imageSmoothingEnabled = true; sub(mapGround);
-  if (extraIsland.visible) { mapIsland(g, EXTRA_ISLAND, true); for (const p of PLOTS) if (p.kind === "extra") mapPlotLine(g, p, "rgba(255,255,255,.8)", 0.6); mapRing(g, LIFTS[2].x, LIFTS[2].z, 2.2, "#2bb3c0"); }
+  if (extraIsland.visible) { mapIsland(g, EXTRA_ISLAND, true); for (const p of PLOTS) if (p.kind === "extra") mapPlotLine(g, p, INK, 0.6); mapRing(g, LIFTS[2].x, LIFTS[2].z, 2.2, INK, 0.6); }
   const skyA = 0.3 + 0.7 * smooth(clamp((me.y - 8) / 45, 0, 1));   // the islands above fade in as I climb
-  const plots = (sky) => { for (const [id, st] of plotState) { const p = PLOTS[id]; if ((p.y >= SKY_Y) !== sky) continue; const o = plotOrigin(p); for (const c of plotCells(st.pieces)) { g.fillStyle = c.c; g.fillRect(o.x + c.x * CELL, o.z + c.z * CELL, CELL, CELL); g.strokeStyle = c.roof ? "rgba(0,0,0,.3)" : "rgba(0,0,0,.18)"; g.lineWidth = 0.3; g.strokeRect(o.x + c.x * CELL, o.z + c.z * CELL, CELL, CELL); } if (id === myPlot) mapPlotLine(g, p, "#f2b01e", 1.1); } };
+  const plots = (sky) => { for (const [id, st] of plotState) { const p = PLOTS[id]; if ((p.y >= SKY_Y) !== sky) continue; const o = plotOrigin(p); for (const c of plotCells(st.pieces)) { g.fillStyle = c.roof ? PAPER : PAPER2; g.fillRect(o.x + c.x * CELL, o.z + c.z * CELL, CELL, CELL); g.strokeStyle = INK; g.lineWidth = 0.3; g.strokeRect(o.x + c.x * CELL, o.z + c.z * CELL, CELL, CELL); } if (id === myPlot) mapPlotLine(g, p, "#f2b01e", 1.1); } };
   plots(false);
   g.globalAlpha = skyA; sub(mapSky); plots(true); g.globalAlpha = 1;
   // the helicopters' searchlights: the beam out to its spot on the ground
   for (const m of vehs) {
     if (!m.kind) continue; const gx = m.x + Math.sin(m.ba) * m.bd, gz = m.z + Math.cos(m.ba) * m.bd, r = Math.max(2, hyp(m.bd, m.y - terrain(gx, gz)) * Math.tan(World.BEAM.half));
     const a = Math.atan2(gz - m.z, gx - m.x), gr = g.createRadialGradient(gx, gz, 0, gx, gz, r * 1.3);
-    gr.addColorStop(0, `rgba(255,252,220,${0.55 + 0.3 * dark})`); gr.addColorStop(1, "rgba(255,252,220,0)");
-    g.fillStyle = `rgba(255,252,220,${0.14 + 0.16 * dark})`; g.beginPath(); g.moveTo(m.x, m.z); g.lineTo(gx + Math.cos(a + 1.5708) * r, gz + Math.sin(a + 1.5708) * r); g.lineTo(gx + Math.cos(a - 1.5708) * r, gz + Math.sin(a - 1.5708) * r); g.closePath(); g.fill();
+    gr.addColorStop(0, "rgba(29,29,34,.22)"); gr.addColorStop(1, "rgba(29,29,34,0)");
+    g.fillStyle = "rgba(29,29,34,.08)"; g.beginPath(); g.moveTo(m.x, m.z); g.lineTo(gx + Math.cos(a + 1.5708) * r, gz + Math.sin(a + 1.5708) * r); g.lineTo(gx + Math.cos(a - 1.5708) * r, gz + Math.sin(a - 1.5708) * r); g.closePath(); g.fill();
     g.fillStyle = gr; g.beginPath(); g.arc(gx, gz, r * 1.3, 0, TAU); g.fill();
   }
   // night falls on the map too
-  g.setTransform(1, 0, 0, 1, 0, 0); if (dark > 0.05) { g.fillStyle = `rgba(8,16,40,${dark * 0.42})`; g.fillRect(0, 0, px, px); }
+  g.setTransform(1, 0, 0, 1, 0, 0); if (dark > 0.05) { g.fillStyle = `rgba(0,0,0,${dark * 0.18})`; g.fillRect(0, 0, px, px); }
   // the way the camera sees (always up)
   const fov = Math.atan(Math.tan((camera.fov * Math.PI) / 360) * camera.aspect), vg = g.createLinearGradient(H, H, H, 0);
-  vg.addColorStop(0, "rgba(255,255,255,.32)"); vg.addColorStop(1, "rgba(255,255,255,0)"); g.fillStyle = vg;
+  vg.addColorStop(0, "rgba(29,29,34,.16)"); vg.addColorStop(1, "rgba(29,29,34,0)"); g.fillStyle = vg;
   g.beginPath(); g.moveTo(H, H); g.lineTo(H - Math.tan(fov) * H, 0); g.lineTo(H + Math.tan(fov) * H, 0); g.closePath(); g.fill();
   const flash = Math.floor(now / 150) % 2 === 0, pulse = 0.5 + 0.5 * Math.sin(now / 160);
   // the houses in my bag (pink: an island house)
