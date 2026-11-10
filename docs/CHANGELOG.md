@@ -6,6 +6,7 @@ and any rule decided. Use `git log` for the code detail (and for the older Atamu
 
 ## 2026-11-09
 
+- **Sketch look (owner).** The world is drawn like a pencil sketch, white paper with black outlines and light hatching, for a prototype feel; labels and bubbles stay in color and readable.
 - **Admin: edit a player's inventory (owner).** Edit in the admin panel shows a player's coins, items, Treats and pets; admins change the numbers or take pets away and save (server ops `inspect` and `edit`).
 - **Tap people; phone buttons in one row (owner).** The name buttons for players and townsfolk and the player panel are gone: tap a townsperson to talk, tap a player for Trade / Party right by them. Held sideways on a phone, the buttons stay in one row along the bottom instead of stacking into the map.
 - **Bright characters at night; baked shadows (owner).** Pets, riders and townsfolk stay bright at night; live shadows are gone, replaced by darker ground under houses, buildings and trees and a soft spot under everyone moving.

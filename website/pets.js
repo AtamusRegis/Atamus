@@ -1193,7 +1193,57 @@ function placeCamera(dt) {
   sun.position.set(me.x + skyNow.sun.x * 90, me.y + Math.max(20, skyNow.sun.y * 90), me.z + skyNow.sun.z * 90); sun.target.position.set(me.x, me.y, me.z);
   fadeHouses(dt, cx, cy, cz);
 }
-function resize() { const w = innerWidth, h = innerHeight; renderer.setSize(w, h, false); camera.aspect = w / h; camera.updateProjectionMatrix(); }
+// ---- the sketch look (owner, 2026-11-09: like a pencil drawing, to feel like a prototype): the world is drawn as usual
+// into a texture, then one pass over the screen turns it to white paper: light grey shading by brightness, pencil
+// hatching in the darker parts, and black outlines where the depth or the brightness changes sharply ----
+const sketchRT = new THREE.WebGLRenderTarget(1, 1, { depthTexture: new THREE.DepthTexture(1, 1) });
+const sketchMat = new THREE.ShaderMaterial({
+  uniforms: { tColor: { value: sketchRT.texture }, tDepth: { value: sketchRT.depthTexture }, texel: { value: new THREE.Vector2(1, 1) }, near: { value: camera.near }, far: { value: camera.far }, gain: { value: 1 } },
+  vertexShader: "varying vec2 vUv; void main() { vUv = uv; gl_Position = vec4(position.xy, 0.0, 1.0); }",
+  fragmentShader: `
+    uniform sampler2D tColor, tDepth; uniform vec2 texel; uniform float near, far, gain; varying vec2 vUv;
+    float lin(float d) { float z = d * 2.0 - 1.0; return 2.0 * near * far / (far + near - z * (far - near)); }
+    float lum(vec2 uv) { vec3 c = pow(max(texture2D(tColor, uv).rgb, 0.0), vec3(1.0 / 2.2)); return dot(c, vec3(0.299, 0.587, 0.114)); }
+    float dep(vec2 uv) { return lin(texture2D(tDepth, uv).r); }
+    void main() {
+      float L = min(1.0, lum(vUv) * gain), dc = dep(vUv);   // gain: the night drawn a little lighter
+      float gx = 0.0, gy = 0.0, dx = 0.0, dy = 0.0;
+      for (int i = -1; i <= 1; i++) for (int j = -1; j <= 1; j++) {
+        if (i == 0 && j == 0) continue;
+        vec2 o = vec2(float(i), float(j)) * texel; float w = (i == 0 || j == 0) ? 2.0 : 1.0;
+        float l = lum(vUv + o), d = dep(vUv + o);
+        gx += float(i) * w * l; gy += float(j) * w * l; dx += float(i) * w * d; dy += float(j) * w * d;
+      }
+      float eL = smoothstep(0.22, 0.5, length(vec2(gx, gy)));
+      float eD = smoothstep(0.035, 0.09, length(vec2(dx, dy)) / max(dc, 0.5)) * step(dc, far * 0.9);
+      float edge = max(eL, eD);
+      float shade = mix(0.62, 1.0, smoothstep(0.08, 0.72, L));
+      vec2 p = gl_FragCoord.xy;
+      float h1 = 1.0 - smoothstep(0.0, 0.9, abs(mod(p.x + p.y, 7.0) - 3.5) - 2.6);
+      float h2 = 1.0 - smoothstep(0.0, 0.9, abs(mod(p.x - p.y, 7.0) - 3.5) - 2.6);
+      float hatch = h1 * (1.0 - smoothstep(0.32, 0.48, L)) + h2 * (1.0 - smoothstep(0.12, 0.26, L));
+      vec3 paper = vec3(0.985, 0.978, 0.955);
+      vec3 col = paper * shade * (1.0 - 0.22 * clamp(hatch, 0.0, 1.0));
+      col = mix(col, vec3(0.1, 0.1, 0.12), edge);
+      gl_FragColor = vec4(col, 1.0);
+      gl_FragDepthEXT = texture2D(tDepth, vUv).r;   // the world's depth, so labels drawn after are hidden behind things
+    }`,
+  depthTest: true, depthFunc: THREE.AlwaysDepth, depthWrite: true,
+});
+const sketchScene = new THREE.Scene(), sketchCam = new THREE.OrthographicCamera(-1, 1, 1, -1, 0, 1);
+sketchScene.add(new THREE.Mesh(new THREE.PlaneGeometry(2, 2), sketchMat));
+const SKETCH = true;
+function renderFrame() {
+  if (!SKETCH) { camera.layers.enableAll(); renderer.render(scene, camera); return; }
+  sketchMat.uniforms.gain.value = me.inst ? 1 : 1 / Math.max(0.45, 0.45 + 0.55 * skyNow.day);
+  // labels (names, speech bubbles, place labels: layer 1) go on after, as they are, so they stay readable
+  camera.layers.set(0); renderer.setRenderTarget(sketchRT); renderer.render(scene, camera); renderer.setRenderTarget(null); renderer.render(sketchScene, sketchCam);
+  const bg = scene.background; scene.background = null; renderer.autoClear = false; camera.layers.set(1); renderer.render(scene, camera); renderer.autoClear = true; camera.layers.set(0); scene.background = bg;
+}
+function resize() {
+  const w = innerWidth, h = innerHeight; renderer.setSize(w, h, false); camera.aspect = w / h; camera.updateProjectionMatrix();
+  const v = renderer.getDrawingBufferSize(new THREE.Vector2()); sketchRT.setSize(v.x, v.y); const k = renderer.getPixelRatio() > 1.4 ? 1.4 : 1; sketchMat.uniforms.texel.value.set(k / v.x, k / v.y);
+}
 addEventListener("resize", resize); resize();
 
 // ---- controls: a thumb joystick on the left of the screen (where you put your thumb down), drag elsewhere to turn
@@ -1565,7 +1615,7 @@ function bubble(text, old, parent, top) {
   const w = Math.min(500, Math.max(...lines.map((l) => g.measureText(l).width)) + 36), h = lines.length * 36 + 22;
   g.fillStyle = "rgba(255,255,255,.95)"; g.beginPath(); g.roundRect((512 - w) / 2, 116 - h, w, h - 10, 20); g.fill(); g.beginPath(); g.moveTo(244, 106); g.lineTo(256, 122); g.lineTo(268, 106); g.fill();
   g.fillStyle = "#23303b"; g.textAlign = "center"; g.textBaseline = "middle"; lines.forEach((l, i) => g.fillText(l, 256, 116 - h + 22 + i * 36));
-  const s = new THREE.Sprite(new THREE.SpriteMaterial({ map: new THREE.CanvasTexture(c), depthTest: false })); s.scale.set(6, 1.5, 1); s.renderOrder = 6; s.position.y = top + 2.4; parent.add(s);
+  const s = new THREE.Sprite(new THREE.SpriteMaterial({ map: new THREE.CanvasTexture(c), depthTest: false })); s.scale.set(6, 1.5, 1); s.layers.set(1); s.renderOrder = 6; s.position.y = top + 2.4; parent.add(s);
   const o = { s }; o.timer = setTimeout(() => { parent.remove(s); if (myBubble === o) myBubble = null; }, 6000); return o;
 }
 
@@ -1645,7 +1695,7 @@ function nameTag(name, stars) {
   g.font = "800 30px system-ui, sans-serif"; const w = Math.min(250, g.measureText(name).width + 28);
   g.fillStyle = "rgba(255,255,255,.92)"; g.beginPath(); g.roundRect((256 - w) / 2, 42, w, 44, 22); g.fill(); g.fillStyle = "#23303b"; g.textAlign = "center"; g.textBaseline = "middle"; g.fillText(name, 128, 65);
   if (stars) { g.font = "800 30px system-ui, sans-serif"; g.fillStyle = "#e5534b"; g.strokeStyle = "#fff"; g.lineWidth = 6; const st = "★".repeat(stars); g.strokeText(st, 128, 20); g.fillText(st, 128, 20); }
-  const s = new THREE.Sprite(new THREE.SpriteMaterial({ map: new THREE.CanvasTexture(c), depthTest: false })); s.scale.set(4, 1.5, 1); s.renderOrder = 5; return s;
+  const s = new THREE.Sprite(new THREE.SpriteMaterial({ map: new THREE.CanvasTexture(c), depthTest: false })); s.scale.set(4, 1.5, 1); s.layers.set(1); s.renderOrder = 5; return s;
 }
 function addOther(p) {
   if (p.id === myId) return; const old = others.get(p.id); dropOther(p.id);
@@ -1858,7 +1908,7 @@ function poiBubble(name, what) {
   g.textAlign = "center"; g.textBaseline = "middle"; g.fillStyle = "#23303b"; g.font = "800 46px system-ui, sans-serif"; g.fillText(name, 256, 54, 470);
   g.fillStyle = "#5a6a78"; g.font = "600 32px system-ui, sans-serif"; g.fillText(what, 256, 104, 470);
   const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace;
-  const sp = new THREE.Sprite(new THREE.SpriteMaterial({ map: t, transparent: true, depthWrite: false })); sp.scale.set(6.4, 2.2, 1); sp.renderOrder = 4; return sp;
+  const sp = new THREE.Sprite(new THREE.SpriteMaterial({ map: t, transparent: true, depthWrite: false })); sp.scale.set(6.4, 2.2, 1); sp.layers.set(1); sp.renderOrder = 4; return sp;
 }
 for (const q of POIS) { q.s = poiBubble(q.name, q.what); q.s.position.set(q.x, q.y, q.z); scene.add(q.s); }
 let homeMarker = null;
@@ -1871,7 +1921,7 @@ function makeHomeMarker() {
   g.fillStyle = "#23303b"; g.textAlign = "left"; g.textBaseline = "middle"; g.font = "800 42px system-ui, sans-serif"; g.fillText("YOUR HOME", 150, 82);
   g.fillStyle = "#5a6a78"; g.font = "600 27px system-ui, sans-serif"; g.fillText("Your plot", 150, 119);
   const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace;
-  const s = new THREE.Sprite(new THREE.SpriteMaterial({ map: t, transparent: true, depthWrite: false })); s.scale.set(7.2, 2.45, 1); s.renderOrder = 4; return s;
+  const s = new THREE.Sprite(new THREE.SpriteMaterial({ map: t, transparent: true, depthWrite: false })); s.scale.set(7.2, 2.45, 1); s.layers.set(1); s.renderOrder = 4; return s;
 }
 function homeStep() {
   if (myPlot < 0 || !PLOTS[myPlot]) { if (homeMarker) homeMarker.visible = false; return; }
@@ -1945,7 +1995,7 @@ function townTag(name, color) {   // their name in their colour, with a speech b
   g.fillStyle = "#ffffff"; g.textAlign = "center"; g.textBaseline = "middle"; g.fillText(name, 128, 129);
   g.fillStyle = "#ffffff"; g.strokeStyle = color; g.lineWidth = 5; g.beginPath(); g.roundRect(94, 8, 68, 50, 22); g.moveTo(118, 58); g.lineTo(128, 78); g.lineTo(138, 58); g.fill(); g.stroke();
   g.fillStyle = "#ffffff"; g.fillRect(116, 52, 24, 9); g.fillStyle = color; for (const x of [111, 128, 145]) { g.beginPath(); g.arc(x, 33, 6, 0, TAU); g.fill(); }
-  const s = new THREE.Sprite(new THREE.SpriteMaterial({ map: new THREE.CanvasTexture(c), depthTest: false })); s.scale.set(3.6, 2.25, 1); s.renderOrder = 5; return s;
+  const s = new THREE.Sprite(new THREE.SpriteMaterial({ map: new THREE.CanvasTexture(c), depthTest: false })); s.scale.set(3.6, 2.25, 1); s.layers.set(1); s.renderOrder = 5; return s;
 }
 const RPS = ["Rock", "Paper", "Scissors"];
 function rpsNode(n) { return { say: [pick(["Rock, paper, scissors...", "Ready? Rock, paper, scissors..."])], opts: RPS.map((r, i) => [r, () => rpsGo(n, i)]) }; }
@@ -3137,7 +3187,7 @@ function draw(dt) {
   pickRing.material.opacity = 0.55 + Math.sin(clock * 4) * 0.3; bigEgg.rotation.y = clock * 0.6;
   folkStep(dt); talkStep(dt); cutaway(); poiStep(); waterStep(dt); boostStep(dt); placeCamera(dt); camera.updateMatrixWorld(); const gd = inArena() ? [obsSpot(OBS[arNext])[0], AR.y, obsSpot(OBS[arNext])[1]] : [tx, ty, tz]; drawGuide(gd[0], gd[1], gd[2], loggedIn && !building && !talk && (me.bag.length > 0 || save.settings.followArrowWhenEmpty) && hyp(gd[0] - me.x, gd[2] - me.z) > 6); drawMap(now, gd[0], gd[2], ti !== undefined && houses[ti].sky, loggedIn && !building && !talk); skyStep(dt, camera.position.x, camera.position.y, camera.position.z); underwater();
   nightGlow = me.inst ? 0 : clamp((1 - skyNow.day) * 0.85, 0, 0.85); for (const m of CHAR_MATS.values()) m.emissiveIntensity = nightGlow; blobStep();
-  renderer.render(scene, camera);
+  renderFrame();
 }
 function frame(now) {
   const dt = clamp((now - last) / 1000, 0, 0.1); last = now;

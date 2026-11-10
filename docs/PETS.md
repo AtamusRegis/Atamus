@@ -105,6 +105,10 @@ Asked (owner): a web game on atamus.io (not Roblox), on its own page; the cargo 
   2026-11-08):** the more of you it hides (5 points on you), the more see-through it gets (down to 18%), easing in and
   out.
 - Roads are laid on the land vertex by vertex (5 across, every ~2 m) just above it, and pets stand on the road surface.
+- **Sketch look (owner, 2026-11-09):** the world is drawn like a pencil sketch: a screen pass turns the rendered
+  scene into off-white paper with dark outlines (from brightness and depth edges) and light diagonal hatching in the
+  darker areas; nights are brightened so the drawing stays readable. Name tags, place labels and speech bubbles are
+  drawn after the pass, in color, still hidden behind buildings. The minimap and HUD keep their colors.
 - **Shadows are baked (owner, 2026-11-09):** no live shadows; the ground is darker under and a little to one side of
   every house, plaza building and tree (soft-edged, painted in once), and a soft dark spot lies on the ground under
   every pet, person, walker and van (smaller and fainter the higher they are). The vans' overlapping faces are offset
