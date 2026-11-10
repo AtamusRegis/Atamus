@@ -1682,6 +1682,7 @@ function onNet(m) {
     case "role": myRole = m.role; uiKey = ""; break;
     case "admin_list": adminList = m.list; setEnvironment(m.environment); renderAdmin(); break;
     case "admin_msg": toast(m.msg); break;
+    case "admin_data": if (editTo && editTo.id === m.id) { editData = m.data; renderAdmin(); } break;
     case "environment": setEnvironment(m.environment); break;
     case "saved": rev = m.rev; saving = false; break;
     case "data": saving = false; adopt(m.data, m.rev); break;
@@ -2798,7 +2799,7 @@ function ui() {
 
 // ---- staff (owner, 2026-11-08): Nyssary is admin and makes admins; admins make moderators and give items; moderators
 // mute, kick and ban. The Admin button opens the panel: everyone online, and any account by name. ----
-let myRole = "player", adminList = [], adminQ = "", giveTo = null, giveWhat = null;
+let myRole = "player", adminList = [], adminQ = "", giveTo = null, giveWhat = null, editTo = null, editData = null;
 const untilText = (u) => { const m = Math.round((u - Date.now()) / 60000); return m < 60 ? m + "m" : m < 2880 ? Math.round(m / 60) + "h" : Math.round(m / 1440) + "d"; };
 const banText = (u) => (u === -1 ? "Banned" : "Banned " + untilText(u));
 const isStaff = () => myRole === "moderator" || myRole === "admin";
@@ -2813,6 +2814,7 @@ let adminBuilt = "";
 function renderAdmin() {
   const el = $("admin"); if (!el) return;
   if (giveTo) { adminBuilt = ""; return renderGive(); }
+  if (editTo) { adminBuilt = ""; return renderEdit(); }
   if (adminBuilt !== myRole) {   // the search box and quick commands are built once, so typing keeps its focus while the list refreshes
     adminBuilt = myRole; el.innerHTML = "";
     const q = document.createElement("input"); q.className = "field asearch"; q.placeholder = "Search"; q.value = adminQ; q.maxLength = 16;
@@ -2866,12 +2868,43 @@ function renderAdmin() {
       acts.appendChild(sel([["", "Quick"], ...QUICK], "", (v) => v && quick({ id: p.id }, v)));
       acts.appendChild(btn(p.vip ? "VIP ★" : "VIP", p.vip ? "gold" : "ghost", () => adminSend({ op: "vip", id: p.id, on: !p.vip })));
       acts.appendChild(btn("Give", "gold", () => { giveTo = p; giveWhat = null; renderAdmin(); }));
+      acts.appendChild(btn("Edit", "", () => { editTo = p; editData = null; adminSend({ op: "inspect", id: p.id }); renderAdmin(); }));
     }
     r.appendChild(acts); rows.appendChild(r);
   }
 }
 // give someone an item, coins, Treats or a pet: type to narrow the list, pick one (owner, 2026-11-09: pets show the
 // Flier / Glider badge here too)
+// (owner, 2026-11-09) an admin edits someone's inventory: coins, items, Treats, and pets' levels (or takes pets away);
+// Save sends it all at once
+function renderEdit() {
+  const el = $("admin"); el.innerHTML = "";
+  const head = document.createElement("div"); head.className = "row2"; head.style.marginTop = "0";
+  const back = document.createElement("button"); back.className = "btn ghost small"; back.type = "button"; back.textContent = "←"; back.onclick = () => { editTo = null; editData = null; renderAdmin(); };
+  const who = document.createElement("b"); who.textContent = editTo.name; who.style.flex = "1"; head.append(back, who); el.appendChild(head);
+  if (!editData) return;
+  const d = editData, rows = document.createElement("div"); rows.className = "eform";
+  const field = (label, value, max, html) => { const r = document.createElement("label"); r.className = "erow"; const t = document.createElement("span"); if (html) t.innerHTML = html; else t.textContent = label; const i = document.createElement("input"); i.className = "field small"; i.type = "number"; i.min = 0; i.max = max; i.value = value; r.append(t, i); rows.appendChild(r); return i; };
+  const hd = (t) => { const h = document.createElement("div"); h.className = "ahead"; h.textContent = t; rows.appendChild(h); };
+  const coins = field("Coins", Math.floor(d.coins), 1e12, `<span class="coin"></span> Coins`);
+  hd("Items"); const items = {}; for (const k of Object.keys(d.items)) items[k] = field(ITEMS[k] ? ITEMS[k].name : k, d.items[k], 1e6);
+  const treats = {}; const tk = Object.keys(d.treats).filter((sp) => SPECIES[sp]); if (tk.length) { hd("Treats"); for (const sp of tk) treats[sp] = field(SPECIES[sp].name, d.treats[sp], 1e6); }
+  hd("Pets"); const pets = {};
+  for (const q of d.pets) {
+    if (!SPECIES[q.sp]) continue;
+    const i = field("", q.lv, 20, `${SPECIES[q.sp].name} ${moveBadge(q.sp)}${q.id === d.ride ? " ★" : ""}`); i.min = 1;
+    const x = document.createElement("button"); x.type = "button"; x.className = "btn small ghost"; x.textContent = "✕"; x.onclick = () => { const off = x.classList.toggle("red"); i.disabled = off; i.parentElement.classList.toggle("gone", off); };
+    i.parentElement.appendChild(x); pets[q.id] = { i, x };
+  }
+  const save2 = document.createElement("button"); save2.type = "button"; save2.className = "btn green"; save2.textContent = "Save";
+  save2.onclick = () => {
+    const msg = { op: "edit", id: editTo.id, coins: +coins.value, items: {}, treats: {}, pets: {} };
+    for (const k in items) msg.items[k] = +items[k].value; for (const sp in treats) msg.treats[sp] = +treats[sp].value;
+    for (const id in pets) msg.pets[id] = pets[id].x.classList.contains("red") ? 0 : +pets[id].i.value;
+    adminSend(msg);
+  };
+  el.append(rows, save2);
+}
 function renderGive() {
   const el = $("admin"); el.innerHTML = "";
   const head = document.createElement("div"); head.className = "row2"; head.style.marginTop = "0";
