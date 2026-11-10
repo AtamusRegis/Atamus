@@ -6,6 +6,7 @@ and any rule decided. Use `git log` for the code detail (and for the older Atamu
 
 ## 2026-11-09
 
+- **Flat grays (owner).** The sketch look drops its hatching and the ground's speckle: clear, flat grayscale with ink outlines.
 - **Nine pets (owner).** A Common, Rare and Legendary of each type: Pup, Raptor, T-Rex; Parrot, Owl, Dragon; Duck, Sea Turtle and the new Sea Serpent (a snake-dragon). The Epic rarity is gone; every retired pet became the new one of its type and rarity, keeping levels, training and Treats. Eggs, prices, Package Rush prizes and pen earnings follow the three rarities.
 - **Guides and circles in color (owner).** In the sketch look the guide arrow, the place rings, the lift beams and the delivery, Package Rush and arena beams stay in color.
 - **Minimap in black and white (owner).** The minimap is drawn like the world, white paper and black ink with the water hatched; markers keep their colors.

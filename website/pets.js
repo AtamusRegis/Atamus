@@ -89,6 +89,7 @@ const MATS = new Map(), mat = (c) => { if (!MATS.has(c)) MATS.set(c, new THREE.M
 const BOX = new THREE.BoxGeometry(1, 1, 1);
 function box(w, h, d, c, x, y, z, parent, shadow = true) { const m = new THREE.Mesh(BOX, mat(c)); m.scale.set(w, h, d); m.position.set(x, y, z); m.castShadow = shadow; m.receiveShadow = true; (parent || scene).add(m); return m; }
 let snowCover;
+const SKETCH = true;   // (owner, 2026-11-09) the world drawn in flat grays with ink outlines (the pass below)
 // (owner, 2026-11-09) guides and interaction circles stay in color: drawn after the sketch pass (layer 1), still hidden
 // behind what stands in front of them
 const inColor = (o) => { o.traverse((c) => c.layers.set(1)); return o; };
@@ -131,7 +132,7 @@ const inColor = (o) => { o.traverse((c) => c.layers.set(1)); return o; };
   }
   g.setAttribute("color", new THREE.BufferAttribute(cols, 3)); g.setAttribute("uv", new THREE.BufferAttribute(uvs, 2));
   const speck = (() => { const cv = document.createElement("canvas"); cv.width = cv.height = 128; const x = cv.getContext("2d"); x.fillStyle = "#fff"; x.fillRect(0, 0, 128, 128); for (let k = 0; k < 900; k++) { const v = 205 + Math.floor(Math.random() * 50); x.fillStyle = `rgb(${v},${v},${v})`; x.fillRect(Math.random() * 128, Math.random() * 128, 1 + Math.random() * 2, 1 + Math.random() * 2); } const t = new THREE.CanvasTexture(cv); t.wrapS = t.wrapT = THREE.RepeatWrapping; t.colorSpace = THREE.SRGBColorSpace; t.anisotropy = 4; return t; })();
-  const m = new THREE.Mesh(g, new THREE.MeshLambertMaterial({ vertexColors: true, map: speck })); m.receiveShadow = true; scene.add(m);
+  const m = new THREE.Mesh(g, new THREE.MeshLambertMaterial({ vertexColors: true, map: SKETCH ? null : speck })); m.receiveShadow = true; scene.add(m);   // (owner, 2026-11-09) flat in the sketch look
   snowCover = new THREE.Mesh(g, new THREE.MeshLambertMaterial({ color: "#eef7ff", transparent: true, opacity: 0, depthWrite: false, polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -2 })); snowCover.visible = false; snowCover.position.y = 0.025; scene.add(snowCover);
   // (owner, 2026-11-08) tall rocks standing on the cliffs and steep slopes, and boulders at their feet
   const rocks = [], rr = World.rng(77);
@@ -1213,13 +1214,9 @@ const sketchMat = new THREE.ShaderMaterial({
       float eL = smoothstep(0.22, 0.5, length(vec2(gx, gy)));
       float eD = smoothstep(0.035, 0.09, length(vec2(dx, dy)) / max(dc, 0.5)) * step(dc, far * 0.9);
       float edge = max(eL, eD);
-      float shade = mix(0.62, 1.0, smoothstep(0.08, 0.72, L));
-      vec2 p = gl_FragCoord.xy;
-      float h1 = 1.0 - smoothstep(0.0, 0.9, abs(mod(p.x + p.y, 7.0) - 3.5) - 2.6);
-      float h2 = 1.0 - smoothstep(0.0, 0.9, abs(mod(p.x - p.y, 7.0) - 3.5) - 2.6);
-      float hatch = h1 * (1.0 - smoothstep(0.32, 0.48, L)) + h2 * (1.0 - smoothstep(0.12, 0.26, L));
+      // (owner, 2026-11-09: no hatching) flat grays by brightness, on off-white paper
       vec3 paper = vec3(0.985, 0.978, 0.955);
-      vec3 col = paper * shade * (1.0 - 0.22 * clamp(hatch, 0.0, 1.0));
+      vec3 col = paper * mix(0.36, 1.0, smoothstep(0.04, 0.85, L));
       col = mix(col, vec3(0.1, 0.1, 0.12), edge);
       gl_FragColor = vec4(col, 1.0);
       gl_FragDepthEXT = texture2D(tDepth, vUv).r;   // the world's depth, so labels drawn after are hidden behind things
@@ -1228,7 +1225,6 @@ const sketchMat = new THREE.ShaderMaterial({
 });
 const sketchScene = new THREE.Scene(), sketchCam = new THREE.OrthographicCamera(-1, 1, 1, -1, 0, 1);
 sketchScene.add(new THREE.Mesh(new THREE.PlaneGeometry(2, 2), sketchMat));
-const SKETCH = true;
 function renderFrame() {
   if (!SKETCH) { camera.layers.enableAll(); renderer.render(scene, camera); return; }
   sketchMat.uniforms.gain.value = me.inst ? 1 : 1 / Math.max(0.45, 0.45 + 0.55 * skyNow.day);
