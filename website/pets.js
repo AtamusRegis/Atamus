@@ -89,7 +89,7 @@ const MATS = new Map(), mat = (c) => { if (!MATS.has(c)) MATS.set(c, new THREE.M
 const BOX = new THREE.BoxGeometry(1, 1, 1);
 function box(w, h, d, c, x, y, z, parent, shadow = true) { const m = new THREE.Mesh(BOX, mat(c)); m.scale.set(w, h, d); m.position.set(x, y, z); m.castShadow = shadow; m.receiveShadow = true; (parent || scene).add(m); return m; }
 let snowCover;
-const SKETCH = true;   // (owner, 2026-11-09) the world drawn in flat grays with ink outlines (the pass below)
+const SKETCH = true;   // (owner, 2026-11-09) the world drawn in shades of gray (the pass below)
 // (owner, 2026-11-09) guides and interaction circles stay in color: drawn after the sketch pass (layer 1), still hidden
 // behind what stands in front of them
 const inColor = (o) => { o.traverse((c) => c.layers.set(1)); return o; };
@@ -132,7 +132,7 @@ const inColor = (o) => { o.traverse((c) => c.layers.set(1)); return o; };
   }
   g.setAttribute("color", new THREE.BufferAttribute(cols, 3)); g.setAttribute("uv", new THREE.BufferAttribute(uvs, 2));
   const speck = (() => { const cv = document.createElement("canvas"); cv.width = cv.height = 128; const x = cv.getContext("2d"); x.fillStyle = "#fff"; x.fillRect(0, 0, 128, 128); for (let k = 0; k < 900; k++) { const v = 205 + Math.floor(Math.random() * 50); x.fillStyle = `rgb(${v},${v},${v})`; x.fillRect(Math.random() * 128, Math.random() * 128, 1 + Math.random() * 2, 1 + Math.random() * 2); } const t = new THREE.CanvasTexture(cv); t.wrapS = t.wrapT = THREE.RepeatWrapping; t.colorSpace = THREE.SRGBColorSpace; t.anisotropy = 4; return t; })();
-  const m = new THREE.Mesh(g, new THREE.MeshLambertMaterial({ vertexColors: true, map: SKETCH ? null : speck })); m.receiveShadow = true; scene.add(m);   // (owner, 2026-11-09) flat in the sketch look
+  const m = new THREE.Mesh(g, new THREE.MeshLambertMaterial({ vertexColors: true, map: speck })); m.receiveShadow = true; scene.add(m);
   snowCover = new THREE.Mesh(g, new THREE.MeshLambertMaterial({ color: "#eef7ff", transparent: true, opacity: 0, depthWrite: false, polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -2 })); snowCover.visible = false; snowCover.position.y = 0.025; scene.add(snowCover);
   // (owner, 2026-11-08) tall rocks standing on the cliffs and steep slopes, and boulders at their feet
   const rocks = [], rr = World.rng(77);
@@ -1204,28 +1204,11 @@ const sketchMat = new THREE.ShaderMaterial({
     float lum(vec2 uv) { vec3 c = pow(max(texture2D(tColor, uv).rgb, 0.0), vec3(1.0 / 2.2)); return dot(c, vec3(0.299, 0.587, 0.114)); }
     float dep(vec2 uv) { return lin(texture2D(tDepth, uv).r); }
     void main() {
-      float L = min(1.0, lum(vUv) * gain), dc = dep(vUv);   // gain: the night drawn a little lighter
-      float gx = 0.0, gy = 0.0;
-      for (int i = -1; i <= 1; i++) for (int j = -1; j <= 1; j++) {
-        if (i == 0 && j == 0) continue;
-        vec2 o = vec2(float(i), float(j)) * texel; float w = (i == 0 || j == 0) ? 2.0 : 1.0;
-        float l = lum(vUv + o);
-        gx += float(i) * w * l; gy += float(j) * w * l;
-      }
-      // depth edges: where the depth bends (second difference across each axis), so flat ground seen at a slant
-      // (whose depth changes evenly) draws no lines
-      vec2 tx = vec2(texel.x, 0.0), ty = vec2(0.0, texel.y);
-      float bend = max(max(abs(dep(vUv + tx) + dep(vUv - tx) - 2.0 * dc), abs(dep(vUv + ty) + dep(vUv - ty) - 2.0 * dc)),
-        max(abs(dep(vUv + tx + ty) + dep(vUv - tx - ty) - 2.0 * dc), abs(dep(vUv + tx - ty) + dep(vUv - tx + ty) - 2.0 * dc)));
-      float eL = smoothstep(0.22, 0.5, length(vec2(gx, gy)));
-      float eD = smoothstep(0.03, 0.08, bend / max(dc, 0.5)) * step(dc, far * 0.9);
-      float edge = max(eL, eD);
-      // (owner, 2026-11-09: no hatching) flat grays by brightness, on off-white paper
-      vec3 paper = vec3(0.985, 0.978, 0.955);
-      vec3 col = paper * mix(0.36, 1.0, smoothstep(0.04, 0.85, L));
-      col = mix(col, vec3(0.1, 0.1, 0.12), edge);
-      gl_FragColor = vec4(col, 1.0);
-      gl_FragDepthEXT = texture2D(tDepth, vUv).r;   // the world's depth, so labels drawn after are hidden behind things
+      // (owner, 2026-11-09: no outlines, no hatching) the world in plain shades of gray: each pixel's brightness, its
+      // textures and shading kept
+      float L = min(1.0, lum(vUv) * gain);   // gain: the night drawn a little lighter
+      gl_FragColor = vec4(vec3(L), 1.0);
+      gl_FragDepthEXT = min(1.0, texture2D(tDepth, vUv).r + 0.00002);   // the world's depth (a hair farther, so rings on the ground never flicker), so what's drawn in color after is hidden behind things
     }`,
   depthTest: true, depthFunc: THREE.AlwaysDepth, depthWrite: true,
 });
