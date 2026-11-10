@@ -426,5 +426,6 @@ export function cleanData(d, species) {
     items: { snack: int(items.snack, 0, 1e6), ribbon: int(items.ribbon, 0, 1e6), ticket: int(items.ticket, 0, 1e6) }, treats,
     delivered: int(d.delivered, 0, 1e9), nextId, shirt: /^#[0-9a-f]{6}$/i.test(d.shirt) ? d.shirt : "#3a8ee6",
     settings: { followArrowWhenEmpty: !(d.settings && d.settings.followArrowWhenEmpty === false) }, home,
+    intro: int(d.intro, 0, 1, 0),   // (owner, 2026-11-09) 1 once the walk-through is done
   };
 }
