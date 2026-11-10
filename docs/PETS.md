@@ -389,7 +389,7 @@ Asked (owner): a web game on atamus.io (not Roblox), on its own page; the cargo 
   (`pet_admin_log`).
 - **Admin** button (staff only) opens the panel: everyone online, and any account by name (type to search). Each shows
   online, role, VIP, muted / banned (with time left), and: role (who's allowed), Mute (10m, 1h, 1d, 7d, 30d, Perma,
-  Off), Ban (the same), Kick (online), Quick, VIP and Give (admins). Online players first; your own row has no mute,
+  Off), Ban (the same), Kick (online), Quick, VIP, Give and Edit (admins). Online players first; your own row has no mute,
   ban or kick. The search box keeps its focus while the list refreshes.
 - **Environment controls (owner, 2026-11-09, admins):** the top of the panel changes the shared weather (Auto, Clear,
   Rain, Snow, Storm or Fog) and time of day (Auto, Sunrise, Day, Sunset or Night). Moderators don't get these controls.
@@ -403,6 +403,9 @@ Asked (owner): a web game on atamus.io (not Roblox), on its own page; the cargo 
   `/everything` (or `/all`), `/unwanted`, each on yourself or on the player named after it (`/coins 1m Name`);
   `/kick Name`, `/mute Name 1h`, `/ban Name 7d` (minutes, or m / h / d, `perma`, `off`; 1 hour if left out).
   Anything else: "Unknown". The server's own rules decide, as in the panel (moderators can't run the quick ones).
+- **Edit (owner, 2026-11-09; admins, on anyone below them or themselves, online or not):** the player's inventory as
+  it is: coins, each item, their Treats, and each pet with its level (and the one they ride ★); change the numbers, ✕
+  takes a pet away (one always stays), **Save** sends it all; an online player gets it at once. Logged like the rest.
 - **Give:** type to narrow the list of everything (Coins, Speed Candy, Training Ribbon, Egg Ticket, every pet, every
   kind's Treats; pets carry their Flier / Glider badge, owner 2026-11-09), pick one, the amount (and level for a pet), Give; it lands in their data straight away (online or
   not).

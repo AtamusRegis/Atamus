@@ -194,6 +194,27 @@ export function attachPets(server, { origins = [], allowLocal = false, store = m
         if (cmd === "treats" || every) for (const sp of SPECIES) d.treats[sp] = Math.min(1e6, (d.treats[sp] || 0) + 100);
         await putData(d); log("quick", cmd + (cmd === "coins" ? " " + m.n : "")); break;
       }
+      // (owner, 2026-11-09) admins see and edit anyone's inventory (below them, or their own): coins, items, Treats, pets
+      case "inspect": {
+        if (my < 2) return reply("Not allowed");
+        const d = cleanData(a.data, SPECIES);
+        send(me.ws, { t: "admin_data", id: a.id, name: a.name, data: { coins: d.coins, items: d.items, treats: d.treats, pets: d.pets, ride: d.ride } }); return;
+      }
+      case "edit": {
+        if (my < 2) return reply("Not allowed");
+        const d = cleanData(a.data, SPECIES), num = (v, hi) => Math.max(0, Math.min(hi, Math.floor(+v) || 0));
+        if (m.coins !== undefined) d.coins = num(m.coins, 1e12);
+        if (m.items && typeof m.items === "object") for (const k of Object.keys(d.items)) if (m.items[k] !== undefined) d.items[k] = num(m.items[k], 1e6);
+        if (m.treats && typeof m.treats === "object") for (const sp of Object.keys(m.treats)) if (SPECIES.has(sp)) { const n = num(m.treats[sp], 1e6); if (n) d.treats[sp] = n; else delete d.treats[sp]; }
+        if (m.pets && typeof m.pets === "object") {   // { pet id: level, or 0 to take it away }
+          for (const q of d.pets) if (m.pets[q.id] !== undefined) q.lv = Math.floor(+m.pets[q.id]) || 0;
+          const keep = d.pets.filter((q) => q.lv > 0); if (keep.length) d.pets = keep.map((q) => ({ ...q, lv: Math.max(1, Math.min(20, q.lv)) }));
+          if (!d.pets.some((q) => q.id === d.ride)) d.ride = d.pets[0].id;
+        }
+        await putData(cleanData(d, SPECIES)); log("edit", JSON.stringify({ coins: m.coins, items: m.items, treats: m.treats, pets: m.pets }).slice(0, 300));
+        send(me.ws, { t: "admin_data", id: a.id, name: a.name, data: (({ coins, items, treats, pets, ride }) => ({ coins, items, treats, pets, ride }))(cleanData(a.data, SPECIES)) });
+        break;
+      }
       default: return;
     }
     reply("Done");
