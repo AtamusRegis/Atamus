@@ -6,6 +6,7 @@ and any rule decided. Use `git log` for the code detail (and for the older Atamu
 
 ## 2026-11-09
 
+- **Polish (owner).** Log Out in the gear menu; thinner rings and telegraph rims; bright red animal control at any hour; short, faint, fewer wind streaks; characters' light parts no longer blow out at night.
 - **Telegraphs, click-on talks, Walt's voucher (owner).** Animal control's reach is drawn as red ground shapes (van sight, searchlight circles); helicopters and searchlights are red; talk lines stay until you click; the walk-through sends you back to Walt for the egg voucher.
 - **The walk-through (owner).** Walt the mailman shows every courier the job once: animal control scenes, two parcels to deliver, a free egg to hatch, and contracts.
 - **Chevron boosts and van sight lines (owner).** Road boosts are see-through chevrons that point and run away from you; animal control vans show red sight lines on the ground, fading with distance.

@@ -457,7 +457,8 @@ const snow = new THREE.Points(snowG, new THREE.PointsMaterial({ color: "#ffffff"
 const flakes = Array.from({ length: SNOW_N }, () => ({ x: (Math.random() - 0.5) * 80, y: Math.random() * 45, z: (Math.random() - 0.5) * 80, v: 3 + Math.random() * 4, sway: Math.random() * TAU }));
 // wind: pale streaks blowing past
 const windTex = (() => { const cv = document.createElement("canvas"); cv.width = 64; cv.height = 4; const x = cv.getContext("2d"), gr = x.createLinearGradient(0, 0, 64, 0); gr.addColorStop(0, "rgba(255,255,255,0)"); gr.addColorStop(0.5, "rgba(255,255,255,1)"); gr.addColorStop(1, "rgba(255,255,255,0)"); x.fillStyle = gr; x.fillRect(0, 0, 64, 4); return new THREE.CanvasTexture(cv); })();
-const winds = Array.from({ length: 72 }, () => { const m = new THREE.Mesh(new THREE.PlaneGeometry(12, 0.18), new THREE.MeshBasicMaterial({ map: windTex, transparent: true, opacity: 0, depthWrite: false, side: THREE.DoubleSide, blending: THREE.AdditiveBlending })); scene.add(m); return { m, life: 0, max: 1, x: 0, y: 0, z: 0 }; });
+const winds = Array.from({ length: 26 }, () => { const m = new THREE.Mesh(new THREE.PlaneGeometry(4.5, 0.08),   // (owner, 2026-11-09: too long, solid and many)
+ new THREE.MeshBasicMaterial({ map: windTex, transparent: true, opacity: 0, depthWrite: false, side: THREE.DoubleSide, blending: THREE.AdditiveBlending })); scene.add(m); return { m, life: 0, max: 1, x: 0, y: 0, z: 0 }; });
 // (owner, 2026-11-09) the wind, the same for everyone (timed off the clock): 3 to 40 mph, easing to a new strength every
 // 3 minutes (windier in the rain) with gusts on top, its direction swinging slowly round. WIND is where it blows to.
 const WIND_BLOCK = 180, WIND_MIN = 3, WIND_MAX = 40;
@@ -527,7 +528,7 @@ function skyStep(dt, cx, cy, cz) {
     w.x += WIND.x * wsp * dt; w.z += WIND.z * wsp * dt; w.m.position.set(w.x, w.y + Math.sin(w.life * 3) * 0.3, w.z);
     tmpV.copy(camera.position).sub(w.m.position); tmpV.addScaledVector(WIND, -tmpV.dot(WIND)).normalize(); tmpV2.crossVectors(tmpV, WIND);   // long side along the wind, flat face to the camera
     tmpM.makeBasis(WIND, tmpV2, tmpV); w.m.quaternion.setFromRotationMatrix(tmpM);
-    w.m.material.opacity = Math.sin((w.life / w.max) * Math.PI) * 0.34 * (0.75 + 0.25 * day) * clamp((hyp(w.x - cx, w.z - cz) - 12) / 8, 0, 1);
+    w.m.material.opacity = Math.sin((w.life / w.max) * Math.PI) * 0.16 * (0.75 + 0.25 * day) * clamp((hyp(w.x - cx, w.z - cz) - 12) / 8, 0, 1);
   }
   // god rays: brightest with the sun low, gone at night and in the rain
   const rk = me.inst ? 0 : day * (1 - rainK) * (0.35 + dusk * 0.9) * 0.22;
@@ -545,7 +546,7 @@ const toWorld = (b, lx, lz) => ({ x: b.x + lx * Math.cos(b.yaw) + lz * Math.sin(
 // the post office, its pickup ring and the contract board
 { const g = bldg(POST); box(18, 7, 10, "#d9e4ee", 0, 3.5, 0, g); box(19, 0.8, 11, "#3a8ee6", 0, 7.4, 0, g); box(4, 3.6, 0.2, "#3a6ea8", 0, 1.8, 5.05, g);
   box(8, 1.6, 0.3, "#f2b01e", 0, 5.4, 5.1, g); box(1.6, 1.1, 0.35, "#e5534b", 0, 5.4, 5.2, g); }
-const RINGG = (r) => new THREE.RingGeometry(r - 0.35, r, 40).rotateX(-Math.PI / 2);
+const RINGG = (r) => new THREE.RingGeometry(r - 0.18, r, 64).rotateX(-Math.PI / 2);   // (owner, 2026-11-09) thin, crisp outlines
 const ringM = (c) => new THREE.MeshBasicMaterial({ color: c, transparent: true, opacity: 0.85 });
 const pickRing = new THREE.Mesh(RINGG(PICKUP.r), ringM("#f2b01e")); pickRing.position.set(PICKUP.x, 0.16, PICKUP.z); scene.add(inColor(pickRing));
 box(2.6, 2, 0.25, "#8a5a3a", BOARD.x, 2.2, BOARD.z - 1.5); box(0.2, 1.4, 0.2, "#7a4f28", BOARD.x - 1, 0.7, BOARD.z - 1.5); box(0.2, 1.4, 0.2, "#7a4f28", BOARD.x + 1, 0.7, BOARD.z - 1.5); box(2.2, 1.5, 0.05, "#fbf3dc", BOARD.x, 2.25, BOARD.z - 1.35);
@@ -604,8 +605,8 @@ const FACE_M = faceMat(SKIN);
 // look (townsfolk only): { skin, pants, sleeve (the arms' colour: long sleeves), blush }
 // (owner, 2026-11-09) people and pets stay bright at night: their materials are their own copies that glow with their
 // own colour as it gets dark (nightGlow), and a soft dark spot lies on the ground under each (blobs)
-const CHAR_MATS = new Map();
-function charMat(m) { if (!CHAR_MATS.has(m)) { const c = m.clone(); c.emissive = m.color ? m.color.clone() : new THREE.Color("#ffffff"); c.emissiveMap = m.map || null; c.emissiveIntensity = nightGlow; CHAR_MATS.set(m, c); } return CHAR_MATS.get(m); }
+const CHAR_MATS = new Map();   // (owner, 2026-11-09: light parts too bright) the night glow lifts colors to about half, not past them
+function charMat(m) { if (!CHAR_MATS.has(m)) { const c = m.clone(); c.emissive = m.color ? m.color.clone().multiplyScalar(0.45) : new THREE.Color("#737373"); c.emissiveMap = m.map || null; c.emissiveIntensity = nightGlow; CHAR_MATS.set(m, c); } return CHAR_MATS.get(m); }
 let nightGlow = 0;
 function brighten(g) { g.traverse((o) => { if (o.isMesh && o.material && o.material.isMeshLambertMaterial && !CHAR_MATS.has(o.material) && ![...CHAR_MATS.values()].includes(o.material)) o.material = charMat(o.material); }); return g; }
 const BLOB_TEX = (() => { const c = document.createElement("canvas"); c.width = c.height = 64; const g = c.getContext("2d"), r = g.createRadialGradient(32, 32, 0, 32, 32, 32); r.addColorStop(0, "rgba(0,0,0,0.42)"); r.addColorStop(0.6, "rgba(0,0,0,0.22)"); r.addColorStop(1, "rgba(0,0,0,0)"); g.fillStyle = r; g.fillRect(0, 0, 64, 64); return new THREE.CanvasTexture(c); })();
@@ -1024,9 +1025,12 @@ function vanModel(style = 1) {
   // Three animal-control silhouettes share the same equipment: a compact car, the standard van and a taller SUV.
   if (style === 0) body.scale.set(0.86, 0.8, 0.84);
   else if (style === 2) { body.scale.set(1.05, 1.1, 0.92); box(2.1, 0.12, 2.5, "#3d4650", 0, 2.28, -0.25, body); }
-  inColor(g);   // (owner, 2026-11-09) animal control is red, in color in the sketch look
+  acRed(g); inColor(g);   // (owner, 2026-11-09) animal control is red, in color in the sketch look
   return { g, body, red, blue, lamp, lit, spd: 0 };
 }
+// (owner, 2026-11-09) animal control's red stays bright red, day and night
+const AC_RED = new THREE.MeshLambertMaterial({ color: "#ff3b30", emissive: "#a01810" });
+function acRed(g) { const r = mat("#d63a3a"); g.traverse((o) => { if (o.isMesh && o.material === r) o.material = AC_RED; }); }
 function heliModel() {
   const g = new THREE.Group(), body = new THREE.Group(); g.add(body);
   box(2.4, 2, 4, "#d63a3a", 0, 0, 0, body); box(2.2, 1.2, 1.4, "#3a5a7a", 0, 0.2, 1.9, body); box(2.46, 0.4, 4.05, "#ffffff", 0, -0.3, 0, body);
@@ -1042,7 +1046,7 @@ function heliModel() {
   box(0.6, 0.45, 0.6, "#2b3440", 0, -1.15, 1.6, body); const lens = new THREE.Mesh(new THREE.CircleGeometry(0.26, 16).rotateX(Math.PI / 2), new THREE.MeshBasicMaterial({ color: "#35363a" })); lens.position.set(0, -1.39, 1.6); body.add(lens);
   const spot = new THREE.SpotLight("#ff6a6a", 0, 0, World.BEAM.half * 1.15, 0.45, 0); spot.layers.enableAll(); scene.add(spot, spot.target);
   const beam = new THREE.Mesh(BEAM_CONE, searchBeamM); beam.frustumCulled = false; scene.add(beam);
-  inColor(g); inColor(beam);   // (owner, 2026-11-09) red, in color in the gray look
+  acRed(g); inColor(g); inColor(beam);   // (owner, 2026-11-09) red, in color in the gray look
   return { g, body, red, blue, rotor, tail, lens, spot, beam, ba: 0, bd: 15 };
 }
 const localVs = World.makeVehicles();
@@ -1054,7 +1058,7 @@ const vehs = localVs.map((v) => { const m = v.kind ? heliModel() : vanModel(v.st
 const telM = new THREE.ShaderMaterial({
   uniforms: { t: { value: 0 }, c: { value: new THREE.Color("#ff2b2b") } }, transparent: true, depthWrite: false, side: THREE.DoubleSide, polygonOffset: true, polygonOffsetFactor: -6, polygonOffsetUnits: -6,
   vertexShader: "attribute float f; varying float vF; void main() { vF = f; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }",
-  fragmentShader: "uniform float t; uniform vec3 c; varying float vF; void main() { float fill = mix(0.26, 0.12, vF); float rim = smoothstep(0.9, 0.965, vF) * (1.0 - smoothstep(0.985, 1.0, vF)) * 0.9; float p = fract(t * 0.55); float pulse = (1.0 - smoothstep(0.0, 0.06, abs(vF - p))) * 0.35 * (1.0 - p); gl_FragColor = vec4(c, clamp(fill + rim + pulse, 0.0, 1.0)); }",
+  fragmentShader: "uniform float t; uniform vec3 c; varying float vF; void main() { float fill = mix(0.26, 0.12, vF); float rim = smoothstep(0.955, 0.975, vF) * (1.0 - smoothstep(0.993, 1.0, vF)) * 0.95; float p = fract(t * 0.55); float pulse = (1.0 - smoothstep(0.0, 0.06, abs(vF - p))) * 0.35 * (1.0 - p); gl_FragColor = vec4(c, clamp(fill + rim + pulse, 0.0, 1.0)); }",
 });
 function telegraphGeo(rOf, N = 72) {   // a fan from the middle out to rOf(angle) (angle 0 = +z, ahead); f: 0 in the middle, 1 at the edge
   const pos = [0, 0, 0], f = [0], idx = [];
@@ -1304,6 +1308,7 @@ function renderSettings() { const el = $("settings"); el.innerHTML = ""; const l
 // (owner, 2026-11-09) the gear left of the chat: a menu with Settings and, for staff, the Admin Panel
 const gearMenu = $("gearmenu");
 $("gear").onclick = () => { gearMenu.style.display = gearMenu.style.display === "flex" ? "none" : "flex"; $("gm-admin").style.display = isStaff() ? "" : "none"; };
+$("gm-logout").onclick = () => { gearMenu.style.display = "none"; flushSave(performance.now()); setTok(null); try { localStorage.setItem("petdelivery.claimed", "1"); } catch (e) { /* private mode */ } setTimeout(() => location.reload(), 150); };   // (owner, 2026-11-09) back to the login, to use or make another account
 $("gm-settings").onclick = () => { gearMenu.style.display = "none"; openPanel === "p-settings" ? closePanels() : show("p-settings"); };
 const WING = `<svg class="ico" viewBox="0 0 14 12" style="width:14px;height:12px;vertical-align:-1px"><path d="M1 10C3 3 8 1 13 1c-1 5-5 9-12 9z" fill="#3a8ee6"/></svg>`;
 // (owner, 2026-11-08: make fliers and gliders obvious) a coloured badge on every card: Flier (sky blue, flapping wings)

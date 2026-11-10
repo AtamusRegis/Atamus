@@ -69,7 +69,7 @@ Asked (owner): a web game on atamus.io (not Roblox), on its own page; the cargo 
   and clouds drift with it. **From 12 mph (most at 40), a flier or glider in the air** drifts gently downwind (up to
   1.4 m/s) and bobs a little (under a metre up and down, a little side to side; flying pets nod slightly with it);
   never on the ground, while stunned or in a home, and the wind never pushes you into a cliff, wall or house. Wind
-  streaks are long, bright and common enough to make its direction clear around town. **Airborne fliers and gliders**
+  streaks are short, faint and few (owner, 2026-11-09: they were too long, solid and frequent). **Airborne fliers and gliders**
   gain up to 10% speed flying with the wind and lose up to 5% flying against it, tapering to no change across it.
   **On screen** (the owner asked for it): a pill under your name with an arrow the way the wind blows (turned with the
   camera), its speed in mph, and the active flight speed percentage in green or red; hidden in a home.
@@ -127,7 +127,8 @@ Asked (owner): a web game on atamus.io (not Roblox), on its own page; the cargo 
   every pet, person, walker and van (smaller and fainter the higher they are). The vans' overlapping faces are offset
   (no flicker).
 - **Bright at night (owner, 2026-11-09):** pets, riders, walkers and the townsfolk glow with their own colors as it
-  gets dark, so they look about as bright at night as by day.
+  gets dark (a lift to about half their color, owner 2026-11-09: light parts were blowing out to white), so they stay
+  readable at night.
 
 ## The courier
 
@@ -169,7 +170,8 @@ Asked (owner): a web game on atamus.io (not Roblox), on its own page; the cargo 
   shapes, in color: a translucent fill, lighter toward its edge, a bright rim and a ring pulsing out from the middle.
   Round each van that's looking (hidden while it chases): the shape of how far it can see you (farther ahead, less
   behind, more per wanted star of yours: `vanSight` in pets-world.js). Under each helicopter's searchlight: the circle
-  it catches you in. Helicopters are red with a white stripe, and the searchlight is red.
+  it catches you in. Helicopters are red with a white stripe, and the searchlight is red. Animal control's red stays bright day and night
+  (it glows a little; owner, 2026-11-09). The place rings are thin outlines (0.18 m).
 - 8 animal control cars (red, owner 2026-11-09) with light bars patrol the roads (driving on the right, turning round at a road's end) and 2
   helicopters circle over town. Online the server runs them for the whole room; offline the page does.
 - They only go after players carrying parcels (owner, 2026-11-08); a chase ends if the bag empties (no star).
@@ -316,8 +318,8 @@ Asked (owner): a web game on atamus.io (not Roblox), on its own page; the cargo 
   in at its foot (a tap on it, or Enter or / on a computer; up to 120 characters, one message per 1.2 s). Left alone 6 s
   its dark background and the typing line fade (the messages stay). The chat button shows or hides the window. Messages
   also show as a speech bubble over the sender for 6 s. Online only.
-- **Menu (owner, 2026-11-09):** a gear left of the chat button opens a menu: **Settings**, and for staff **Admin
-  Panel** (the side buttons Chat, Settings and Admin are gone).
+- **Menu (owner, 2026-11-09):** a gear left of the chat button opens a menu: **Settings**, for staff **Admin
+  Panel**, and **Log Out** (owner, 2026-11-09: back to the login, to sign in to or make another account) (the side buttons Chat, Settings and Admin are gone).
 - **Players online (owner, 2026-11-09):** a green dot (grey offline) and the count in white at the bottom right inside
   the map (the online pill is gone). The distance-to-home pill is gone too.
 - **Candy (owner, 2026-11-09):** its button stays put (only its count changes), so it can be tapped while moving on a
