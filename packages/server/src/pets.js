@@ -6,15 +6,14 @@
 //   smoothly), which pet they ride, animal control (pets-world.js, the same file the page uses) and wanted levels,
 //   contracts (personal, or shared with your party: every delivery in it counts, the reward split by deliveries) and chat.
 // - Parties and trades between players, checked and carried out here.
-// - Housing plots (owner, 2026-11-08): each player in a room gets a plot their house (kept in their data) stands on, seen
-//   by everyone: VIPs the two on the VIP island, then the three near the middle (first come, first served), then one of
-//   five around town at random; past 10 players the extra island's plots.
+// - Housing (owner, 2026-11-10): each player in a room takes a random free town house's lot (its id is their plot); their
+//   own house (kept in their data) stands there, seen by everyone, until they leave and the town house comes back.
 // - The block world (owner, 2026-11-10): staff (admin) build the town from blocks; their edits go to everyone at once,
 //   rebuild every room's animal control, and are saved (one copy, in the store).
 // Connections that go quiet are dropped; logging in again replaces the old connection. A new website build reloads
 // everyone onto it.
 import { WebSocketServer } from "ws";
-import { makeVehicles, stepVehicles, cleanData, petCap, penPets, setWorld, worldData, applyEdits } from "./pets-world.js";
+import { makeVehicles, stepVehicles, cleanData, petCap, penPets, setWorld, worldData, applyEdits, PLOTS, lotById } from "./pets-world.js";
 import { makePackageEvent, packageEventView, packageReward, takePackage } from "./package-events.js";
 import { onWebsiteUpdate, websiteBuild, websiteBy } from "./build.js";
 import { hashSecret, verifySecret } from "./hash.js";
@@ -42,7 +41,7 @@ const GIVE_ITEMS = new Set(["snack", "ribbon", "ticket"]);
 
 function roomFor(packageEveryMs) {
   let r = rooms.find((q) => q.players.size < ROOM_MAX);
-  if (!r) { const now = Date.now(); r = { players: new Map(), packageEvent: null, nextPackageEvent: now + packageEveryMs, packageEveryMs, vs: makeVehicles(), last: now, plots: new Array(16).fill(null) }; rooms.push(r); }
+  if (!r) { const now = Date.now(); r = { players: new Map(), packageEvent: null, nextPackageEvent: now + packageEveryMs, packageEveryMs, vs: makeVehicles(), last: now, plots: new Map() }; rooms.push(r); }
   return r;
 }
 const send = (ws, o) => { if (ws && ws.readyState === 1) ws.send(JSON.stringify(o)); };
@@ -54,15 +53,14 @@ const plotMsg = (plot, p) => {
   for (const t of d.home.pieces) if (t.k === "pen" && t.pet) { const q = d.pets.find((x) => x.id === t.pet); if (q) penSp[t.pet] = q.sp; }
   return { t: "plot", plot, id: p.id, name: p.name, pieces: d.home.pieces, ext: d.home.ext | 0, penSp };   // ext: the house outside (owner, 2026-11-09)
 };
-function assignPlot(r, p) {
-  const free = (ids) => ids.filter((i) => !r.plots[i]);
-  let pick = null;
-  if (p.acct.vip) pick = free([3, 4])[0];
-  if (pick === undefined || pick === null) pick = free([0, 1, 2])[0];
-  if (pick === undefined) { const f = free([5, 6, 7, 8, 9]); pick = f.length ? f[Math.floor(Math.random() * f.length)] : undefined; }
-  if (pick === undefined) pick = free([10, 11, 12, 13, 14, 15])[0];
-  if (pick === undefined) return;
-  r.plots[pick] = p; p.plot = pick;
+function assignPlot(r, p) {   // a random town house nobody in the room lives in (none free: no house for now)
+  const free = PLOTS.filter((l) => !r.plots.has(l.id)); if (!free.length) { p.plot = -1; return; }
+  const pick = free[Math.floor(Math.random() * free.length)].id; r.plots.set(pick, p); p.plot = pick;
+}
+// after the world changes: anyone whose house is gone moves to another, and anyone without one gets one if there's room
+function relot(r) {
+  for (const [id, p] of [...r.plots]) if (!lotById.has(id)) { r.plots.delete(id); all(r, plotMsg(id, null)); p.plot = -1; send(p.ws, { t: "myplot", plot: -1 }); }
+  for (const p of r.players.values()) if (p.plot < 0) { assignPlot(r, p); if (p.plot >= 0) { send(p.ws, { t: "myplot", plot: p.plot }); all(r, plotMsg(p.plot, p), p); } }
 }
 // a contract belongs to your party when you're in one, or to you
 const groupOf = (p) => p.party || p, membersOf = (g) => (g.members ? [...g.members] : [g]);
@@ -84,7 +82,7 @@ function finish(g, won) {
 export function attachPets(server, { origins = [], allowLocal = false, store = memStore(), packageEveryMs = 0 } = {}) {   // (owner, 2026-11-09) Package Rush off for now (0); tests pass a period
   // (owner, 2026-11-10) the saved block world (until it's loaded, or if there's none, the starting square)
   let worldSave = null;
-  store.getWorld().then((d) => { if (!d) return; setWorld(d); for (const r of rooms) r.vs = makeVehicles(r.vs); const w = worldData(); for (const p of online.values()) send(p.ws, { t: "world", all: w }); }).catch((e) => console.error("[pets] world load", e.message));
+  store.getWorld().then((d) => { if (!d) return; setWorld(d); for (const r of rooms) r.vs = makeVehicles(r.vs); const w = worldData(); for (const p of online.values()) send(p.ws, { t: "world", all: w }); for (const r of rooms) relot(r); }).catch((e) => console.error("[pets] world load", e.message));
   // Admins can override the clock-driven sky for everyone. It returns to the normal cycle when the server restarts.
   let environment = { weather: "auto", time: "auto" };
   // ---- saving: changed accounts are written every few seconds (and when their player leaves) ----
@@ -142,7 +140,7 @@ export function attachPets(server, { origins = [], allowLocal = false, store = m
       if (my < 2) return reply("Not allowed");
       const done = applyEdits(m.edits); if (!done.length) return;
       for (const p of online.values()) send(p.ws, { t: "world", edits: done });
-      for (const r of rooms) r.vs = makeVehicles(r.vs);   // those still placed carry on where they are
+      for (const r of rooms) { r.vs = makeVehicles(r.vs); relot(r); }   // those still placed carry on where they are; anyone whose house went moves
       clearTimeout(worldSave); worldSave = setTimeout(() => store.saveWorld(worldData()).catch((e) => console.error("[pets] world save", e.message)), 800);
       return;
     }
@@ -275,7 +273,7 @@ export function attachPets(server, { origins = [], allowLocal = false, store = m
         me.airMount = AIR_MOUNTS.has(me.sp);
         online.set(acct.id, me);
         assignPlot(room, me);
-        send(ws, { t: "welcome", world: worldData(), web: websiteBuild(), by: websiteBy(), id: me.id, name: me.name, role: rankOf(acct) >= 2 ? "admin" : acct.role, token, data: acct.data, rev: acct.rev, players: [...room.players.values()].map(pub), contract: null, packageEvent: packageEventView(room.packageEvent), stars: me.stars, vip: !!acct.vip, plot: me.plot, plots: room.plots.map((p, i) => (p ? plotMsg(i, p) : null)).filter(Boolean), environment });
+        send(ws, { t: "welcome", world: worldData(), web: websiteBuild(), by: websiteBy(), id: me.id, name: me.name, role: rankOf(acct) >= 2 ? "admin" : acct.role, token, data: acct.data, rev: acct.rev, players: [...room.players.values()].map(pub), contract: null, packageEvent: packageEventView(room.packageEvent), stars: me.stars, vip: !!acct.vip, plot: me.plot, plots: [...room.plots].map(([i, p]) => plotMsg(i, p)), environment });
         room.players.set(me.id, me);
         all(room, { t: "join", p: pub(me) }, me);
         if (me.plot >= 0) all(room, plotMsg(me.plot, me), me);
@@ -288,7 +286,7 @@ export function attachPets(server, { origins = [], allowLocal = false, store = m
       if (p.trade) endTrade(p.trade, "left");
       leaveParty(p);
       const r = p.room; if (r && r.players.get(p.id) === p) {
-        if (p.plot >= 0 && r.plots[p.plot] === p) { r.plots[p.plot] = null; all(r, plotMsg(p.plot, null)); }
+        if (p.plot >= 0 && r.plots.get(p.plot) === p) { r.plots.delete(p.plot); all(r, plotMsg(p.plot, null)); }
         r.players.delete(p.id); all(r, { t: "leave", id: p.id });
         if (!r.players.size) rooms.splice(rooms.indexOf(r), 1);
       }

@@ -29,9 +29,9 @@ export function rng(seed) { let s = seed; return () => ((s = (s * 16807) % 21474
 // block of water, its surface just under the top), corner (owner, 2026-11-10: a flat block cut corner to corner, road
 // on one side, grass on the other, to round a road's turn) and half (the road half of that, nothing on the other side).
 // Blocks can float with nothing under them (floating islands).
-// Things stand on tiles: trees, houses (on a tile corner, 2 x 2 tiles, facing a way, with a mailbox in front), lone
+// Things stand on tiles: trees, houses (on a tile, facing a way, with a mailbox at the front of their 3 x 3 lot), lone
 // mailboxes, boost pads (on roads), animal control vans (on roads: they roam every road joined to theirs), helicopters
-// (anywhere, keeping within a chosen radius) and housing plots (3 x 3 tiles, by plot number). Only staff (admin) edit it,
+// (anywhere, keeping within a chosen radius); every house is also a lot a player can live on (3 x 3 tiles). Only staff (admin) edit it,
 // live, for everyone; the server keeps it. It starts as just the town square: a round island of tiles with the square's
 // buildings, which stay where they are. ----
 export const TILE = 6, STEP = 3;
@@ -55,7 +55,7 @@ function cleanThing(o) {
   const i = +o.i, j = +o.j, y = +o.y; if (!okInt(i, -200, 200) || !okInt(j, -200, 200) || !Number.isFinite(y) || Math.abs(y) > 200) return null;
   const t = { id: okInt(+o.id, 1, 1e9) ? +o.id : nextThing++, k: o.k, i, j, y: Math.round(y * 100) / 100, d: okInt(+o.d, 0, 3) ? +o.d : 0 };
   if (t.k === "heli") t.r = okInt(+o.r, 10, 400) ? +o.r : 80;
-  if (t.k === "plot") { if (!okInt(+o.p, 0, PLOTS.length - 1)) return null; t.p = +o.p; }
+  if (t.k === "plot") { if (!okInt(+o.p, 0, 999)) return null; t.p = +o.p; }   // (owner, 2026-11-10) old plot markers: kept in the data, no longer used
   nextThing = Math.max(nextThing, t.id + 1); return t;
 }
 // the whole world from saved data (bad entries dropped)
@@ -74,7 +74,7 @@ export function applyEdits(edits) {
   for (const e of Array.isArray(edits) ? edits.slice(0, 200) : []) {
     if (e && e.op === "put") { const c = cleanCell(e.c); if (c) { cells.set(ckey(c.i, c.j, c.k), c); done.push({ op: "put", c: [c.i, c.j, c.k, KINDS.indexOf(c.t), c.d] }); } }
     else if (e && e.op === "del" && Array.isArray(e.c)) { const k = ckey(+e.c[0], +e.c[1], +e.c[2]); if (cells.delete(k)) done.push({ op: "del", c: [+e.c[0], +e.c[1], +e.c[2]] }); }
-    else if (e && e.op === "add") { const t = cleanThing({ ...e.t, id: e.t && e.t.id ? e.t.id : 0 }); if (t) { if (t.k === "plot") things = things.filter((q) => !(q.k === "plot" && q.p === t.p)); things = things.filter((q) => q.id !== t.id); things.push(t); done.push({ op: "add", t: { ...t } }); } }
+    else if (e && e.op === "add") { const t = cleanThing({ ...e.t, id: e.t && e.t.id ? e.t.id : 0 }); if (t && t.k !== "plot") { things = things.filter((q) => q.id !== t.id); things.push(t); done.push({ op: "add", t: { ...t } }); } }
     else if (e && e.op === "rm") { const n = things.length; things = things.filter((q) => q.id !== +e.id); if (things.length < n) done.push({ op: "rm", id: +e.id }); }
   }
   if (done.length) { derive(); world.rev++; }
@@ -132,9 +132,15 @@ const solid = (x, z, yaw, hw, hd, y0, y1) => solids.push({ x, z, c: Math.cos(yaw
 // ---- housing plots (owner, 2026-11-08; placed by staff, 2026-11-10): 20 x 20 m (5 x 5 squares of 4 m) where players
 // build their own houses, seen by everyone. 16 by number: 3 first come, first served, 2 VIP, 5 given out at random, 6 for
 // rooms of more than 10 players. A plot not yet placed is nowhere. ----
-export const PLOT = 20, CELL = 4, GRID = 5, LEVELS = 3, LEVEL_H = 5.5;   // (owner, 2026-11-09) taller walls, so the camera fits
-export const PLOTS = [];
-{ const kinds = ["center", "center", "center", "vip", "vip", "random", "random", "random", "random", "random", "extra", "extra", "extra", "extra", "extra", "extra"]; kinds.forEach((kind, id) => PLOTS.push({ id, kind, x: 0, z: 0, y: -1000, placed: false })); }
+export const PLOT = 18, CELL = 4, GRID = 5, LEVELS = 3, LEVEL_H = 5.5;   // (owner, 2026-11-09) taller walls, so the camera fits
+// (owner, 2026-11-10) every town house stands on a lot of 3 x 3 tiles (PLOT across): a player who joins a room takes a
+// random free one, and their own house stands there instead until they leave. PLOTS: the lots, rebuilt with the world
+// ({ id: the house's id, x, z, y, yaw (turning the lot's front, -z, to face the house's way), d, placed }); lotById
+// finds one by id
+export const PLOTS = [], lotById = new Map();
+const LOT_YAW = [Math.PI, -Math.PI / 2, 0, Math.PI / 2];
+// a point in a lot (lx across, lz from its middle toward its back; the front is -z) in the world
+export const lotPoint = (p, lx, lz) => [p.x + lx * Math.cos(p.yaw) + lz * Math.sin(p.yaw), p.z - lx * Math.sin(p.yaw) + lz * Math.cos(p.yaw)];
 export const plotAt = (x, z) => PLOTS.find((p) => p.placed && Math.abs(x - p.x) < PLOT / 2 && Math.abs(z - p.z) < PLOT / 2) || null;
 export const islandAt = () => null;
 // ---- what the blocks and things make: columns, houses (with mailboxes), trees, boosts, plots, the road network ----
@@ -144,17 +150,17 @@ function derive() {
   for (const col of cols.values()) col.sort((a, b) => a.k - b.k);
   roadTiles.clear(); for (const [k, col] of cols) { const top = col[col.length - 1]; if (top.t === "road" || top.t === "ramp" || top.t === "corner" || top.t === "half") roadTiles.set(k, top); }
   houses.length = 0; solids.length = 0; trees.length = 0; boosts.length = 0;
-  for (const p of PLOTS) { p.placed = false; p.y = -1000; }
+  PLOTS.length = 0; lotById.clear();
   const rnd = rng(7);
   for (const t of things) {
-    if (t.k === "house") {   // on the tile corner at (i, j): 2 x 2 tiles; the mailbox 7.5 m in front
-      const x = t.i * TILE, z = t.j * TILE, [fx, fz] = DIRS[t.d], yaw = Math.atan2(fx, fz);
-      houses.push({ x, z, yaw, base: t.y, mx: x + fx * 7.5, mz: z + fz * 7.5, my: t.y, sky: false, r: rnd(), id: t.id });
+    if (t.k === "house") {   // (owner, 2026-11-10) on its tile, its lot the 3 x 3 tiles round it; the mailbox at the lot's front
+      const x = tileMid(t.i), z = tileMid(t.j), [fx, fz] = DIRS[t.d], yaw = Math.atan2(fx, fz);
+      houses.push({ x, z, yaw, base: t.y, mx: x + fx * 7.8, mz: z + fz * 7.8, my: t.y, sky: false, r: rnd(), id: t.id });
       solid(x, z, yaw, 4.5, 4.5, t.y - 4, t.y + 4.4);
+      const lot = { id: t.id, x, z, y: t.y, yaw: LOT_YAW[t.d], d: t.d, placed: true }; PLOTS.push(lot); lotById.set(t.id, lot);
     } else if (t.k === "mailbox") { const x = tileMid(t.i), z = tileMid(t.j); houses.push({ x, z, yaw: [0, Math.PI / 2, Math.PI, -Math.PI / 2][t.d], base: t.y, mx: x, mz: z, my: t.y, sky: false, r: rnd(), box: true, id: t.id }); }
     else if (t.k === "tree") trees.push({ x: tileMid(t.i), z: tileMid(t.j), y: t.y, s: 0.85 + rnd() * 0.5, id: t.id });
     else if (t.k === "boost") boosts.push({ x: tileMid(t.i), z: tileMid(t.j), y: t.y, yaw: [0, Math.PI / 2, Math.PI, -Math.PI / 2][t.d], id: t.id });
-    else if (t.k === "plot") { const p = PLOTS[t.p]; p.x = tileMid(t.i); p.z = tileMid(t.j); p.y = t.y; p.placed = true; }
   }
   for (const h of houses) { h.d = hyp(h.mx - POST.x, h.mz - POST.z); h.sky = h.base > 30; }
   solid(POST.x, POST.z, POST.yaw, 9, 5, -1, 8); solid(SHOP_B.x, SHOP_B.z, SHOP_B.yaw, 6, 4, -1, 9); solid(POUND_B.x, POUND_B.z, POUND_B.yaw, 8, 4, -1, 7);
