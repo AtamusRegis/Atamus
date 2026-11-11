@@ -247,7 +247,7 @@ function turn(a, b, k) { let d = b - a; while (d > Math.PI) d -= TAU; while (d <
 // lamp under the nose and the unit direction it shines (down to the ground at the spot); the page draws the same beam
 export function beamOf(v, out = {}) {
   const lx = v.x + Math.sin(v.yaw) * 1.6, ly = v.y - 1.3, lz = v.z + Math.cos(v.yaw) * 1.6;
-  const ax = v.x + Math.sin(v.ba) * v.bd, az = v.z + Math.cos(v.ba) * v.bd, dx = ax - lx, dy = terrain(ax, az) - ly, dz = az - lz, d = hyp(dx, dy, dz) || 1;
+  const ax = v.x + Math.sin(v.ba) * v.bd, az = v.z + Math.cos(v.ba) * v.bd, gy = terrain(ax, az), dx = ax - lx, dy = (gy > -200 ? gy : 0) - ly, dz = az - lz, d = hyp(dx, dy, dz) || 1;
   out.lx = lx; out.ly = ly; out.lz = lz; out.dx = dx / d; out.dy = dy / d; out.dz = dz / d; return out;
 }
 const beamTmp = {};
@@ -273,13 +273,11 @@ function catchPlayer(p, vs, now, ev) {
 export function stepVehicles(vs, players, dt, now, daylightOverride) {
   const ev = [];
   for (const p of players) if (p.stars > 0 && now - p.lastChased > WANTED_COOL) { p.stars--; p.lastChased = now; ev.push({ k: "stars", id: p.id, stars: p.stars }); }
-  // The helicopters keep circling by day, but their searchlights only work once daylight has faded.
-  const daylight = daylightOverride === undefined ? isDaylight(now) : !!daylightOverride;
+  // (owner, 2026-11-10) the helicopters' searchlights work day and night (daylightOverride no longer matters)
   const inLight = new Set();
   for (const v of vs) {
     if (v.kind !== 1) continue;
     stepHeli(v, dt, now); v.mode = 0;
-    if (daylight) continue;
     beamOf(v, beamTmp);
     for (const p of players) {
       if (p.immuneUntil > now || !insideWorld(p) || !p.bag || !beamHits(beamTmp, p)) continue;
