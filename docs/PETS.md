@@ -13,8 +13,10 @@ Asked (owner): a web game on atamus.io (not Roblox), on its own page; the cargo 
 - **The world is built from blocks (owner, 2026-11-10)** by admins, live, in the town editor (below). Tiles are 6 x 6 m on
   a grid; blocks stack in 3 m steps (level k fills 3(k-1) to 3k m; the ground's top is 0). Kinds: **land** (grass on
   top, earth down the sides), **wedge** (climbs one step across the tile, rising toward the way it faces), **road** (a
-  land block paved on top; a road is one tile wide), **road ramp** (a paved wedge) and **water** (a see-through block,
-  its surface 0.4 m under its top). Blocks can float with nothing under them: that's how floating islands are made.
+  land block paved on top; a road is one tile wide), **road ramp** (a paved wedge), **road corner** (owner, 2026-11-10:
+  a flat block cut corner to corner, road on one side, grass on the other, to round a turn), **half road** (just the
+  road half of that, nothing on the other side) and **water** (a see-through block, its surface 0.4 m under its top).
+  A road corner or half road turns four ways; its road joins the tiles beside its two straight road edges. Blocks can float with nothing under them: that's how floating islands are made.
   Everything snaps to the grid. Built from `website/pets-world.js`, which the server uses too (the two copies must
   match; `scripts/check.sh` compares them); the server keeps the world in the database (`pet_world`) and sends it with
   the welcome, and every change to everyone.
@@ -48,7 +50,7 @@ Asked (owner): a web game on atamus.io (not Roblox), on its own page; the cargo 
   pink ring), the **pound** (south; animal control, striped front, a fenced yard in front) and the **training yard**
   (west; a running track with hurdles, green ring). The lift to your plot stands south of the center.
 - **The town editor (owner, 2026-11-10; admins only):** Build Town in the gear menu opens a bar of pieces: Land,
-  Wedge, Road, Road Ramp, Water, Tree, House, Mailbox, Boost, Van, Helicopter, Plot and Erase, with ⟳ (turn; R on a
+  Wedge, Road, Road Ramp, Road Corner, Half Road, Water, Tree, House, Mailbox, Boost, Van, Helicopter, Plot and Erase, with ⟳ (turn; R on a
   keyboard), the level (− Auto +) and, for a helicopter its radius, for a plot its number. A see-through preview shows
   where the piece goes (red where it can't, or what Erase takes away); a tap (or click) places it. Blocks go against
   the face pointed at (on top, or beside it), or, with a level chosen, on that level (a grid shows it) to build in the

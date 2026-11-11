@@ -5,6 +5,7 @@ export function testWorld(W) {
   const base = W.starterWorld(), cells = new Map(base.cells.map((c) => [c[0] + "," + c[1] + "," + c[2], c]));
   const put = (i, j, k, t, d = 0) => cells.set(i + "," + j + "," + k, [i, j, k, W.KINDS.indexOf(t), d]);
   for (let n = -8; n <= 7; n++) { put(n, -8, 0, "road"); put(n, 7, 0, "road"); put(-8, n, 0, "road"); put(7, n, 0, "road"); }
+  put(-8, -8, 0, "corner", 0); put(7, -8, 0, "half", 3); put(7, 7, 0, "corner", 2); put(-8, 7, 0, "half", 1);   // the ring's corners cut round
   put(8, 0, 0, "land"); put(8, 0, 1, "ramp", 1); put(9, 0, 0, "land"); put(9, 0, 1, "road");   // up a step from the ring
   const things = []; let id = 1;
   for (let n = -6; n <= 6; n += 2) {
