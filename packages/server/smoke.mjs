@@ -17,7 +17,18 @@ const fresh = W.cleanData({}, SPECIES);
 ok(fresh.pets.length === 1 && fresh.home.pieces.length > 0, "a new player has a pet and a starter house");
 ok(W.petCap(fresh) === W.HOME.baseCap, "pet cap");
 ok(W.PLOTS.length === 16 && W.PLOTS.every((p) => Number.isFinite(p.x) && Number.isFinite(p.y)), "16 plots");
-ok(W.houses.length > 50 && W.ROADS.length >= 8, "town generated");
+// (owner, 2026-11-10) the world is blocks staff build: it starts as just the square, then the test town goes on it
+ok(W.inside(0, 0) && !W.inside(0, 90) && W.houses.length === 0 && W.terrain(0, 0) === 0, "the world starts as just the square");
+const { testWorld } = await import("./test-world.mjs");
+W.setWorld(testWorld(W));
+ok(W.houses.length >= 20 && W.isRoad(0, -8) && W.roadNext(0, -8).length === 2, "test town: houses and a road ring");
+ok(Math.abs(W.surfaceAt(8 * W.TILE + 3, 3, 1) - 1.5) < 0.01 && W.surfaceAt(9 * W.TILE + 3, 3, 3) === 3, "a ramp climbs one step");
+ok(W.roadNext(8, 0).some(([i, j]) => i === 7 && j === 0) && W.roadNext(8, 0).some(([i, j]) => i === 9 && j === 0), "roads join up and down a ramp");
+ok(W.blocked(9 * W.TILE - 0.2, 3, 0) && !W.blocked(0, 0, 0), "a block's side stands in the way");
+{ const before = W.houses.length, done = W.applyEdits([{ op: "put", c: [0, 0, 1, 0, 0] }, { op: "add", t: { k: "mailbox", i: 2, j: 2, y: 0 } }, { op: "put", c: [999, 0, 0, 0, 0] }]);
+  ok(done.length === 2 && W.terrain(3, 3) === 3 && W.houses.length === before + 1, "edits place blocks and mailboxes (bad ones dropped)");
+  const mb = done[1].t.id; ok(W.applyEdits([{ op: "del", c: [0, 0, 1] }, { op: "rm", id: mb }]).length === 2 && W.terrain(3, 3) === 0 && W.houses.length === before, "edits take them away again");
+  ok(JSON.stringify(W.worldData()) === JSON.stringify((W.setWorld(W.worldData()), W.worldData())), "the world saves and loads unchanged"); }
 const again = W.cleanData(fresh, SPECIES); ok(JSON.stringify(again) === JSON.stringify(fresh), "cleanData is stable");
 const moved = W.cleanData({ pets: [{ id: 1, sp: "kitten", lv: 3 }, { id: 2, sp: "unicorn", lv: 7, tp: 5 }], treats: { kitten: 4, bunny: 6, unicorn: 2 } }, new Set(["pup", "trex"]));
 ok(moved.pets[0].sp === "pup" && moved.pets[1].sp === "trex" && moved.pets[1].lv === 7 && moved.pets[1].tp === 5 && moved.treats.pup === 10 && moved.treats.trex === 2, "retired pets and their Treats become the new pet of their type and rarity");
@@ -122,6 +133,12 @@ try {
   ok(env.environment.weather === "storm" && env.environment.time === "night", "an admin changes weather and time for everyone");
   await n.wait((m) => m.t === "environment", "owner's environment change");
   b.send({ t: "admin", op: "environment", weather: "clear", time: "day" });   // a player: ignored
+  // (owner, 2026-11-10) an admin builds the town: everyone gets the change; a player's edits are ignored
+  b.send({ t: "admin", op: "world", edits: [{ op: "put", c: [1, 1, 5, 0, 0] }] });
+  n.send({ t: "admin", op: "world", edits: [{ op: "put", c: [2, 2, 1, 2, 0] }] });
+  const wEd = await b.wait((m) => m.t === "world", "an admin's world edit");
+  ok(wEd.edits.length === 1 && wEd.edits[0].c.join() === "2,2,1,2,0" && !W.worldData().cells.some((c) => c[2] === 5), "an admin's block reaches everyone, a player's doesn't land");
+  ok(wb.world && Array.isArray(wb.world.cells) && wb.world.cells.length > 100, "the world comes with the welcome");
   n.send({ t: "admin", op: "quick", cmd: "everything", name: "smokeB" });
   const db1 = (await b.wait((m) => m.t === "data", "B's data after Everything")).data;
   ok(db1.coins >= 1e6 && db1.pets.length >= 6 && db1.pets.every((p) => p.lv === 20) && db1.items.ticket >= 100 && db1.treats.dragon >= 100, "Everything gives coins, every pet at 20, items and Treats");

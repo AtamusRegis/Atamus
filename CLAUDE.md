@@ -43,7 +43,7 @@ website/              GitHub Pages site (atamus.io)
   index.html          the front page (Updates list); style.css + theme.css + front-updates.js for it
   pets.html           the game page and HUD; its <meta name="pets-server"> (and CSP connect-src) name the game server
   pets.js             the whole client: town, riding, parcels, eggs, training, items, houses and building, co-op client
-  pets-world.js       the world, shared with the server: terrain, roads, houses, islands, plots, animal control, the
+  pets-world.js       the world, shared with the server: the blocks and things staff build, plots, animal control, the
                       player-data rules (cleanData). packages/server/src/pets-world.js must be an identical copy
                       (scripts/check.sh compares them)
   vendor/             Three.js (self-hosted); fonts/, assets/ (logo), favicon, CNAME
@@ -52,7 +52,7 @@ packages/server/src/
                       PTR it also serves website/
   pets.js             the co-op: WebSocket /pets, accounts, rooms of 16, positions, animal control, contracts, chat,
                       parties, trades, housing plots, staff (admin panel)
-  petstore.js         accounts in Postgres (pet_accounts, pet_tokens, pet_admin_log) or in memory for tests
+  petstore.js         accounts and the world in Postgres (pet_accounts, pet_tokens, pet_admin_log, pet_world) or in memory
   pets-world.js       copy of website/pets-world.js (keep identical)
   build.js            SERVER_BUILD, website build polling (a new site build reloads players), the update countdown
   gamehttp.js         the deploy workflows' calls; db.js the schema (Pet Delivery Co.'s tables); config.js; hash.js

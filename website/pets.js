@@ -4,7 +4,7 @@
 // its edge; animal control chases you. Co-op: everyone in a room rides the same town, works on contracts (alone or with a party) and
 // chats. The server (packages/server/src/pets.js) shares players, runs animal control, contracts and chat.
 import * as THREE from "./vendor/three.module.min.js";
-import * as World from "./pets-world.js?v=1793100065";
+import * as World from "./pets-world.js?v=1793100066";
 
 const $ = (id) => document.getElementById(id);
 const TAU = Math.PI * 2, clamp = (v, a, b) => Math.max(a, Math.min(b, v)), hyp = Math.hypot;
@@ -59,13 +59,13 @@ const riding = () => save.pets.find((p) => p.id === save.ride) || save.pets[0];
 const moveKind = () => SPECIES[riding().sp].fly || "land";
 const flies = () => !!SPECIES[riding().sp].fly;
 
-// ---- the world (shared with the server: pets-world.js): the town is a big floating island of plateaus and cliffs with
-// winding roads, houses along them and the plaza in the middle; small islands float off its edge ----
-const { terrain, smoothTerrain, inside, edgeR, ROADS, ROAD_HALF, houses, trees, ISLANDS, islandAt, blocked, PLAZA, POST, PICKUP, BOARD, SHOP, SHOP_B, TRAIN, POUND, POUND_B, RELEASE, SPAWN } = World;
+// ---- the world (shared with the server: pets-world.js; owner, 2026-11-10): the town is built from blocks by staff,
+// round the town square ----
+const { terrain, smoothTerrain, inside, ROAD_HALF, houses, trees, blocked, PLAZA, POST, PICKUP, BOARD, SHOP, SHOP_B, TRAIN, POUND, POUND_B, RELEASE, SPAWN } = World;
 let seed = 20261108; const srnd = () => ((seed = (seed * 16807) % 2147483647) / 2147483647);
 const pick2 = (a) => a[Math.floor(srnd() * a.length)];
 const HOUSE_C = ["#f6d9b8", "#cfe6f7", "#f7cfd8", "#d8f0c8", "#fbe7a8", "#e3d4f5", "#f9f4ea"], ROOF_C = ["#c8553d", "#3b6ea8", "#5a8f3e", "#8a5a3a", "#6b5b95"];
-for (const h of houses) { h.c = pick2(HOUSE_C); h.roof = pick2(ROOF_C); }
+const houseColors = () => { for (const h of houses) { h.c = HOUSE_C[h.id % HOUSE_C.length]; h.roof = ROOF_C[(h.id * 7) % ROOF_C.length]; } };   // the same for everyone, by the house's id
 const LIMIT = 460;   // how far out anyone can go (the extra plot island is at 400)
 
 // ---- 3D ----
@@ -88,169 +88,68 @@ const SKETCH = true;   // (owner, 2026-11-09) the world drawn in shades of gray 
 // (owner, 2026-11-09) guides and interaction circles stay in color: drawn after the sketch pass (layer 1), still hidden
 // behind what stands in front of them
 const inColor = (o) => { o.traverse((c) => c.layers.set(1)); return o; };
-// the ground (owner, 2026-11-09: flat, on a grid): a square grid of 2 m over the island, grass, rock down the lake's sides
-{
-  const NA = 360, GS = 2, GW = Math.round((World.R_TOWN * 2) / GS), pos = [], idx = [];
-  for (let j = 0; j <= GW; j++) for (let i = 0; i <= GW; i++) { const x = -World.R_TOWN + i * GS, z = -World.R_TOWN + j * GS; pos.push(x, terrain(x, z), z); }
-  for (let j = 0; j < GW; j++) for (let i = 0; i < GW; i++) { const a = j * (GW + 1) + i, b = a + 1, c = a + GW + 1, d = c + 1; idx.push(a, c, b, b, c, d); }
-  const g = new THREE.BufferGeometry(); g.setAttribute("position", new THREE.Float32BufferAttribute(pos, 3)); g.setIndex(idx); g.computeVertexNormals();
-  // (owner, 2026-11-08: smooth it out) colors blend gradually: by the slope of the land over a few metres (so cliffs
-  // fade into rock), by height, and in broad patches; a fine speckled texture on top
-  const cols = new Float32Array((pos.length / 3) * 3), uvs = new Float32Array((pos.length / 3) * 2), c = new THREE.Color(), c2 = new THREE.Color();
-  // (owner, 2026-11-09) shadows baked into the ground: each house, building and tree darkens the ground under it and a
-  // little to one side (as if the sun were high in the north-west), softly at the edges
-  const SH = new Map(), shKey = (x, z) => Math.floor(x / 10) + "," + Math.floor(z / 10), addSh = (o) => { for (let gx = Math.floor((o.x - o.r) / 10); gx <= Math.floor((o.x + o.r) / 10); gx++) for (let gz = Math.floor((o.z - o.r) / 10); gz <= Math.floor((o.z + o.r) / 10); gz++) { const k = gx + "," + gz; if (!SH.has(k)) SH.set(k, []); SH.get(k).push(o); } };
-  for (const h of houses) if (!h.sky) addSh({ x: h.x + 1.6, z: h.z + 1.6, c: Math.cos(h.yaw), s: Math.sin(h.yaw), hw: 5.2, hd: 5.2, r: 9, k: 0.6 });
-  for (const t of trees) addSh({ x: t.x + 1.1 * t.s, z: t.z + 1.1 * t.s, rr: 2.3 * t.s, r: 3 * t.s, k: 0.68 });
-  for (const [b, hw, hd] of [[POST, 9.5, 5.5], [SHOP_B, 6.5, 4.5], [POUND_B, 8.5, 4.5]]) addSh({ x: b.x + 2, z: b.z + 2, c: Math.cos(b.yaw), s: Math.sin(b.yaw), hw, hd, r: 12, k: 0.68 });
-  function bakedShade(x, z) {
-    let f = 1;
-    for (const o of SH.get(shKey(x, z)) || []) {
-      let e;   // how far inside the shadow's edge (m)
-      if (o.rr) e = o.rr - hyp(x - o.x, z - o.z);
-      else { const dx = x - o.x, dz = z - o.z, lx = Math.abs(dx * o.c - dz * o.s), lz = Math.abs(dx * o.s + dz * o.c); e = Math.min(o.hw - lx, o.hd - lz); }
-      if (e > -1.2) f = Math.min(f, 1 - (1 - o.k) * smooth(clamp((e + 1.2) / 2.4, 0, 1)));
+// ---- the blocks (owner, 2026-11-10): every block drawn as a box or a ramp: grass on top (roads paved), earth down the
+// sides, darker underneath; sides against a neighbouring block are left out. Water blocks are see-through blue. All of
+// it is rebuilt whenever staff change the world (buildWorldView). ----
+const speck = (() => { const cv = document.createElement("canvas"); cv.width = cv.height = 128; const x = cv.getContext("2d"); x.fillStyle = "#fff"; x.fillRect(0, 0, 128, 128); for (let k = 0; k < 900; k++) { const v = 205 + Math.floor(Math.random() * 50); x.fillStyle = `rgb(${v},${v},${v})`; x.fillRect(Math.random() * 128, Math.random() * 128, 1 + Math.random() * 2, 1 + Math.random() * 2); } const t = new THREE.CanvasTexture(cv); t.wrapS = t.wrapT = THREE.RepeatWrapping; t.colorSpace = THREE.SRGBColorSpace; t.anisotropy = 4; return t; })();
+const blockM = new THREE.MeshLambertMaterial({ vertexColors: true, map: speck, side: THREE.DoubleSide });
+const waterBlockM = new THREE.MeshLambertMaterial({ vertexColors: true, transparent: true, opacity: 0.78, side: THREE.DoubleSide, depthWrite: true });
+const GRASS_T = [new THREE.Color("#7fc25a"), new THREE.Color("#8bc95f"), new THREE.Color("#96cf63")], EARTH = new THREE.Color("#a0805a"), ROAD_T = new THREE.Color("#5c6670"), WATER_T = new THREE.Color("#3f9fd8");
+const worldG = new THREE.Group(); scene.add(worldG);
+snowCover = new THREE.Mesh(new THREE.BufferGeometry(), new THREE.MeshLambertMaterial({ color: "#eef7ff", transparent: true, opacity: 0, depthWrite: false, polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -2, side: THREE.DoubleSide })); snowCover.visible = false; snowCover.position.y = 0.025; scene.add(snowCover);
+function blockGeometry() {
+  const { TILE: T, STEP: S, DIRS, cellTop } = World, at = new Map(), P = [], C = [], U = [], WP = [], WC = [], TOP = [];
+  for (const c of World.allCells()) at.set(c.i + "," + c.j + "," + c.k, c);
+  const full = (i, j, k) => { const c = at.get(i + "," + j + "," + k); return !!c && (c.t === "land" || c.t === "road"); };
+  const quad = (pts, col, f, uvf, top) => {   // 4 corners in order; f darkens
+    const cc = col.clone().multiplyScalar(f);
+    for (const q of [0, 1, 2, 0, 2, 3]) { const [x, y, z] = pts[q]; P.push(x, y, z); C.push(cc.r, cc.g, cc.b); const [u, v] = uvf(x, y, z); U.push(u, v); if (top) TOP.push(x, y, z); }
+  };
+  const wquad = (pts, f) => { const cc = WATER_T.clone().multiplyScalar(f); for (const q of [0, 1, 2, 0, 2, 3]) { const [x, y, z] = pts[q]; WP.push(x, y, z); WC.push(cc.r, cc.g, cc.b); } };
+  const topUV = (x, y, z) => [x / 9, z / 9], sideUV = (x, y, z) => [(x + z) / 9, y / 9];
+  for (const c of at.values()) {
+    const x0 = c.i * T, x1 = x0 + T, z0 = c.j * T, z1 = z0 + T, y0 = (c.k - 1) * S, y1 = c.k * S;
+    const corners = [[x0, z0], [x1, z0], [x1, z1], [x0, z1]], h = c.t === "water" ? corners.map(() => y1 - 0.4) : corners.map(([x, z]) => cellTop(c, x, z));
+    if (c.t === "water") {
+      if (!at.has(c.i + "," + c.j + "," + (c.k + 1))) wquad(corners.map(([x, z], n) => [x, h[n], z]), 1);
+      for (let s2 = 0; s2 < 4; s2++) { const [dx, dz] = DIRS[s2], n = at.get((c.i + dx) + "," + (c.j + dz) + "," + c.k); if (n && (n.t === "water" || full(c.i + dx, c.j + dz, c.k))) continue; const e = sideCorners(s2); wquad([[e[0][0], y0, e[0][1]], [e[1][0], y0, e[1][1]], [e[1][0], y1 - 0.4, e[1][1]], [e[0][0], y1 - 0.4, e[0][1]]], 0.8); }
+      continue;
     }
-    return f;
+    const road = c.t === "road" || c.t === "ramp", hsh = ((c.i * 73856093) ^ (c.j * 19349663)) >>> 0, topC = road ? ROAD_T : GRASS_T[hsh % 3];
+    if (!full(c.i, c.j, c.k + 1)) quad(corners.map(([x, z], n) => [x, h[n], z]), topC, 1, topUV, true);
+    if (!full(c.i, c.j, c.k - 1)) quad(corners.map(([x, z]) => [x, y0, z]), EARTH, 0.5, topUV);
+    function sideCorners(s2) { return s2 === 0 ? [[x0, z1], [x1, z1]] : s2 === 1 ? [[x1, z0], [x1, z1]] : s2 === 2 ? [[x0, z0], [x1, z0]] : [[x0, z0], [x0, z1]]; }
+    for (let s2 = 0; s2 < 4; s2++) {
+      const [dx, dz] = DIRS[s2]; if (full(c.i + dx, c.j + dz, c.k)) continue;
+      const e = sideCorners(s2), ha = cellTop(c, e[0][0], e[0][1]), hb = cellTop(c, e[1][0], e[1][1]); if (ha - y0 < 0.01 && hb - y0 < 0.01) continue;
+      quad([[e[0][0], y0, e[0][1]], [e[1][0], y0, e[1][1]], [e[1][0], hb, e[1][1]], [e[0][0], ha, e[0][1]]], EARTH, s2 % 2 ? 0.86 : 0.74, sideUV);
+    }
   }
-  const LAKEBED = new THREE.Color("#c9b98c"), GRASS = [new THREE.Color("#7fc25a"), new THREE.Color("#96cf63"), new THREE.Color("#a9d46e")], ROCK = new THREE.Color("#a08f7a"), ROCK2 = new THREE.Color("#8a7a68");
-  for (let i = 0; i < pos.length / 3; i++) {
-    const x = pos[i * 3], y = pos[i * 3 + 1], z = pos[i * 3 + 2];
-    const slope = hyp(terrain(x + 3, z) - terrain(x - 3, z), terrain(x, z + 3) - terrain(x, z - 3)) / 6;
-    const patch = 0.5 + 0.25 * Math.sin(x / 23 + Math.cos(z / 31)) + 0.25 * Math.sin(z / 19 - x / 41);
-    c.copy(GRASS[0]).lerp(GRASS[1], patch).lerp(GRASS[2], smooth(clamp(y / 45, 0, 1)) * 0.7);
-    c2.copy(ROCK).lerp(ROCK2, patch);
-    c.lerp(c2, smooth(clamp((slope - 0.3) / 0.7, 0, 1)));
-    if (World.waterAt(x, z) > -Infinity) c.lerp(LAKEBED, 0.85);   // (owner, 2026-11-09) sand under the water
-    c.multiplyScalar(bakedShade(x, z));
-    cols.set([c.r, c.g, c.b], i * 3); uvs.set([x / 9, z / 9], i * 2);
-  }
-  g.setAttribute("color", new THREE.BufferAttribute(cols, 3)); g.setAttribute("uv", new THREE.BufferAttribute(uvs, 2));
-  const speck = (() => { const cv = document.createElement("canvas"); cv.width = cv.height = 128; const x = cv.getContext("2d"); x.fillStyle = "#fff"; x.fillRect(0, 0, 128, 128); for (let k = 0; k < 900; k++) { const v = 205 + Math.floor(Math.random() * 50); x.fillStyle = `rgb(${v},${v},${v})`; x.fillRect(Math.random() * 128, Math.random() * 128, 1 + Math.random() * 2, 1 + Math.random() * 2); } const t = new THREE.CanvasTexture(cv); t.wrapS = t.wrapT = THREE.RepeatWrapping; t.colorSpace = THREE.SRGBColorSpace; t.anisotropy = 4; return t; })();
-  const m = new THREE.Mesh(g, new THREE.MeshLambertMaterial({ vertexColors: true, map: speck })); m.receiveShadow = true; scene.add(m);
-  snowCover = new THREE.Mesh(g, new THREE.MeshLambertMaterial({ color: "#eef7ff", transparent: true, opacity: 0, depthWrite: false, polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -2 })); snowCover.visible = false; snowCover.position.y = 0.025; scene.add(snowCover);
-  // (owner, 2026-11-08) tall rocks standing on the cliffs and steep slopes, and boulders at their feet
-  const rocks = [], rr = World.rng(77);
-  for (let n = 0; n < 9000 && rocks.length < 320; n++) {
-    const a = rr() * TAU, r = Math.sqrt(rr()) * (World.R_TOWN - 6), x = Math.cos(a) * r, z = Math.sin(a) * r;
-    if (!inside(x, z, 4) || r < PLAZA + 6 || World.roadDist(x, z) < 9 || World.waterAt(x, z) > -Infinity || World.waterAt(x + 3, z) > -Infinity || World.waterAt(x - 3, z) > -Infinity || World.waterAt(x, z + 3) > -Infinity || World.waterAt(x, z - 3) > -Infinity) continue;
-    const slope = hyp(terrain(x + 2, z) - terrain(x - 2, z), terrain(x, z + 2) - terrain(x, z - 2)) / 4; if (slope < 0.9) continue;
-    if (houses.some((h) => !h.sky && hyp(h.x - x, h.z - z) < 9)) continue;
-    const lo = Math.min(terrain(x + 2, z), terrain(x - 2, z), terrain(x, z + 2), terrain(x, z - 2)), tall = rr() < 0.55;
-    rocks.push({ x, z, y: lo, w: tall ? 1.4 + rr() * 1.8 : 1 + rr() * 1.4, h: tall ? 4 + rr() * 9 : 1 + rr() * 1.5, rot: rr() * TAU, c: rr() });
-  }
-  const rockG = new THREE.DodecahedronGeometry(1, 0); rockG.translate(0, 0.8, 0);
-  const rockM = new THREE.InstancedMesh(rockG, new THREE.MeshLambertMaterial({ color: "#ffffff", flatShading: true }), rocks.length); rockM.castShadow = true; rockM.receiveShadow = true;
-  rocks.forEach((k, i) => { dummy.position.set(k.x, k.y - 0.4, k.z); dummy.rotation.set(0, k.rot, 0); dummy.scale.set(k.w, k.h / 1.6, k.w * (0.8 + k.c * 0.4)); dummy.updateMatrix(); rockM.setMatrixAt(i, dummy.matrix); rockM.setColorAt(i, new THREE.Color().setHSL(0.08, 0.14 + k.c * 0.08, 0.5 + k.c * 0.12)); });
-  scene.add(rockM);
-  // its underside: a cliff face at the edge, then rock tapering away below
-  const RINGS = [[1, 0], [1.01, -9], [0.9, -30], [0.72, -62], [0.48, -98], [0.22, -132]], up = [], ui = [];
-  for (let k = 0; k < RINGS.length; k++) for (let i = 0; i < NA; i += 3) {
-    const a = (i / NA) * TAU, e = edgeR(a), top = terrain(Math.cos(a) * e, Math.sin(a) * e), atFall = World.RIVERS.some((R) => R.fall && Math.abs(Math.atan2(Math.sin(a - Math.atan2(R.pts[R.pts.length - 1][1], R.pts[R.pts.length - 1][0])), Math.cos(a - Math.atan2(R.pts[R.pts.length - 1][1], R.pts[R.pts.length - 1][0])))) < 0.1);
-    const j = k > 1 && !atFall ? 1 + (Math.sin(i * 1.7 + k * 3.1) * 0.5 + 0.5) * 0.08 : 1, r = e * (atFall && k === 1 ? 0.97 : RINGS[k][0]) * j;   // (owner, 2026-11-09) no rock bulging out under a waterfall
-    up.push(Math.cos(a) * r, k ? Math.min(top - 2, 0) + RINGS[k][1] - (k > 1 ? Math.abs(Math.sin(i * 0.37 + k)) * 12 : 0) : top, Math.sin(a) * r);
-  }
-  up.push(0, -165, 0); const NU = NA / 3, apex = up.length / 3 - 1;
-  for (let k = 0; k < RINGS.length - 1; k++) for (let i = 0; i < NU; i++) { const a = k * NU + i, b = k * NU + ((i + 1) % NU), c2 = (k + 1) * NU + i, d = (k + 1) * NU + ((i + 1) % NU); ui.push(a, c2, b, b, c2, d); }
-  for (let i = 0; i < NU; i++) ui.push((RINGS.length - 1) * NU + i, apex, (RINGS.length - 1) * NU + ((i + 1) % NU));
-  const ug = new THREE.BufferGeometry(); ug.setAttribute("position", new THREE.Float32BufferAttribute(up, 3)); ug.setIndex(ui); ug.computeVertexNormals();
-  scene.add(new THREE.Mesh(ug, new THREE.MeshLambertMaterial({ color: "#8a7a68", flatShading: true, side: THREE.DoubleSide })));
+  const mk = (pos, col, uv) => { const g = new THREE.BufferGeometry(); g.setAttribute("position", new THREE.Float32BufferAttribute(pos, 3)); g.setAttribute("color", new THREE.Float32BufferAttribute(col, 3)); if (uv) g.setAttribute("uv", new THREE.Float32BufferAttribute(uv, 2)); g.computeVertexNormals(); return g; };
+  const tg = new THREE.BufferGeometry(); tg.setAttribute("position", new THREE.Float32BufferAttribute(TOP, 3)); tg.computeVertexNormals();
+  return { solid: mk(P, C, U), water: mk(WP, WC, null), tops: tg };
 }
 // the plaza's paving
 { const m = new THREE.Mesh(new THREE.CircleGeometry(PLAZA - 4, 64).rotateX(-Math.PI / 2), mat("#e8dcc4")); m.position.y = 0.06; m.receiveShadow = true; scene.add(m); }
-// roads: a ribbon along each, laid on the land, with the dashed center line
-const roadTex = (() => { const c = document.createElement("canvas"); c.width = 32; c.height = 64; const g = c.getContext("2d"); g.fillStyle = "#5c6670"; g.fillRect(0, 0, 32, 64); g.fillStyle = "#6c757e"; g.fillRect(0, 0, 2, 64); g.fillRect(30, 0, 2, 64); g.fillStyle = "#f4f1e6"; g.fillRect(14.5, 8, 3, 30); const t = new THREE.CanvasTexture(c); t.wrapT = THREE.RepeatWrapping; t.colorSpace = THREE.SRGBColorSpace; t.anisotropy = 4; return t; })();
-const roadM = new THREE.MeshLambertMaterial({ map: roadTex, side: THREE.DoubleSide, polygonOffset: true, polygonOffsetFactor: -4, polygonOffsetUnits: -4 });
-const ROAD_LIFT = 0.1;   // (owner, 2026-11-08: clipping) every road vertex sits just above the land under it, and pets stand on that
-ROADS.forEach((R, k) => {
-  const P = R.loop ? [...R.pts, R.pts[0]] : R.pts, S = R.loop ? [...R.S, R.len] : R.S, pos = [], uv = [], idx = [];
-  for (let i = 0; i < P.length; i++) {
-    const a = P[Math.max(0, i - 1)], b = P[Math.min(P.length - 1, i + 1)], fx = b[0] - a[0], fz = b[1] - a[1], fl = hyp(fx, fz) || 1, rx = -fz / fl, rz = fx / fl;
-    for (const sd of [-1, -0.5, 0, 0.5, 1]) { const x = P[i][0] + rx * ROAD_HALF * sd, z = P[i][1] + rz * ROAD_HALF * sd; pos.push(x, terrain(x, z) + ROAD_LIFT + k * 0.004, z); uv.push((sd + 1) / 2, S[i] / 8); }
-    if (i) { const q = (i - 1) * 5; for (let c = 0; c < 4; c++) idx.push(q + c, q + c + 1, q + c + 5, q + c + 1, q + c + 6, q + c + 5); }
-  }
-  const g = new THREE.BufferGeometry(); g.setAttribute("position", new THREE.Float32BufferAttribute(pos, 3)); g.setAttribute("uv", new THREE.Float32BufferAttribute(uv, 2)); g.setIndex(idx); g.computeVertexNormals();
-  const m = new THREE.Mesh(g, roadM); m.receiveShadow = true; scene.add(m);
-});
-// ---- water (owner, 2026-11-09): the lake, its rivers and the stream (pets-world.js), drawn over the height grid: deeper
-// is darker, steep runs (the stream's small falls) foam white; ripples drift across. Where a river runs off the edge it
-// pours over in a waterfall with spray at the lip. ----
-const waterTex = (() => { const c = document.createElement("canvas"); c.width = c.height = 128; const g = c.getContext("2d"); g.fillStyle = "#ffffff"; g.fillRect(0, 0, 128, 128); g.strokeStyle = "rgba(255,255,255,0.0)"; for (let k = 0; k < 40; k++) { const x = Math.random() * 128, y = Math.random() * 128, w = 8 + Math.random() * 18; g.strokeStyle = `rgba(190,225,255,${0.5 + Math.random() * 0.5})`; g.lineWidth = 1.5; g.beginPath(); g.moveTo(x, y); g.quadraticCurveTo(x + w / 2, y - 3, x + w, y); g.stroke(); } const t = new THREE.CanvasTexture(c); t.wrapS = t.wrapT = THREE.RepeatWrapping; t.colorSpace = THREE.SRGBColorSpace; return t; })();
-const fallTex = (() => { const c = document.createElement("canvas"); c.width = 64; c.height = 128; const g = c.getContext("2d"); g.fillStyle = "#cfeaff"; g.fillRect(0, 0, 64, 128); for (let k = 0; k < 70; k++) { g.fillStyle = `rgba(255,255,255,${0.4 + Math.random() * 0.6})`; g.fillRect(Math.random() * 64, Math.random() * 128, 1 + Math.random() * 3, 10 + Math.random() * 40); } const t = new THREE.CanvasTexture(c); t.wrapS = t.wrapT = THREE.RepeatWrapping; t.colorSpace = THREE.SRGBColorSpace; return t; })();
-const mistTex = (() => { const c = document.createElement("canvas"); c.width = c.height = 64; const g = c.getContext("2d"), r = g.createRadialGradient(32, 32, 0, 32, 32, 32); r.addColorStop(0, "rgba(255,255,255,0.9)"); r.addColorStop(1, "rgba(255,255,255,0)"); g.fillStyle = r; g.fillRect(0, 0, 64, 64); return new THREE.CanvasTexture(c); })();
-const mists = [], lakeTex = waterTex, riverTex = waterTex.clone();
-const FALLS = [];   // where each outflowing river pours over the edge: { x, z, fx, fz, a, y, hw }
-for (const R of World.RIVERS) if (R.fall) {
-  let e = R.pts.findIndex(([x, z]) => !inside(x, z)); if (e < 1) continue;
-  const [px, pz] = R.pts[Math.max(0, e - 4)], [qx, qz] = R.pts[e], dl = hyp(qx - px, qz - pz) || 1, fx = (qx - px) / dl, fz = (qz - pz) / dl;
-  const a = Math.atan2(qz, qx), er = edgeR(a); FALLS.push({ x: Math.cos(a) * er, z: Math.sin(a) * er, fx, fz, a, y: R.y[e - 1], hw: R.hw });
-}
-{
-  const { x0, step: G, n, w: WAT, wet: WETN } = World.waterGrid(), c = new THREE.Color();
-  const DEEP = new THREE.Color("#2f7fc4"), SHALLOW = new THREE.Color("#5cc3e8"), FOAM = new THREE.Color("#f2fbff");
-  // (owner, 2026-11-09: the stream looked like it ran uphill) along each river the ripples run downstream, stretched
-  // (so faster) where it's steep; the lake drifts gently
-  for (const R of World.RIVERS) { R.V = [0]; for (let q = 1; q < R.pts.length; q++) { const ds = R.S[q] - R.S[q - 1], sl = Math.abs(R.y[q] - R.y[q - 1]) / (ds || 1); R.V.push(R.V[q - 1] + ds / (1 + 6 * sl)); } }
-  const flowAt = (x, z) => {
-    const L = World.LAKE, dl = Math.max(Math.abs(x - L.x) - L.hw, Math.abs(z - L.z) - L.hd); let best = null, bd = Math.max(dl, 0) + 3;
-    for (const R of World.RIVERS) for (let q = 0; q < R.pts.length; q++) { const d = hyp(R.pts[q][0] - x, R.pts[q][1] - z); if (d < bd) { bd = d; const nq = R.pts[Math.min(q + 1, R.pts.length - 1)], pq = R.pts[Math.max(q - 1, 0)], tx = nq[0] - pq[0], tz = nq[1] - pq[1], tl = hyp(tx, tz) || 1; best = { u: ((x - R.pts[q][0]) * -tz + (z - R.pts[q][1]) * tx) / tl / 8, v: R.V[q] / 8 }; } }
-    return best;
-  };
-  const build = (river) => {
-    const pos = [], col = [], uv = [], idx = [], vid = new Map();
-    const vert = (i, j, f) => {
-      const k = j * n + i; if (vid.has(k)) return vid.get(k);
-      let x = x0 + i * G, z = x0 + j * G; const y = WAT[k], d = clamp((y - terrain(x, z)) / 2.5, 0, 1);
-      const sl = Math.max(Math.abs((WAT[k + 1] > -1e8 ? WAT[k + 1] : y) - y), Math.abs((WAT[k + n] > -1e8 ? WAT[k + n] : y) - y), Math.abs((WAT[k - 1] > -1e8 ? WAT[k - 1] : y) - y), Math.abs((WAT[k - n] > -1e8 ? WAT[k - n] : y) - y)) / G;
-      c.copy(SHALLOW).lerp(DEEP, d).lerp(FOAM, smooth(clamp((sl - 0.25) / 0.6, 0, 1)));
-      if (!inside(x, z, 0.3)) { const a = Math.atan2(z, x), r = edgeR(a) - 0.3; x = Math.cos(a) * r; z = Math.sin(a) * r; }   // never past the island's edge
-      pos.push(x, y + 0.02, z); col.push(c.r, c.g, c.b); if (f) uv.push(f.u, f.v); else uv.push(x / 14, z / 14); vid.set(k, pos.length / 3 - 1); return pos.length / 3 - 1;
-    };
-    for (let j = 0; j < n - 1; j++) for (let i = 0; i < n - 1; i++) {
-      const k = j * n + i; if (WAT[k] < -1e8 || WAT[k + 1] < -1e8 || WAT[k + n] < -1e8 || WAT[k + n + 1] < -1e8) continue;
-      if (!(WETN[k] | WETN[k + 1] | WETN[k + n] | WETN[k + n + 1])) continue;   // only the water itself (not over its banks)
-      const x = x0 + i * G, z = x0 + j * G; if (![[0, 0], [G, 0], [0, G], [G, G]].some(([a, b]) => terrain(x + a, z + b) < WAT[k] - 0.05)) continue;
-      const f = flowAt(x + G / 2, z + G / 2); if (!!f !== river) continue;
-      const fl = (a, b) => (river ? flowAt(x + a, z + b) || f : null);
-      vid.clear();   // each cell's corners carry their own flow coordinates
-      const A = vert(i, j, fl(0, 0)), B = vert(i + 1, j, fl(G, 0)), C = vert(i, j + 1, fl(0, G)), D = vert(i + 1, j + 1, fl(G, G)); idx.push(A, C, B, B, C, D);
-    }
-    const g = new THREE.BufferGeometry(); g.setAttribute("position", new THREE.Float32BufferAttribute(pos, 3)); g.setAttribute("color", new THREE.Float32BufferAttribute(col, 3)); g.setAttribute("uv", new THREE.Float32BufferAttribute(uv, 2)); g.setIndex(idx); g.computeVertexNormals();
-    const m = new THREE.Mesh(g, new THREE.MeshLambertMaterial({ vertexColors: true, map: river ? riverTex : lakeTex, transparent: true, opacity: 0.86, depthWrite: true, side: THREE.DoubleSide })); m.receiveShadow = true; m.renderOrder = 1; scene.add(m);
-  };
-  build(false); build(true);
-  // the waterfalls: from the lip at the island's edge, a sheet of water pours out and down, clear of the rock below
-  const fallM = new THREE.MeshBasicMaterial({ map: fallTex, transparent: true, vertexColors: true, side: THREE.DoubleSide, depthWrite: false });
-  for (const F of FALLS) {
-    const rx = -F.fz, rz = F.fx, fp = [], fc = [], fu = [], fi = [], COLS = 6, ROWS = 20;
-    for (let r = 0; r <= ROWS; r++) { const t = r / ROWS, drop = t * t * 130 + t * 4, out = 0.3 + Math.sqrt(t) * 16; for (let q = 0; q <= COLS; q++) { const s2 = (q / COLS - 0.5) * 2 * F.hw * (1 + t * 0.6); fp.push(F.x + F.fx * out + rx * s2, F.y - drop, F.z + F.fz * out + rz * s2); fc.push(1, 1, 1, (1 - t) * (0.95 - Math.abs(q / COLS - 0.5) * 0.6)); fu.push(q / COLS, t * 6); } }
-    for (let r = 0; r < ROWS; r++) for (let q = 0; q < COLS; q++) { const a = r * (COLS + 1) + q, b = a + 1, c2 = a + COLS + 1, d = c2 + 1; fi.push(a, c2, b, b, c2, d); }
-    const fg = new THREE.BufferGeometry(); fg.setAttribute("position", new THREE.Float32BufferAttribute(fp, 3)); fg.setAttribute("color", new THREE.Float32BufferAttribute(fc, 4)); fg.setAttribute("uv", new THREE.Float32BufferAttribute(fu, 2)); fg.setIndex(fi);
-    const fm = new THREE.Mesh(fg, fallM); fm.renderOrder = 2; scene.add(fm);
-    for (let k = 0; k < 7; k++) { const s2 = new THREE.Sprite(new THREE.SpriteMaterial({ map: mistTex, transparent: true, opacity: 0.55, depthWrite: false })), t = k / 6, out = 1 + Math.sqrt(t) * 16; s2.position.set(F.x + F.fx * out + rx * (Math.random() - 0.5) * F.hw, F.y - t * t * 60 - 1, F.z + F.fz * out + rz * (Math.random() - 0.5) * F.hw); s2.userData = { y: s2.position.y, ph: k * 1.3, sz: 5 + t * 10 }; s2.scale.setScalar(s2.userData.sz); scene.add(s2); mists.push(s2); }
-  }
-}
-// (owner, 2026-11-09) the camera under the water: everything goes a hazy blue
+const ROAD_LIFT = 0;   // (owner, 2026-11-10) roads are paved blocks: their top is the road
+// the camera under the water: everything goes a hazy blue (water blocks)
 const UNDER = new THREE.Color("#2b6f9e");
 function underwater() { if (me.inst) { scene.background.set("#000000"); scene.fog.color.set("#000000"); scene.fog.near = 60; scene.fog.far = 400; return; }   // (owner, 2026-11-09) inside a house: a black void round it
   const w = World.waterAt(camera.position.x, camera.position.z); if (w > camera.position.y) { scene.fog.color.copy(UNDER); scene.background.copy(UNDER); scene.fog.near = 0.5; scene.fog.far = 38; } }
-function waterStep(dt) {
-  lakeTex.offset.x += dt * 0.015; lakeTex.offset.y += dt * 0.01; riverTex.offset.y -= dt * 0.45; fallTex.offset.y -= dt * 1.6;   // rivers run downstream, falls pour down
-  for (const s of mists) { const u = s.userData; s.position.y = u.y + Math.sin(clock * 0.8 + u.ph) * 0.6; s.scale.setScalar(u.sz * (1 + Math.sin(clock * 1.3 + u.ph) * 0.12)); }
-}
+function waterStep() {}
 // ---- speed boosts (owner, 2026-11-09): glowing arrow pads laid on the roads, rings in the air and whirlpools on the
 // water; run, fly or swim through one and your pet goes 1.6x for 5 s (with Speed Candy too). The rings are only there
 // for fliers and gliders, the whirlpools only for swimmers; both fade out with distance. ----
 const PAD_BOOST = 1.6, PAD_TIME = 5000, BOOST_SEE = 120, BOOST_FADE = 45;
 const BOOSTS = [];
+let padMat;
 {
-  for (const R of ROADS) for (const u of [-182, -102, 0, 102, 182]) { const p = World.roadAt(R, u + R.len / 2); if (hyp(p.x, p.z) < PLAZA + 12) continue; BOOSTS.push({ k: "pad", x: p.x, y: terrain(p.x, p.z) + ROAD_LIFT, z: p.z, yaw: Math.atan2(p.fx, p.fz), r: 3 }); }
-  for (let n = 0; n < 14; n++) { const a = (n / 14) * TAU + 0.35, r = n % 2 ? 95 : 160, x = Math.cos(a) * r, z = Math.sin(a) * r; BOOSTS.push({ k: "air", x, y: terrain(x, z) + 16 + (n % 3) * 9, z, yaw: a, r: 4 }); }
+  for (let n = 0; n < 14; n++) { const a = (n / 14) * TAU + 0.35, r = n % 2 ? 95 : 160, x = Math.cos(a) * r, z = Math.sin(a) * r; BOOSTS.push({ k: "air", x, y: Math.max(0, terrain(x, z)) + 16 + (n % 3) * 9, z, yaw: a, r: 4 }); }
   for (const [x, z, y] of [[0, -20, 34], [0, 20, 34], [-20, 0, 48], [20, 0, 48], [-70, -70, 76], [70, -70, 76], [-70, 70, 76], [70, 70, 76]]) BOOSTS.push({ k: "air", x, y, z, yaw: Math.atan2(x, z), r: 4 });
   for (const b of BOOSTS) if (b.k === "water") { b.y = World.waterAt(b.x, b.z); b.yaw = 0; }
   // (owner, 2026-11-10) chevrons drawn by a shader, with no edge cutting them off: each comes in faintly where the pad
   // starts and fades away as it runs to the far end. uv: x across the pad (3.4 m), y along it (5 m)
-  const padMat = new THREE.ShaderMaterial({
+  padMat = new THREE.ShaderMaterial({
     uniforms: { t: { value: 0 }, dir: { value: 1 } }, transparent: true, depthWrite: false, polygonOffset: true, polygonOffsetFactor: -8, polygonOffsetUnits: -8,
     vertexShader: "varying vec2 vUv; void main() { vUv = uv; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }",
     fragmentShader: `uniform float t; uniform float dir; varying vec2 vUv;
@@ -267,18 +166,23 @@ const BOOSTS = [];
   });
   const swirlTex = (() => { const c = document.createElement("canvas"); c.width = c.height = 128; const g = c.getContext("2d"); g.translate(64, 64); for (let arm = 0; arm < 3; arm++) { g.beginPath(); for (let t = 0; t < 1; t += 0.01) { const a = arm * (TAU / 3) + t * 7, r = 4 + t * 58; g.lineTo(Math.cos(a) * r, Math.sin(a) * r); } g.strokeStyle = "rgba(255,255,255,0.95)"; g.lineWidth = 7; g.lineCap = "round"; g.stroke(); } const rg = g.createRadialGradient(0, 0, 0, 0, 0, 62); rg.addColorStop(0, "rgba(40,60,190,0.9)"); rg.addColorStop(0.7, "rgba(110,130,255,0.5)"); rg.addColorStop(1, "rgba(150,170,255,0)"); g.globalCompositeOperation = "destination-over"; g.fillStyle = rg; g.beginPath(); g.arc(0, 0, 62, 0, TAU); g.fill(); return new THREE.CanvasTexture(c); })();
   const ringG = new THREE.TorusGeometry(3.2, 0.32, 8, 32), glowG = new THREE.TorusGeometry(3.2, 0.9, 8, 32), swirlG = new THREE.CircleGeometry(2.6, 32).rotateX(-Math.PI / 2);
+  BOOSTS.padT = padMat.uniforms.t;
   for (const b of BOOSTS) {
-    if (b.k === "pad") {   // (owner, 2026-11-09: pads cut through the road) laid on the road itself, vertex by vertex
-      const c = Math.cos(b.yaw), sn = Math.sin(b.yaw), pos = [], uv = [], idx = [], NX = 4, NZ = 8;
-      for (let zi = 0; zi <= NZ; zi++) for (let xi = 0; xi <= NX; xi++) { const lx = (xi / NX - 0.5) * 3.4, lz = (zi / NZ - 0.5) * 5, x = b.x + lx * c + lz * sn, z = b.z - lx * sn + lz * c; pos.push(x, terrain(x, z) + ROAD_LIFT + 0.05, z); uv.push(xi / NX, zi / NZ); }
-      for (let zi = 0; zi < NZ; zi++) for (let xi = 0; xi < NX; xi++) { const a = zi * (NX + 1) + xi, bb = a + 1, cc = a + NX + 1, d = cc + 1; idx.push(a, cc, bb, bb, cc, d); }
-      const g = new THREE.BufferGeometry(); g.setAttribute("position", new THREE.Float32BufferAttribute(pos, 3)); g.setAttribute("uv", new THREE.Float32BufferAttribute(uv, 2)); g.setIndex(idx);
-      BOOSTS.padT = padMat.uniforms.t; b.m = padMat.clone(); b.m.uniforms = { t: padMat.uniforms.t, dir: { value: 1 } };   // each pad runs its own way (away from you), on the shared clock
-      b.g = new THREE.Mesh(g, b.m); b.g.renderOrder = 2; scene.add(inColor(b.g)); continue;
-    }
     const g = new THREE.Group(); g.position.set(b.x, b.y, b.z); g.rotation.y = b.yaw; scene.add(g); b.g = g;
     if (b.k === "air") { b.m = [new THREE.MeshBasicMaterial({ color: "#5fe3ff", transparent: true }), new THREE.MeshBasicMaterial({ color: "#5fe3ff", transparent: true, opacity: 0.25, blending: THREE.AdditiveBlending, depthWrite: false })]; g.add(new THREE.Mesh(ringG, b.m[0]), new THREE.Mesh(glowG, b.m[1])); }
     else { b.m = [new THREE.MeshBasicMaterial({ map: swirlTex, transparent: true, depthWrite: false, side: THREE.DoubleSide })]; const w = new THREE.Mesh(swirlG, b.m[0]); w.position.y = 0.06; w.renderOrder = 3; g.add(w); b.spin = w; }
+  }
+}
+// (owner, 2026-11-10) the pads staff put on road tiles, laid on the tile (it follows a ramp), rebuilt with the world
+const PAD_G = new THREE.PlaneGeometry(3.4, 5, 4, 8).rotateX(-Math.PI / 2);
+function buildPads(parent) {
+  for (let i = BOOSTS.length - 1; i >= 0; i--) if (BOOSTS[i].k === "pad") BOOSTS.splice(i, 1);
+  for (const p of World.boosts) {
+    const g = PAD_G.clone(), pos = g.attributes.position, c = Math.cos(p.yaw), sn = Math.sin(p.yaw);
+    for (let n = 0; n < pos.count; n++) { const lx = pos.getX(n), lz = pos.getZ(n), x = p.x + lx * c + lz * sn, z = p.z - lx * sn + lz * c; pos.setXYZ(n, x, World.surfaceAt(x, z, p.y + 2) + 0.06, z); }
+    const b = { k: "pad", x: p.x, y: p.y, z: p.z, yaw: p.yaw, r: 3 };
+    b.m = padMat.clone(); b.m.uniforms = { t: padMat.uniforms.t, dir: { value: 1 } };   // each pad runs its own way (away from you), on the shared clock
+    b.g = new THREE.Mesh(g, b.m); b.g.renderOrder = 2; parent.add(inColor(b.g)); BOOSTS.push(b);
   }
 }
 // which boosts this pet can use: road pads any pet riding; rings fliers and gliders; whirlpools swimmers
@@ -412,32 +316,31 @@ function arenaStep() {
   }
   arPrev = q;
 }
-// houses as instances: walls (reaching down into the slope), roofs, doors, mailboxes; each faces its road
-function instanced(geo, color, n, each) { const m = new THREE.InstancedMesh(geo, mat(color), n); m.castShadow = true; m.receiveShadow = true; for (let i = 0; i < n; i++) { dummy.rotation.set(0, 0, 0); dummy.scale.set(1, 1, 1); each(i, dummy); dummy.updateMatrix(); m.setMatrixAt(i, dummy.matrix); } scene.add(m); return m; }
-const wallAt = (h, d) => { d.position.set(h.x, h.base + 2.2 - (h.sky ? 0 : 2), h.z); d.scale.set(9, 4.4 + (h.sky ? 0 : 4), 9); d.rotation.y = h.yaw; };
-const roofAt = (h, d) => { d.position.set(h.x, h.base + 6.1, h.z); d.scale.set(1, 1, 1); d.rotation.y = h.yaw; };
-const doorAt = (h, d) => { d.position.set(h.x + Math.sin(h.yaw) * 4.55, h.base + 1.1, h.z + Math.cos(h.yaw) * 4.55); d.scale.set(1.6, 2.2, 0.15); d.rotation.y = h.yaw; };
-const walls = instanced(BOX, "#ffffff", houses.length, (i, d) => wallAt(houses[i], d)); houses.forEach((h, i) => walls.setColorAt(i, new THREE.Color(h.c)));
+// houses as instances: walls, roofs, doors, mailboxes; each faces its way. Lone mailboxes (owner, 2026-11-10) have no
+// house. Rebuilt with the world.
+function instanced(geo, color, n, each, parent = scene) { const m = new THREE.InstancedMesh(geo, mat(color), Math.max(1, n)); m.count = n; m.castShadow = true; m.receiveShadow = true; for (let i = 0; i < n; i++) { dummy.rotation.set(0, 0, 0); dummy.scale.set(1, 1, 1); each(i, dummy); dummy.updateMatrix(); m.setMatrixAt(i, dummy.matrix); } parent.add(m); return m; }
+const HIDE = 0.0001;
+const wallAt = (h, d) => { d.position.set(h.x, h.base + 1.2, h.z); d.scale.set(9, 6.4, 9); d.rotation.y = h.yaw; if (h.box) d.scale.set(HIDE, HIDE, HIDE); };
+const roofAt = (h, d) => { d.position.set(h.x, h.base + 6.1, h.z); d.scale.set(1, 1, 1); d.rotation.y = h.yaw; if (h.box) d.scale.set(HIDE, HIDE, HIDE); };
+const doorAt = (h, d) => { d.position.set(h.x + Math.sin(h.yaw) * 4.55, h.base + 1.1, h.z + Math.cos(h.yaw) * 4.55); d.scale.set(1.6, 2.2, 0.15); d.rotation.y = h.yaw; if (h.box) d.scale.set(HIDE, HIDE, HIDE); };
 const ROOFG = new THREE.ConeGeometry(7.2, 3.4, 4); ROOFG.rotateY(Math.PI / 4);
-const roofs = instanced(ROOFG, "#ffffff", houses.length, (i, d) => roofAt(houses[i], d)); houses.forEach((h, i) => roofs.setColorAt(i, new THREE.Color(h.roof)));
-const doors = instanced(BOX, "#7a4f28", houses.length, (i, d) => doorAt(houses[i], d));
-const houseParts = [[walls, wallAt], [roofs, roofAt], [doors, doorAt]];
-function setHouse(i, on) { for (const [m, f] of houseParts) { dummy.rotation.set(0, 0, 0); f(houses[i], dummy); if (!on) dummy.scale.set(0.0001, 0.0001, 0.0001); dummy.updateMatrix(); m.setMatrixAt(i, dummy.matrix); m.instanceMatrix.needsUpdate = true; } }
+let houseParts = [];
+function setHouse(i, on) { for (const [m, f] of houseParts) { dummy.rotation.set(0, 0, 0); f(houses[i], dummy); if (!on) dummy.scale.set(HIDE, HIDE, HIDE); dummy.updateMatrix(); m.setMatrixAt(i, dummy.matrix); m.instanceMatrix.needsUpdate = true; } }
 // windows either side of the door: they light up at night
 const windowM = new THREE.MeshBasicMaterial({ color: "#6b7f99" }), WINDOW_ON = new THREE.Color("#ffd76a");
-{ const wm = new THREE.InstancedMesh(BOX, windowM, houses.length * 2); houses.forEach((h, i) => { for (const sd of [-1, 1]) { const lx = sd * 2.8, lz = 4.53; dummy.position.set(h.x + lx * Math.cos(h.yaw) + lz * Math.sin(h.yaw), h.base + 2.5, h.z - lx * Math.sin(h.yaw) + lz * Math.cos(h.yaw)); dummy.rotation.set(0, h.yaw, 0); dummy.scale.set(1.5, 1.3, 0.1); dummy.updateMatrix(); wm.setMatrixAt(i * 2 + (sd > 0 ? 1 : 0), dummy.matrix); } }); scene.add(wm); }
-instanced(BOX, "#6b7680", houses.length, (i, d) => { const h = houses[i]; d.position.set(h.mx, h.my + 0.55, h.mz); d.scale.set(0.15, 1.1, 0.15); });
-instanced(BOX, "#e5534b", houses.length, (i, d) => { const h = houses[i]; d.position.set(h.mx, h.my + 1.25, h.mz); d.scale.set(0.8, 0.45, 0.6); d.rotation.y = h.yaw; });
-// trees
 const TRUNK = new THREE.CylinderGeometry(0.25, 0.3, 2, 6), LEAF = new THREE.SphereGeometry(1.6, 8, 6);
-instanced(TRUNK, "#7a4f28", trees.length, (i, d) => { const t = trees[i]; d.position.set(t.x, t.y + t.s, t.z); d.scale.set(t.s, t.s, t.s); });
-instanced(LEAF, "#4fae4a", trees.length, (i, d) => { const t = trees[i]; d.position.set(t.x, t.y + 2.6 * t.s, t.z); d.scale.set(t.s, t.s, t.s); });
-// the small islands: a grassy top on a rock that tapers away beneath it; clouds drifting around and below
-const islandTopM = mat("#86c95f");
-for (const isl of ISLANDS) {
-  const top = new THREE.Mesh(new THREE.CylinderGeometry(isl.r, isl.r * 0.94, 1.6, 28), islandTopM); top.position.set(isl.x, isl.y - 0.8, isl.z); top.receiveShadow = true; top.castShadow = true; scene.add(top);
-  const rock = new THREE.Mesh(new THREE.ConeGeometry(isl.r * 0.94, isl.r * 1.4, 10).rotateX(Math.PI), mat("#8a7f72")); rock.position.set(isl.x, isl.y - 1.6 - isl.r * 0.7, isl.z); rock.castShadow = true; scene.add(rock);
-  for (let k = 0; k < 4; k++) { const a = k * 1.7 + isl.r, x = isl.x + Math.cos(a) * isl.r * 0.55, z = isl.z + Math.sin(a) * isl.r * 0.55; const b = new THREE.Mesh(new THREE.DodecahedronGeometry(1.2 + (k % 2), 0), mat("#9a8f80")); b.position.set(x, isl.y - 4 - k * 2.5, z); scene.add(b); }
+function buildThings(parent) {
+  houseColors();
+  const walls = instanced(BOX, "#ffffff", houses.length, (i, d) => wallAt(houses[i], d), parent); houses.forEach((h, i) => walls.setColorAt(i, new THREE.Color(h.c)));
+  const roofs = instanced(ROOFG, "#ffffff", houses.length, (i, d) => roofAt(houses[i], d), parent); houses.forEach((h, i) => roofs.setColorAt(i, new THREE.Color(h.roof)));
+  const doors = instanced(BOX, "#7a4f28", houses.length, (i, d) => doorAt(houses[i], d), parent);
+  houseParts = [[walls, wallAt], [roofs, roofAt], [doors, doorAt]];
+  const wm = new THREE.InstancedMesh(BOX, windowM, Math.max(1, houses.length * 2)); wm.count = houses.length * 2;
+  houses.forEach((h, i) => { for (const sd of [-1, 1]) { const lx = sd * 2.8, lz = 4.53; dummy.position.set(h.x + lx * Math.cos(h.yaw) + lz * Math.sin(h.yaw), h.base + 2.5, h.z - lx * Math.sin(h.yaw) + lz * Math.cos(h.yaw)); dummy.rotation.set(0, h.yaw, 0); dummy.scale.set(h.box ? HIDE : 1.5, h.box ? HIDE : 1.3, 0.1); dummy.updateMatrix(); wm.setMatrixAt(i * 2 + (sd > 0 ? 1 : 0), dummy.matrix); } }); parent.add(wm);
+  instanced(BOX, "#6b7680", houses.length, (i, d) => { const h = houses[i]; d.position.set(h.mx, h.my + 0.55, h.mz); d.scale.set(0.15, 1.1, 0.15); }, parent);
+  instanced(BOX, "#e5534b", houses.length, (i, d) => { const h = houses[i]; d.position.set(h.mx, h.my + 1.25, h.mz); d.scale.set(0.8, 0.45, 0.6); d.rotation.y = h.yaw; }, parent);
+  instanced(TRUNK, "#7a4f28", trees.length, (i, d) => { const t = trees[i]; d.position.set(t.x, t.y + t.s, t.z); d.scale.set(t.s, t.s, t.s); }, parent);
+  instanced(LEAF, "#4fae4a", trees.length, (i, d) => { const t = trees[i]; d.position.set(t.x, t.y + 2.6 * t.s, t.z); d.scale.set(t.s, t.s, t.s); }, parent);
 }
 // ---- the sky (owner, 2026-11-08): a day and night cycle, rain now and then, wind, god rays, more clouds; the same for
 // everyone (all timed off the clock) ----
@@ -535,7 +438,6 @@ function skyStep(dt, cx, cy, cz) {
   }
   if (snow.visible) snowG.attributes.position.needsUpdate = true;
   snowCover.visible = snowK > 0.01; snowCover.material.opacity = snowK * 0.72;
-  islandTopM.color.set("#86c95f").lerp(SNOW_COLOR, snowK * 0.82);
   // wind streaks, more of them the windier it is, up high and in the rain
   const windK = me.inst ? 0 : 0.3 + windNow.mph / WIND_MAX * 0.65 + rainK * 0.3 + clamp((me.y - terrain(me.x, me.z)) / 40, 0, 0.5);
   for (const w of winds) {
@@ -1065,8 +967,8 @@ function heliModel() {
   acRed(g); inColor(g); inColor(beam);   // (owner, 2026-11-09) red, in color in the gray look
   return { g, body, red, blue, rotor, tail, lens, spot, beam, ba: 0, bd: 15 };
 }
-const localVs = World.makeVehicles();
-const vehs = localVs.map((v) => { const m = v.kind ? heliModel() : vanModel(v.style); scene.add(m.g); blobUnder(m.g, v.kind ? 7 : 5); return Object.assign(m, { kind: v.kind, buf: [], x: v.x, y: v.y, z: v.z, yaw: v.yaw, mode: 0, target: 0, pitch: 0 }); });
+let localVs = [];
+const vehs = [];
 // (owner, 2026-11-09, like an MMO's ground telegraphs) animal control's reach drawn on the ground as red shapes: a
 // translucent fill, lighter toward its edge, a bright rim, and a ring pulsing out from the middle. A van's is the shape
 // of how far it sees you (your wanted stars count), shown while it's looking (not while it chases); a helicopter's is
@@ -1083,9 +985,18 @@ function telegraphGeo(rOf, N = 72) {   // a fan from the middle out to rOf(angle
 }
 const losLines = (stars) => telegraphGeo((a) => World.vanSight(Math.cos(a), Math.abs(Math.sin(a)), stars));
 const DISC_G = telegraphGeo(() => 1);
-for (const m of vehs) {
-  if (!m.kind) { m.los = new THREE.Mesh(losLines(0), telM); m.los.position.y = -0.1; m.los.renderOrder = 2; m.losStars = 0; m.g.add(inColor(m.los)); }
-  else { m.disc = new THREE.Mesh(DISC_G, telM); m.disc.renderOrder = 2; scene.add(inColor(m.disc)); }
+// (owner, 2026-11-10) the vans and helicopters staff placed, rebuilt with the world
+function buildVehicles() {
+  for (const m of vehs) { scene.remove(m.g); if (m.beam) scene.remove(m.beam); if (m.spot) scene.remove(m.spot, m.spot.target); if (m.disc) scene.remove(m.disc); }
+  for (let i = blobs.length - 1; i >= 0; i--) if (vehs.some((m) => m.g === blobs[i].g)) { scene.remove(blobs[i].b); blobs.splice(i, 1); }
+  vehs.length = 0; localVs = World.makeVehicles();
+  for (const v of localVs) {
+    const m = v.kind ? heliModel() : vanModel(v.style); scene.add(m.g); blobUnder(m.g, v.kind ? 7 : 5);
+    Object.assign(m, { kind: v.kind, buf: [], x: v.x, y: v.y, z: v.z, yaw: v.yaw, mode: 0, target: 0, pitch: 0 });
+    if (!m.kind) { m.los = new THREE.Mesh(losLines(0), telM); m.los.position.y = -0.1; m.los.renderOrder = 2; m.losStars = 0; m.g.add(inColor(m.los)); }
+    else { m.disc = new THREE.Mesh(DISC_G, telM); m.disc.renderOrder = 2; scene.add(inColor(m.disc)); }
+    vehs.push(m);
+  }
 }
 const meP = { id: 0, x: 0, y: 0, z: 0, stars: 0, lastChased: 0, lastStar: 0, immuneUntil: 0 };   // me, for running them offline
 const tmpS = {}, beamB = {}, DOWN = new THREE.Vector3(0, -1, 0);
@@ -1098,8 +1009,8 @@ function vehiclesDraw(dt) {
     else { const v = localVs[i]; m.x = v.x; m.y = v.y; m.z = v.z; m.yaw = v.yaw; m.mode = v.mode; m.target = v.target; if (v.kind) { m.ba = v.ba; m.bd = v.bd; } }
     const chasing = m.mode === 1;
     if (!m.kind) {   // (owner, 2026-11-08: rear clipping into the road) sit on the front and rear wheels, a little above the road
-      const sx = Math.sin(m.yaw), sz = Math.cos(m.yaw), front = terrain(m.x + sx * 1.6, m.z + sz * 1.6), rear = terrain(m.x - sx * 1.5, m.z - sz * 1.5);
-      m.y = Math.max((front + rear) / 2, terrain(m.x, m.z)) + 0.22; m.pitch += (-Math.atan2(front - rear, 3.1) - m.pitch) * Math.min(1, dt * 10); m.body.rotation.x = m.pitch;
+      const sx = Math.sin(m.yaw), sz = Math.cos(m.yaw), gy = m.y + 1.5, gnd = (x, z) => { const v = World.surfaceAt(x, z, gy); return v > -Infinity ? v : m.y - 0.22; }, front = gnd(m.x + sx * 1.6, m.z + sz * 1.6), rear = gnd(m.x - sx * 1.5, m.z - sz * 1.5);
+      m.y = Math.max((front + rear) / 2, gnd(m.x, m.z)) + 0.22; m.pitch += (-Math.atan2(front - rear, 3.1) - m.pitch) * Math.min(1, dt * 10); m.body.rotation.x = m.pitch;
       if (dt > 0) m.spd += (Math.min(40, hyp(m.x - px, m.z - pz) / dt) - m.spd) * Math.min(1, dt * 4);   // headlights while it's moving
       const on = lightsOn && m.spd > 1.5; m.lit.visible = on; m.lamp.color.set(on ? "#fff8dc" : "#6d6a5c");
     }
@@ -1129,6 +1040,7 @@ let lastChaseToast = 0;
 
 // ---- the camera: behind and above me (below too, on a flier); drag to turn it, pinch (or the wheel) to zoom ----
 const cam = { yaw: 0, pitch: 0.5, dist: 14, goalDist: 14, y: 0 };
+const zoomMax = () => (wedit ? 160 : 45);   // (owner, 2026-11-10) staff building the town see further
 const pitchMin = () => (moveKind() === "fly" && !me.inst ? -0.75 : 0.18);
 // (owner, 2026-11-08) a house between the camera and me fades: the more of me it hides, the more see-through it gets,
 // easing in and out (it's swapped for a see-through copy while it's faded)
@@ -1190,8 +1102,7 @@ function placeCamera(dt) {
     cx = me.x + Math.sin(cam.yaw) * d * Math.cos(cam.pitch); cz = me.z + Math.cos(cam.yaw) * d * Math.cos(cam.pitch); cy = cam.y + 1.5 + d * Math.sin(cam.pitch);
     break;
   }
-  if (inside(cx, cz)) cy = Math.max(cy, terrain(cx, cz) + 1.2);
-  const isl = islandAt(cx, cz); if (isl && cy < isl.y + 1.2 && cy > isl.y - 3) cy = isl.y + 1.2;
+  { const gy = World.surfaceAt(cx, cz, cy); if (gy > -Infinity && cy < gy + 1.2 && cy > gy - 3) cy = gy + 1.2; }   // (owner, 2026-11-10) never inside a block
   // (owner, 2026-11-09) talking to someone in town, the camera moves in close on them and back out after
   let lx = me.x, ly = cam.y + 1.8, lz = me.z;
   shot.k += ((talk ? 1 : 0) - shot.k) * Math.min(1, dt * 3.2);
@@ -1256,7 +1167,7 @@ canvas.addEventListener("pointermove", (e) => {
   const d = drags.get(e.pointerId); if (!d) return;
   if (drags.size >= 2) {   // pinch
     const [a, b] = [...drags.values()], before = hyp(a.x - b.x, a.y - b.y); d.x = e.clientX; d.y = e.clientY; const after = hyp(a.x - b.x, a.y - b.y);
-    if (before > 0) cam.goalDist = clamp((cam.goalDist * before) / after, 7, 45); return;
+    if (before > 0) cam.goalDist = clamp((cam.goalDist * before) / after, 7, zoomMax()); return;
   }
   cam.yaw -= (e.clientX - d.x) * 0.006; cam.pitch = clamp(cam.pitch + (e.clientY - d.y) * 0.004, pitchMin(), 1.25); d.x = e.clientX; d.y = e.clientY;
 });
@@ -1265,7 +1176,7 @@ const up = (e) => {
   if (tp && e.type === "pointerup" && hyp(e.clientX - tp.x, e.clientY - tp.y) < 10 && performance.now() - tp.t < 400) tapAt(e.clientX, e.clientY);
   if (e.pointerId === joy.id) { joy.id = null; joy.x = joy.y = 0; joyEl.style.display = "none"; } drags.delete(e.pointerId); };
 canvas.addEventListener("pointerup", up); canvas.addEventListener("pointercancel", up);
-canvas.addEventListener("wheel", (e) => { e.preventDefault(); cam.goalDist = clamp(cam.goalDist * Math.exp(e.deltaY * 0.001), 7, 45); }, { passive: false });
+canvas.addEventListener("wheel", (e) => { e.preventDefault(); cam.goalDist = clamp(cam.goalDist * Math.exp(e.deltaY * 0.001), 7, zoomMax()); }, { passive: false });
 const typing = () => { const a = document.activeElement; return !!a && a.tagName === "INPUT" && a.offsetParent !== null; };
 addEventListener("keydown", (e) => {
   if (typing()) return;
@@ -1274,7 +1185,8 @@ addEventListener("keydown", (e) => {
     if (e.code === "Escape") endTalk(); else if (e.code === "Space" || e.code === "Enter" || e.code === "NumpadEnter" || e.code === "KeyF") talkNext(); else if (/^(Digit|Numpad)[1-9]$/.test(e.code)) talkPick(+e.code.slice(-1) - 1);
     return;
   }
-  keys.add(e.code); if (e.code === "Escape") { if (building) closeBuild(); closePanels(); }
+  keys.add(e.code); if (e.code === "Escape") { if (building) closeBuild(); if (wedit) closeWorldEdit(); closePanels(); }
+  if (e.code === "KeyR" && wedit) weditTurn();
   if ((e.code === "Enter" || e.code === "Slash") && loggedIn) { e.preventDefault(); openChat(); }
   if (e.code === "Space") { e.preventDefault(); if (!e.repeat) jumpQueued = performance.now() + 150; }   // (owner, 2026-11-08) a press each time, never held (a flier holds it: step)
   if (e.code === "KeyF") runAct("E"); if (e.code === "KeyE") runAct("E"); if (e.code === "KeyG") runAct("G"); if (e.code === "KeyR" && building) turnBuild(e.shiftKey ? -15 : 15); if ((e.code === "Delete" || e.code === "Backspace") && building) deleteSel();
@@ -1323,7 +1235,7 @@ $("btn-pets").onclick = () => (openPanel === "p-pets" ? closePanels() : show("p-
 function renderSettings() { const el = $("settings"); el.innerHTML = ""; const label = document.createElement("label"); label.className = "setting"; const input = document.createElement("input"); input.type = "checkbox"; input.checked = !!save.settings.followArrowWhenEmpty; input.onchange = () => { save.settings.followArrowWhenEmpty = input.checked; persist(); }; label.append(input, document.createTextNode("Show the follow arrow when the bag is empty")); el.appendChild(label); }
 // (owner, 2026-11-09) the gear left of the chat: a menu with Settings and, for staff, the Admin Panel
 const gearMenu = $("gearmenu");
-$("gear").onclick = () => { gearMenu.style.display = gearMenu.style.display === "flex" ? "none" : "flex"; $("gm-admin").style.display = isStaff() ? "" : "none"; };
+$("gear").onclick = () => { gearMenu.style.display = gearMenu.style.display === "flex" ? "none" : "flex"; $("gm-admin").style.display = isStaff() ? "" : "none"; $("gm-world").style.display = myRole === "admin" ? "" : "none"; };
 $("gm-logout").onclick = () => { gearMenu.style.display = "none"; flushSave(performance.now()); setTok(null); try { localStorage.setItem("petdelivery.claimed", "1"); } catch (e) { /* private mode */ } setTimeout(() => location.reload(), 150); };   // (owner, 2026-11-09) back to the login, to use or make another account
 $("gm-settings").onclick = () => { gearMenu.style.display = "none"; openPanel === "p-settings" ? closePanels() : show("p-settings"); };
 const WING = `<svg class="ico" viewBox="0 0 14 12" style="width:14px;height:12px;vertical-align:-1px"><path d="M1 10C3 3 8 1 13 1c-1 5-5 9-12 9z" fill="#3a8ee6"/></svg>`;
@@ -1516,7 +1428,7 @@ function contractOver(won, payN, progress, helped) {
 // island, more with a wanted level) and sometimes an item ----
 const STAR_PAY = 0.2;
 function fillBag() {
-  const cap = petBag(riding()), before = me.bag.length; if (before >= cap) return;
+  const cap = petBag(riding()), before = me.bag.length; if (before >= cap || !houses.length) return;   // (owner, 2026-11-10) no mailboxes yet: nothing to take
   // (owner, 2026-11-08) how far parcels go: a new courier's stay near the post office; the faster your best pet of the
   // kind you're riding (land pets, or fliers and gliders), the further out they go. Riding a flier or glider some go to
   // islands in reach (any on a flapping flier, only the low ones off the edge on a glider).
@@ -1524,7 +1436,7 @@ function fillBag() {
   let town = houses.map((h, i) => i).filter((i) => !houses[i].sky && houses[i].d <= far);
   const isl = air ? houses.map((h, i) => i).filter((i) => houses[i].sky && houses[i].d <= far && (kind === "fly" || houses[i].base < 20)) : [];
   if (town.length < cap + 6) town = houses.map((h, i) => i).filter((i) => !houses[i].sky).sort((a, b) => houses[a].d - houses[b].d).slice(0, cap + 6);
-  for (let tries = 0; me.bag.length < cap && tries < 500; tries++) { const i = isl.length && Math.random() < 0.3 ? pick(isl) : pick(town); if (!taken.has(i)) { taken.add(i); me.bag.push(i); } }
+  for (let tries = 0; me.bag.length < cap && tries < 500; tries++) { const i = isl.length && (!town.length || Math.random() < 0.3) ? pick(isl) : pick(town); if (i !== undefined && !taken.has(i)) { taken.add(i); me.bag.push(i); } }
   toast("+" + (cap - before)); syncBeams(); hudKey = "";
   emitSparks(me.x, me.y + 2, me.z, 20, 4, ["#ffd35a", "#ffffff"], 0.7, -1, 0.8);
 }
@@ -1690,6 +1602,7 @@ function onNet(m) {
   switch (m.t) {
     case "welcome": {
       if (stale(m.web, false, m.by)) return;
+      if (m.world) { World.setWorld(m.world); buildWorldView(); }
       sentPet = "";   // tell the room again what I ride once I'm in
       setTok(m.token); if (registering) { try { localStorage.setItem("petdelivery.claimed", "1"); } catch (e) { /* private mode */ } registering = false; }
       const again = loggedIn && myName === m.name; myName = m.name; myId = m.id; netOk = true; loggedIn = true; $("login").style.display = "none"; if (document.activeElement && document.activeElement.blur) document.activeElement.blur();
@@ -1736,6 +1649,7 @@ function onNet(m) {
     case "chase": case "caught": case "escaped": case "stars": onVehEvent(m.t, m.stars || 0); break;
     case "reload": stale(m.web, true, m.by); break;
     case "contract": setContract(m.c); break;
+    case "world": if (m.all) World.setWorld(m.all); else if (m.edits) World.applyEdits(m.edits); buildWorldView(); break;
     case "done": contractOver(m.won, m.pay || 0, m.progress || 0, !!m.helped); break;
     case "package_event": setPackageEvent(m.event, !!m.event); break;
     case "package_taken": if (packageEvent) packageEvent.boxes.delete(m.id); dropPrize(m.id); hudKey = ""; break;
@@ -1846,20 +1760,12 @@ function renderTrade() {
 // at random), and an island off the edge with more when a room has more than 10 players. Build it however you like
 // from pieces (floors, walls, windows, doors, roofs, slopes, stairs on a 5 x 5 grid of 4 m squares, up to 3 floors;
 // furniture anywhere), in any wall colour. Inside a house you're on foot. Tap a playpen to choose its pet. ----
-const { PLOTS, PLOT, CELL, GRID, LEVELS, LEVEL_H, PIECES, COLORS, VIP_ISLAND, EXTRA_ISLAND } = World;
+const { PLOTS, PLOT, CELL, GRID, LEVELS, LEVEL_H, PIECES, COLORS } = World;
 const plotState = new Map();   // plot id -> { id (player), name, pieces, g, col: { walls, surfaces, ramps }, pens }
 let myPlot = -1, isVip = false;
 const plotOrigin = (p) => ({ x: p.x - PLOT / 2, z: p.z - PLOT / 2, y: p.y });
-// the islands for plots: the VIP island above the middle, the extra island off the edge (shown when it's in use)
-function plotIsland(isl) {
-  const g = new THREE.Group();
-  const top = new THREE.Mesh(new THREE.CylinderGeometry(isl.r, isl.r * 0.94, 1.6, 36), mat("#86c95f")); top.position.set(isl.x, isl.y - 0.8, isl.z); top.receiveShadow = true; g.add(top);
-  const rock = new THREE.Mesh(new THREE.ConeGeometry(isl.r * 0.94, isl.r * 1.3, 12).rotateX(Math.PI), mat("#8a7f72")); rock.position.set(isl.x, isl.y - 1.6 - isl.r * 0.65, isl.z); g.add(rock);
-  scene.add(g); return g;
-}
-plotIsland(VIP_ISLAND); const extraIsland = plotIsland(EXTRA_ISLAND); extraIsland.visible = false;
-// lifts: one at the plaza takes you to your plot; one on each plot island brings you back down
-const LIFT = { x: 0, z: 22 }, LIFTS = [{ x: LIFT.x, z: LIFT.z, y: 0, to: "plot" }, { x: VIP_ISLAND.x, z: VIP_ISLAND.z + 18, y: VIP_ISLAND.y, to: "plaza" }, { x: EXTRA_ISLAND.x, z: EXTRA_ISLAND.z + 30, y: EXTRA_ISLAND.y, to: "plaza" }];
+// (owner, 2026-11-10) plots stand where staff placed them; the lift at the square takes you to yours
+const LIFT = { x: 0, z: 22 }, LIFTS = [{ x: LIFT.x, z: LIFT.z, y: 0, to: "plot" }];
 const liftBeamM = new THREE.MeshBasicMaterial({ color: "#7fd8ff", transparent: true, opacity: 0.28, depthWrite: false, side: THREE.DoubleSide });
 for (const l of LIFTS) { const r = new THREE.Mesh(RINGG(2.2), ringM("#2bb3c0")); r.position.set(l.x, l.y + 0.18, l.z); scene.add(r); const b = new THREE.Mesh(new THREE.CylinderGeometry(2, 2, 14, 20, 1, true), liftBeamM); b.position.set(l.x, l.y + 7, l.z); scene.add(b); l.ring = r; inColor(r); inColor(b); }
 // (owner, 2026-11-09) a speech-bubble label floats over each place, saying what it is: clear up close, fading out with
@@ -1871,8 +1777,6 @@ const POIS = [
   { x: TRAIN.x, y: 4.5, z: TRAIN.z, name: "Training Yard", what: "Train the pet you ride" },
   { x: toWorld(POUND, 0, 3).x, y: 4.4, z: toWorld(POUND, 0, 3).z, name: "Animal Control", what: "Where caught couriers end up" },
   { x: LIFT.x, y: 6, z: LIFT.z, name: "Sky Lift", what: "Up to your plot" },
-  { x: LIFTS[1].x, y: LIFTS[1].y + 6, z: LIFTS[1].z, name: "Sky Lift", what: "Down to the plaza" },
-  { x: LIFTS[2].x, y: LIFTS[2].y + 6, z: LIFTS[2].z, name: "Sky Lift", what: "Down to the plaza", extra: true },
 ];
 function poiBubble(name, what) {
   const c = document.createElement("canvas"); c.width = 512; c.height = 176; const g = c.getContext("2d");
@@ -1899,7 +1803,7 @@ function makeHomeMarker() {
   const s = new THREE.Sprite(new THREE.SpriteMaterial({ map: t, transparent: true, depthWrite: false })); s.scale.set(7.2, 2.45, 1); s.layers.set(1); s.renderOrder = 4; return s;
 }
 function homeStep() {
-  if (myPlot < 0 || !PLOTS[myPlot]) { if (homeMarker) homeMarker.visible = false; return; }
+  if (myPlot < 0 || !PLOTS[myPlot] || !PLOTS[myPlot].placed) { if (homeMarker) homeMarker.visible = false; return; }
   if (!homeMarker) { homeMarker = makeHomeMarker(); scene.add(homeMarker); }
   const p = PLOTS[myPlot]; homeMarker.position.set(p.x, p.y + 5.1, p.z - PLOT / 2 - 0.8);
   const d = hyp(p.x - me.x, p.z - me.z, (p.y - me.y) * 0.5), a = building || talk ? 0 : clamp((100 - d) / 65, 0, 1);
@@ -1907,7 +1811,7 @@ function homeStep() {
 }
 function poiStep() {
   for (const q of POIS) {
-    const d = hyp(q.x - me.x, q.z - me.z, (q.y - me.y) * 0.5), f = clamp((45 - d) / 35, 0, 1) * clamp((hyp(q.x - camera.position.x, q.y - camera.position.y, q.z - camera.position.z) - 5) / 6, 0, 1), a = building || talk || (q.extra && !extraIsland.visible) ? 0 : f * f;   // and not right in front of the camera   // (owner, 2026-11-09) fainter the further, gone past 45 m
+    const d = hyp(q.x - me.x, q.z - me.z, (q.y - me.y) * 0.5), f = clamp((45 - d) / 35, 0, 1) * clamp((hyp(q.x - camera.position.x, q.y - camera.position.y, q.z - camera.position.z) - 5) / 6, 0, 1), a = building || talk || false ? 0 : f * f;   // and not right in front of the camera   // (owner, 2026-11-09) fainter the further, gone past 45 m
     q.s.visible = a > 0.01; q.s.material.opacity = a; const k = 1 + clamp((d - 15) / 60, 0, 0.3); q.s.scale.set(6.4 * k, 2.2 * k, 1);
   }
   homeStep();
@@ -1930,8 +1834,8 @@ function introGo(stage) {
   else if (stage === "mailbox") {
     // two parcels for the nearest houses to the post office; the camera goes to the first one's mailbox
     const near = houses.map((h, i) => i).filter((i) => !houses[i].sky).sort((a, b) => houses[a].d - houses[b].d).slice(0, 2);
-    me.bag = near.slice(); intro.parcels = near; intro.dl = []; syncBeams(); hudKey = ""; toast("+2");
-    const h = houses[near[0]]; cine.on = true; cine.lx = h.mx; cine.ly = h.my + 1; cine.lz = h.mz; const a = Math.atan2(walt().x - h.mx, walt().z - h.mz); cine.cx = h.mx + Math.sin(a) * 11; cine.cz = h.mz + Math.cos(a) * 11; cine.cy = h.my + 6;
+    me.bag = near.slice(); intro.parcels = near; intro.dl = []; syncBeams(); hudKey = ""; if (near.length) toast("+" + near.length);
+    const h = houses[near[0]]; if (h) { cine.on = true; cine.lx = h.mx; cine.ly = h.my + 1; cine.lz = h.mz; const a = Math.atan2(walt().x - h.mx, walt().z - h.mz); cine.cx = h.mx + Math.sin(a) * 11; cine.cz = h.mz + Math.cos(a) * 11; cine.cy = h.my + 6; }
     introSay("i5");
   } else if (stage === "egg") {
     save.items.ticket++; persist(); toast(ITEMS.ticket.name, ITEMS.ticket.c); emitConfetti(me.x, me.y + 3, me.z, 60, 4, 7); hudKey = "";
@@ -2273,11 +2177,14 @@ function shotAt(n) {
   SH.lx = n.x; SH.ly = n.y + 1.5 * n.s; SH.lz = n.z;
 }
 // each plot: a pale outline on the ground and a sign with its owner's name
-const plotLines = PLOTS.map((p) => {
-  const g = new THREE.Group(), o = plotOrigin(p), m = new THREE.MeshBasicMaterial({ color: "#ffffff", transparent: true, opacity: 0.5 });
-  for (const [w, d, x, z] of [[PLOT, 0.25, PLOT / 2, 0], [PLOT, 0.25, PLOT / 2, PLOT], [0.25, PLOT, 0, PLOT / 2], [0.25, PLOT, PLOT, PLOT / 2]]) { const b = new THREE.Mesh(BOX, m); b.scale.set(w, 0.06, d); b.position.set(o.x + x, o.y + 0.08, o.z + z); g.add(b); }
-  scene.add(g); g.visible = p.kind !== "extra"; return g;
+let extraUsed = false;   // the extra plots show once a room is big enough to use them
+const plotLines = PLOTS.map(() => {
+  const g = new THREE.Group(), m = new THREE.MeshBasicMaterial({ color: "#ffffff", transparent: true, opacity: 0.5 });
+  for (const [w, d, x, z] of [[PLOT, 0.25, PLOT / 2, 0], [PLOT, 0.25, PLOT / 2, PLOT], [0.25, PLOT, 0, PLOT / 2], [0.25, PLOT, PLOT, PLOT / 2]]) { const b = new THREE.Mesh(BOX, m); b.scale.set(w, 0.06, d); b.position.set(x, 0.08, z); g.add(b); }
+  scene.add(g); return g;
 });
+// (owner, 2026-11-10) each plot's outline where it's placed now; plots not placed are nowhere
+function placePlots() { PLOTS.forEach((p, i) => { const o = plotOrigin(p); plotLines[i].position.set(o.x, o.y, o.z); plotLines[i].visible = p.placed && (p.kind !== "extra" || extraUsed); }); }
 // one mesh per house: every box of every piece in one geometry, coloured per vertex (glass on its own)
 function Merger() { this.p = []; this.n = []; this.c = []; this.i = []; }
 const unitBox = new THREE.BoxGeometry(1, 1, 1), mtx = new THREE.Matrix4(), nmx = new THREE.Matrix3(), qq = new THREE.Quaternion(), ee = new THREE.Euler(), vv = new THREE.Vector3(), sc = new THREE.Vector3(), colr = new THREE.Color();
@@ -2399,6 +2306,7 @@ function exteriorBoxes(ext, p, M, G, col) {
 function buildPlot(id) {
   const st = plotState.get(id), p = PLOTS[id]; if (!st) return;
   if (st.g) scene.remove(st.g);
+  if (!p.placed) { st.g = null; st.col = null; return; }   // (owner, 2026-11-10) a plot staff haven't placed yet is nowhere
   const M = new Merger(), G = new Merger(), col = { walls: [], surfaces: [], ramps: [] }, g = new THREE.Group();
   st.fd = exteriorBoxes(st.ext | 0, p, M, G, col);
   g.add(M.mesh(houseMat)); if (G.p.length) g.add(G.mesh(houseGlass));
@@ -2445,12 +2353,11 @@ function setPlot(id, owner, name, pieces, penSp, ext) {
   const st = plotState.get(id); if (st && st.g) scene.remove(st.g);
   if (!owner) { plotState.delete(id); if (inter && st && inter.owner === st.id && me.inst === st.id) leaveHouse(true); }
   else { plotState.set(id, { id: owner, name, pieces: pieces || [], penSp: penSp || {}, ext: ext | 0 }); buildPlot(id); if (me.inst === owner && owner !== myId) buildInside(owner, pieces || []); }
-  extraIsland.visible = PLOTS.some((p) => p.kind === "extra" && plotState.has(p.id));
-  PLOTS.forEach((p, i) => (plotLines[i].visible = p.kind !== "extra" || extraIsland.visible));
+  extraUsed = PLOTS.some((p) => p.kind === "extra" && plotState.has(p.id)); placePlots();
 }
 function refreshMyPlot() { if (myPlot >= 0 && save.home) setPlot(myPlot, myId, myName, save.home.pieces, null, save.home.ext); if (me.inst === myId && save.home) buildInside(myId, save.home.pieces); }
 // walking: the floors, steps and slopes under me, and walls in the way (outside: the houses on lots; inside: this house)
-function nearPlots(x, z, m = 2) { if (inHouse()) return inter ? [inter.col] : []; const out = []; for (const [id, st] of plotState) { const p = PLOTS[id]; if (st.col && Math.abs(x - p.x) < PLOT / 2 + m && Math.abs(z - p.z) < PLOT / 2 + m) out.push(st.col); } return out; }
+function nearPlots(x, z, m = 2) { if (inHouse()) return inter ? [inter.col] : []; const out = []; for (const [id, st] of plotState) { const p = PLOTS[id]; if (st.col && p.placed && Math.abs(x - p.x) < PLOT / 2 + m && Math.abs(z - p.z) < PLOT / 2 + m) out.push(st.col); } return out; }
 function houseSurface(x, z, y) {
   let best = -Infinity;
   for (const col of nearPlots(x, z)) {
@@ -2527,10 +2434,11 @@ const ghostOk = new THREE.MeshLambertMaterial({ vertexColors: true, transparent:
 const ghostRed = new THREE.MeshBasicMaterial({ color: "#ff3b30", transparent: true, opacity: 0.55, depthWrite: false }), ghostSel = new THREE.MeshBasicMaterial({ color: "#ff3b30", transparent: true, opacity: 0.8, depthWrite: false });
 let bghost = new THREE.Group(), ghostKey = "", markG = new THREE.Group(), markKey = "";
 scene.add(bghost, markG); bghost.visible = false;
-const onMyPlot = (m = 2) => !inHouse() && myPlot >= 0 && Math.abs(me.x - PLOTS[myPlot].x) < PLOT / 2 + m && Math.abs(me.z - PLOTS[myPlot].z) < PLOT / 2 + m;
+const onMyPlot = (m = 2) => !inHouse() && myPlot >= 0 && PLOTS[myPlot].placed && Math.abs(me.x - PLOTS[myPlot].x) < PLOT / 2 + m && Math.abs(me.z - PLOTS[myPlot].z) < PLOT / 2 + m;
 const curLevel = () => clamp(Math.floor((me.y - INT.y + 0.6) / LEVEL_H), 0, LEVELS - 1);
 let camSave = null;
 function openBuild() {
+  if (wedit) closeWorldEdit();
   if (me.inst === myId) { building = { mode: "in", tool: "floor", a: 0, color: 0, w: 0, hover: -1, sel: -1 }; }
   else if (onMyPlot()) { building = { mode: "ext" }; camSave = { d: cam.goalDist, p: cam.pitch }; cam.goalDist = 30; cam.pitch = 0.6; }
   else return;
@@ -2654,6 +2562,7 @@ function buildTap(px, py) {
 }
 const ray = new THREE.Raycaster(), ndc = new THREE.Vector2(), plane = new THREE.Plane(new THREE.Vector3(0, 1, 0), 0), hitV = new THREE.Vector3();
 function tapAt(px, py) {
+  if (wedit) return weditTap(px, py);
   if (building) return buildTap(px, py);
   if (talk) { talkNext(); return true; }
   const fk = folkHit(px, py); if (fk) { closePlayerMenu(); startTalk(fk); return true; }
@@ -2671,7 +2580,7 @@ function tapAt(px, py) {
   }
   return false;
 }
-canvas.addEventListener("pointermove", (e) => { if (building && e.pointerType === "mouse") showGhost(e.clientX, e.clientY); });
+canvas.addEventListener("pointermove", (e) => { if (building && e.pointerType === "mouse") showGhost(e.clientX, e.clientY); if (wedit && e.pointerType === "mouse") weditAim(e.clientX, e.clientY); });
 $("btn-build").onclick = () => (building ? closeBuild() : openBuild());
 
 // ---- the minimap (owner, 2026-11-09): a square map in the top right, turned with the camera so up on it is always the
@@ -2686,6 +2595,7 @@ const SKY_Y = 60;   // above this, the sky layer (the town tops out under 50 m; 
 // (owner, 2026-11-09) the map is drawn like the world: white paper, black ink; only the markers keep their colors
 const INK = "#1d1d22", PAPER = "#faf8f2", PAPER2 = "#e9e7e1";
 function mapHouse(g, h) {   // seen from above: its roof (a pyramid), the door at the front, the mailbox
+  if (h.box) { g.fillStyle = INK; g.fillRect(h.mx - 0.7, h.mz - 0.7, 1.4, 1.4); return; }
   g.save(); g.translate(h.x, h.z); g.rotate(-h.yaw);
   g.fillStyle = PAPER; g.fillRect(-4.5, -4.5, 9, 9); g.strokeStyle = INK; g.lineWidth = 0.55; g.strokeRect(-4.5, -4.5, 9, 9);
   g.strokeStyle = "rgba(29,29,34,.45)"; g.lineWidth = 0.3; g.beginPath(); g.moveTo(-4.5, -4.5); g.lineTo(4.5, 4.5); g.moveTo(4.5, -4.5); g.lineTo(-4.5, 4.5); g.stroke();
@@ -2693,41 +2603,30 @@ function mapHouse(g, h) {   // seen from above: its roof (a pyramid), the door a
   g.restore(); g.fillStyle = INK; g.fillRect(h.mx - 0.5, h.mz - 0.5, 1, 1);
 }
 function mapTree(g, t) { g.fillStyle = PAPER; g.strokeStyle = INK; g.lineWidth = 0.35; g.beginPath(); g.arc(t.x, t.z, 1.7 * t.s, 0, TAU); g.fill(); g.stroke(); }
-function mapIsland(g, isl, shadow) {
-  g.save(); if (shadow) { g.shadowColor = "rgba(0,0,0,.18)"; g.shadowBlur = 10; g.shadowOffsetX = 5; g.shadowOffsetY = 6; }
-  g.fillStyle = PAPER; g.beginPath(); g.arc(isl.x, isl.z, isl.r, 0, TAU); g.fill(); g.restore();
-  g.strokeStyle = INK; g.lineWidth = 0.8; g.beginPath(); g.arc(isl.x, isl.z, isl.r, 0, TAU); g.stroke();
-}
 const mapRing = (g, x, z, r, c, w = 0.9) => { g.strokeStyle = c; g.lineWidth = w; g.beginPath(); g.arc(x, z, r, 0, TAU); g.stroke(); };
 const mapPlotLine = (g, p, c, w) => { g.save(); g.setLineDash([2, 1.5]); g.strokeStyle = c; g.lineWidth = w; g.strokeRect(p.x - PLOT / 2, p.z - PLOT / 2, PLOT, PLOT); g.restore(); };
-{
-  const g = mgG;
-  for (const isl of ISLANDS) if (isl.y < SKY_Y) mapIsland(g, isl, true);
-  // the town's rock rim (and its shadow over the clouds), then the land: grass by height and in broad patches, rock on
-  // steep slopes (as on the ground itself), lit from the north-west
-  g.save(); g.shadowColor = "rgba(0,0,0,.2)"; g.shadowBlur = 18; g.shadowOffsetX = 8; g.shadowOffsetY = 10; g.fillStyle = PAPER;
-  g.beginPath(); for (let i = 0; i <= 360; i++) { const a = (i / 360) * TAU, r = edgeR(a) + 1; g.lineTo(Math.cos(a) * r, Math.sin(a) * r); } g.fill(); g.restore();
-  const n = MAP_R, cv = document.createElement("canvas"); cv.width = cv.height = n; const cx = cv.getContext("2d"), img = cx.createImageData(n, n), d = img.data;
-  const GRASS = [[127, 194, 90], [150, 207, 99], [169, 212, 110]], ROCK = [160, 143, 122], ROCK2 = [138, 122, 104], mix = (a, b, k) => a + (b - a) * k;
-  for (let j = 0; j < n; j++) for (let i = 0; i < n; i++) {
-    const x = -MAP_R + (i + 0.5) * 2, z = -MAP_R + (j + 0.5) * 2; if (!inside(x, z)) continue;
-    const y = terrain(x, z), hx = terrain(x + 2, z) - terrain(x - 2, z), hz = terrain(x, z + 2) - terrain(x, z - 2);
-    const slope = hyp(terrain(x + 3, z) - terrain(x - 3, z), terrain(x, z + 3) - terrain(x, z - 3)) / 6;
-    const patch = 0.5 + 0.25 * Math.sin(x / 23 + Math.cos(z / 31)) + 0.25 * Math.sin(z / 19 - x / 41), up = smooth(clamp(y / 45, 0, 1)) * 0.7, rk = smooth(clamp((slope - 0.3) / 0.7, 0, 1));
-    const lit = clamp(1 + (hx + hz) * 0.11, 0.55, 1.3), k = (j * n + i) * 4;
-    const wet = World.waterAt(x, z) > -Infinity, v = wet ? ((i + j) % 4 === 0 ? 120 : 214) : 250 - rk * 30;   // paper; water hatched
-    d[k] = v; d[k + 1] = v - (wet ? 0 : 2); d[k + 2] = v - (wet ? -4 : 8); d[k + 3] = 255;
+// (owner, 2026-11-10) the map drawn from the blocks: each tile seen from above (land paper, roads gray, water hatched,
+// ramps marked with their way up), an ink line round the land's edges, a soft shadow under it; blocks topping out above
+// SKY_Y go on the sky layer. Redrawn whenever the world changes.
+function drawMapLayers() {
+  for (const g of [mgG, mgS]) { g.save(); g.setTransform(1, 0, 0, 1, 0, 0); g.clearRect(0, 0, MAP_N, MAP_N); g.restore(); }
+  const T = World.TILE, tops = new Map();
+  for (const c of World.allCells()) { const k = c.i + "," + c.j, o = tops.get(k); if (!o || c.k > o.k) tops.set(k, c); }
+  const layerOf = (c) => (c.k * World.STEP >= SKY_Y ? mgS : mgG);
+  for (const g of [mgG, mgS]) { g.save(); g.shadowColor = "rgba(0,0,0,.2)"; g.shadowBlur = 12; g.shadowOffsetX = 6; g.shadowOffsetY = 8; g.fillStyle = PAPER; for (const c of tops.values()) if (layerOf(c) === g) g.fillRect(c.i * T, c.j * T, T, T); g.restore(); }
+  for (const c of tops.values()) {
+    const g = layerOf(c), x = c.i * T, z = c.j * T;
+    if (c.t === "road" || c.t === "ramp") { g.fillStyle = PAPER2; g.fillRect(x, z, T, T); }
+    else if (c.t === "water") { g.fillStyle = "#d6d8de"; g.fillRect(x, z, T, T); g.strokeStyle = "rgba(29,29,34,.5)"; g.lineWidth = 0.3; g.beginPath(); for (let q = 1; q < 6; q++) { g.moveTo(x, z + q); g.lineTo(x + q, z); g.moveTo(x + q, z + T); g.lineTo(x + T, z + q); } g.stroke(); }
+    else g.fillStyle = PAPER;
+    if (c.t === "wedge" || c.t === "ramp") { const [dx, dz] = World.DIRS[c.d], mx = x + T / 2, mz = z + T / 2; g.strokeStyle = INK; g.lineWidth = 0.4; g.beginPath(); g.moveTo(mx - dx * 2 - dz * 1.5, mz - dz * 2 + dx * 1.5); g.lineTo(mx + dx * 2, mz + dz * 2); g.lineTo(mx - dx * 2 + dz * 1.5, mz - dz * 2 - dx * 1.5); g.stroke(); }
+    g.strokeStyle = INK; g.lineWidth = 0.8; g.beginPath();   // the edges: where the next tile is missing or a different height
+    for (let s2 = 0; s2 < 4; s2++) { const [dx, dz] = World.DIRS[s2], n = tops.get((c.i + dx) + "," + (c.j + dz)); if (n && n.k === c.k) continue; const [ax, az, bx2, bz] = s2 === 0 ? [x, z + T, x + T, z + T] : s2 === 1 ? [x + T, z, x + T, z + T] : s2 === 2 ? [x, z, x + T, z] : [x, z, x, z + T]; g.moveTo(ax, az); g.lineTo(bx2, bz); }
+    g.stroke();
   }
-  cx.putImageData(img, 0, 0); g.imageSmoothingEnabled = true; g.drawImage(cv, -MAP_R, -MAP_R, MAP_R * 2, MAP_R * 2);
-  g.strokeStyle = INK; g.lineWidth = 1; g.beginPath(); for (let i = 0; i <= 360; i++) { const a = (i / 360) * TAU, r = edgeR(a); g.lineTo(Math.cos(a) * r, Math.sin(a) * r); } g.stroke();   // the island's edge
-  { const L = World.LAKE, R = World.RIVERS[0]; g.lineWidth = 0.7; g.strokeRect(L.x - L.hw, L.z - L.hd, L.hw * 2, L.hd * 2); if (R) { const x0 = L.x - L.hw, x1 = Math.max(-World.R_TOWN, R.pts[R.pts.length - 1][0]); g.beginPath(); for (const sz of [-1, 1]) { g.moveTo(x0, sz * R.hw); g.lineTo(x1, sz * R.hw); } g.stroke(); } }   // the lake and the river's banks
-  // the plaza, the roads (with their dashed middle), the plots in town
+  const g = mgG;
+  // the plaza, its buildings and rings: post office, egg shop, training track, pound, contract board, the lift
   g.fillStyle = PAPER2; g.strokeStyle = INK; g.lineWidth = 0.7; g.beginPath(); g.arc(0, 0, PLAZA - 4, 0, TAU); g.fill(); g.stroke();
-  for (const R of ROADS) { g.beginPath(); for (const [x, z] of R.pts) g.lineTo(x, z); if (R.loop) g.closePath(); g.strokeStyle = INK; g.lineWidth = ROAD_HALF * 2 + 0.8; g.stroke(); g.strokeStyle = PAPER2; g.lineWidth = ROAD_HALF * 2 - 0.6; g.stroke(); }
-  g.save(); g.setLineDash([3.75, 4.25]); g.strokeStyle = INK; g.lineWidth = 0.45; g.lineCap = "butt";
-  for (const R of ROADS) { g.beginPath(); for (const [x, z] of R.pts) g.lineTo(x, z); if (R.loop) g.closePath(); g.stroke(); } g.restore();
-  for (const p of PLOTS) if (p.kind === "center" || p.kind === "random") mapPlotLine(g, p, INK, 0.6);
-  // the plaza's buildings and rings: post office, egg shop, training track, pound, contract board, the lift
   g.fillStyle = PAPER2; g.strokeStyle = INK; g.lineWidth = 0.6; g.beginPath(); g.arc(TRAIN.x, TRAIN.z, 14, 0, TAU); g.arc(TRAIN.x, TRAIN.z, 9, 0, TAU, true); g.fill(); g.stroke();
   const inFrame = (b, f) => { g.save(); g.translate(b.x, b.z); g.rotate(-b.yaw); f(); g.restore(); };   // a building drawn facing +z, turned as it stands
   const bx = (x, z, w, h) => { g.fillStyle = PAPER; g.fillRect(x, z, w, h); g.strokeStyle = INK; g.lineWidth = 0.6; g.strokeRect(x, z, w, h); };
@@ -2736,15 +2635,9 @@ const mapPlotLine = (g, p, c, w) => { g.save(); g.setLineDash([2, 1.5]); g.strok
   inFrame(POUND, () => { bx(-8.5, -7.5, 17, 9); g.fillStyle = INK; g.fillRect(-8.2, 0.0, 16.4, 0.8); g.lineWidth = 0.4; g.setLineDash([1, 1]); g.strokeRect(-8, 1.1, 16, 7.9); g.setLineDash([]); });
   g.fillStyle = INK; g.fillRect(BOARD.x - 1.3, BOARD.z - 1.8, 2.6, 0.6);
   for (const [x, z, r] of [[PICKUP.x, PICKUP.z, PICKUP.r], [BOARD.x, BOARD.z, BOARD.r], [SHOP.x, SHOP.z, SHOP.r], [TRAIN.x, TRAIN.z, TRAIN.r - 1], [LIFTS[0].x, LIFTS[0].z, 2.2]]) mapRing(g, x, z, r, INK, 0.6);
-  for (const h of houses) if (h.base < SKY_Y) mapHouse(g, h);
-  for (const t of trees) if (t.y < SKY_Y) mapTree(g, t);
-  // above the town: the high islands and the VIP island (its plots and lift)
-  const s = mgS;
-  for (const isl of [...ISLANDS.filter((i) => i.y >= SKY_Y), VIP_ISLAND]) mapIsland(s, isl, true);
-  for (const p of PLOTS) if (p.kind === "vip") mapPlotLine(s, p, INK, 0.6);
-  mapRing(s, LIFTS[1].x, LIFTS[1].z, 2.2, INK, 0.6);
-  for (const h of houses) if (h.base >= SKY_Y) mapHouse(s, h);
-  for (const t of trees) if (t.y >= SKY_Y) mapTree(s, t);
+  for (const p of PLOTS) if (p.placed && p.kind !== "extra") mapPlotLine(p.y >= SKY_Y ? mgS : mgG, p, INK, 0.6);
+  for (const h of houses) mapHouse(h.base >= SKY_Y ? mgS : mgG, h);
+  for (const t of trees) mapTree(t.y >= SKY_Y ? mgS : mgG, t);
 }
 const mapEl = $("map"), mapG = mapEl.getContext("2d"), MAP_ZOOMS = [40, 80, 170, 300];   // half the map's width, in metres
 let mapZoom = 1, mapHalf = 80, mapLast = 0;
@@ -2774,9 +2667,9 @@ function drawMap(now, tx, tz, tsky, guide) {
   g.setTransform(1, 0, 0, 1, H, H); g.rotate(cam.yaw); g.scale(s, s); g.translate(-me.x, -me.z);
   const rr = mapHalf * 1.45 + 4, sub = (img) => { const x0 = clamp(me.x - rr, -MAP_R, MAP_R), z0 = clamp(me.z - rr, -MAP_R, MAP_R), x1 = clamp(me.x + rr, -MAP_R, MAP_R), z1 = clamp(me.z + rr, -MAP_R, MAP_R); if (x1 > x0 && z1 > z0) g.drawImage(img, (x0 + MAP_R) * MAP_PX, (z0 + MAP_R) * MAP_PX, (x1 - x0) * MAP_PX, (z1 - z0) * MAP_PX, x0, z0, x1 - x0, z1 - z0); };
   g.imageSmoothingEnabled = true; sub(mapGround);
-  if (extraIsland.visible) { mapIsland(g, EXTRA_ISLAND, true); for (const p of PLOTS) if (p.kind === "extra") mapPlotLine(g, p, INK, 0.6); mapRing(g, LIFTS[2].x, LIFTS[2].z, 2.2, INK, 0.6); }
+  if (extraUsed) for (const p of PLOTS) if (p.kind === "extra" && p.placed) mapPlotLine(g, p, INK, 0.6);
   const skyA = 0.3 + 0.7 * smooth(clamp((me.y - 8) / 45, 0, 1));   // the islands above fade in as I climb
-  const plots = (sky) => { for (const [id, st] of plotState) { const p = PLOTS[id]; if ((p.y >= SKY_Y) !== sky) continue; const o = plotOrigin(p); for (const c of plotCells(st.pieces)) { g.fillStyle = c.roof ? PAPER : PAPER2; g.fillRect(o.x + c.x * CELL, o.z + c.z * CELL, CELL, CELL); g.strokeStyle = INK; g.lineWidth = 0.3; g.strokeRect(o.x + c.x * CELL, o.z + c.z * CELL, CELL, CELL); } if (id === myPlot) mapPlotLine(g, p, "#f2b01e", 1.1); } };
+  const plots = (sky) => { for (const [id, st] of plotState) { const p = PLOTS[id]; if (!p.placed || (p.y >= SKY_Y) !== sky) continue; const o = plotOrigin(p); for (const c of plotCells(st.pieces)) { g.fillStyle = c.roof ? PAPER : PAPER2; g.fillRect(o.x + c.x * CELL, o.z + c.z * CELL, CELL, CELL); g.strokeStyle = INK; g.lineWidth = 0.3; g.strokeRect(o.x + c.x * CELL, o.z + c.z * CELL, CELL, CELL); } if (id === myPlot) mapPlotLine(g, p, "#f2b01e", 1.1); } };
   plots(false);
   g.globalAlpha = skyA; sub(mapSky); plots(true); g.globalAlpha = 1;
   // the helicopters' searchlights: the beam out to its spot on the ground
@@ -2797,7 +2690,7 @@ function drawMap(now, tx, tz, tsky, guide) {
   // the houses in my bag (pink: an island house)
   for (const i of me.bag) { const h = houses[i], [x, y] = toMap(h.mx, h.mz); if (x < -8 || y < -8 || x > px + 8 || y > px + 8) continue; g.fillStyle = h.sky ? "#ff5aa0" : "#f2b01e"; g.strokeStyle = "#fff"; g.lineWidth = 1.5 * u; g.beginPath(); g.arc(x, y, 3.6 * u, 0, TAU); g.fill(); g.stroke(); }
   // my home: a small gold house marker, kept on the edge when it is out of view
-  if (myPlot >= 0) { const p = PLOTS[myPlot], [x, y, out] = edge(toMap(p.x, p.z), 8 * u); g.save(); g.translate(x, y); g.fillStyle = "#f2b01e"; g.strokeStyle = "#fff8dc"; g.lineWidth = 1.5 * u; g.beginPath(); g.moveTo(0, -5 * u); g.lineTo(5 * u, 0); g.lineTo(4 * u, 5 * u); g.lineTo(-4 * u, 5 * u); g.lineTo(-5 * u, 0); g.closePath(); g.fill(); g.stroke(); g.fillStyle = "#8a5a00"; g.fillRect(-1 * u, 1 * u, 2 * u, 4 * u); if (out) { g.strokeStyle = "#8a5a00"; g.beginPath(); g.moveTo(0, -8 * u); g.lineTo(0, 8 * u); g.stroke(); } g.restore(); g.save(); g.font = `800 ${Math.max(9, 10 * u)}px system-ui, sans-serif`; g.textAlign = "center"; g.textBaseline = "top"; g.lineWidth = 3 * u; g.strokeStyle = "rgba(35,48,59,.9)"; g.strokeText("Home", x, y + 7 * u); g.fillStyle = "#fff8dc"; g.fillText("Home", x, y + 7 * u); g.restore(); }
+  if (myPlot >= 0 && PLOTS[myPlot].placed) { const p = PLOTS[myPlot], [x, y, out] = edge(toMap(p.x, p.z), 8 * u); g.save(); g.translate(x, y); g.fillStyle = "#f2b01e"; g.strokeStyle = "#fff8dc"; g.lineWidth = 1.5 * u; g.beginPath(); g.moveTo(0, -5 * u); g.lineTo(5 * u, 0); g.lineTo(4 * u, 5 * u); g.lineTo(-4 * u, 5 * u); g.lineTo(-5 * u, 0); g.closePath(); g.fill(); g.stroke(); g.fillStyle = "#8a5a00"; g.fillRect(-1 * u, 1 * u, 2 * u, 4 * u); if (out) { g.strokeStyle = "#8a5a00"; g.beginPath(); g.moveTo(0, -8 * u); g.lineTo(0, 8 * u); g.stroke(); } g.restore(); g.save(); g.font = `800 ${Math.max(9, 10 * u)}px system-ui, sans-serif`; g.textAlign = "center"; g.textBaseline = "top"; g.lineWidth = 3 * u; g.strokeStyle = "rgba(35,48,59,.9)"; g.strokeText("Home", x, y + 7 * u); g.fillStyle = "#fff8dc"; g.fillText("Home", x, y + 7 * u); g.restore(); }
   // animal control: vans (lights flashing when they chase) and helicopters (rotors turning)
   for (const m of vehs) {
     const [x, y] = toMap(m.x, m.z); if (x < -10 || y < -10 || x > px + 10 || y > px + 10) continue; const chasing = m.mode === 1;
@@ -2857,7 +2750,7 @@ function nearPen() {
 }
 function ride_lift(l) {   // up to my plot (in front of it), or back down to the plaza
   if (l.to === "plaza") { me.x = LIFT.x + 3; me.z = LIFT.z; me.y = terrain(me.x, me.z); }
-  else { const p = PLOTS[myPlot]; me.x = p.x; me.z = p.z - PLOT / 2 - 2.5; me.y = floorAt(me.x, me.z, p.y + 3); cam.yaw = Math.PI; }
+  else { const p = PLOTS[myPlot]; if (!p || !p.placed) return; me.x = p.x; me.z = p.z - PLOT / 2 - 2.5; me.y = floorAt(me.x, me.z, p.y + 3); cam.yaw = Math.PI; }
   me.vy = 0; cam.y = me.y; emitSparks(me.x, me.y + 1, me.z, 30, 5, ["#7fd8ff", "#ffffff"], 0.8, -1); sendPos(true);
 }
 function context() {
@@ -2878,16 +2771,17 @@ function ui() {
   acts = context();
   if (pmenu.style.display === "flex" && (!others.has(target) || hyp(others.get(target).x - me.x, others.get(target).z - me.z) > 14)) closePlayerMenu();
   const kind = me.foot ? "foot" : moveKind(), mine2 = onMyPlot();
-  const key = acts.filter((a) => !a.hidden).map((a) => a.key + a.label).join("|") + "|" + kind + "|" + !!me.flying + "|" + !!me.swim + "|" + mine2 + "|" + me.inst + "|" + !!building + "|" + party.length + "|" + myRole;
+  const key = acts.filter((a) => !a.hidden).map((a) => a.key + a.label).join("|") + "|" + kind + "|" + !!me.flying + "|" + !!me.swim + "|" + mine2 + "|" + me.inst + "|" + !!building + "|" + !!wedit + "|" + party.length + "|" + myRole;
   if (key === uiKey) return; uiKey = key;
   const el = $("acts"); el.innerHTML = "";
   for (const a of acts) { if (a.hidden) continue; const b = document.createElement("button"); b.className = "btn ghost"; b.type = "button"; b.innerHTML = touchy || a.key.length > 1 ? a.label : `<kbd class="interact-key">${a.key}</kbd> ${a.label}`; b.onclick = () => runAct(a.key); el.appendChild(b); }
-  $("btn-jump").style.display = building ? "none" : "";
+  const bld = building || wedit;   // (owner, 2026-11-10) the bar along the bottom while building
+  $("btn-jump").style.display = bld ? "none" : "";
   $("btn-jump").textContent = me.swim ? "Swim ▲" : kind === "fly" ? "Fly ▲" : kind === "glide" ? "Flap ▲" : "Jump";
   $("btn-down").textContent = me.swim ? "Swim ▼" : "Fly ▼";
-  $("btn-down").style.display = ((kind === "fly" && me.flying) || me.swim) && !building ? "" : "none";
-  $("flykeys").style.display = kind === "fly" && !building && !touchy ? "" : "none";   // (owner, 2026-11-09) only on a flier
-  $("btn-build").style.display = mine2 || me.inst === myId || building ? "" : "none"; $("btn-build").textContent = building ? "Done" : "Build";
+  $("btn-down").style.display = ((kind === "fly" && me.flying) || me.swim) && !bld ? "" : "none";
+  $("flykeys").style.display = kind === "fly" && !bld && !touchy ? "" : "none";   // (owner, 2026-11-09) only on a flier
+  $("btn-build").style.display = !wedit && (mine2 || me.inst === myId || building) ? "" : "none"; $("btn-build").textContent = building ? "Done" : "Build";
 }
 
 // ---- staff (owner, 2026-11-08): Nyssary is admin and makes admins; admins make moderators and give items; moderators
@@ -3015,6 +2909,126 @@ function renderGive() {
   row.append(n, lv, go); el.append(q, list, row); fill();
 }
 $("gm-admin").onclick = () => { gearMenu.style.display = "none"; if (openPanel === "p-admin") closePanels(); else { giveTo = null; show("p-admin"); adminSend({ op: "list" }); } };
+
+// ---- the world as it is now (owner, 2026-11-10): the blocks, houses, trees, pads, vans, helicopters, plots and the map,
+// all rebuilt from the shared world whenever staff change it ----
+let worldMeshes = [], houseKey = "";
+function buildWorldView() {
+  for (const o of [...worldG.children]) { worldG.remove(o); if (o.userData.own) o.geometry.dispose(); if (o.isInstancedMesh) o.dispose(); }
+  const { solid, water, tops } = blockGeometry();
+  const sm = new THREE.Mesh(solid, blockM), wm = new THREE.Mesh(water, waterBlockM); sm.castShadow = sm.receiveShadow = true; wm.renderOrder = 1; sm.userData.own = wm.userData.own = true;
+  worldG.add(sm, wm); worldMeshes = [sm, wm];
+  snowCover.geometry.dispose(); snowCover.geometry = tops;
+  buildThings(worldG); buildPads(worldG); for (const b of BOOSTS) if (b.k === "pad") b.g.userData.own = true;
+  buildVehicles(); placePlots(); for (const id of plotState.keys()) buildPlot(id);
+  for (const f of fades.values()) if (f.g) { scene.remove(f.g.g); ghostPool.push(f.g); } fades.clear();
+  const hk = houses.map((h) => h.id).join(); if (hk !== houseKey) { if (houseKey && me.bag.length) { me.bag = []; syncBeams(); hudKey = ""; } houseKey = hk; }   // the houses changed: parcels for old addresses are gone
+  drawMapLayers(); if (wedit) weditAim(wedit.px, wedit.py);
+}
+// ---- building the town (owner, 2026-11-10, admins only): pick a piece, see where it goes, tap to place it (or with
+// Erase, tap to take it away). Blocks go against the face you point at (on top, or beside it), or on a chosen level
+// to build in the air; things stand on the tile you point at. Everyone sees each change as it's made. ----
+let wedit = null;   // { tool, d (0-3), lvl (null: against what you point at), r (helicopter radius), p (plot number), px, py, aim }
+const WTOOLS = [["land", "Land"], ["wedge", "Wedge"], ["road", "Road"], ["ramp", "Road Ramp"], ["water", "Water"], ["tree", "Tree"], ["house", "House"], ["mailbox", "Mailbox"], ["boost", "Boost"], ["van", "Van"], ["heli", "Helicopter"], ["plot", "Plot"], ["erase", "Erase"]];
+const HELI_R = [40, 80, 150, 250];
+const wghost = new THREE.Group(); scene.add(wghost); wghost.visible = false;
+const wOk = new THREE.MeshBasicMaterial({ color: "#ffffff", transparent: true, opacity: 0.45, depthWrite: false }), wBad = new THREE.MeshBasicMaterial({ color: "#ff3b30", transparent: true, opacity: 0.5, depthWrite: false });
+const WEDGE_G = (() => {   // a 6 x 3 x 6 ramp rising toward +z, its base at y 0
+  const T = World.TILE, S = World.STEP, h = T / 2, v = [[-h, 0, -h], [h, 0, -h], [h, 0, h], [-h, 0, h], [-h, S, h], [h, S, h]];
+  const f = [[0, 2, 1], [0, 3, 2], [3, 4, 5], [3, 5, 2], [0, 1, 5], [0, 5, 4], [0, 4, 3], [1, 2, 5]], pos = [];
+  for (const t of f) for (const n of t) pos.push(...v[n]);
+  const g = new THREE.BufferGeometry(); g.setAttribute("position", new THREE.Float32BufferAttribute(pos, 3)); return g;
+})();
+const CUBE_G = new THREE.BoxGeometry(World.TILE, World.STEP, World.TILE).translate(0, World.STEP / 2, 0);
+const levelGrid = new THREE.GridHelper(240, 40, "#ffffff", "#ffffff"); levelGrid.material.transparent = true; levelGrid.material.opacity = 0.35; levelGrid.visible = false; scene.add(levelGrid);
+function openWorldEdit() {
+  if (myRole !== "admin") return;
+  if (building) closeBuild(); closePanels();
+  wedit = { tool: "land", d: 0, lvl: null, r: 80, p: 0, px: innerWidth / 2, py: innerHeight / 2, aim: null, camD: cam.goalDist };
+  cam.goalDist = 40; renderWorldBar(); $("buildbar").style.display = "flex"; uiKey = "";
+}
+function closeWorldEdit() { if (!wedit) return; cam.goalDist = Math.min(wedit.camD, 45); wedit = null; wghost.visible = false; levelGrid.visible = false; $("buildbar").style.display = "none"; uiKey = ""; }
+function weditTurn() { if (!wedit) return; wedit.d = (wedit.d + 1) % 4; weditAim(wedit.px, wedit.py); }
+function renderWorldBar() {
+  const el = $("buildbar"); el.innerHTML = "";
+  const row1 = document.createElement("div"), row2 = document.createElement("div"); row1.className = row2.className = "bbrow";
+  const tool = (row, label, on, fn, cls = "") => { const b = document.createElement("button"); b.type = "button"; b.className = "bbbtn " + cls + (on ? " on" : ""); b.textContent = label; b.onclick = fn; row.appendChild(b); return b; };
+  for (const [k, name] of WTOOLS) tool(row1, name, wedit.tool === k, () => { wedit.tool = k; renderWorldBar(); weditAim(wedit.px, wedit.py); }, k === "erase" ? "red" : "");
+  tool(row2, "⟳", false, weditTurn);
+  tool(row2, "−", false, () => { wedit.lvl = (wedit.lvl === null ? weditLevel() : wedit.lvl) - 1; wedit.lvl = clamp(wedit.lvl, -9, 60); renderWorldBar(); weditAim(wedit.px, wedit.py); });
+  tool(row2, wedit.lvl === null ? "Auto" : String(wedit.lvl), wedit.lvl !== null, () => { wedit.lvl = null; renderWorldBar(); weditAim(wedit.px, wedit.py); });
+  tool(row2, "+", false, () => { wedit.lvl = (wedit.lvl === null ? weditLevel() : wedit.lvl) + 1; wedit.lvl = clamp(wedit.lvl, -9, 60); renderWorldBar(); weditAim(wedit.px, wedit.py); });
+  if (wedit.tool === "heli") tool(row2, wedit.r + " m", true, () => { wedit.r = HELI_R[(HELI_R.indexOf(wedit.r) + 1) % HELI_R.length]; renderWorldBar(); weditAim(wedit.px, wedit.py); });
+  if (wedit.tool === "plot") tool(row2, "Plot " + (wedit.p + 1), true, () => { wedit.p = (wedit.p + 1) % PLOTS.length; renderWorldBar(); weditAim(wedit.px, wedit.py); });
+  tool(row2, "✕", false, closeWorldEdit);
+  el.append(row1, row2);
+}
+const weditLevel = () => Math.floor((me.y + 0.01) / World.STEP) + 1;   // the level of the block above the one I stand on
+const BLOCK_TOOLS = ["land", "wedge", "road", "ramp", "water"];
+const cellAtP = (x, y, z) => [Math.floor(x / World.TILE), Math.floor(z / World.TILE), Math.floor(y / World.STEP) + 1];
+const hasCell = (i, j, k) => [...World.allCells()].some((c) => c.i === i && c.j === j && c.k === k);
+// what a tap at (px, py) would do: { put | del (a cell) | add (a thing) | rm (a thing's id), ok }
+function weditTarget(px, py) {
+  const T = World.TILE, S = World.STEP, tl = wedit.tool;
+  ndc.set((px / innerWidth) * 2 - 1, -(py / innerHeight) * 2 + 1); ray.setFromCamera(ndc, camera);
+  let hit = null, n = null;
+  if (wedit.lvl !== null) { plane.normal.set(0, 1, 0); plane.constant = -(wedit.lvl - 1) * S; if (ray.ray.intersectPlane(plane, hitV)) hit = hitV.clone(); n = new THREE.Vector3(0, 1, 0); }
+  else { const h = ray.intersectObjects(worldMeshes, false)[0]; if (h) { hit = h.point.clone(); n = h.face.normal.clone(); if (n.dot(ray.ray.direction) > 0) n.negate(); } }
+  if (!hit) return null;
+  const inC = cellAtP(hit.x - n.x * 0.1, hit.y - n.y * 0.1, hit.z - n.z * 0.1);   // the block pointed at
+  const top = World.surfaceAt(hit.x, hit.z, hit.y + 0.3), ty = top > -Infinity ? top : hit.y;
+  const ti = Math.floor(hit.x / T), tj = Math.floor(hit.z / T);
+  if (tl === "erase") {
+    const th = World.allThings().find((t) => Math.abs(t.y - ty) < 3.5 && (t.k === "house" ? Math.abs(t.i * T - hit.x) < T && Math.abs(t.j * T - hit.z) < T : t.k === "plot" ? Math.abs(tileMid(t.i) - hit.x) < 10 && Math.abs(tileMid(t.j) - hit.z) < 10 : t.i === ti && t.j === tj));
+    if (th) return { rm: th, ok: true };
+    const c = wedit.lvl !== null ? [ti, tj, wedit.lvl] : inC; return { del: c, ok: hasCell(...c) };
+  }
+  if (BLOCK_TOOLS.includes(tl)) {
+    let c;
+    if (wedit.lvl !== null) c = [ti, tj, wedit.lvl];
+    else { const ax = Math.abs(n.x), ay = Math.abs(n.y), az = Math.abs(n.z); c = ay >= ax && ay >= az ? [inC[0], inC[1], inC[2] + Math.sign(n.y)] : ax >= az ? [inC[0] + Math.sign(n.x), inC[1], inC[2]] : [inC[0], inC[1] + Math.sign(n.z), inC[2]]; }
+    return { put: [c[0], c[1], c[2], World.KINDS.indexOf(tl), wedit.d], ok: true };   // a block already there is replaced
+  }
+  const t = { k: tl, i: ti, j: tj, y: Math.round(ty * 100) / 100, d: wedit.d };
+  if (tl === "house") { t.i = Math.round(hit.x / T); t.j = Math.round(hit.z / T); }
+  if (tl === "heli") t.r = wedit.r;
+  if (tl === "plot") t.p = wedit.p;
+  const ok = tl === "van" || tl === "boost" ? World.isRoad(ti, tj) : top > -Infinity;
+  return { add: t, ok };
+}
+const tileMid = World.tileMid;
+function weditAim(px, py) {
+  if (!wedit) return; wedit.px = px; wedit.py = py;
+  const a = weditTarget(px, py); wedit.aim = a;
+  for (const c of [...wghost.children]) { wghost.remove(c); if (c.userData.own) c.geometry.dispose(); }
+  levelGrid.visible = wedit.lvl !== null; if (wedit.lvl !== null) { levelGrid.position.set(Math.round(me.x / World.TILE) * World.TILE, (wedit.lvl - 1) * World.STEP + 0.02, Math.round(me.z / World.TILE) * World.TILE); }
+  if (!a) { wghost.visible = false; return; }
+  const T = World.TILE, S = World.STEP, m = a.ok && !a.del && !a.rm ? wOk : wBad, add = (geo, x, y, z, yaw = 0, own = false) => { const o = new THREE.Mesh(geo, m); o.position.set(x, y, z); o.rotation.y = yaw; o.renderOrder = 5; o.userData.own = own; wghost.add(o); return o; };
+  const YAW = [0, Math.PI / 2, Math.PI, -Math.PI / 2];
+  if (a.put || a.del) {
+    const [i, j, k] = a.put || a.del, kind = a.put ? World.KINDS[a.put[3]] : "land";
+    add(kind === "wedge" || kind === "ramp" ? WEDGE_G : CUBE_G, tileMid(i), (k - 1) * S + 0.01, tileMid(j), a.put ? YAW[wedit.d] : 0).scale.setScalar(a.del ? 1.03 : 1);
+  } else if (a.rm) {
+    const t = a.rm, x = t.k === "house" ? t.i * T : tileMid(t.i), z = t.k === "house" ? t.j * T : tileMid(t.j), w = t.k === "house" ? 2 * T : t.k === "plot" ? World.PLOT : T;
+    add(new THREE.BoxGeometry(w, 4, w).translate(0, 2, 0), x, t.y, z, 0, true);
+  } else {
+    const t = a.add, x = t.k === "house" ? t.i * T : tileMid(t.i), z = t.k === "house" ? t.j * T : tileMid(t.j);
+    if (t.k === "house") { add(new THREE.BoxGeometry(9, 4.4, 9).translate(0, 2.2, 0), x, t.y, z, YAW[t.d], true); add(new THREE.BoxGeometry(0.8, 1.4, 0.8), x + World.DIRS[t.d][0] * 7.5, t.y + 0.7, z + World.DIRS[t.d][1] * 7.5); }
+    else if (t.k === "plot") add(new THREE.BoxGeometry(World.PLOT, 0.3, World.PLOT), x, t.y + 0.15, z, 0, true);
+    else if (t.k === "heli") { add(new THREE.CylinderGeometry(0.6, 0.6, 14, 8).translate(0, 7, 0), x, t.y, z, 0, true); const ring = add(new THREE.TorusGeometry(t.r, 0.4, 6, 96).rotateX(Math.PI / 2), x, t.y + 0.3, z, 0, true); ring.renderOrder = 5; }
+    else if (t.k === "mailbox") add(new THREE.BoxGeometry(0.8, 1.4, 0.8).translate(0, 0.7, 0), x, t.y, z, YAW[t.d], true);
+    else if (t.k === "tree") add(new THREE.CylinderGeometry(1.4, 1.4, 4, 10).translate(0, 2, 0), x, t.y, z, 0, true);
+    else if (t.k === "boost") add(new THREE.BoxGeometry(3.4, 0.2, 5), x, t.y + 0.1, z, YAW[t.d], true);
+    else add(new THREE.BoxGeometry(2.4, 2.4, 5).translate(0, 1.2, 0), x, t.y, z, YAW[t.d], true);   // van
+  }
+  wghost.visible = true; inColor(wghost);
+}
+function weditTap(px, py) {
+  weditAim(px, py); const a = wedit.aim; if (!a || !a.ok) return true;
+  adminSend({ op: "world", edits: [a.put ? { op: "put", c: a.put } : a.del ? { op: "del", c: a.del } : a.rm ? { op: "rm", id: a.rm.id } : { op: "add", t: a.add }] });
+  return true;
+}
+$("gm-world").onclick = () => { gearMenu.style.display = "none"; if (wedit) closeWorldEdit(); else openWorldEdit(); };
 // (owner, 2026-11-09) staff chat commands, never sent as chat: /coins 1m, /allpets, /maxlv, /items, /treats, /everything
 // (or /all), /unwanted, each on yourself or a player named after it (/coins 50k Name); /kick Name, /mute Name 1h, /ban
 // Name 7d (minutes, or m / h / d, perma, off)
@@ -3058,14 +3072,13 @@ function roofTop(x, z, y) {
   return best;
 }
 function groundAt(x, z, y) {
-  const isl = islandAt(x, z); if (isl && y > isl.y - 3) return Math.max(isl.y, roofTop(x, z, y));
   const rf = roofTop(x, z, y); if (rf > -Infinity) return rf;
   if (inArena(x, z) && y > AR.y - 3) return AR.y + arenaFloor(x, z);
-  if (!inside(x, z)) return -200;
+  const sy = World.surfaceAt(x, z, y); if (sy === -Infinity) return -200;   // (owner, 2026-11-10) the blocks: the highest top at or a step above me
   // (owner, 2026-11-09) in the water: a swimmer goes down to the bottom (it swims, below), a flier or glider hovers
   // over it, and anyone else would float (but is put back on the shore: only swimmers go in the water)
   const w = World.waterAt(x, z); if (w > -Infinity) return waterMode === "swim" ? terrain(x, z) + 0.25 : waterMode === "hover" ? w + 0.8 : w - SWIM_SINK;
-  return terrain(x, z) + (World.roadDist(x, z) < ROAD_HALF + 0.3 ? ROAD_LIFT : 0);
+  return sy;
 }
 // (owner, 2026-11-09) swimmers swim fast; anyone else paddles slowly, and can't wade in from the shore (they can jump in)
 const SWIM_SINK = 0.55, SWIM_FAST = 1.35, SWIM_UP = 0.7;
@@ -3112,7 +3125,7 @@ function step(dt) {
       if (hyp(x, z) > LIMIT || blocked(x, z, me.y) || houseWall(x, z, me.y) || arenaBlocked(x, z, me.y) || (!me.inst && folkBlock(x, z, me.y))) return false;
       if (flying) return true;
       const hs = houseSurface(x, z, me.y); if (hs > -Infinity && hs >= groundAt(x, z, me.y) && hs - me.y <= 0.6) return true;   // floors, steps and slopes of houses
-      if ((kind === "land" || kind === "foot") && !inside(x, z, 1.5) && !islandAt(x, z) && !inArena(x, z, 1.5)) return false;   // the edge (gliders can step off)
+      if ((kind === "land" || kind === "foot") && !inside(x, z) && !inArena(x, z, 1.5)) return false;   // the edge (gliders can step off)
       if (waterMode !== "swim" && !flying && World.waterAt(x, z) > me.y - 2.5) return false;   // (owner, 2026-11-09) only swimmers go in the water
       if (wet && !inside(x, z, 2.5)) return false;   // not over the waterfall
       return floorAt(x, z, me.y) - me.y <= SLOPE * v + 0.05 + (wet ? 1.1 : 0);   // too steep to climb (a jump gets you up a ledge; out of the water too)
@@ -3196,6 +3209,7 @@ function step(dt) {
   flushSave(false);
 }
 function draw(dt) {
+  if (wedit && performance.now() - (wedit.t || 0) > 100) { wedit.t = performance.now(); weditAim(wedit.px, wedit.py); }   // the preview follows the camera
   const now = performance.now();
   mine.g.position.set(me.x, me.y, me.z); mine.g.rotation.set(0, me.yaw, 0); mine.g.visible = !me.foot;
   walker.g.visible = !!me.foot; if (me.foot) { walker.g.position.set(me.x, me.y, me.z); walker.g.rotation.y = me.yaw; animateWalker(walker, clock, me.moving); }
@@ -3241,9 +3255,10 @@ function frame(now) {
 $("btn-jump").addEventListener("pointerdown", (e) => { e.preventDefault(); jumpQueued = performance.now() + 150; flyUp = true; });
 $("btn-down").addEventListener("pointerdown", (e) => { e.preventDefault(); flyDown = true; });
 for (const ev of ["pointerup", "pointercancel", "pointerleave"]) { $("btn-jump").addEventListener(ev, () => { flyUp = false; }); $("btn-down").addEventListener(ev, () => { flyDown = false; }); }
+buildWorldView();
 me.y = terrain(me.x, me.z); cam.y = me.y;
 syncBeams(); hud(); requestAnimationFrame(frame); connect();
 $("lgo").disabled = $("lnew").disabled = true;
 
 // for tests
-window.Pets = { get save() { return save; }, get intro() { return intro; }, talkNext, enterHouse, leaveHouse, get inter() { return inter; }, lotDoor, nearDoor, deleteSel, turnBuild, get myPlotId() { return myPlot; }, INT, get mine() { return mine; }, BOOSTS, nearestDry, get arena() { return { AR, OBS, next: arNext, TRM, obsSpot }; }, me, houses, get contract() { return contract; }, get packageEvent() { return packageEvent; }, get packageMeshes() { return packageMeshes; }, get online() { return online; }, get netOk() { return netOk; }, get loggedIn() { return loggedIn; }, get others() { return others; }, get myPlot() { return myPlot; }, plotState, get party() { return party; }, get trading() { return trading; }, step, deliver, fillBag, buyEgg, folk, startTalk, talkNext, talkPick, endTalk, get talk() { return talk; }, train, startContract, ride, setPen, collectPens, openBuild, closeBuild, get building() { return building; }, buildTap, showGhost, runAct, netSend, setPackageEvent, eventFlash, EGGS, SPECIES, PICKUP, SHOP, TRAIN, BOARD, ISLANDS, World, vehs, localVs, cam, terrain, contractOver, houseSurface, houseWall, refreshTest: () => refreshMyPlot(), emitConfetti, firework, caught, trade, persist, flushSave, set skyOffset(v) { skyOffset = v; }, get daylight() { return skyNow.day; }, get environment() { return { ...environment }; }, get sky() { return { day: skyNow.day, rain: skyNow.rain, snow: skyNow.snow, storm: skyNow.storm, fog: skyNow.fog }; }, get wind() { return { mph: windNow.mph, x: WIND.x, z: WIND.z }; }, windRideFactor, reach, camera, V3: THREE.Vector3, teleport: (x, z, y) => { me.x = x; me.z = z; me.y = y === undefined ? terrain(x, z) : y; me.vy = 0; } };
+window.Pets = { get save() { return save; }, openWorldEdit, weditTap, get wedit() { return wedit; }, get intro() { return intro; }, talkNext, enterHouse, leaveHouse, get inter() { return inter; }, lotDoor, nearDoor, deleteSel, turnBuild, get myPlotId() { return myPlot; }, INT, get mine() { return mine; }, BOOSTS, nearestDry, get arena() { return { AR, OBS, next: arNext, TRM, obsSpot }; }, me, houses, get contract() { return contract; }, get packageEvent() { return packageEvent; }, get packageMeshes() { return packageMeshes; }, get online() { return online; }, get netOk() { return netOk; }, get loggedIn() { return loggedIn; }, get others() { return others; }, get myPlot() { return myPlot; }, plotState, get party() { return party; }, get trading() { return trading; }, step, deliver, fillBag, buyEgg, folk, startTalk, talkNext, talkPick, endTalk, get talk() { return talk; }, train, startContract, ride, setPen, collectPens, openBuild, closeBuild, get building() { return building; }, buildTap, showGhost, runAct, netSend, setPackageEvent, eventFlash, EGGS, SPECIES, PICKUP, SHOP, TRAIN, BOARD, World, vehs, localVs, cam, terrain, contractOver, houseSurface, houseWall, refreshTest: () => refreshMyPlot(), emitConfetti, firework, caught, trade, persist, flushSave, set skyOffset(v) { skyOffset = v; }, get daylight() { return skyNow.day; }, get environment() { return { ...environment }; }, get sky() { return { day: skyNow.day, rain: skyNow.rain, snow: skyNow.snow, storm: skyNow.storm, fog: skyNow.fog }; }, get wind() { return { mph: windNow.mph, x: WIND.x, z: WIND.z }; }, windRideFactor, reach, camera, V3: THREE.Vector3, teleport: (x, z, y) => { me.x = x; me.z = z; me.y = y === undefined ? terrain(x, z) : y; me.vy = 0; } };
