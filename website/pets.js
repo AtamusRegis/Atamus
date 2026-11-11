@@ -341,7 +341,15 @@ const roofAt = (h, d) => { d.position.set(h.x, h.base + 6.1, h.z); d.scale.set(1
 const doorAt = (h, d) => { d.position.set(h.x + Math.sin(h.yaw) * 4.55, h.base + 1.1, h.z + Math.cos(h.yaw) * 4.55); d.scale.set(1.6, 2.2, 0.15); d.rotation.y = h.yaw; if (h.box) d.scale.set(HIDE, HIDE, HIDE); };
 const ROOFG = new THREE.ConeGeometry(7.2, 3.4, 4); ROOFG.rotateY(Math.PI / 4);
 let houseParts = [];
-function setHouse(i, on) { for (const [m, f] of houseParts) { dummy.rotation.set(0, 0, 0); f(houses[i], dummy); if (!on) dummy.scale.set(HIDE, HIDE, HIDE); dummy.updateMatrix(); m.setMatrixAt(i, dummy.matrix); m.instanceMatrix.needsUpdate = true; } }
+// (owner, 2026-11-10) a town house someone lives in is hidden: their own house stands on its lot (its mailbox stays)
+const lotTaken = (i) => !!houses[i] && plotState.has(houses[i].id);
+let houseWin = null;
+function winAt(h, sd, d) { const lx = sd * 2.8, lz = 4.53; d.position.set(h.x + lx * Math.cos(h.yaw) + lz * Math.sin(h.yaw), h.base + 2.5, h.z - lx * Math.sin(h.yaw) + lz * Math.cos(h.yaw)); d.rotation.set(0, h.yaw, 0); d.scale.set(h.box ? HIDE : 1.5, h.box ? HIDE : 1.3, 0.1); }
+function syncLots() { for (let i = 0; i < houses.length; i++) if (!fades.has(i)) setHouse(i, true); }
+function setHouse(i, on) {
+  on = on && !lotTaken(i);
+  if (houseWin) { for (const sd of [-1, 1]) { winAt(houses[i], sd, dummy); if (!on) dummy.scale.set(HIDE, HIDE, HIDE); dummy.updateMatrix(); houseWin.setMatrixAt(i * 2 + (sd > 0 ? 1 : 0), dummy.matrix); } houseWin.instanceMatrix.needsUpdate = true; }
+  for (const [m, f] of houseParts) { dummy.rotation.set(0, 0, 0); f(houses[i], dummy); if (!on) dummy.scale.set(HIDE, HIDE, HIDE); dummy.updateMatrix(); m.setMatrixAt(i, dummy.matrix); m.instanceMatrix.needsUpdate = true; } }
 // windows either side of the door: they light up at night
 const windowM = new THREE.MeshBasicMaterial({ color: "#6b7f99" }), WINDOW_ON = new THREE.Color("#ffd76a");
 // (owner, 2026-11-10) tall pines, three to four blocks high: a trunk and three tiers of cone
@@ -355,7 +363,7 @@ function buildThings(parent) {
   const doors = instanced(BOX, "#7a4f28", houses.length, (i, d) => doorAt(houses[i], d), parent);
   houseParts = [[walls, wallAt], [roofs, roofAt], [doors, doorAt]];
   const wm = new THREE.InstancedMesh(BOX, windowM, Math.max(1, houses.length * 2)); wm.count = houses.length * 2;
-  houses.forEach((h, i) => { for (const sd of [-1, 1]) { const lx = sd * 2.8, lz = 4.53; dummy.position.set(h.x + lx * Math.cos(h.yaw) + lz * Math.sin(h.yaw), h.base + 2.5, h.z - lx * Math.sin(h.yaw) + lz * Math.cos(h.yaw)); dummy.rotation.set(0, h.yaw, 0); dummy.scale.set(h.box ? HIDE : 1.5, h.box ? HIDE : 1.3, 0.1); dummy.updateMatrix(); wm.setMatrixAt(i * 2 + (sd > 0 ? 1 : 0), dummy.matrix); } }); parent.add(wm);
+  houses.forEach((h, i) => { for (const sd of [-1, 1]) { winAt(h, sd, dummy); dummy.updateMatrix(); wm.setMatrixAt(i * 2 + (sd > 0 ? 1 : 0), dummy.matrix); } }); parent.add(wm); houseWin = wm;
   instanced(BOX, "#6b7680", houses.length, (i, d) => { const h = houses[i]; d.position.set(h.mx, h.my + 0.55, h.mz); d.scale.set(0.15, 1.1, 0.15); }, parent);
   { const mb = inColor(instanced(BOX, "#3a7aff", houses.length, (i, d) => { const h = houses[i]; d.position.set(h.mx, h.my + 1.25, h.mz); d.scale.set(0.8, 0.45, 0.6); d.rotation.y = h.yaw; }, parent)); mb.material = lightB; }   // (owner, 2026-11-10) the blue of animal control's light, in color: you deliver to them
   instanced(TRUNK, "#7a4f28", trees.length, (i, d) => { const t = trees[i], h = pineH(t); d.position.set(t.x, t.y, t.z); d.scale.set(1 + h / 30, h * 0.35, 1 + h / 30); }, parent);
@@ -1099,6 +1107,7 @@ function fadeHouses(dt, cx, cy, cz) {
   if (!me.inst) {
     const sx = cx - me.x, sz = cz - me.z, L2 = sx * sx + sz * sz || 1;
     houses.forEach((h, i) => {
+      if (lotTaken(i)) return;
       const t = clamp(((h.x - me.x) * sx + (h.z - me.z) * sz) / L2, 0, 1), d = hyp(me.x + sx * t - h.x, me.z + sz * t - h.z);
       if (d < 8 && !(me.y > h.base + 4 && hyp(me.x - h.x, me.z - h.z) < 6.5)) { const f = hiddenBy(h, cx, cy, cz); if (f > 0) want.set(i, f); }   // not the roof I'm standing on
     });
@@ -1686,6 +1695,7 @@ function onNet(m) {
     case "trade": { const first = !trading; trading = m; if (first) { offer = { pets: new Set(), coins: 0 }; show("p-trade"); } else if (openPanel === "p-trade") renderTrade(); break; }
     case "trade_end": trading = null; if (openPanel === "p-trade") closePanels(); toast(m.done ? "Traded!" : "Trade cancelled", m.done ? "#3fb36b" : undefined); if (m.done) emitConfetti(me.x, me.y + 3, me.z, 60, 4, 7); break;
     case "plot": if (m.id !== myId) setPlot(m.plot, m.id, m.name, m.pieces, m.penSp, m.ext); break;
+    case "myplot": if (myPlot >= 0 && myPlot !== m.plot) setPlot(myPlot, 0); myPlot = m.plot; refreshMyPlot(); break;   // (owner, 2026-11-10) my town house changed (the old one was taken down)
     case "vip": isVip = !!m.on; toast(m.on ? "VIP ★" : "VIP ✕", "#e08a00"); break;
   }
 }
@@ -1786,7 +1796,8 @@ function renderTrade() {
 // at random), and an island off the edge with more when a room has more than 10 players. Build it however you like
 // from pieces (floors, walls, windows, doors, roofs, slopes, stairs on a 5 x 5 grid of 4 m squares, up to 3 floors;
 // furniture anywhere), in any wall colour. Inside a house you're on foot. Tap a playpen to choose its pet. ----
-const { PLOTS, PLOT, CELL, GRID, LEVELS, LEVEL_H, PIECES, COLORS } = World;
+const { PLOTS, PLOT, CELL, GRID, LEVELS, LEVEL_H, PIECES, COLORS, lotPoint } = World;
+const LOT = (id) => World.lotById.get(id) || null;   // (owner, 2026-11-10) a lot by its town house's id
 const plotState = new Map();   // plot id -> { id (player), name, pieces, g, col: { walls, surfaces, ramps }, pens }
 let myPlot = -1, isVip = false;
 const plotOrigin = (p) => ({ x: p.x - PLOT / 2, z: p.z - PLOT / 2, y: p.y });
@@ -1829,9 +1840,9 @@ function makeHomeMarker() {
   const s = new THREE.Sprite(new THREE.SpriteMaterial({ map: t, transparent: true, depthWrite: false })); s.scale.set(7.2, 2.45, 1); s.layers.set(1); s.renderOrder = 4; return s;
 }
 function homeStep() {
-  if (myPlot < 0 || !PLOTS[myPlot] || !PLOTS[myPlot].placed) { if (homeMarker) homeMarker.visible = false; return; }
+  if (myPlot < 0 || !LOT(myPlot)) { if (homeMarker) homeMarker.visible = false; return; }
   if (!homeMarker) { homeMarker = makeHomeMarker(); scene.add(homeMarker); }
-  const p = PLOTS[myPlot]; homeMarker.position.set(p.x, p.y + 5.1, p.z - PLOT / 2 - 0.8);
+  const p = LOT(myPlot), [hx, hz] = lotPoint(p, 0, -PLOT / 2 - 0.8); homeMarker.position.set(hx, p.y + 5.1, hz);
   const d = hyp(p.x - me.x, p.z - me.z, (p.y - me.y) * 0.5), a = building || talk ? 0 : clamp((100 - d) / 65, 0, 1);
   homeMarker.visible = a > 0.01; homeMarker.material.opacity = a;
 }
@@ -2202,15 +2213,9 @@ function shotAt(n) {
   SH.cx = n.x + Math.sin(a) * D; SH.cz = n.z + Math.cos(a) * D; SH.cy = n.y + 1.95 * n.s + 0.25;
   SH.lx = n.x; SH.ly = n.y + 1.5 * n.s; SH.lz = n.z;
 }
-// each plot: a pale outline on the ground and a sign with its owner's name
-let extraUsed = false;   // the extra plots show once a room is big enough to use them
-const plotLines = PLOTS.map(() => {
-  const g = new THREE.Group(), m = new THREE.MeshBasicMaterial({ color: "#ffffff", transparent: true, opacity: 0.5 });
-  for (const [w, d, x, z] of [[PLOT, 0.25, PLOT / 2, 0], [PLOT, 0.25, PLOT / 2, PLOT], [0.25, PLOT, 0, PLOT / 2], [0.25, PLOT, PLOT, PLOT / 2]]) { const b = new THREE.Mesh(BOX, m); b.scale.set(w, 0.06, d); b.position.set(x, 0.08, z); g.add(b); }
-  scene.add(g); return g;
-});
-// (owner, 2026-11-10) each plot's outline where it's placed now; plots not placed are nowhere
-function placePlots() { PLOTS.forEach((p, i) => { const o = plotOrigin(p); plotLines[i].position.set(o.x, o.y, o.z); plotLines[i].visible = p.placed && (p.kind !== "extra" || extraUsed); }); }
+// each lot someone lives on: a pale outline on the ground and a sign with its owner's name (built with their house)
+const LOT_LINE_M = new THREE.MeshBasicMaterial({ color: "#ffffff", transparent: true, opacity: 0.5 });
+function lotLines(p, g) { const o = plotOrigin(p); for (const [w, d, x, z] of [[PLOT, 0.25, PLOT / 2, 0], [PLOT, 0.25, PLOT / 2, PLOT], [0.25, PLOT, 0, PLOT / 2], [0.25, PLOT, PLOT, PLOT / 2]]) { const b = new THREE.Mesh(BOX, LOT_LINE_M); b.scale.set(w, 0.06, d); b.position.set(o.x + x, o.y + 0.08, o.z + z); g.add(b); } }
 // one mesh per house: every box of every piece in one geometry, coloured per vertex (glass on its own)
 function Merger() { this.p = []; this.n = []; this.c = []; this.i = []; }
 const unitBox = new THREE.BoxGeometry(1, 1, 1), mtx = new THREE.Matrix4(), nmx = new THREE.Matrix3(), qq = new THREE.Quaternion(), ee = new THREE.Euler(), vv = new THREE.Vector3(), sc = new THREE.Vector3(), colr = new THREE.Color();
@@ -2293,15 +2298,17 @@ function pieceBoxes(t, o, M, G, col, W) {
 const pieceSize = (t) => (PIECES[t.k].t === "tile" ? [2.1, 2.1] : PIECES[t.k].t === "wall" ? [2, 0.5] : t.k === "pen" ? [2, 2] : t.k === "rug" ? [1.3, 0.9] : t.k === "bed" || t.k === "table" ? [0.95, 0.75] : [0.7, 0.6]);
 // ---- the 5 houses outside: each a few boxes, its door at the front (toward the lot's front, -z) ----
 function exteriorBoxes(ext, p, M, G, col) {
-  const cx = p.x, cz = p.z, y = p.y;
-  const b = (w, h, d, x, yy, z, color, rx = 0, glass = false) => (glass ? G : M).box(w, h, d, cx + x, y + yy, cz + z, 0, color, rx);
-  const solid = (hw, hd, h, x = 0, z = 0) => col.walls.push({ x: cx + x, z: cz + z, c: 1, s: 0, hw, hd, y0: y - 1, y1: y + h });
-  const flat = (hw, hd, h, x = 0, z = 0) => col.surfaces.push({ x: cx + x, z: cz + z, c: 1, s: 0, hw, hd, h: y + h });
+  // (owner, 2026-11-10) drawn facing -z, then turned with the lot (p.yaw) so its front faces the way the town house did
+  const y = p.y, a = p.yaw || 0, ca = Math.cos(a), sa = Math.sin(a), W = (x, z) => lotPoint(p, x, z);
+  const rect = (o, turn = 0) => { const [x, z] = W(o.x, o.z), c0 = o.c, s0 = o.s; return { ...o, x, z, c: c0 * ca - s0 * sa, s: s0 * ca + c0 * sa }; };   // a collision box (in the lot's frame) in the world
+  const b = (w, h, d, x, yy, z, color, rx = 0, glass = false) => { const [wx, wz] = W(x, z); (glass ? G : M).box(w, h, d, wx, y + yy, wz, a, color, rx); };
+  const solid = (hw, hd, h, x = 0, z = 0) => col.walls.push(rect({ x, z, c: 1, s: 0, hw, hd, y0: y - 1, y1: y + h }));
+  const flat = (hw, hd, h, x = 0, z = 0) => col.surfaces.push(rect({ x, z, c: 1, s: 0, hw, hd, h: y + h }));
   const gable = (w, d, h0, rise, color, x = 0, z = 0, wall = null) => {   // a pitched roof, ridge along x; walkable both sides
     const half = d / 2 + 0.6, len = hyp(half, rise), ang = Math.atan2(rise, half);
     if (wall) { const N = 8; for (let n = 0; n < N; n++) b(w, rise / N + 0.02, Math.max(0.2, d * (1 - (n + 0.5) / N)), x, h0 + rise * (n + 0.5) / N, z, wall); }   // (owner, 2026-11-10) the gable ends filled in under the roof
     b(w + 1.2, 0.3, len, x, h0 + rise / 2, z - half / 2, color, -ang); b(w + 1.2, 0.3, len, x, h0 + rise / 2, z + half / 2, color, ang);
-    col.ramps.push({ x: cx + x, z: cz + z - half / 2, c: 1, s: 0, hw: w / 2 + 0.6, hd: half / 2, y0: y + h0, rise }); col.ramps.push({ x: cx + x, z: cz + z + half / 2, c: -1, s: 0, hw: w / 2 + 0.6, hd: half / 2, y0: y + h0, rise });
+    col.ramps.push(rect({ x, z: z - half / 2, c: 1, s: 0, hw: w / 2 + 0.6, hd: half / 2, y0: y + h0, rise })); col.ramps.push(rect({ x, z: z + half / 2, c: -1, s: 0, hw: w / 2 + 0.6, hd: half / 2, y0: y + h0, rise }));
   };
   const door = (z, color = "#7a4f28", w = 1.8, h = 3) => { b(w, h, 0.2, 0, h / 2, z - 0.1, color); b(0.18, 0.18, 0.1, 0.55, h * 0.5, z - 0.25, "#f2b01e"); };
   const win = (x, yy, z, w = 1.6, h = 1.4) => { b(w + 0.3, h + 0.3, 0.16, x, yy, z - 0.05, "#ffffff"); b(w, h, 0.18, x, yy, z - 0.1, "#9fd8ff", 0, true); };
@@ -2315,7 +2322,7 @@ function exteriorBoxes(ext, p, M, G, col) {
     door(-5.1, "#5a3a1a"); win(-3.6, 2.8, -5.1); win(3.6, 2.8, -5.1); fd = 10.2;
   } else if (ext === 2) {   // Modern: two white blocks, flat roofs, wide glass
     b(14, 4.5, 10, 0, 2.25, 0, "#f7f7f2"); b(14.4, 0.3, 10.4, 0, 4.6, 0, "#3d4650"); solid(7, 5, 4.75); flat(7.2, 5.2, 4.75);
-    b(9, 4, 8, 2, 6.75, 1, "#e8eef3"); b(9.4, 0.3, 8.4, 2, 8.9, 1, "#3d4650"); col.walls.push({ x: cx + 2, z: cz + 1, c: 1, s: 0, hw: 4.5, hd: 4, y0: y + 4.6, y1: y + 9.05 }); flat(4.7, 4.2, 9.05, 2, 1);
+    b(9, 4, 8, 2, 6.75, 1, "#e8eef3"); b(9.4, 0.3, 8.4, 2, 8.9, 1, "#3d4650"); col.walls.push(rect({ x: 2, z: 1, c: 1, s: 0, hw: 4.5, hd: 4, y0: y + 4.6, y1: y + 9.05 })); flat(4.7, 4.2, 9.05, 2, 1);
     b(5, 2.6, 0.18, -4, 2, -5.1, "#9fd8ff", 0, true); b(6, 2.4, 0.18, 2, 6.8, -3.1, "#9fd8ff", 0, true); door(-5, "#3d4650", 1.8, 3.2); fd = 10;
   } else if (ext === 3) {   // Barn: red with white trim and a tall two-step roof
     b(12, 5.5, 12, 0, 2.75, 0, "#b8433a"); solid(6, 6, 5.5); gable(12, 12, 5.5, 4, "#5a3a32", 0, 0, "#b8433a");
@@ -2331,14 +2338,14 @@ function exteriorBoxes(ext, p, M, G, col) {
 }
 // a lot: the house outside (everyone sees it), the owner's name on a post
 function buildPlot(id) {
-  const st = plotState.get(id), p = PLOTS[id]; if (!st) return;
+  const st = plotState.get(id), p = LOT(id); if (!st) return;
   if (st.g) scene.remove(st.g);
-  if (!p.placed) { st.g = null; st.col = null; return; }   // (owner, 2026-11-10) a plot staff haven't placed yet is nowhere
+  if (!p) { st.g = null; st.col = null; return; }   // (owner, 2026-11-10) its town house is gone
   const M = new Merger(), G = new Merger(), col = { walls: [], surfaces: [], ramps: [] }, g = new THREE.Group();
   st.fd = exteriorBoxes(st.ext | 0, p, M, G, col);
   g.add(M.mesh(houseMat)); if (G.p.length) g.add(G.mesh(houseGlass));
-  const o = plotOrigin(p);
-  if (st.name) { const tag = nameTag(st.name, 0); tag.position.set(o.x + 1, o.y + 3.4, o.z - 0.6); g.add(tag); box(0.15, 2.4, 0.15, "#8a5a3a", o.x + 1, o.y + 1.2, o.z - 0.6, g); }
+  lotLines(p, g);
+  if (st.name) { const [nx, nz] = lotPoint(p, -PLOT / 2 + 1, -PLOT / 2 - 0.6), tag = nameTag(st.name, 0); tag.position.set(nx, p.y + 3.4, nz); g.add(tag); box(0.15, 2.4, 0.15, "#8a5a3a", nx, p.y + 1.2, nz, g); }
   scene.add(g); st.g = g; st.col = col;
 }
 // the inside of a house (whose: owner), where I am in it
@@ -2380,11 +2387,11 @@ function setPlot(id, owner, name, pieces, penSp, ext) {
   const st = plotState.get(id); if (st && st.g) scene.remove(st.g);
   if (!owner) { plotState.delete(id); if (inter && st && inter.owner === st.id && me.inst === st.id) leaveHouse(true); }
   else { plotState.set(id, { id: owner, name, pieces: pieces || [], penSp: penSp || {}, ext: ext | 0 }); buildPlot(id); if (me.inst === owner && owner !== myId) buildInside(owner, pieces || []); }
-  extraUsed = PLOTS.some((p) => p.kind === "extra" && plotState.has(p.id)); placePlots();
+  syncLots();
 }
 function refreshMyPlot() { if (myPlot >= 0 && save.home) setPlot(myPlot, myId, myName, save.home.pieces, null, save.home.ext); if (me.inst === myId && save.home) buildInside(myId, save.home.pieces); }
 // walking: the floors, steps and slopes under me, and walls in the way (outside: the houses on lots; inside: this house)
-function nearPlots(x, z, m = 2) { if (inHouse()) return inter ? [inter.col] : []; const out = []; for (const [id, st] of plotState) { const p = PLOTS[id]; if (st.col && p.placed && Math.abs(x - p.x) < PLOT / 2 + m && Math.abs(z - p.z) < PLOT / 2 + m) out.push(st.col); } return out; }
+function nearPlots(x, z, m = 2) { if (inHouse()) return inter ? [inter.col] : []; const out = []; for (const [id, st] of plotState) { const p = LOT(id); if (st.col && p && Math.abs(x - p.x) < PLOT / 2 + m && Math.abs(z - p.z) < PLOT / 2 + m) out.push(st.col); } return out; }
 function houseSurface(x, z, y) {
   let best = -Infinity;
   for (const col of nearPlots(x, z)) {
@@ -2399,7 +2406,7 @@ function houseWall(x, z, y) {
 }
 let stuckFor = 0;
 // going in and out of houses: the front door outside (E: the owner, or someone in their party) and inside
-function lotDoor(id) { const p = PLOTS[id], st = plotState.get(id); return { x: p.x, z: p.z - (st && st.fd ? st.fd : 10) / 2 - 1.4, y: p.y }; }
+function lotDoor(id) { const p = LOT(id), st = plotState.get(id); if (!p) return { x: 0, z: 0, y: -1000 }; const [x, z] = lotPoint(p, 0, -(st && st.fd ? st.fd : 10) / 2 - 1.4); return { x, z, y: p.y }; }
 function nearDoor() {
   if (inHouse() || !loggedIn) return null;
   for (const [id, st] of plotState) { const d = lotDoor(id); if (hyp(me.x - d.x, me.z - d.z) < 2.6 && Math.abs(me.y - d.y) < 2.5 && (st.id === myId || party.some((q) => q.id === st.id))) return id; }
@@ -2461,7 +2468,7 @@ const ghostOk = new THREE.MeshLambertMaterial({ vertexColors: true, transparent:
 const ghostRed = new THREE.MeshBasicMaterial({ color: "#ff3b30", transparent: true, opacity: 0.55, depthWrite: false }), ghostSel = new THREE.MeshBasicMaterial({ color: "#ff3b30", transparent: true, opacity: 0.8, depthWrite: false });
 let bghost = new THREE.Group(), ghostKey = "", markG = new THREE.Group(), markKey = "";
 scene.add(bghost, markG); bghost.visible = false;
-const onMyPlot = (m = 2) => !inHouse() && myPlot >= 0 && PLOTS[myPlot].placed && Math.abs(me.x - PLOTS[myPlot].x) < PLOT / 2 + m && Math.abs(me.z - PLOTS[myPlot].z) < PLOT / 2 + m;
+const onMyPlot = (m = 2) => !inHouse() && myPlot >= 0 && !!LOT(myPlot) && Math.abs(me.x - LOT(myPlot).x) < PLOT / 2 + m && Math.abs(me.z - LOT(myPlot).z) < PLOT / 2 + m;
 const curLevel = () => clamp(Math.floor((me.y - INT.y + 0.6) / LEVEL_H), 0, LEVELS - 1);
 let camSave = null;
 function openBuild() {
@@ -2668,7 +2675,6 @@ function drawMapLayers() {
   inFrame(POUND, () => { bx(-8.5, -7.5, 17, 9); g.fillStyle = INK; g.fillRect(-8.2, 0.0, 16.4, 0.8); g.lineWidth = 0.4; g.setLineDash([1, 1]); g.strokeRect(-8, 1.1, 16, 7.9); g.setLineDash([]); });
   g.fillStyle = INK; g.fillRect(BOARD.x - 1.3, BOARD.z - 1.8, 2.6, 0.6);
   for (const [x, z, r] of [[PICKUP.x, PICKUP.z, PICKUP.r], [BOARD.x, BOARD.z, BOARD.r], [SHOP.x, SHOP.z, SHOP.r], [TRAIN.x, TRAIN.z, TRAIN.r - 1], [LIFTS[0].x, LIFTS[0].z, 2.2]]) mapRing(g, x, z, r, INK, 0.6);
-  for (const p of PLOTS) if (p.placed && p.kind !== "extra") mapPlotLine(p.y >= SKY_Y ? mgS : mgG, p, INK, 0.6);
   for (const h of houses) mapHouse(h.base >= SKY_Y ? mgS : mgG, h);
   for (const t of trees) mapTree(t.y >= SKY_Y ? mgS : mgG, t);
 }
@@ -2700,9 +2706,8 @@ function drawMap(now, tx, tz, tsky, guide) {
   g.setTransform(1, 0, 0, 1, H, H); g.rotate(cam.yaw); g.scale(s, s); g.translate(-me.x, -me.z);
   const rr = mapHalf * 1.45 + 4, sub = (img) => { const x0 = clamp(me.x - rr, -MAP_R, MAP_R), z0 = clamp(me.z - rr, -MAP_R, MAP_R), x1 = clamp(me.x + rr, -MAP_R, MAP_R), z1 = clamp(me.z + rr, -MAP_R, MAP_R); if (x1 > x0 && z1 > z0) g.drawImage(img, (x0 + MAP_R) * MAP_PX, (z0 + MAP_R) * MAP_PX, (x1 - x0) * MAP_PX, (z1 - z0) * MAP_PX, x0, z0, x1 - x0, z1 - z0); };
   g.imageSmoothingEnabled = true; sub(mapGround);
-  if (extraUsed) for (const p of PLOTS) if (p.kind === "extra" && p.placed) mapPlotLine(g, p, INK, 0.6);
   const skyA = 0.3 + 0.7 * smooth(clamp((me.y - 8) / 45, 0, 1));   // the islands above fade in as I climb
-  const plots = (sky) => { for (const [id, st] of plotState) { const p = PLOTS[id]; if (!p.placed || (p.y >= SKY_Y) !== sky) continue; const o = plotOrigin(p); for (const c of plotCells(st.pieces)) { g.fillStyle = c.roof ? PAPER : PAPER2; g.fillRect(o.x + c.x * CELL, o.z + c.z * CELL, CELL, CELL); g.strokeStyle = INK; g.lineWidth = 0.3; g.strokeRect(o.x + c.x * CELL, o.z + c.z * CELL, CELL, CELL); } if (id === myPlot) mapPlotLine(g, p, "#f2b01e", 1.1); } };
+  const plots = (sky) => { for (const [id, st] of plotState) { const p = LOT(id); if (!p || (p.y >= SKY_Y) !== sky) continue; mapPlotLine(g, p, INK, 0.6); if (id === myPlot) mapPlotLine(g, p, "#f2b01e", 1.1); } };
   plots(false);
   g.globalAlpha = skyA; sub(mapSky); plots(true); g.globalAlpha = 1;
   // the helicopters' searchlights: the beam out to its spot on the ground
@@ -2723,7 +2728,7 @@ function drawMap(now, tx, tz, tsky, guide) {
   // the houses in my bag (pink: an island house)
   for (const i of me.bag) { const h = houses[i], [x, y] = toMap(h.mx, h.mz); if (x < -8 || y < -8 || x > px + 8 || y > px + 8) continue; g.fillStyle = h.sky ? "#ff5aa0" : "#f2b01e"; g.strokeStyle = "#fff"; g.lineWidth = 1.5 * u; g.beginPath(); g.arc(x, y, 3.6 * u, 0, TAU); g.fill(); g.stroke(); }
   // my home: a small gold house marker, kept on the edge when it is out of view
-  if (myPlot >= 0 && PLOTS[myPlot].placed) { const p = PLOTS[myPlot], [x, y, out] = edge(toMap(p.x, p.z), 8 * u); g.save(); g.translate(x, y); g.fillStyle = "#f2b01e"; g.strokeStyle = "#fff8dc"; g.lineWidth = 1.5 * u; g.beginPath(); g.moveTo(0, -5 * u); g.lineTo(5 * u, 0); g.lineTo(4 * u, 5 * u); g.lineTo(-4 * u, 5 * u); g.lineTo(-5 * u, 0); g.closePath(); g.fill(); g.stroke(); g.fillStyle = "#8a5a00"; g.fillRect(-1 * u, 1 * u, 2 * u, 4 * u); if (out) { g.strokeStyle = "#8a5a00"; g.beginPath(); g.moveTo(0, -8 * u); g.lineTo(0, 8 * u); g.stroke(); } g.restore(); g.save(); g.font = `800 ${Math.max(9, 10 * u)}px system-ui, sans-serif`; g.textAlign = "center"; g.textBaseline = "top"; g.lineWidth = 3 * u; g.strokeStyle = "rgba(35,48,59,.9)"; g.strokeText("Home", x, y + 7 * u); g.fillStyle = "#fff8dc"; g.fillText("Home", x, y + 7 * u); g.restore(); }
+  if (myPlot >= 0 && LOT(myPlot)) { const p = LOT(myPlot), [x, y, out] = edge(toMap(p.x, p.z), 8 * u); g.save(); g.translate(x, y); g.fillStyle = "#f2b01e"; g.strokeStyle = "#fff8dc"; g.lineWidth = 1.5 * u; g.beginPath(); g.moveTo(0, -5 * u); g.lineTo(5 * u, 0); g.lineTo(4 * u, 5 * u); g.lineTo(-4 * u, 5 * u); g.lineTo(-5 * u, 0); g.closePath(); g.fill(); g.stroke(); g.fillStyle = "#8a5a00"; g.fillRect(-1 * u, 1 * u, 2 * u, 4 * u); if (out) { g.strokeStyle = "#8a5a00"; g.beginPath(); g.moveTo(0, -8 * u); g.lineTo(0, 8 * u); g.stroke(); } g.restore(); g.save(); g.font = `800 ${Math.max(9, 10 * u)}px system-ui, sans-serif`; g.textAlign = "center"; g.textBaseline = "top"; g.lineWidth = 3 * u; g.strokeStyle = "rgba(35,48,59,.9)"; g.strokeText("Home", x, y + 7 * u); g.fillStyle = "#fff8dc"; g.fillText("Home", x, y + 7 * u); g.restore(); }
   // animal control: vans (lights flashing when they chase) and helicopters (rotors turning)
   for (const m of vehs) {
     const [x, y] = toMap(m.x, m.z); if (x < -10 || y < -10 || x > px + 10 || y > px + 10) continue; const chasing = m.mode === 1;
@@ -2783,7 +2788,7 @@ function nearPen() {
 }
 function ride_lift(l) {   // up to my plot (in front of it), or back down to the plaza
   if (l.to === "plaza") { me.x = LIFT.x + 3; me.z = LIFT.z; me.y = terrain(me.x, me.z); }
-  else { const p = PLOTS[myPlot]; if (!p || !p.placed) return; me.x = p.x; me.z = p.z - PLOT / 2 - 2.5; me.y = floorAt(me.x, me.z, p.y + 3); cam.yaw = Math.PI; }
+  else { const p = LOT(myPlot); if (!p) return; [me.x, me.z] = lotPoint(p, 0, -PLOT / 2 - 2.5); me.y = floorAt(me.x, me.z, p.y + 3); cam.yaw = Math.PI + p.yaw; }
   me.vy = 0; cam.y = me.y; emitSparks(me.x, me.y + 1, me.z, 30, 5, ["#7fd8ff", "#ffffff"], 0.8, -1); sendPos(true);
 }
 function context() {
@@ -2954,7 +2959,7 @@ function buildWorldView() {
   worldG.add(sm, dm, wm); worldMeshes = [sm, dm, wm];
   snowCover.geometry.dispose(); snowCover.geometry = tops;
   buildThings(worldG); buildPads(worldG); for (const b of BOOSTS) if (b.k === "pad") b.g.userData.own = true;
-  buildVehicles(); placePlots(); for (const id of plotState.keys()) buildPlot(id);
+  buildVehicles(); for (const id of plotState.keys()) buildPlot(id); syncLots();
   for (const f of fades.values()) if (f.g) { scene.remove(f.g.g); ghostPool.push(f.g); } fades.clear();
   const hk = houses.map((h) => h.id).join(); if (hk !== houseKey) { if (houseKey && me.bag.length) { me.bag = []; syncBeams(); hudKey = ""; } houseKey = hk; }   // the houses changed: parcels for old addresses are gone
   drawMapLayers(); if (wedit) { if (wedit.sel !== undefined && !vehThings().some((t) => t.id === wedit.sel)) { wedit.sel = undefined; renderWorldBar(); } weditAim(wedit.px, wedit.py); }
@@ -2963,7 +2968,7 @@ function buildWorldView() {
 // Erase, tap to take it away). Blocks go against the face you point at (on top, or beside it), or on a chosen level
 // to build in the air; things stand on the tile you point at. Everyone sees each change as it's made. ----
 let wedit = null;   // { tool, d (0-3), lvl (null: against what you point at), r (helicopter radius), p (plot number), px, py, aim }
-const WTOOLS = [["land", "Land"], ["wedge", "Wedge"], ["road", "Road"], ["ramp", "Road Ramp"], ["corner", "Road Corner"], ["half", "Half Road"], ["water", "Water"], ["tree", "Tree"], ["house", "House"], ["mailbox", "Mailbox"], ["boost", "Boost"], ["van", "Van"], ["heli", "Helicopter"], ["plot", "Plot"], ["erase", "Erase"]];
+const WTOOLS = [["land", "Land"], ["wedge", "Wedge"], ["road", "Road"], ["ramp", "Road Ramp"], ["corner", "Road Corner"], ["half", "Half Road"], ["water", "Water"], ["tree", "Tree"], ["house", "House"], ["mailbox", "Mailbox"], ["boost", "Boost"], ["van", "Van"], ["heli", "Helicopter"], ["erase", "Erase"]];
 const HELI_R = [40, 80, 150, 250];
 const wghost = new THREE.Group(); scene.add(wghost); wghost.visible = false;
 const wOk = new THREE.MeshBasicMaterial({ color: "#ffffff", transparent: true, opacity: 0.45, depthWrite: false }), wBad = new THREE.MeshBasicMaterial({ color: "#ff3b30", transparent: true, opacity: 0.5, depthWrite: false });
@@ -3016,7 +3021,6 @@ function renderWorldBar() {
   tool(row2, wedit.lvl === null ? "Auto" : String(wedit.lvl), wedit.lvl !== null, () => { wedit.lvl = null; renderWorldBar(); weditAim(wedit.px, wedit.py); });
   tool(row2, "+", false, () => { wedit.lvl = (wedit.lvl === null ? weditLevel() : wedit.lvl) + 1; wedit.lvl = clamp(wedit.lvl, -9, 60); renderWorldBar(); weditAim(wedit.px, wedit.py); });
   if (wedit.tool === "heli") tool(row2, wedit.r + " m", true, () => { wedit.r = HELI_R[(HELI_R.indexOf(wedit.r) + 1) % HELI_R.length]; renderWorldBar(); weditAim(wedit.px, wedit.py); });
-  if (wedit.tool === "plot") tool(row2, "Plot " + (wedit.p + 1), true, () => { wedit.p = (wedit.p + 1) % PLOTS.length; renderWorldBar(); weditAim(wedit.px, wedit.py); });
   if (wedit.sel !== undefined) tool(row2, "Delete", false, weditDeleteSel, "red");
   tool(row2, "✕", false, closeWorldEdit);
   el.append(row1, row2);
@@ -3038,7 +3042,7 @@ function weditTarget(px, py) {
   const top = World.surfaceAt(hit.x, hit.z, hit.y + 0.3), ty = top > -Infinity ? top : hit.y;
   const ti = Math.floor(hit.x / T), tj = Math.floor(hit.z / T);
   if (tl === "erase") {
-    const th = World.allThings().find((t) => Math.abs(t.y - ty) < 3.5 && (t.k === "house" ? Math.abs(t.i * T - hit.x) < T && Math.abs(t.j * T - hit.z) < T : t.k === "plot" ? Math.abs(tileMid(t.i) - hit.x) < 10 && Math.abs(tileMid(t.j) - hit.z) < 10 : t.i === ti && t.j === tj));
+    const th = World.allThings().find((t) => Math.abs(t.y - ty) < 3.5 && (t.k === "house" ? Math.abs(tileMid(t.i) - hit.x) < World.PLOT / 2 && Math.abs(tileMid(t.j) - hit.z) < World.PLOT / 2 : t.i === ti && t.j === tj));
     if (th) return { rm: th, ok: true };
     const c = wedit.lvl !== null ? [ti, tj, wedit.lvl] : inC; return { del: c, ok: hasCell(...c) };
   }
@@ -3049,9 +3053,7 @@ function weditTarget(px, py) {
     return { put: [c[0], c[1], c[2], World.KINDS.indexOf(tl), wedit.d], ok: true };   // a block already there is replaced
   }
   const t = { k: tl, i: ti, j: tj, y: Math.round(ty * 100) / 100, d: wedit.d };
-  if (tl === "house") { t.i = Math.round(hit.x / T); t.j = Math.round(hit.z / T); }
   if (tl === "heli") t.r = wedit.r;
-  if (tl === "plot") t.p = wedit.p;
   const ok = tl === "van" || tl === "boost" ? World.isRoad(ti, tj) : top > -Infinity;
   return { add: t, ok };
 }
@@ -3069,12 +3071,11 @@ function weditAim(px, py) {
     add(kind === "wedge" || kind === "ramp" ? WEDGE_G : kind === "half" ? HALF_G : CUBE_G, tileMid(i), (k - 1) * S + 0.01, tileMid(j), a.put ? YAW[wedit.d] : 0).scale.setScalar(a.del ? 1.03 : 1);
     if (kind === "corner") add(HALF_G, tileMid(i), k * S + 0.03, tileMid(j), YAW[wedit.d]).scale.set(1, 0.06, 1);   // which half is road
   } else if (a.rm) {
-    const t = a.rm, x = t.k === "house" ? t.i * T : tileMid(t.i), z = t.k === "house" ? t.j * T : tileMid(t.j), w = t.k === "house" ? 2 * T : t.k === "plot" ? World.PLOT : T;
+    const t = a.rm, x = tileMid(t.i), z = tileMid(t.j), w = t.k === "house" ? World.PLOT : T;
     add(new THREE.BoxGeometry(w, 4, w).translate(0, 2, 0), x, t.y, z, 0, true);
   } else {
-    const t = a.add, x = t.k === "house" ? t.i * T : tileMid(t.i), z = t.k === "house" ? t.j * T : tileMid(t.j);
-    if (t.k === "house") { add(new THREE.BoxGeometry(9, 4.4, 9).translate(0, 2.2, 0), x, t.y, z, YAW[t.d], true); add(new THREE.BoxGeometry(0.8, 1.4, 0.8), x + World.DIRS[t.d][0] * 7.5, t.y + 0.7, z + World.DIRS[t.d][1] * 7.5); }
-    else if (t.k === "plot") add(new THREE.BoxGeometry(World.PLOT, 0.3, World.PLOT), x, t.y + 0.15, z, 0, true);
+    const t = a.add, x = tileMid(t.i), z = tileMid(t.j);
+    if (t.k === "house") { add(new THREE.BoxGeometry(9, 4.4, 9).translate(0, 2.2, 0), x, t.y, z, YAW[t.d], true); add(new THREE.BoxGeometry(World.PLOT, 0.2, World.PLOT), x, t.y + 0.1, z, 0, true); add(new THREE.BoxGeometry(0.8, 1.4, 0.8), x + World.DIRS[t.d][0] * 7.8, t.y + 0.7, z + World.DIRS[t.d][1] * 7.8); }   // (owner, 2026-11-10) its 3 x 3 lot
     else if (t.k === "heli") { add(new THREE.CylinderGeometry(0.6, 0.6, 14, 8).translate(0, 7, 0), x, t.y, z, 0, true); const ring = add(new THREE.TorusGeometry(t.r, 0.4, 6, 96).rotateX(Math.PI / 2), x, t.y + 0.3, z, 0, true); ring.renderOrder = 5; }
     else if (t.k === "mailbox") add(new THREE.BoxGeometry(0.8, 1.4, 0.8).translate(0, 0.7, 0), x, t.y, z, YAW[t.d], true);
     else if (t.k === "tree") add(new THREE.ConeGeometry(2.8, 10.5, 8).translate(0, 5.25, 0), x, t.y, z, 0, true);
