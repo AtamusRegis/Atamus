@@ -4,7 +4,7 @@
 // its edge; animal control chases you. Co-op: everyone in a room rides the same town, works on contracts (alone or with a party) and
 // chats. The server (packages/server/src/pets.js) shares players, runs animal control, contracts and chat.
 import * as THREE from "./vendor/three.module.min.js";
-import * as World from "./pets-world.js?v=1793100072";
+import * as World from "./pets-world.js?v=1793100073";
 
 const $ = (id) => document.getElementById(id);
 const TAU = Math.PI * 2, clamp = (v, a, b) => Math.max(a, Math.min(b, v)), hyp = Math.hypot;
@@ -1281,7 +1281,7 @@ $("btn-pets").onclick = () => (openPanel === "p-pets" ? closePanels() : show("p-
 function renderSettings() { const el = $("settings"); el.innerHTML = ""; const label = document.createElement("label"); label.className = "setting"; const input = document.createElement("input"); input.type = "checkbox"; input.checked = !!save.settings.followArrowWhenEmpty; input.onchange = () => { save.settings.followArrowWhenEmpty = input.checked; persist(); }; label.append(input, document.createTextNode("Show the follow arrow when the bag is empty")); el.appendChild(label); }
 // (owner, 2026-11-09) the gear left of the chat: a menu with Settings and, for staff, the Admin Panel
 const gearMenu = $("gearmenu");
-$("gear").onclick = () => { gearMenu.style.display = gearMenu.style.display === "flex" ? "none" : "flex"; $("gm-admin").style.display = isStaff() ? "" : "none"; $("gm-world").style.display = myRole === "admin" ? "" : "none"; };
+$("gear").onclick = () => { gearMenu.style.display = gearMenu.style.display === "flex" ? "none" : "flex"; $("gm-admin").style.display = isStaff() ? "" : "none"; };
 $("gm-logout").onclick = () => { gearMenu.style.display = "none"; flushSave(performance.now()); setTok(null); try { localStorage.setItem("petdelivery.claimed", "1"); } catch (e) { /* private mode */ } setTimeout(() => location.reload(), 150); };   // (owner, 2026-11-09) back to the login, to use or make another account
 $("gm-settings").onclick = () => { gearMenu.style.display = "none"; openPanel === "p-settings" ? closePanels() : show("p-settings"); };
 const WING = `<svg class="ico" viewBox="0 0 14 12" style="width:14px;height:12px;vertical-align:-1px"><path d="M1 10C3 3 8 1 13 1c-1 5-5 9-12 9z" fill="#3a8ee6"/></svg>`;
@@ -1655,7 +1655,7 @@ function onNet(m) {
       const again = loggedIn && myName === m.name; myName = m.name; myId = m.id; netOk = true; loggedIn = true; $("login").style.display = "none"; if (document.activeElement && document.activeElement.blur) document.activeElement.blur();
       if (again && saveDirty && m.rev === rev) { save.name = myName; flushSave(true); } else adopt(m.data, m.rev);   // back after a drop: my unsaved progress goes up
       if (!again) { chatHist.length = 0; rmsgs.innerHTML = ""; }   // a fresh login starts a fresh chat history
-      myRole = m.role || "player";
+      myRole = m.role || "player"; showWorldBtn();
       setEnvironment(m.environment);
       isVip = !!m.vip; for (const id of [...plotState.keys()]) setPlot(id, 0); myPlot = m.plot >= 0 ? m.plot : -1;
       for (const q of m.plots || []) if (q.id !== myId) setPlot(q.plot, q.id, q.name, q.pieces, q.penSp, q.ext); refreshMyPlot();
@@ -1665,7 +1665,7 @@ function onNet(m) {
     case "auth_err": if (m.why === "expired") { setTok(null); showLogin(); } else showLogin(m.why === "banned" ? banText(m.until) : ERR[m.why] || ERR.server); break;
     case "kicked": kicked = true; loggedIn = false; showLogin(m.why === "kick" ? "Kicked" : m.why === "banned" ? banText(m.until) : ERR.kicked); break;
     case "muted": if (m.until) toast(m.until === -1 ? "Muted" : "Muted " + untilText(m.until), "#e5534b"); break;
-    case "role": myRole = m.role; uiKey = ""; break;
+    case "role": myRole = m.role; uiKey = ""; showWorldBtn(); if (myRole !== "admin" && wedit) closeWorldEdit(); break;
     case "admin_list": adminList = m.list; setEnvironment(m.environment); renderAdmin(); break;
     case "admin_msg": toast(m.msg); break;
     case "admin_data": if (editTo && editTo.id === m.id) { editData = m.data; renderAdmin(); } break;
@@ -2978,21 +2978,16 @@ function buildWorldView() {
   const hk = houses.map((h) => h.id).join(); if (hk !== houseKey) { if (houseKey && me.bag.length) { me.bag = []; syncBeams(); hudKey = ""; } houseKey = hk; }   // the houses changed: parcels for old addresses are gone
   buildVanPoints(); drawMapLayers(); if (wedit) { if (wedit.sel !== undefined && !vehThings().some((t) => t.id === wedit.sel)) { wedit.sel = undefined; renderWorldBar(); } weditAim(wedit.px, wedit.py); }
 }
-// (owner, 2026-11-10) van points, seen only while building: a yellow post on each and a line along the road to each
-// point it's joined to
+// (owner, 2026-11-10) van points, seen only while building: a yellow post on each and a straight line to each point
+// it's joined to
 const vanPtG = new THREE.Group(); vanPtG.visible = false; scene.add(vanPtG);
-const VANPT_M = new THREE.MeshBasicMaterial({ color: "#ffcc33" }), VANLINK_M = new THREE.LineBasicMaterial({ color: "#ffcc33" }), VANPT_G = new THREE.CylinderGeometry(0.45, 0.45, 3, 10).translate(0, 1.5, 0);
+const VANPT_SEL_M = new THREE.MeshBasicMaterial({ color: "#ffffff" }), VANKNOB_G = new THREE.SphereGeometry(0.45, 10, 8), VANPT_M = new THREE.MeshBasicMaterial({ color: "#ffcc33" }), VANLINK_M = new THREE.LineBasicMaterial({ color: "#ffcc33" }), VANPT_G = new THREE.CylinderGeometry(0.45, 0.45, 3, 10).translate(0, 1.5, 0);
 function buildVanPoints() {
   for (const o of [...vanPtG.children]) { vanPtG.remove(o); if (o.isLine) o.geometry.dispose(); }
-  const T = World.TILE, seen = new Set();
-  for (const t of World.allThings()) {
-    if (t.k !== "vanpt") continue;
-    const m = new THREE.Mesh(VANPT_G, VANPT_M); m.position.set(World.tileMid(t.i), t.y, World.tileMid(t.j)); vanPtG.add(m);
-    for (const r of World.vanRoutes(t.i, t.j)) {
-      const key = [t.i + "," + t.j, r.k].sort().join("|"); if (seen.has(key)) continue; seen.add(key);
-      const pts = [[t.i, t.j], ...r.path].map(([i, j]) => { const x = World.tileMid(i), z = World.tileMid(j); return new THREE.Vector3(x, World.surfaceAt(x, z, 200) + 0.4, z); });
-      vanPtG.add(new THREE.Line(new THREE.BufferGeometry().setFromPoints(pts), VANLINK_M));
-    }
+  const lift = (q) => new THREE.Vector3(q.x, World.surfaceAt(q.x, q.z, q.y + 2) + 0.4, q.z);
+  for (const q of World.vanPts) {
+    const m = new THREE.Mesh(VANPT_G, wedit && wedit.vsel === q.id ? VANPT_SEL_M : VANPT_M); m.position.set(q.x, q.y, q.z); vanPtG.add(m);
+    for (const id of q.links) if (id > q.id) { const o = World.vanById.get(id); if (!o) continue; const A = lift(q), B = lift(o); vanPtG.add(new THREE.Line(new THREE.BufferGeometry().setFromPoints([A, B]), VANLINK_M)); const k = new THREE.Mesh(VANKNOB_G, VANPT_M); k.position.copy(A).add(B).multiplyScalar(0.5); vanPtG.add(k); }   // a knob at its middle
   }
   inColor(vanPtG);
 }
@@ -3019,13 +3014,13 @@ const HALF_G = (() => {   // the road half of a tile (its corner at +x +z), 3 m 
 const CUBE_G = new THREE.BoxGeometry(World.TILE, World.STEP, World.TILE).translate(0, World.STEP / 2, 0);
 const levelGrid = new THREE.GridHelper(240, 40, "#ffffff", "#ffffff"); levelGrid.material.transparent = true; levelGrid.material.opacity = 0.35; levelGrid.visible = false; scene.add(levelGrid);
 function openWorldEdit() {
-  vanPtG.visible = true;
+  vanPtG.visible = true; setTimeout(showWorldBtn);
   if (myRole !== "admin") return;
   if (building) closeBuild(); closePanels();
   wedit = { tool: "land", d: 0, lvl: null, r: 80, p: 0, px: innerWidth / 2, py: innerHeight / 2, aim: null, camD: cam.goalDist };
   cam.goalDist = 40; renderWorldBar(); $("buildbar").style.display = "flex"; uiKey = "";
 }
-function closeWorldEdit() { if (!wedit) return; cam.goalDist = Math.min(wedit.camD, 45); wedit = null; wghost.visible = false; vanPtG.visible = false; selBox.visible = false; levelGrid.visible = false; $("buildbar").style.display = "none"; uiKey = ""; }
+function closeWorldEdit() { if (!wedit) return; cam.goalDist = Math.min(wedit.camD, 45); wedit = null; showWorldBtn(); wghost.visible = false; vanPtG.visible = false; selBox.visible = false; levelGrid.visible = false; $("buildbar").style.display = "none"; uiKey = ""; }
 function weditTurn() { if (!wedit) return; wedit.d = (wedit.d + 1) % 4; weditAim(wedit.px, wedit.py); }
 // (owner, 2026-11-10) vans and helicopters can be picked out where they are now: tap one to select it (Delete, or Del,
 // takes it away), or tap it with Erase. vehThings()[n] is the thing vehs[n] was made from (the same order).
@@ -3048,7 +3043,7 @@ function renderWorldBar() {
   const el = $("buildbar"); el.innerHTML = "";
   const row1 = document.createElement("div"), row2 = document.createElement("div"); row1.className = row2.className = "bbrow";
   const tool = (row, label, on, fn, cls = "") => { const b = document.createElement("button"); b.type = "button"; b.className = "bbbtn " + cls + (on ? " on" : ""); b.textContent = label; b.onclick = fn; row.appendChild(b); return b; };
-  for (const [k, name] of WTOOLS) tool(row1, name, wedit.tool === k, () => { wedit.tool = k; renderWorldBar(); weditAim(wedit.px, wedit.py); }, k === "erase" ? "red" : "");
+  for (const [k, name] of WTOOLS) tool(row1, name, wedit.tool === k, () => { wedit.tool = k; if (wedit.vsel) { wedit.vsel = 0; buildVanPoints(); } renderWorldBar(); weditAim(wedit.px, wedit.py); }, k === "erase" ? "red" : "");
   tool(row2, "⟳", false, weditTurn);
   tool(row2, "−", false, () => { wedit.lvl = (wedit.lvl === null ? weditLevel() : wedit.lvl) - 1; wedit.lvl = clamp(wedit.lvl, -9, 60); renderWorldBar(); weditAim(wedit.px, wedit.py); });
   tool(row2, wedit.lvl === null ? "Auto" : String(wedit.lvl), wedit.lvl !== null, () => { wedit.lvl = null; renderWorldBar(); weditAim(wedit.px, wedit.py); });
@@ -3074,6 +3069,11 @@ function weditTarget(px, py) {
   const inC = cellAtP(hit.x - n.x * 0.1, hit.y - n.y * 0.1, hit.z - n.z * 0.1);   // the block pointed at
   const top = World.surfaceAt(hit.x, hit.z, hit.y + 0.3), ty = top > -Infinity ? top : hit.y;
   const ti = Math.floor(hit.x / T), tj = Math.floor(hit.z / T);
+  if (tl === "vanpt" || tl === "erase") {   // (owner, 2026-11-10) van points: a point under the pointer, or a line's middle
+    const near = World.vanPts.find((q) => hyp(q.x - hit.x, q.z - hit.z) < 2 && Math.abs(q.y - ty) < 3.5);
+    if (near) return tl === "erase" ? { rm: World.allThings().find((q) => q.id === near.id), ok: true } : { pt: near.id, ok: true };
+    if (tl === "vanpt") for (const q of World.vanPts) for (const id of q.links) { const o = World.vanById.get(id); if (o && id > q.id && hyp((q.x + o.x) / 2 - hit.x, (q.z + o.z) / 2 - hit.z) < 2.5) return { unlink: [q.id, id], ok: true }; }
+  }
   if (tl === "erase") {
     const th = World.allThings().find((t) => Math.abs(t.y - ty) < 3.5 && (t.k === "house" ? Math.abs(tileMid(t.i) - hit.x) < World.PLOT / 2 && Math.abs(tileMid(t.j) - hit.z) < World.PLOT / 2 : t.i === ti && t.j === tj));
     if (th) return { rm: th, ok: true };
@@ -3087,7 +3087,8 @@ function weditTarget(px, py) {
   }
   const t = { k: tl, i: ti, j: tj, y: Math.round(ty * 100) / 100, d: wedit.d };
   if (tl === "heli") t.r = wedit.r;
-  const ok = tl === "van" || tl === "boost" || tl === "vanpt" ? World.isRoad(ti, tj) : top > -Infinity;
+  if (tl === "vanpt") { t.x = Math.round(hit.x * 100) / 100; t.z = Math.round(hit.z * 100) / 100; }   // (owner, 2026-11-10) right where you point, not on the grid
+  const ok = tl === "vanpt" ? World.roadDist(hit.x, hit.z) === 0 : tl === "van" || tl === "boost" ? World.isRoad(ti, tj) : top > -Infinity;
   return { add: t, ok };
 }
 const tileMid = World.tileMid;
@@ -3096,7 +3097,12 @@ function weditAim(px, py) {
   const a = weditTarget(px, py); wedit.aim = a;
   for (const c of [...wghost.children]) { wghost.remove(c); if (c.userData.own) c.geometry.dispose(); }
   levelGrid.visible = wedit.lvl !== null; if (wedit.lvl !== null) { levelGrid.position.set(Math.round(me.x / World.TILE) * World.TILE, (wedit.lvl - 1) * World.STEP + 0.02, Math.round(me.z / World.TILE) * World.TILE); }
-  if (!a || a.veh !== undefined) { wghost.visible = false; return; }
+  if (wedit.tool === "vanpt" && wedit.vsel && a && !a.pt && !a.unlink && World.vanById.get(wedit.vsel)) {   // from the selected point to where you point
+    const q = World.vanById.get(wedit.vsel), hx = a.add ? a.add.x : q.x, hz = a.add ? a.add.z : q.z, ln = new THREE.Line(new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(q.x, q.y + 0.6, q.z), new THREE.Vector3(hx, (a.add ? a.add.y : q.y) + 0.6, hz)]), VANLINK_M); ln.userData.own = true; wghost.add(ln);
+  }
+  if (a && a.pt) { const q = World.vanById.get(a.pt), o = new THREE.Mesh(new THREE.CylinderGeometry(1.1, 1.1, 3.4, 14).translate(0, 1.7, 0), wOk); o.userData.own = true; o.position.set(q.x, q.y, q.z); o.renderOrder = 5; wghost.add(o); wghost.visible = true; inColor(wghost); return; }
+  if (a && a.unlink) { const q = World.vanById.get(a.unlink[0]), r = World.vanById.get(a.unlink[1]), o = new THREE.Mesh(new THREE.SphereGeometry(1, 12, 8), wBad); o.userData.own = true; o.position.set((q.x + r.x) / 2, Math.max(q.y, r.y) + 0.6, (q.z + r.z) / 2); o.renderOrder = 5; wghost.add(o); wghost.visible = true; inColor(wghost); return; }
+  if (!a || a.veh !== undefined) { wghost.visible = wghost.children.length > 0; return; }
   const T = World.TILE, S = World.STEP, m = a.ok && !a.del && !a.rm ? wOk : wBad, add = (geo, x, y, z, yaw = 0, own = false) => { const o = new THREE.Mesh(geo, m); o.position.set(x, y, z); o.rotation.y = yaw; o.renderOrder = 5; o.userData.own = own; wghost.add(o); return o; };
   const YAW = [0, Math.PI / 2, Math.PI, -Math.PI / 2];
   if (a.put || a.del) {
@@ -3111,7 +3117,7 @@ function weditAim(px, py) {
     if (t.k === "house") { add(new THREE.BoxGeometry(9, 4.4, 9).translate(0, 2.2, 0), x, t.y, z, YAW[t.d], true); add(new THREE.BoxGeometry(World.PLOT, 0.2, World.PLOT), x, t.y + 0.1, z, 0, true); add(new THREE.BoxGeometry(0.8, 1.4, 0.8), x + World.DIRS[t.d][0] * 7.8, t.y + 0.7, z + World.DIRS[t.d][1] * 7.8); }   // (owner, 2026-11-10) its 3 x 3 lot
     else if (t.k === "heli") { add(new THREE.CylinderGeometry(0.6, 0.6, 14, 8).translate(0, 7, 0), x, t.y, z, 0, true); const ring = add(new THREE.TorusGeometry(t.r, 0.4, 6, 96).rotateX(Math.PI / 2), x, t.y + 0.3, z, 0, true); ring.renderOrder = 5; }
     else if (t.k === "mailbox") add(new THREE.BoxGeometry(0.8, 1.4, 0.8).translate(0, 0.7, 0), x, t.y, z, YAW[t.d], true);
-    else if (t.k === "vanpt") add(new THREE.CylinderGeometry(0.5, 0.5, 3, 10).translate(0, 1.5, 0), x, t.y, z, 0, true);
+    else if (t.k === "vanpt") add(new THREE.CylinderGeometry(0.5, 0.5, 3, 10).translate(0, 1.5, 0), t.x, t.y, t.z, 0, true);
     else if (t.k === "boulder") add(new THREE.IcosahedronGeometry(2, 0).translate(0, 1.2, 0), x, t.y, z, 0, true);
     else if (t.k === "tree") add(new THREE.ConeGeometry(2.8, 10.5, 8).translate(0, 5.25, 0), x, t.y, z, 0, true);
     else if (t.k === "boost") add(new THREE.BoxGeometry(3.4, 0.2, 5), x, t.y + 0.1, z, YAW[t.d], true);
@@ -3123,11 +3129,17 @@ function weditTap(px, py) {
   weditAim(px, py); const a = wedit.aim;
   if (a && a.veh !== undefined) { if (wedit.tool === "erase") adminSend({ op: "world", edits: [{ op: "rm", id: a.id }] }); else { wedit.sel = a.id; renderWorldBar(); } return true; }
   if (wedit.sel !== undefined) { wedit.sel = undefined; renderWorldBar(); return true; }   // a tap away lets go of it
+  // (owner, 2026-11-10) van points: tap one to select it, then another to put a line between them; tap a line's middle to take it away
+  if (a && a.pt) { if (wedit.vsel && wedit.vsel !== a.pt) { adminSend({ op: "world", edits: [{ op: "link", a: wedit.vsel, b: a.pt }] }); wedit.vsel = 0; } else wedit.vsel = wedit.vsel === a.pt ? 0 : a.pt; buildVanPoints(); return true; }
+  if (a && a.unlink) { adminSend({ op: "world", edits: [{ op: "unlink", a: a.unlink[0], b: a.unlink[1] }] }); return true; }
+  if (wedit.vsel) { wedit.vsel = 0; buildVanPoints(); return true; }
   if (!a || !a.ok) return true;
   adminSend({ op: "world", edits: [a.put ? { op: "put", c: a.put } : a.del ? { op: "del", c: a.del } : a.rm ? { op: "rm", id: a.rm.id } : { op: "add", t: a.add }] });
   return true;
 }
-$("gm-world").onclick = () => { gearMenu.style.display = "none"; if (wedit) closeWorldEdit(); else openWorldEdit(); };
+// (owner, 2026-11-10) Build Town is a button on screen (admins only), not in the menu
+$("worldbtn").onclick = () => { gearMenu.style.display = "none"; if (wedit) closeWorldEdit(); else openWorldEdit(); };
+const showWorldBtn = () => { $("worldbtn").style.display = myRole === "admin" ? "" : "none"; $("worldbtn").classList.toggle("on", !!wedit); };
 // (owner, 2026-11-09) staff chat commands, never sent as chat: /coins 1m, /allpets, /maxlv, /items, /treats, /everything
 // (or /all), /unwanted, each on yourself or a player named after it (/coins 50k Name); /kick Name, /mute Name 1h, /ban
 // Name 7d (minutes, or m / h / d, perma, off)

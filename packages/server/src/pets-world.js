@@ -55,7 +55,8 @@ function cleanThing(o) {
   const i = +o.i, j = +o.j, y = +o.y; if (!okInt(i, -200, 200) || !okInt(j, -200, 200) || !Number.isFinite(y) || Math.abs(y) > 200) return null;
   const t = { id: okInt(+o.id, 1, 1e9) ? +o.id : nextThing++, k: o.k, i, j, y: Math.round(y * 100) / 100, d: okInt(+o.d, 0, 3) ? +o.d : 0 };
   if (t.k === "heli") t.r = okInt(+o.r, 10, 400) ? +o.r : 80;
-  if (t.k === "plot") { if (!okInt(+o.p, 0, 999)) return null; t.p = +o.p; }   // (owner, 2026-11-10) old plot markers: kept in the data, no longer used
+  if (t.k === "plot") { if (!okInt(+o.p, 0, 999)) return null; t.p = +o.p; }
+  if (t.k === "vanpt") { const x = Number.isFinite(+o.x) ? +o.x : tileMid(i), z = Number.isFinite(+o.z) ? +o.z : tileMid(j); t.x = Math.round(x * 100) / 100; t.z = Math.round(z * 100) / 100; t.i = tileOf(t.x); t.j = tileOf(t.z); t.l = Array.isArray(o.l) ? [...new Set(o.l.map((v) => +v).filter((v) => okInt(v, 1, 1e9)))].slice(0, 24) : []; }   // (owner, 2026-11-10) placed freely, not on the grid; l: the points it's joined to   // (owner, 2026-11-10) old plot markers: kept in the data, no longer used
   nextThing = Math.max(nextThing, t.id + 1); return t;
 }
 // the whole world from saved data (bad entries dropped)
@@ -68,13 +69,18 @@ export function setWorld(data) {
 }
 export const worldData = () => ({ v: 1, cells: [...cells.values()].map((c) => [c.i, c.j, c.k, KINDS.indexOf(c.t), c.d]), things: things.map((t) => ({ ...t })) });
 // edits (from the editor): { op: "put", c: [i, j, k, kind, dir] } | { op: "del", c: [i, j, k] } | { op: "add", t: thing }
-// | { op: "rm", id }. Returns the edits that applied (things get their ids), or [] for none.
+// | { op: "rm", id } | { op: "link" / "unlink", a, b } (two van points). Returns the edits that applied (things get their ids), or [] for none.
 export function applyEdits(edits) {
   const done = [];
   for (const e of Array.isArray(edits) ? edits.slice(0, 200) : []) {
     if (e && e.op === "put") { const c = cleanCell(e.c); if (c) { cells.set(ckey(c.i, c.j, c.k), c); done.push({ op: "put", c: [c.i, c.j, c.k, KINDS.indexOf(c.t), c.d] }); } }
     else if (e && e.op === "del" && Array.isArray(e.c)) { const k = ckey(+e.c[0], +e.c[1], +e.c[2]); if (cells.delete(k)) done.push({ op: "del", c: [+e.c[0], +e.c[1], +e.c[2]] }); }
     else if (e && e.op === "add") { const t = cleanThing({ ...e.t, id: e.t && e.t.id ? e.t.id : 0 }); if (t && t.k !== "plot") { things = things.filter((q) => q.id !== t.id); things.push(t); done.push({ op: "add", t: { ...t } }); } }
+    else if (e && (e.op === "link" || e.op === "unlink")) {   // (owner, 2026-11-10) join two van points, or take the line away
+      const a = things.find((q) => q.id === +e.a && q.k === "vanpt"), b = things.find((q) => q.id === +e.b && q.k === "vanpt"); if (!a || !b || a === b) continue;
+      for (const [p, q] of [[a, b], [b, a]]) { p.l = (p.l || []).filter((id) => id !== q.id); if (e.op === "link" && p.l.length < 24) p.l.push(q.id); }
+      done.push({ op: e.op, a: a.id, b: b.id });
+    }
     else if (e && e.op === "rm") { const n = things.length; things = things.filter((q) => q.id !== +e.id); if (things.length < n) done.push({ op: "rm", id: +e.id }); }
   }
   if (done.length) { derive(); world.rev++; }
@@ -149,7 +155,7 @@ function derive() {
   cols.clear(); for (const c of cells.values()) { const k = tkey(c.i, c.j); if (!cols.has(k)) cols.set(k, []); cols.get(k).push(c); }
   for (const col of cols.values()) col.sort((a, b) => a.k - b.k);
   roadTiles.clear(); for (const [k, col] of cols) { const top = col[col.length - 1]; if (top.t === "road" || top.t === "ramp" || top.t === "corner" || top.t === "half") roadTiles.set(k, top); }
-  houses.length = 0; solids.length = 0; trees.length = 0; boosts.length = 0; boulders.length = 0; vanPts.clear();
+  houses.length = 0; solids.length = 0; trees.length = 0; boosts.length = 0; boulders.length = 0; vanPts.length = 0; vanById.clear();
   PLOTS.length = 0; lotById.clear();
   const rnd = rng(7);
   for (const t of things) {
@@ -160,11 +166,12 @@ function derive() {
       const lot = { id: t.id, x, z, y: t.y, yaw: LOT_YAW[t.d], d: t.d, placed: true }; PLOTS.push(lot); lotById.set(t.id, lot);
     } else if (t.k === "mailbox") { const x = tileMid(t.i), z = tileMid(t.j); houses.push({ x, z, yaw: [0, Math.PI / 2, Math.PI, -Math.PI / 2][t.d], base: t.y, mx: x, mz: z, my: t.y, sky: false, r: rnd(), box: true, id: t.id }); }
     else if (t.k === "tree") { const x = tileMid(t.i), z = tileMid(t.j); trees.push({ x, z, y: t.y, s: 0.85 + rnd() * 0.5, id: t.id }); solid(x, z, 0, 0.55, 0.55, t.y - 1, t.y + 12); }   // (owner, 2026-11-10) trees are solid: their trunk stops you
-    else if (t.k === "vanpt") vanPts.add(tkey(t.i, t.j));   // (owner, 2026-11-10) a van point on a road tile
+    else if (t.k === "vanpt") { const q = { id: t.id, x: t.x, z: t.z, y: t.y, links: t.l || [] }; vanPts.push(q); vanById.set(t.id, q); }   // (owner, 2026-11-10) a van point, anywhere on a road
     else if (t.k === "boulder") { const x = tileMid(t.i), z = tileMid(t.j), sz = 1.7 + rnd() * 0.8; boulders.push({ x, z, y: t.y, s: sz, yaw: rnd() * 6.28, id: t.id }); solid(x, z, 0, sz * 0.8, sz * 0.8, t.y - 1, t.y + sz * 1.5); }   // (owner, 2026-11-10) a boulder on a tile, like a tree
     else if (t.k === "boost") boosts.push({ x: tileMid(t.i), z: tileMid(t.j), y: t.y, yaw: [0, Math.PI / 2, Math.PI, -Math.PI / 2][t.d], id: t.id });
   }
   for (const h of houses) { h.d = hyp(h.mx - POST.x, h.mz - POST.z); h.sky = h.base > 30; }
+  for (const q of vanPts) q.links = q.links.filter((id) => id !== q.id && vanById.has(id) && vanById.get(id).links.includes(q.id));
   solid(POST.x, POST.z, POST.yaw, 9, 5, -1, 8); solid(SHOP_B.x, SHOP_B.z, SHOP_B.yaw, 6, 4, -1, 9); solid(POUND_B.x, POUND_B.z, POUND_B.yaw, 8, 4, -1, 7);
 }
 // a road tile's height at the middle of one of its edges (side 0-3 as DIRS), or null where it doesn't join (a ramp's sides)
@@ -184,19 +191,16 @@ export function roadNext(i, j) {
   return out;
 }
 export const isRoad = (i, j) => roadTiles.has(tkey(i, j));
-// ---- van points (owner, 2026-11-10): marked road tiles vans drive between, like streets between junctions. Two points
-// are joined when a road runs from one to the other without passing another point. ----
-const vanPts = new Set();   // "i,j"
-export const isVanPt = (i, j) => vanPts.has(tkey(i, j)), vanPointCount = () => vanPts.size;
-// the points reachable from tile (i, j) along roads without passing another point, each with the tiles to it
-export function vanRoutes(i, j) {
-  const start = tkey(i, j), prev = new Map([[start, null]]), q = [[i, j]], found = [];
-  for (let n = 0; n < q.length && n < 6000; n++) {
-    const [a, b] = q[n], k = tkey(a, b);
-    if (k !== start && vanPts.has(k)) { found.push(k); continue; }
-    for (const [ni, nj] of roadNext(a, b)) { const nk = tkey(ni, nj); if (!prev.has(nk)) { prev.set(nk, k); q.push([ni, nj]); } }
+// ---- van points (owner, 2026-11-10): points admins place freely on roads and join by hand (select one, then another:
+// a line; the line's middle taken away: no line). Vans drive straight along the lines, like streets between corners. ----
+export const vanPts = [], vanById = new Map();
+export function roadLine(ax, az, bx, bz) {   // does the straight line from a to b stay on road?
+  const len = hyp(bx - ax, bz - az), n = Math.max(1, Math.ceil(len)); let y = surfaceAt(ax, az, 200);
+  for (let k = 0; k <= n; k++) {
+    const x = ax + ((bx - ax) * k) / n, z = az + ((bz - az) * k) / n; if (roadDist(x, z) > 0) return false;
+    const ny = surfaceAt(x, z, y + 1.2); if (ny === -Infinity || Math.abs(ny - y) > 1.2) return false; y = ny;
   }
-  return found.map((k) => { const path = []; for (let c = k; c !== start; c = prev.get(c)) path.unshift(c.split(",").map(Number)); return { k, path }; });
+  return true;
 }
 setWorld(starterWorld());
 
@@ -249,27 +253,36 @@ export function makeVehicles(old) {
 }
 // a van's spot on the right-hand side of its way into tile (ni, nj) from (i, j)
 function lane(v) { const fx = Math.sign(v.ni - v.i), fz = Math.sign(v.nj - v.j); return [tileMid(v.ni) - fz * 1.5, tileMid(v.nj) + fx * 1.5]; }
-// (owner, 2026-11-10) with van points on its roads a van drives point to point: at a point it picks one joined to it
-// (not the one it just came from, unless that's the only one) and follows the road there; off the points it heads to
-// the nearest. Returns the next tile, or null when there are no points to go by
-function vanStep(v, opts) {
-  if (!vanPts.size) return null;
-  const ci = v.ni, cj = v.nj, ck = tkey(ci, cj);
-  if (v.path && v.path.length && !opts.some(([a, b]) => a === v.path[0][0] && b === v.path[0][1])) v.path = [];   // the road changed under it
-  if (!v.path || !v.path.length) {
-    const routes = vanRoutes(ci, cj); v.path = [];
-    if (vanPts.has(ck)) { const fwd = routes.filter((r) => r.k !== v.fromPt), list = fwd.length ? fwd : routes, r = list[Math.floor(Math.random() * list.length)]; if (r) { v.path = r.path; v.fromPt = ck; } }
-    else if (routes.length) { const r = routes.reduce((a, b) => (b.path.length < a.path.length ? b : a)); v.path = r.path; v.fromPt = null; }
+// (owner, 2026-11-10) with van points about, a van drives straight from point to point (keeping right): at a point it
+// takes a joined one, not the one it came from unless that's the only way; off the points it heads for the nearest one
+// with lines that it can reach straight along road. Returns false when there's none (then it roams the road tiles)
+function vanFree(v, dt, snap) {
+  if (!vanPts.length) return false;
+  let P = v.tp ? vanById.get(v.tp) : null;
+  if (!P) {
+    let bd = 80; for (const q of vanPts) { const d = hyp(q.x - v.x, q.z - v.z); if (q.links.length && d < bd && roadLine(v.x, v.z, q.x, q.z)) { bd = d; P = q; } }
+    if (!P) return false; v.tp = P.id; v.fromPt = 0;
   }
-  return v.path.length ? v.path.shift() : null;
+  const F = v.fromPt ? vanById.get(v.fromPt) : null, ox = F ? F.x : v.x, oz = F ? F.z : v.z, L = hyp(P.x - ox, P.z - oz) || 1, ux = (P.x - ox) / L, uz = (P.z - oz) / L;
+  const tx = P.x - uz * 1.5, tz = P.z + ux * 1.5;   // its lane: a little right of the line
+  let dx = tx - v.x, dz = tz - v.z, d = hyp(dx, dz);
+  if (d < 0.8) {   // here: on to the next point
+    const fwd = P.links.filter((id) => id !== v.fromPt), list = fwd.length ? fwd : P.links;
+    v.fromPt = P.id; v.tp = list.length ? list[Math.floor(Math.random() * list.length)] : 0;
+    return true;
+  }
+  const m = Math.min(d, VAN.patrol * v.speed * dt); if (d > 0.01) { v.x += (dx / d) * m; v.z += (dz / d) * m; v.yaw = turn(v.yaw, Math.atan2(dx, dz), snap ? 1 : Math.min(1, dt * 6)); }
+  const gy = surfaceAt(v.x, v.z, v.y + 2); if (gy > -Infinity) v.y += (gy - v.y) * (snap ? 1 : Math.min(1, dt * 10));
+  v.i = v.ni = v.pi = tileOf(v.x); v.j = v.nj = v.pj = tileOf(v.z);   // the tile it's on (for coming back after a chase)
+  return true;
 }
 function placePatrol(v, dt, snap) {
   if (v.kind === 0) {
+    if (vanFree(v, dt, snap)) return;
     if (!isRoad(v.ni, v.nj)) { if (isRoad(v.i, v.j)) { v.ni = v.i; v.nj = v.j; } else return; }
     let [tx, tz] = lane(v), dx = tx - v.x, dz = tz - v.z, d = hyp(dx, dz);
     if (d < 0.6 || snap) {   // here: pick the next tile (not straight back unless it's a dead end)
-      const opts = roadNext(v.ni, v.nj); let pick = vanStep(v, opts);
-      if (!pick) { const fwd = opts.filter(([a, b]) => a !== v.i || b !== v.j); pick = (fwd.length ? fwd : opts)[Math.floor(Math.random() * (fwd.length || opts.length || 1))]; }   // no van points on its roads: it roams
+      const opts = roadNext(v.ni, v.nj), fwd = opts.filter(([a, b]) => a !== v.i || b !== v.j), pick = (fwd.length ? fwd : opts)[Math.floor(Math.random() * (fwd.length || opts.length || 1))];
       v.pi = v.i; v.pj = v.j; v.i = v.ni; v.j = v.nj; if (pick) { v.ni = pick[0]; v.nj = pick[1]; }
       if (snap) { v.x = tileMid(v.i); v.z = tileMid(v.j); }
       [tx, tz] = lane(v); dx = tx - v.x; dz = tz - v.z; d = hyp(dx, dz);
@@ -355,7 +368,7 @@ export function stepVehicles(vs, players, dt, now, daylightOverride) {
       const dx = tx - v.x, dz = tz - v.z, d = hyp(dx, dz), m = Math.min(d, C.patrol * v.speed * 1.4 * dt);
       if (d > 0.01) { v.x += (dx / d) * m; v.z += (dz / d) * m; v.yaw = turn(v.yaw, Math.atan2(dx, dz), Math.min(1, dt * 8)); }
       const gy = surfaceAt(v.x, v.z, v.y + 2); if (gy > -Infinity) v.y = gy;
-      if (d < 1) { v.mode = 0; v.ni = v.i; v.nj = v.j; v.path = []; }
+      if (d < 1) { v.mode = 0; v.ni = v.i; v.nj = v.j; v.tp = 0; }
     } else placePatrol(v, dt, false);
     if (v.mode === 0 && now > v.cool) {   // look around
       let best = null, bd = 1e9;

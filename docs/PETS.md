@@ -52,7 +52,8 @@ Asked (owner): a web game on atamus.io (not Roblox), on its own page; the cargo 
   office** (north; blue roof, its **pickup ring**, gold, in front), the **egg shop** (east; pink, a giant egg on top,
   pink ring), the **pound** (south; animal control, striped front, a fenced yard in front) and the **training yard**
   (west; a running track with hurdles, green ring). The lift to your plot stands south of the center.
-- **The town editor (owner, 2026-11-10; admins only):** Build Town in the gear menu opens a bar of pieces: Land,
+- **The town editor (owner, 2026-11-10; admins only):** the Build Town button (top left, beside the menu and chat;
+  admins only) opens a bar of pieces: Land,
   Wedge, Road, Road Ramp, Road Corner, Half Road, Water, Rock, Tree, Boulder, House, Mailbox, Boost, Van, Van Point, Helicopter and Erase, with ⟳ (turn; R on a
   keyboard), the level (− Auto +) and, for a helicopter, its radius. A see-through preview shows
   where the piece goes (red where it can't, or what Erase takes away); a tap (or click) places it. Blocks go against
@@ -199,11 +200,12 @@ Asked (owner): a web game on atamus.io (not Roblox), on its own page; the cargo 
   many as admins place (owner, 2026-11-10). A van roams every road tile joined to the one it was placed on (tiles
   sharing an edge at the same height, up and down ramps), picking a way at each tile and turning round only at a dead
   end, so a road built onto its network becomes part of its beat at once. A helicopter keeps within its radius.
-  **Van points (owner, 2026-11-10):** road tiles admins mark in Build Town. Two points are joined when a road runs
-  from one to the other without passing another point. A van on roads with points drives point to point like streets:
-  at a point it takes a joined point other than the one it came from (back only at a dead end) and follows the shortest
-  road there; off the points it heads to the nearest one. Vans on roads with no points roam as above. The points and
-  their links (yellow posts and lines) show only while building.
+  **Van points (owner, 2026-11-10):** placed freely (not on the grid) anywhere on a road in Build Town, and joined
+  by hand: with Van Point picked, a tap on a point selects it (white), a tap on another puts a line between them, a tap
+  on a line's middle (its knob) takes the line away; a tap elsewhere lets go. A van with lines about drives straight
+  along them (keeping right): at a point it takes a line other than the one it came along (back only at a dead end);
+  off the points it heads for the nearest point with lines it can reach straight along road. Vans with none roam the
+  road tiles as above. Points, lines and knobs show only while building; Erase takes a point away.
   Building or taking a vehicle away leaves every other vehicle where it is (owner, 2026-11-10); a van whose road is
   removed from under it starts again from where it was placed. Online the server runs them for the whole room; offline the page does.
 - They only go after players carrying parcels (owner, 2026-11-08); a chase ends if the bag empties (no star).
