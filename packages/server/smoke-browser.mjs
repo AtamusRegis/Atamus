@@ -62,13 +62,15 @@ try {
   step = "grab a parcel off the conveyor";
   for (let i = 0; i < 40 && !(await page.evaluate(() => !!window.Pets.parcel)); i++) { await page.evaluate(() => { const P = window.Pets, q = P.readyAt(), d = Math.hypot(q.x, q.z); P.teleport(q.x * (1 + 1.6 / d), q.z * (1 + 1.6 / d)); }); await page.waitForTimeout(250); }
   await until(page, () => !!window.Pets.parcel, "no parcel grabbed");
-  await until(page, () => getComputedStyle(document.getElementById("card")).display !== "none" && getComputedStyle(document.getElementById("way")).display !== "none", "the parcel card didn't show");
-  const card = await page.evaluate(() => ({ shown: getComputedStyle(document.getElementById("card")).display, tier: document.getElementById("ctier").textContent, addr: document.getElementById("caddr").textContent, pips: document.querySelectorAll("#cpips i.on").length, timer: getComputedStyle(document.getElementById("ctimer")).display, way: getComputedStyle(document.getElementById("way")).display }));
-  if (card.shown === "none" || card.tier !== "Bronze" || !/Main Street/.test(card.addr) || card.pips !== 3 || card.timer === "none" || card.way === "none") problems.push("the parcel card is wrong: " + JSON.stringify(card));
+  await until(page, () => getComputedStyle(document.getElementById("card")).display !== "none" && / m$/.test(document.getElementById("cdist").textContent), "the parcel card didn't show");
+  const card = await page.evaluate(() => ({ shown: getComputedStyle(document.getElementById("card")).display, tier: document.getElementById("ctier").textContent, addr: document.getElementById("caddr").textContent, pips: document.querySelectorAll("#cpips i.on").length, timer: getComputedStyle(document.getElementById("ctimer")).display, way: window.Pets.arrow.visible }));
+  if (card.shown === "none" || card.tier !== "Bronze" || !/Main Street/.test(card.addr) || card.pips !== 3 || card.timer === "none" || !card.way) problems.push("the parcel card is wrong: " + JSON.stringify(card));
   step = "deliver it and see the roll";
   await page.evaluate(() => { const P = window.Pets, h = P.World.houses[P.parcel.house]; P.teleport(h.mx, h.mz, h.my); });
   await until(page, () => window.Pets.save.stats.del === 1 && !window.Pets.parcel, "the delivery didn't land");
-  await until(page, () => getComputedStyle(document.getElementById("roll")).display !== "none" && window.Pets.World.RARITY.includes(document.getElementById("roll").textContent), "no reward roll shown");
+  await until(page, () => getComputedStyle(document.getElementById("roll")).display !== "none" && window.Pets.World.RARITY.includes(document.getElementById("reel").textContent), "no reward roll shown");
+  await until(page, () => getComputedStyle(document.getElementById("rcard")).display !== "none" && document.querySelectorAll("#rlist .rrow").length > 0, "the roll's reveal card didn't show", null, 20000);
+  await page.waitForTimeout(600); await page.click("#rok"); await until(page, () => getComputedStyle(document.getElementById("roll")).display === "none", "the reveal card didn't close");
   await until(page, () => document.getElementById("coinn").textContent !== "0", "the coin counter didn't move");
   step = "open the menus";
   for (const [id, title] of [["mstable", "Stable"], ["mup", "Upgrades"], ["modds", "Odds"], ["mset", "Settings"]]) {

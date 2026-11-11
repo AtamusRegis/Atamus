@@ -13,11 +13,15 @@ Every rule below is in `website/pets-world.js` (shared with the server, an ident
 
 1. **Grab.** Ride (or walk) into your Ready parcel on the post office conveyor. It snaps to your saddle, where everyone
    sees it.
-2. **Ride** to the address: a random house in the parcel's district. A label floats over its mailbox, a beam and a ring
-   mark the spot, and an arrow at the edge of the screen shows the way and how far.
+2. **Ride** to the address: a random house in the parcel's district. (owner, 2026-11-11) The delivery spot is the one
+   hot pink thing in town (the town's colors are kept calm around it): a tall beam, a spinning marker, a ring on the
+   ground and the address on a label. A pink arrow on the ground a few meters out from you points the way (like the old
+   game's), and the parcel card shows how far.
 3. **Deliver.** Ride into the glowing ring in front of that mailbox (within 3 m; no button). The server checks it. A
    wrong mailbox just shakes.
-4. **Roll.** Coins pay out and a slot spins over the mailbox for 1.5 s, then lands on the reward.
+4. **Roll.** Coins pay out and the reward reel spins big in the middle of the screen, slowing over 2.6 s, then lands
+   (a flash in the rarity's color). Then a card shows what you got (coins, XP, Level Coupons, an egg), each line
+   popping in, and stays until you close it or grab your next parcel.
 
 One parcel at a time. A parcel that breaks or is lost is gone; the conveyor always has the next one.
 
@@ -71,13 +75,13 @@ One parcel at a time. A parcel that breaks or is lost is gone; the conveyor alwa
 
 - One equipped mount, seen by everyone; the rest wait in the Stable menu. Levels 1 to 20; a mount's size is 1 + 0.079 x
   (level - 1), so 2.5x at level 20. The rider stays the same size.
-- **Twelve mounts:** Common Pup (Bark), Piglet (Dash), Bunny (Double Jump); Uncommon Cat (Dash), Fox (Dash), Parrot
-  (Glide); Rare Raptor (Dash), Owl (Glide), Pony (Double Jump); Epic T-Rex (Bark), Unicorn (Double Jump); Legendary
-  Dragon (Glide). A new courier starts with a Pup.
+- **Twelve mounts, all on the ground** (owner, 2026-11-11: no flying pets): Common Pup (Bark), Piglet (Dash), Bunny
+  (Double Jump); Uncommon Cat (Dash), Fox (Dash), Deer (Double Jump); Rare Raptor (Dash), Stegosaurus (Bark), Pony
+  (Double Jump); Epic T-Rex (Bark), Triceratops (Dash); Legendary Unicorn (Double Jump). A new courier starts with a
+  Pup. A Parrot, Owl or Dragon someone already had became a Deer, Stegosaurus or Unicorn, keeping its level.
 - **Stats** (rarity 0-4, n = level - 1): Speed 10 + 0.6 x rarity + (0.1 + 0.02 x rarity) x n m/s; Jump 8 + 0.25 x rarity
   + (0.08 + 0.01 x rarity) x n; Grip (shortens stuns) 5% x rarity + 2% x n, up to 60%.
-- **Ability** from level 5, stronger at 10 and 20: Dash (a burst of speed; every 8 / 6 / 4 s), Glide (hold Jump in the
-  air to fall slowly), Double Jump (a second jump, higher at 10, a third at 20), Bark (dogs within 10.5 / 14 / 17.5 m
+- **Ability** from level 5, stronger at 10 and 20: Dash (a burst of speed; every 8 / 6 / 4 s), Double Jump (a second jump, higher at 10, a third at 20), Bark (dogs within 10.5 / 14 / 17.5 m
   run home; every 12 / 9 / 6 s).
 - **Leveling:** Train (XP from deliveries: 30 x 1.42^(level - 1) per level), Pay (100 x 1.6^(level - 1) coins: 100 for
   level 2, 655 for 6, about 472,000 for 20; about 1.26 million in all), or a Level Coupon (one whole level).
@@ -99,14 +103,16 @@ One parcel at a time. A parcel that breaks or is lost is gone; the conveyor alwa
 A fixed town made in code (`buildTown` in pets-world.js); about 97 houses.
 
 - **Post office** at the center: the counter under an open frame. Within 20 m is the **safe zone**.
-- **Main Street** (Bronze): 20 houses round the inner ring road, four avenues, a park pond with 2 geese, 4 dogs.
-- **Maple Suburbs** (Silver): 30 houses round and inside the outer ring, fenced yards with dogs at two houses in three,
-  a pond with 3 geese, 8 sprinklers along the ring road.
+- **Main Street** (Bronze): 20 houses round the inner ring road, four avenues, two park ponds (7 geese), 9 dogs.
+- **Maple Suburbs** (Silver): 30 houses round and inside the outer ring, fenced yards, two ponds (10 geese), 18 dogs,
+  8 sprinklers along the ring road.
 - **Goose Marsh** (Gold): east over the bridge. Mud (25% slower; 40% in a pond) crossed by boardwalks, 20 houses on
-  platforms, four ponds with a flock of 4 geese each.
+  platforms, four ponds with a flock of 5 geese each, 8 dogs on the boardwalks.
 - **Cliffside** (Diamond): the mountain past the marsh. Five terraces, 10 m apart, joined by switchback ramps up narrow
-  ledges; 15 houses; a goat on each of the first four terraces; falling rocks.
-- **Floating Islands** (Sky): six islands 70 to 108 m up, two houses each, joined by jump pads. The **Sky Cannon** on
+  ledges; 15 houses; 6 dogs; two goats on each of the first four terraces; falling rocks.
+- **Floating Islands** (Sky): six islands 70 to 108 m up, two houses each, joined by jump pads. (owner, 2026-11-11:
+  couriers got stuck in houses by the pads) Each island's houses stand as far as they can from its pads, landing
+  spots, balloon and middle; anyone who somehow ends up inside something solid is moved out to the nearest clear spot. The **Sky Cannon** on
   top of Cliffside fires you to the first. Falling off costs the parcel 1 hit and puts you back on the last island you
   stood on. A **balloon** on the first and last island takes you back to the post office.
 
@@ -119,18 +125,20 @@ marsh's main boardwalk.
 
 ## Danger
 
-- **Dogs** wait in their yards. A courier carrying a parcel within 10 m sets one off: a bark and a red "!" for 0.5 s,
-  then it chases for up to 6 s at 11.5 m/s. A bite stuns for 1.5 s and takes 1 hit. It gives up if you outrun it, get a
-  fence between you, leave (38 m from its yard) or reach the safe zone; then it trots home and rests 8 s.
-- **Geese** wander near their ponds. One that sees a parcel within 7 m honks and flaps for 1 s, then lunges (13 m/s for
+- (owner, 2026-11-11: dangers roam, and more of them) **Dogs** (41) roam their district: a short trot somewhere, now
+  and then a pause, staying within 45 m of where they started, off the post office's safe zone, out of ponds. A
+  courier carrying a parcel within 10 m sets one off: a bark and a red "!" for 0.5 s, then it chases for up to 6 s at
+  11.5 m/s. A bite stuns for 1.5 s and takes 1 hit. It gives up if you outrun it, get a wall between you, take it 38 m
+  from where it started or reach the safe zone; then it rests 8 s. Scared off (a kick, Bark), it bolts away for 2.5 s.
+- **Geese** (37) roam up to 34 m out from their pond, round houses and fences. One that sees a parcel within 7 m honks and flaps for 1 s, then lunges (13 m/s for
   up to 2.2 s). Touching you it takes the parcel (no stun) and waddles to its pond (7.2 m/s), then takes 3 s out in the
   middle to sink it: then it's lost. **Kick the goose** and the parcel drops where it stands, unharmed: pick it up
   (within 20 s) for 15 coins x the tier. "GOOSE BUSTED!"
 - **Sprinklers** (Suburbs): on 3 s in every 6, they shove you sideways.
 - **Falling rocks** (Cliffside): every 3 to 6 s near a courier on the mountain; a shadow for 1 s, then a 1.5 s stun and
   1 hit within 2.3 m.
-- **Goats** (Cliffside): a goat that sees anyone within 9 m stomps for 0.8 s, then charges and knocks them back toward
-  the ledge (no hit); it won't run off its own ledge.
+- **Goats** (Cliffside, 8): they wander their terrace; a goat that sees anyone within 9 m stomps for 0.8 s, then
+  charges and knocks them back toward the ledge (no hit); it won't run off its own ledge.
 - **Wind** (Islands): a gust for 3.5 s in every 11 pushes everyone the same way.
 - **Sky geese** (Islands): every 9 to 16 s one dives at a courier carrying a parcel; a shadow circle for 1.4 s, then it
   takes the parcel for good if you're still within 2.2 m.
@@ -163,8 +171,8 @@ Platinum 38.
 
 ## The screen
 
-- Coins top left (they count up; coins fly to it from the mailbox). Chat button under it. The Stamp Meter down the left.
-- The parcel card top center: tier, modifier, durability pips, address, the Express countdown.
+- Coins top left (they count up; coins fly to it). Chat button under it. The Stamp Meter down the left.
+- The parcel card top center: tier, modifier, durability pips, address, distance, the Express countdown.
 - Bottom right: Kick (with its cooldown), Whistle above it, the Ability beside it (gray until level 5), Jump.
 - Right edge: Stable, Upgrades, Odds, Settings (Friendly, music and SFX volume, shirt color, Admin for staff, Log out).
 - Controls: WASD or arrows, Space to jump, F kick, Q whistle, E ability, Enter chat; drag to look, wheel to zoom. Touch:
@@ -215,6 +223,10 @@ upgrades, everything, reset), and edit coins and coupons. Everything is logged (
 
 ## Rejected / removed
 
+- (owner, 2026-11-11) Flying and gliding mounts: the Parrot, Owl and Dragon, and the Glide ability.
+- (owner, 2026-11-11) The edge-of-screen guide arrow (replaced by the arrow on the ground round you); the reward roll
+  over the mailbox (moved to the middle of the screen, with the card of what you got); dogs waiting in yards and geese
+  staying by their ponds (they roam); the bright, saturated town colors.
 - (owner, 2026-11-11) **All of Pet Delivery Co.**, replaced by Critter Courier rather than merged with it: the block
   world and the Build Town editor (van points, lots), animal control (vans, helicopters, wanted stars, the pound),
   contracts, houses and plots and building inside them, the training arena, items (Speed Candy, Training Ribbon, Egg

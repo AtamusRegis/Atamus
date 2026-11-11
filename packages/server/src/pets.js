@@ -36,9 +36,9 @@ const between = ([a, b]) => a + Math.random() * (b - a);
 
 function makeRoom() {
   const r = { players: new Map(), last: Date.now(), tick: 0, slow: 0, rocks: [], dives: [] };
-  r.dogs = W.dogs.map((d) => ({ id: d.id, x: d.hx, z: d.hz, yaw: 0, mode: 0, t: 0, target: null, cool: 0, sent: true }));
+  r.dogs = W.dogs.map((d) => ({ id: d.id, x: d.hx, z: d.hz, y: d.y, yaw: 0, mode: 0, t: 0, target: null, cool: 0, pause: 0, stuck: 0, awake: false }));
   r.geese = W.geese.map((g) => ({ id: g.id, x: g.x, z: g.z, y: g.y, yaw: 0, mode: 0, t: 0, target: null, carry: null, wx: g.x, wz: g.z, awake: false }));
-  r.goats = W.goats.map((g) => ({ id: g.id, x: g.hx, z: g.hz, yaw: Math.PI / 2, mode: 0, t: 0, dx: 0, dz: 0, cool: 0, sent: true }));
+  r.goats = W.goats.map((g) => ({ id: g.id, x: g.hx, z: g.hz, y: g.y, yaw: Math.PI / 2, mode: 0, t: 0, dx: 0, dz: 0, cool: 0, stuck: 0, awake: false }));
   return r;
 }
 function roomFor() { let r = rooms.find((q) => q.players.size < ROOM_MAX); if (!r) { r = makeRoom(); rooms.push(r); } return r; }
@@ -48,7 +48,7 @@ const mountOf = (p) => { const d = p.acct.data; return d.mounts.find((m) => m.id
 const statsOf = (p) => { const m = mountOf(p); return W.mountStats(m.sp, m.lv); };
 const pub = (p) => { const m = mountOf(p), d = p.acct.data; return { id: p.id, name: p.name, sp: m.sp, lv: m.lv, va: m.va, shirt: d.set.shirt, rank: W.rankOf(W.upTotal(d.up)), friendly: d.set.friendly, x: p.x, y: p.y, z: p.z, yaw: p.yaw, carry: p.parcel ? [p.parcel.tier, p.parcel.mod] : null }; };
 const parcelView = (q) => (q ? { tier: q.tier, mod: q.mod, dur: q.dur, max: q.max, hits: q.hits, house: q.house, due: q.due } : null);
-const dogView = (d) => [d.id, r1(d.x), r1(d.z), r2(d.yaw), d.mode], gooseView = (g) => [g.id, r1(g.x), r1(g.z), r1(g.y), r2(g.yaw), g.mode, g.carry ? g.carry.parcel.tier : -1], goatView = (g) => [g.id, r1(g.x), r1(g.z), r2(g.yaw), g.mode];
+const dogView = (d) => [d.id, r1(d.x), r1(d.z), r2(d.yaw), d.mode, r1(d.y)], gooseView = (g) => [g.id, r1(g.x), r1(g.z), r1(g.y), r2(g.yaw), g.mode, g.carry ? g.carry.parcel.tier : -1], goatView = (g) => [g.id, r1(g.x), r1(g.z), r2(g.yaw), g.mode];
 
 export function attachPets(server, { origins = [], allowLocal = false, store = memStore() } = {}) {
   // ---- saving ----
@@ -113,7 +113,7 @@ export function attachPets(server, { origins = [], allowLocal = false, store = m
         }
         g.mode = 4; g.t = 3; g.target = null;
       }
-      for (const q of r.dogs) if (q.mode && kickable(me, q.x, q.z, W.dogs[q.id].y, 0.4)) { landed = true; q.mode = 3; q.target = null; q.cool = now + DOG.cool * 1000; all(r, { t: "fx", k: "yelp", dog: q.id }); }
+      for (const q of r.dogs) if (q.mode !== 3 && kickable(me, q.x, q.z, q.y, 0.4)) { landed = true; q.mode = 3; q.target = null; q.cool = now + DOG.cool * 1000; all(r, { t: "fx", k: "yelp", dog: q.id }); }
       for (const g of r.goats) if (kickable(me, g.x, g.z, W.goats[g.id].y, 0.4)) { landed = true; g.mode = 3; g.cool = now + GOAT.cool * 1000; }
     }
     if (landed) { d.stats.kicks++; changed(me); }
@@ -122,7 +122,7 @@ export function attachPets(server, { origins = [], allowLocal = false, store = m
   function bark(me) {   // the Bark ability: dogs near turn tail
     const m = mountOf(me), tier = W.abilityTier(m.lv), now = Date.now(); if (MOUNTS[m.sp].ab !== "bark" || !tier || now < me.abilityAt + W.ABILITY_CD.bark[tier] * 1000 - 150) return;
     me.abilityAt = now; const R = 7 + 3.5 * tier;
-    for (const q of me.room.dogs) if (q.mode && hyp(q.x - me.x, q.z - me.z) < R) { q.mode = 3; q.target = null; q.cool = now + DOG.cool * 1000; all(me.room, { t: "fx", k: "yelp", dog: q.id }); }
+    for (const q of me.room.dogs) if (q.mode !== 3 && hyp(q.x - me.x, q.z - me.z) < R) { q.mode = 3; q.target = null; q.cool = now + DOG.cool * 1000; all(me.room, { t: "fx", k: "yelp", dog: q.id }); }
     all(me.room, { t: "fx", k: "bark", id: me.id, r: R });
   }
   function teleport(p, x, z, y, why) { p.x = x; p.z = z; p.y = y; p.tpAt = Date.now(); p.lx = x; p.lz = z; p.lt = p.tpAt; send(p.ws, { t: "tp", x, z, y, why }); }
@@ -253,7 +253,7 @@ export function attachPets(server, { origins = [], allowLocal = false, store = m
         me.lx = me.x; me.lz = me.z; me.lt = now;
         online.set(acct.id, me);
         send(ws, { t: "welcome", web: websiteBuild(), by: websiteBy(), now, id: me.id, name: me.name, role: rankOf(acct) >= 2 ? "admin" : acct.role, token, data: acct.data, x: me.x, z: me.z, players: [...room.players.values()].map(pub),
-          dogs: room.dogs.filter((d) => d.mode).map(dogView), geese: room.geese.map(gooseView), goats: room.goats.map(goatView) });
+          dogs: room.dogs.map(dogView), geese: room.geese.map(gooseView), goats: room.goats.map(goatView) });
         room.players.set(me.id, me);
         all(room, { t: "join", p: pub(me) }, me);
         fillBelt(me);
@@ -359,34 +359,47 @@ export function attachPets(server, { origins = [], allowLocal = false, store = m
   setInterval(() => { for (const ws of wss.clients) { if (!ws.alive) { ws.terminate(); continue; } ws.alive = false; try { ws.ping(); } catch { /* closing */ } } }, BEAT_MS).unref();
 
   // ---- the town's dangers, 20 times a second; where everyone is, 10 times a second ----
-  const walk = (o, dx, dz, y) => { if (!W.blocked(o.x + dx, o.z, y, 0.4)) o.x += dx; if (!W.blocked(o.x, o.z + dz, y, 0.4)) o.z += dz; };
   const exposed = (p, now) => now >= p.graceUntil && now >= p.stunUntil && now >= p.tpAt && !W.inSafeZone(p.x, p.z, p.y);
+  // an animal's step toward a point, staying on ground it can walk (no walls, no drops); false when it can't
+  const pace = (o, tx, tz, sp, tol) => {
+    const dx = tx - o.x, dz = tz - o.z, l = hyp(dx, dz) || 1, st = Math.min(l, sp), ok = (x, z) => { const y = W.surfaceAt(x, z, o.y + tol); if (Math.abs(y - o.y) > tol || W.blocked(x, z, y, 0.4)) return false; o.x = x; o.z = z; o.y = y; return true; };
+    o.yaw = Math.atan2(dx, dz); return ok(o.x + (dx / l) * st, o.z + (dz / l) * st) || ok(o.x + (dx / l) * st, o.z) || ok(o.x, o.z + (dz / l) * st);
+  };
+  const near = (players, o, R) => players.some((p) => Math.abs(p.x - o.x) < R && Math.abs(p.z - o.z) < R);
+  // dogs roam their district (owner, 2026-11-11), a short walk at a time, and go for any parcel that comes close
   function stepDogs(r, players, dt, now) {
     for (const q of r.dogs) {
-      const D = W.dogs[q.id];
+      const D = W.dogs[q.id]; q.awake = q.mode !== 0 || near(players, q, 110);
+      if (!q.awake) continue;   // asleep while nobody's near
       if (q.mode === 0) {
-        if (now < q.cool) continue;
-        for (const p of players) if (p.parcel && Math.abs(p.y - D.y) < 3 && hyp(p.x - D.hx, p.z - D.hz) < DOG.trigger && exposed(p, now)) { q.mode = 1; q.t = DOG.telegraph; q.target = p; q.sent = false; break; }   // bark and a red "!"
+        if (now >= q.cool) for (const p of players) if (p.parcel && Math.abs(p.y - q.y) < 3 && hyp(p.x - q.x, p.z - q.z) < DOG.trigger && exposed(p, now)) { q.mode = 1; q.t = DOG.telegraph; q.target = p; q.sx = q.x; q.sz = q.z; break; }   // bark and a red "!"
+        if (q.mode !== 0) continue;
+        if ((q.pause -= dt) > 0) continue;
+        if (q.wx === undefined || hyp(q.wx - q.x, q.wz - q.z) < 1 || q.stuck > 0.6) {   // somewhere new to trot to (now and then it stops for a sniff)
+          q.stuck = 0; q.wx = D.hx; q.wz = D.hz; if (Math.random() < 0.3) q.pause = 1 + Math.random() * 3;
+          for (let k = 0; k < 8; k++) { const a = Math.random() * W.TAU, d = 8 + Math.random() * 26, x = q.x + Math.cos(a) * d, z = q.z + Math.sin(a) * d; if (hyp(x - D.hx, z - D.hz) < DOG.range && W.roamOk(x, z, q.y, D.d)) { q.wx = x; q.wz = z; break; } }
+        }
+        if (!pace(q, q.wx, q.wz, DOG.roam * dt, 0.55) || W.inSafeZone(q.x, q.z, q.y)) q.stuck += dt;
         continue;
       }
       const p = q.target;
       if (q.mode === 1) { if (p) q.yaw = Math.atan2(p.x - q.x, p.z - q.z); q.t -= dt; if (q.t <= 0) { q.mode = 2; q.t = DOG.chase; } continue; }
       if (q.mode === 2) {
-        if (!p || p.gone || !p.parcel || !exposed(p, now) || Math.abs(p.y - D.y) > 3.5 || hyp(q.x - D.hx, q.z - D.hz) > DOG.leash || (q.t -= dt) <= 0) { q.mode = 3; q.target = null; q.cool = now + DOG.cool * 1000; continue; }
-        const dx = p.x - q.x, dz = p.z - q.z, d = hyp(dx, dz) || 1, sp = DOG.speed * (p.acct.data.fails >= 3 ? 0.8 : 1) * dt;   // three failed runs in a row: the dogs ease off
-        q.yaw = Math.atan2(dx, dz); walk(q, (dx / d) * sp, (dz / d) * sp, D.y);
-        if (d < DOG.bite) { stun(p, DOG.stun, "dog"); hit(p, "dog"); all(r, { t: "fx", k: "bite", dog: q.id, id: p.id }); q.mode = 3; q.target = null; q.cool = now + DOG.cool * 1000; }
+        if (!p || p.gone || !p.parcel || !exposed(p, now) || Math.abs(p.y - q.y) > 3.5 || hyp(q.x - q.sx, q.z - q.sz) > DOG.leash || (q.t -= dt) <= 0) { q.mode = 0; q.target = null; q.cool = now + DOG.cool * 1000; q.pause = 1.5; q.wx = undefined; continue; }
+        const d = hyp(p.x - q.x, p.z - q.z);
+        pace(q, p.x, p.z, DOG.speed * (p.acct.data.fails >= 3 ? 0.8 : 1) * dt, 0.75);   // three failed runs in a row: the dogs ease off
+        if (d < DOG.bite) { stun(p, DOG.stun, "dog"); hit(p, "dog"); all(r, { t: "fx", k: "bite", dog: q.id, id: p.id }); q.mode = 0; q.target = null; q.cool = now + DOG.cool * 1000; q.pause = 2; q.wx = undefined; }
         continue;
       }
-      const dx = D.hx - q.x, dz = D.hz - q.z, d = hyp(dx, dz);   // trotting home
-      if (d < 0.6) { q.mode = 0; q.x = D.hx; q.z = D.hz; q.sent = false; continue; }
-      q.yaw = Math.atan2(dx, dz); const sp = Math.min(d, 7 * dt); q.x += (dx / d) * sp; q.z += (dz / d) * sp;
+      // scared off (a kick, a Bark): it bolts back toward where it started, then carries on
+      if (q.t3 === undefined) q.t3 = 2.5;
+      if ((q.t3 -= dt) <= 0 || !pace(q, D.hx, D.hz, 9 * dt, 0.75) || hyp(q.x - D.hx, q.z - D.hz) < 1) { q.mode = 0; q.t3 = undefined; q.wx = undefined; q.pause = 1; }
     }
   }
   function stepGeese(r, players, dt, now) {
     for (const g of r.geese) {
       const G = W.geese[g.id], P = W.ponds[G.pond];
-      g.awake = !!g.carry || g.mode !== 0 || players.some((p) => Math.abs(p.x - P.x) < 75 && Math.abs(p.z - P.z) < 75 && Math.abs(p.y - P.y) < 12);
+      g.awake = !!g.carry || g.mode !== 0 || players.some((p) => Math.abs(p.x - P.x) < 120 && Math.abs(p.z - P.z) < 120 && Math.abs(p.y - P.y) < 12);
       if (!g.awake) continue;   // asleep while nobody's near
       const go = (tx, tz, sp) => { const dx = tx - g.x, dz = tz - g.z, d = hyp(dx, dz) || 1, s = Math.min(d, sp * dt); g.yaw = Math.atan2(dx, dz); g.x += (dx / d) * s; g.z += (dz / d) * s; const s2 = W.surfaceAt(g.x, g.z, P.y + 1.4); g.y = s2 > -100 ? s2 : P.y; return d; };
       if (g.mode === 4) { if ((g.t -= dt) <= 0) { g.mode = 0; g.cool = now + GOOSE.cool * 1000; } continue; }   // dizzy from a kick
@@ -397,7 +410,7 @@ export function attachPets(server, { origins = [], allowLocal = false, store = m
       }
       if (g.mode === 0) {
         if (!(now < g.cool)) for (const p of players) if (p.parcel && Math.abs(p.y - g.y) < 2.5 && hyp(p.x - g.x, p.z - g.z) < GOOSE.see && exposed(p, now)) { g.mode = 1; g.t = GOOSE.telegraph; g.target = p; break; }   // honk and flap
-        if (g.mode === 0) { if (hyp(g.wx - g.x, g.wz - g.z) < 0.5 || Math.random() < 0.004) { const a = Math.random() * W.TAU, d = P.r + 1.5 + Math.random() * 7; g.wx = P.x + Math.cos(a) * d; g.wz = P.z + Math.sin(a) * d; } go(g.wx, g.wz, GOOSE.wander); }
+        if (g.mode === 0) { if (hyp(g.wx - g.x, g.wz - g.z) < 0.5 || Math.random() < 0.003) { const a = Math.random() * W.TAU, d = P.r + 1.5 + Math.random() * GOOSE.roam; g.wx = P.x + Math.cos(a) * d; g.wz = P.z + Math.sin(a) * d; } const ox = g.x, oz = g.z; go(g.wx, g.wz, GOOSE.wander); if (W.blocked(g.x, g.z, g.y, 0.3) && !W.blocked(ox, oz, g.y, 0.3)) { g.x = ox; g.z = oz; g.wx = ox; g.wz = oz; } }   // geese roam well away from their pond (owner, 2026-11-11), round houses and fences
         continue;
       }
       const p = g.target;
@@ -409,21 +422,28 @@ export function attachPets(server, { origins = [], allowLocal = false, store = m
       }
     }
   }
-  function stepGoats(r, players, dt, now) {
+  function stepGoats(r, players, dt, now) {   // goats wander their terrace and charge anyone who comes close
     for (const g of r.goats) {
-      const G = W.goats[g.id];
-      if (g.mode === 0) { if (now < g.cool) continue; for (const p of players) if (Math.abs(p.y - G.y) < 2.5 && hyp(p.x - g.x, p.z - g.z) < GOAT.see && now >= p.stunUntil && now >= p.tpAt) { const d = hyp(p.x - g.x, p.z - g.z) || 1; g.mode = 1; g.t = GOAT.telegraph; g.dx = (p.x - g.x) / d; g.dz = (p.z - g.z) / d; g.yaw = Math.atan2(g.dx, g.dz); g.sent = false; break; } continue; }   // it stomps
+      const G = W.goats[g.id]; g.y = G.y; g.awake = g.mode !== 0 || near(players, g, 110);
+      if (!g.awake) continue;
+      const onLedge = (x, z) => W.surfaceAt(x, z, G.y + 0.3) === G.y && !W.blocked(x, z, G.y, 0.5);
+      if (g.mode === 0) {
+        if (now >= g.cool) for (const p of players) if (Math.abs(p.y - G.y) < 2.5 && hyp(p.x - g.x, p.z - g.z) < GOAT.see && now >= p.stunUntil && now >= p.tpAt) { const d = hyp(p.x - g.x, p.z - g.z) || 1; g.mode = 1; g.t = GOAT.telegraph; g.dx = (p.x - g.x) / d; g.dz = (p.z - g.z) / d; g.yaw = Math.atan2(g.dx, g.dz); break; }   // it stomps
+        if (g.mode !== 0) continue;
+        if (g.wx === undefined || hyp(g.wx - g.x, g.wz - g.z) < 0.8 || g.stuck > 0.6) { g.stuck = 0; g.wx = g.x; g.wz = g.z; for (let k = 0; k < 8; k++) { const a = Math.random() * W.TAU, d = 5 + Math.random() * 24, x = g.x + Math.cos(a) * d, z = g.z + Math.sin(a) * d; if (onLedge(x, z)) { g.wx = x; g.wz = z; break; } } }
+        const dx = g.wx - g.x, dz = g.wz - g.z, d = hyp(dx, dz) || 1, st = Math.min(d, GOAT.roam * dt), nx = g.x + (dx / d) * st, nz = g.z + (dz / d) * st;
+        if (onLedge(nx, nz)) { g.x = nx; g.z = nz; g.yaw = Math.atan2(dx, dz); } else g.stuck += dt;
+        continue;
+      }
       if (g.mode === 1) { if ((g.t -= dt) <= 0) { g.mode = 2; g.t = GOAT.run; } continue; }
       if (g.mode === 2) {
         const nx = g.x + g.dx * GOAT.speed * dt, nz = g.z + g.dz * GOAT.speed * dt;
-        if (W.surfaceAt(nx, nz, G.y + 0.3) === G.y && !W.blocked(nx, nz, G.y, 0.4)) { g.x = nx; g.z = nz; } else g.t = 0;   // it won't run off its ledge
+        if (onLedge(nx, nz)) { g.x = nx; g.z = nz; } else g.t = 0;   // it won't run off its ledge
         for (const p of players) if (Math.abs(p.y - G.y) < 2.5 && hyp(p.x - g.x, p.z - g.z) < GOAT.touch && now >= p.tpAt) { send(p.ws, { t: "knock", x: -0.85 * GOAT.knock + g.dx * 4, z: g.dz * 6, y: 6 }); all(r, { t: "fx", k: "butt", goat: g.id, id: p.id }); g.t = 0; }   // toward the ledge
-        if ((g.t -= dt) <= 0) { g.mode = 3; g.cool = now + GOAT.cool * 1000; }
+        if ((g.t -= dt) <= 0) { g.mode = 0; g.cool = now + GOAT.cool * 1000; g.wx = undefined; }
         continue;
       }
-      const dx = G.hx - g.x, dz = G.hz - g.z, d = hyp(dx, dz);
-      if (d < 0.5) { g.mode = 0; g.sent = false; continue; }
-      g.yaw = Math.atan2(dx, dz); const s = Math.min(d, 5 * dt); g.x += (dx / d) * s; g.z += (dz / d) * s;
+      g.mode = 0; g.wx = undefined;   // kicked: it thinks better of it
     }
   }
   function stepSky(r, players, now) {   // falling rocks on Cliffside; diving sky geese and the long drop on the islands
@@ -459,8 +479,7 @@ export function attachPets(server, { origins = [], allowLocal = false, store = m
       const players = [...r.players.values()];
       stepDogs(r, players, dt, now); stepGeese(r, players, dt, now); stepGoats(r, players, dt, now); stepSky(r, players, now);
       if ((r.tick = (r.tick + 1) % 2)) continue;
-      const dg = r.dogs.filter((d) => d.mode || !d.sent), gs = r.geese.filter((g) => g.awake), gt = r.goats.filter((g) => g.mode || !g.sent);
-      for (const d of dg) d.sent = true; for (const g of gt) g.sent = true;
+      const dg = r.dogs.filter((d) => d.awake), gs = r.geese.filter((g) => g.awake), gt = r.goats.filter((g) => g.awake);
       r.slow = (r.slow + 1) % 10; const ps = players.length > 1 ? players.filter((p) => p.fresh || !r.slow).map((p) => { p.fresh = false; return [p.id, r2(p.x), r2(p.z), r2(p.yaw), p.mv, r2(p.y), p.ct || 0]; }) : [];
       if (ps.length || dg.length || gs.length || gt.length) all(r, { t: "snap", ts: now, ps, dogs: dg.map(dogView), geese: gs.map(gooseView), goats: gt.map(goatView) });
     }

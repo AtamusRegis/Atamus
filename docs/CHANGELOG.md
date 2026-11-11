@@ -6,6 +6,14 @@ and any rule decided. Use `git log` for the code detail (and for the older Atamu
 
 ## 2026-11-11
 
+- **Easier to see, dangers that roam, a bigger roll (owner).** The town's colors are calmer and the delivery spot is
+  hot pink (a tall beam, a spinning marker, a ring and the address), with a pink arrow on the ground round you
+  pointing the way (the edge-of-screen arrow is gone; the distance is on the parcel card). Dogs (41) roam their
+  districts instead of waiting in yards, geese (37) roam well out from their ponds, two goats wander each Cliffside
+  terrace. The reward roll spins big in the middle of the screen for 2.6 s, lands with a flash, then a card shows
+  what you got until you close it. No flying pets: the Parrot, Owl and Dragon became a Deer, Stegosaurus and
+  Unicorn (keeping their levels), and Glide is gone; the Triceratops is new. Fixed: getting stuck in the island
+  houses by the jump pads (they moved clear of the pads, and anyone inside something solid is moved out).
 - **Critter Courier (owner).** The game was remade from the Critter Courier design document, replacing Pet Delivery Co.
   rather than merging with it; the blocky couriers stay. Grab your Ready parcel off the post office conveyor, ride to
   its address, deliver in the mailbox's ring, and a reward roll spins. Five parcel tiers for five districts (Main
