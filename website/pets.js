@@ -672,27 +672,32 @@ function flyCoins(x, y, z, n) {   // coins fly from the mailbox to the counter o
     c.animate([{ transform: "translate(-50%,-50%) scale(1)", offset: 0 }, { transform: `translate(${(Math.random() - 0.5) * 160}px, ${-60 - Math.random() * 80}px) scale(1.2)`, offset: 0.35 }, { transform: `translate(${to.left + 18 - from.x}px, ${to.top + 16 - from.y}px) scale(0.6)`, offset: 1 }], { duration: 650 + k * 60, easing: "ease-in", delay: k * 45 }).onfinish = () => { c.remove(); sfx("coin"); $("coins").classList.remove("bump"); void $("coins").offsetWidth; $("coins").classList.add("bump"); }; }
 }
 
-// ---- gifts (owner, 2026-11-11): every delivery leaves a gift on the left of the screen, showing its rarity at once
-// (the box in the rarity's color, the rarity popping up over the mailbox). Gifts wait until you open them: tap one to
-// open it (it shakes, glowing, then bursts; tap again to skip the build-up), or Open all to open every one at once.
-// What came out stays under them until the next opening or you close it. ----
+// ---- delivered parcels (owner, 2026-11-11): each delivery leaves its parcel on the left of the screen with a small
+// sparkle beside it in the rarity's color (more sparkle the rarer), and the rarity pops up over the mailbox. A parcel
+// waits until you open it: tap it and it builds up (shakes, its sparkle growing) then shows the prize; tap while it
+// builds up to make it go faster. Open all opens every one at once. What came out stays until the next opening or you
+// close it. ----
 const gifts = []; let opening = null;
-const boxC = (tier) => (tier ? RARITY_C[tier] : "#c3ccd5");   // a Common gift is a light gray box (white wouldn't show its ribbon)
 function addGift(h, res, lvUp, mount) {
   gifts.push({ h, res, lvUp, mount }); heldCoins += res.coins; giftsUi();
   const c = RARITY_C[res.tier]; popup(RARITY[res.tier] + "!", c, h.mx, h.my + 3.2, h.mz, res.tier >= 2); sfx(res.tier >= 3 ? "shiny" : "pop"); if (res.tier >= 3) emit(h.mx, h.my + 2.6, h.mz, 10 + res.tier * 8, { colors: [c, "#ffffff"], speed: 4, up: 5, life: 1, size: 0.16 });
 }
+const sparkC = (tier) => (tier ? RARITY_C[tier] : "#ffffff");
+function parcelTile(g, big) {   // a parcel (its tier's label on the cardboard) and its rarity sparkle
+  const t = el(big ? "i" : "button", big ? "gtile big" : "gtile"); t.style.setProperty("--tc", TIERS[g.h.d].c); t.style.setProperty("--rc", sparkC(g.res.tier));
+  t.appendChild(el("i", "gpar")); const sp = el("i", "spark r" + g.res.tier); t.appendChild(sp); return t;
+}
 function giftsUi() {
   const q = $("gq"); q.innerHTML = "";
-  gifts.slice(0, 10).forEach((g, n) => { const b = el("button", "gbox t" + g.res.tier); b.style.setProperty("--gc", boxC(g.res.tier)); b.title = RARITY[g.res.tier]; b.onclick = () => openGift(n); b.addEventListener("pointerdown", (e) => e.stopPropagation()); q.appendChild(b); });
+  gifts.slice(0, 10).forEach((g, n) => { const b = parcelTile(g); b.title = RARITY[g.res.tier]; b.onclick = () => openGift(n); b.addEventListener("pointerdown", (e) => e.stopPropagation()); q.appendChild(b); });
   if (gifts.length > 10) q.appendChild(el("b", "disp", "+" + (gifts.length - 10)));
   $("gall").style.display = gifts.length > 1 ? "block" : "none";
   $("gifts").style.display = gifts.length || opening || $("gres").style.display === "flex" ? "flex" : "none";
 }
-function openGift(n) {   // one gift: it shakes and glows in its rarity's color, then bursts open
-  if (opening && !opening.done) skipGift(); const g = gifts.splice(n, 1)[0]; if (!g) return;
-  const c = boxC(g.res.tier), o = $("gopen"); opening = { g, t: 0, done: false, shook: 0 }; o.style.display = "flex"; o.style.setProperty("--gc", c);
-  $("gbig").className = "gbig"; $("glabel").textContent = RARITY[g.res.tier]; $("glabel").style.color = c; $("gres").style.display = "none"; giftsUi();
+function openGift(n) {   // one parcel: it shakes, its sparkle growing, then shows the prize
+  if (opening && !opening.done) { opening.done = true; landGifts([opening.g]); } const g = gifts.splice(n, 1)[0]; if (!g) return;
+  const o = $("gopen"); opening = { g, t: 0, done: false, shook: 0, speed: 1 }; o.style.display = "flex"; o.style.setProperty("--rc", sparkC(g.res.tier));
+  const slot = $("gbig"); slot.innerHTML = ""; slot.appendChild(parcelTile(g, true)); $("glabel").textContent = RARITY[g.res.tier]; $("glabel").style.color = sparkC(g.res.tier); $("gres").style.display = "none"; giftsUi();
 }
 function resultRows(list, R) {   // what came out of a gift (or several): coins, XP, Level Coupons, eggs, a mount
   const row = (icon, text) => { const d = el("div", "grow"); d.appendChild(icon); d.appendChild(el("b", "disp", text)); d.style.animationDelay = list.children.length * 120 + "ms"; list.appendChild(d); };
@@ -715,15 +720,15 @@ function landGifts(list) {   // one or more gifts open: their totals show under 
   const m = list.find((g) => g.mount); if (m) setTimeout(() => { selMount = m.mount.id; hatchShow("gift", m.mount); }, 900);
   hudDirty = true; giftsUi(); if (panel === "stable" || panel === "odds") renderPanel();
 }
-function skipGift() { if (opening && !opening.done) { opening.done = true; landGifts([opening.g]); } }
+function hurryGift() { if (opening && !opening.done) { opening.speed = Math.min(8, opening.speed * 2.5); sfx("tick"); } }   // a tap while it builds up: faster
 function openAll() { const list = (opening && !opening.done ? [opening.g] : []).concat(gifts.splice(0)); if (!list.length) return; landGifts(list); }
-$("gopen").onclick = skipGift; $("gall").onclick = openAll; $("gx").onclick = () => { $("gres").style.display = "none"; giftsUi(); };
+$("gopen").onclick = hurryGift; $("gall").onclick = openAll; $("gx").onclick = () => { $("gres").style.display = "none"; giftsUi(); };
 for (const id of ["gopen", "gall", "gx"]) $(id).addEventListener("pointerdown", (e) => e.stopPropagation());
 function levelFx() { sfx("level"); popup("LEVEL UP!", "#ffd84a", me.x, me.y + 3.2, me.z, true); for (let k = 0; k < 28; k++) { const a = (k / 28) * TAU; parts.length < PN && parts.push({ x: me.x, y: me.y + 0.3, z: me.z, vx: Math.cos(a) * 6, vy: 2.5, vz: Math.sin(a) * 6, t: 0, life: 0.8, size: 0.2, grav: 3, c: k % 2 ? "#ffd84a" : "#ffffff", r: k }); } }
-function stepGifts(dt) {   // the build-up: three shakes, each bigger, the glow growing, then it bursts
-  const o = opening; if (!o || o.done) return; o.t += dt; const T = 1.6, b = $("gbig");
-  const n = Math.floor((o.t / T) * 3.4); if (n > o.shook && n <= 3) { o.shook = n; sfx("wobble"); b.className = "gbig"; void b.offsetWidth; b.className = "gbig shake" + n; }
-  $("gopen").style.setProperty("--glow", (8 + (o.t / T) * 40).toFixed(0) + "px");
+function stepGifts(dt) {   // the build-up: three shakes, each bigger, the sparkle growing, then the prize
+  const o = opening; if (!o || o.done) return; o.t += dt * o.speed; const T = 2.2, b = $("gbig").firstChild;
+  const n = Math.floor((o.t / T) * 3.4); if (n > o.shook && n <= 3) { o.shook = n; sfx("wobble"); if (b) { b.classList.remove("shake1", "shake2", "shake3"); void b.offsetWidth; b.classList.add("shake" + n); } }
+  $("gopen").style.setProperty("--glow", (6 + (o.t / T) * 36).toFixed(0) + "px"); $("gopen").style.setProperty("--grow", (1 + (o.t / T) * 1.6).toFixed(2));
   if (o.t >= T) { o.done = true; landGifts([o.g]); }
 }
 let hudDirty = true, shownCoins = 0, heldCoins = 0, cardKey = "", myName = "", myRole = "player", myId = null, loggedIn = false;

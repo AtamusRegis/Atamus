@@ -6,6 +6,9 @@ and any rule decided. Use `git log` for the code detail (and for the older Atamu
 
 ## 2026-11-11
 
+- **Delivered parcels to open; jumping over dogs (owner).** Each delivery's parcel waits on the left with a sparkle in
+  its rarity's color; tap one to open it (tapping during the build-up speeds it up) or Open all. Dogs no longer bite
+  a courier jumping over them.
 - **Gifts you open (owner).** A delivery's gift shows its rarity straight away (its color, and the rarity over the
   mailbox) and waits on the left until you open it: tap one (it shakes and bursts; tap again to skip), or Open all.
 - **Gifts on the left (owner).** Each delivery's reward is a gift on the left of the screen instead of the big reel
