@@ -111,8 +111,21 @@ A parcel that breaks or is lost is gone; the conveyor always has the next one. *
 - Only from reward rolls. Basic: Common 70%, Uncommon 25%, Rare 5%. Rare: Uncommon 50%, Rare 38%, Epic 10%, Legendary
   2%. Legendary: Rare 50%, Epic 38%, Legendary 12%. The odds are on each egg in the Stable before you hatch.
 - Hatch from the Stable, no timer: the egg wobbles three times and opens. Any mount of the rolled rarity.
+- (owner, 2026-11-11) **Merging mounts:** four of the same mount with the same skin merge (the Stable's Merge button,
+  on any of them) into the best of the four (the highest level), which gets the next skin: normal, Shiny, Golden,
+  **Rainbow** (violet with a sea-green trim and a rainbow trail; only by merging). The other three go. A Golden or
+  Rainbow merge is announced to the server.
 - 1 in 100 is **Shiny** (a lighter coat and a sparkle trail), 1 in 1,000 **Golden** (a gold coat and trail); the whole
   server is told. Up to 60 mounts.
+
+## The tutorial
+
+(owner, 2026-11-11) A courier with no deliveries gets six short cards at the bottom of the screen (on narrow phones,
+under the parcel card), each with its own words (the owner asked for this explanation, an exception to "no helper
+text"): **Pick up parcels** (the ground arrow points at your parcel on the counter), **Drop them off**, **Open your
+parcels** (the parcels on the left outlined), **Stable**, **Upgrades** and **Stamp Meter** (their buttons, and the bar,
+outlined in pink). The first three move on when you do them; the rest with Next. Skip ends it. It's shown once (saved
+as a setting).
 
 ## The town
 

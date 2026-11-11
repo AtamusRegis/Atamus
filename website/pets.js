@@ -4,7 +4,7 @@
 // deliveries, rolls, damage, coins, mounts; this page shows the town (pets-world.js, shared with the server), moves you
 // and asks. Phone first: a thumb joystick, drag to look, pinch to zoom, big buttons.
 import * as THREE from "./vendor/three.module.min.js";
-import * as World from "./pets-world.js?v=1794439332";
+import * as World from "./pets-world.js?v=1794439868";
 
 const $ = (id) => document.getElementById(id);
 const { TAU, clamp, hyp, MOUNTS, TIERS, RARITY, RARITY_C, MODS, EGGS, UPGRADES } = World;
@@ -222,7 +222,7 @@ function petModel(sp, rider, va) {   // sp: a mount's kind, or { look, c, a, siz
   let riderG = null;
   const s = typeof sp === "object" ? sp : World.MOUNTS[sp], L = LOOK[s.look || sp] || LOOK.pup, k = s.size, g = new THREE.Group(), body = new THREE.Group(); g.add(body);
   const legs = [], wings = [], tails = [], head = new THREE.Group();
-  const C = va === 2 ? "#f6c53a" : va === 1 ? shiny(s.c) : s.c, A = va === 2 ? "#fff3b8" : va === 1 ? shiny(s.a) : s.a;
+  const C = va === 3 ? "#b06bff" : va === 2 ? "#f6c53a" : va === 1 ? shiny(s.c) : s.c, A = va === 3 ? "#5ff2d8" : va === 2 ? "#fff3b8" : va === 1 ? shiny(s.a) : s.a;   // Rainbow: violet with a sea-green trim, and a rainbow trail
   let seat = 1, seatZ = -0.1 * k;
   const eyes = (hs, z, big) => { for (const ex of [-1, 1]) { if (big) { ball(hs * 0.2, "#ffffff", ex * hs * 0.24, hs * 0.08, z, head); ball(hs * 0.11, "#1d232a", ex * hs * 0.24, hs * 0.08, z + hs * 0.12, head); } else ball(hs * 0.09, "#1d232a", ex * hs * 0.26, hs * 0.12, z, head); } };
   const tail = (type, y, z) => {
@@ -583,7 +583,8 @@ function stepMe(dt) {
   if (me.ground && me.moving) { me.stepT -= dt; if (me.stepT <= 0) { me.stepT = 0.16; trail(me.x, me.y, me.z, q, kind); } }
 }
 function trail(x, y, z, q, kind) {
-  if (q.va === 2) emit(x, y + 0.5, z, 2, { colors: ["#ffd84a", "#fff3b8"], speed: 0.8, up: 1.2, life: 0.8, grav: -1, size: 0.14 });
+  if (q.va === 3) emit(x, y + 0.5, z, 3, { colors: RAINBOW, speed: 0.9, up: 1.3, life: 0.9, grav: -1, size: 0.15 });
+  else if (q.va === 2) emit(x, y + 0.5, z, 2, { colors: ["#ffd84a", "#fff3b8"], speed: 0.8, up: 1.2, life: 0.8, grav: -1, size: 0.14 });
   else if (q.va === 1) emit(x, y + 0.5, z, 2, { colors: ["#bfe6ff", "#ffffff", "#ffc7f0"], speed: 0.8, up: 1.2, life: 0.8, grav: -1, size: 0.12 });
   if (q.lv >= World.MAX_LV) emit(x, y + 0.1, z, 2, { colors: ["#ffd84a", "#ffffff"], speed: 1.2, up: 1.5, life: 0.6, grav: 2, size: 0.12 });
   else if (kind === "mud") emit(x, y + 0.1, z, 2, { colors: ["#6b4d33"], speed: 1.5, up: 2, life: 0.4, grav: 9, size: 0.14 });
@@ -738,6 +739,28 @@ function landGifts(list, lvUp) {   // what the server says came out: totals unde
 function hurryGift() { if (opening && !opening.all) { opening.speed = Math.min(8, opening.speed * 2.5); sfx("tick"); } }   // a tap while it builds up: faster
 $("gopen").onclick = hurryGift; $("gall").onclick = openAll; $("gx").onclick = () => { $("gres").style.display = "none"; giftsUi(); };
 for (const id of ["gopen", "gall", "gx"]) $(id).addEventListener("pointerdown", (e) => e.stopPropagation());
+// ---- the new courier's tutorial (owner, 2026-11-11): six short cards at the bottom of the screen, each pointing at what
+// it explains: picking up parcels, dropping them off, opening them, the Stable, Upgrades and the Stamp Meter. The first
+// three move on when you do them; the rest with Next. Skip ends it; it's shown once (saved), to couriers with no
+// deliveries yet. ----
+const TUT = [
+  { t: "Pick up parcels", p: "Ride into your parcel on the post office counter. The pink arrow shows the way.", on: "grab" },
+  { t: "Drop them off", p: "Follow the pink arrow to the pink beam and ride into the ring by the mailbox.", on: "deliver" },
+  { t: "Open your parcels", p: "Delivered parcels wait on the left. Tap one to open it (tap again to hurry it), or Open all. Four of one rarity merge into a better one.", on: "open", hi: "gifts" },
+  { t: "Stable", p: "Your mounts: ride one, level it up with coins or Level Coupons, hatch eggs, and merge four of the same into a cooler skin.", hi: "mstable" },
+  { t: "Upgrades", p: "Spend coins on Route Permits to open farther neighborhoods, and on better pay, luck and sturdier boxes.", hi: "mup" },
+  { t: "Stamp Meter", p: "The bar on the left gets a stamp for every Common or Uncommon parcel. At 25 the next is Rare, at 100 Epic.", hi: "stamp" },
+];
+let tut = -1;
+function tutShow(n) {
+  for (const s of TUT) if (s.hi) $(s.hi).classList.remove("tuthi");
+  tut = n; const c = $("tut"); if (n < 0 || n >= TUT.length) { c.style.display = "none"; if (n >= TUT.length || n === -2) { save.set.tut = true; netSend({ t: "set", tut: true }); } tut = -1; return; }
+  const s = TUT[n]; c.style.display = "flex"; $("tutt").textContent = s.t; $("tutp").textContent = s.p; $("tutn").textContent = n + 1 + " / " + TUT.length; $("tutnext").style.display = s.on ? "none" : "block"; if (s.hi) $(s.hi).classList.add("tuthi");
+  c.classList.remove("in"); void c.offsetWidth; c.classList.add("in");
+}
+function tutDid(what) { if (tut >= 0 && TUT[tut].on === what) setTimeout(() => tutShow(tut + 1), what === "open" ? 1800 : 900); }
+$("tutnext").onclick = () => tutShow(tut + 1); $("tutskip").onclick = () => tutShow(-2);
+for (const id of ["tutnext", "tutskip"]) $(id).addEventListener("pointerdown", (e) => e.stopPropagation());
 function levelFx() { sfx("level"); popup("LEVEL UP!", "#ffd84a", me.x, me.y + 3.2, me.z, true); for (let k = 0; k < 28; k++) { const a = (k / 28) * TAU; parts.length < PN && parts.push({ x: me.x, y: me.y + 0.3, z: me.z, vx: Math.cos(a) * 6, vy: 2.5, vz: Math.sin(a) * 6, t: 0, life: 0.8, size: 0.2, grav: 3, c: k % 2 ? "#ffd84a" : "#ffffff", r: k }); } }
 function stepGifts(dt) {   // the build-up: three shakes, each bigger, the sparkle growing, then the prize (once the server's said)
   const o = opening; if (!o) return; o.t += dt * (o.speed || 1);
@@ -771,6 +794,7 @@ function hud(dt) {
   let tg = null, best = Infinity; const consider = (x, y, z, c) => { const d = hyp(x - me.x, z - me.z); if (d < best) { best = d; tg = { x, y, z, c }; } };
   for (const q of bag) { const h = World.houses[q.house]; consider(h.mx, h.my, h.mz, POI); }
   if (!tg) { for (const q of dropped) consider(q.x, q.y, q.z, "#ffd84a"); for (const q of stolen) { const g = gooseMesh[q.goose]; if (g) consider(g.x, g.y, g.z, "#ff3b30"); } }
+  if (!tg && tut === 0 && belt.ready) { const q = readyAt(); tg = { x: q.x, y: 1, z: q.z, c: POI }; }   // the tutorial's first step: the arrow points at your parcel on the counter
   stepArrow(t, tg);
   if (!hudDirty) return; hudDirty = false;
   $("stampn").textContent = save.stamp; $("stampfill").style.height = clamp(save.stamp, 0, 100) + "%";
@@ -801,6 +825,7 @@ function renderPanel() {
     const ar = el("div", "stat ab" + (tier ? "" : " off")); ar.appendChild(el("span", "", World.ABILITY[M.ab])); const pp = el("div", "pips"); for (const need of [5, 10, 20]) pp.appendChild(el("i", m.lv >= need ? "on" : "", need)); ar.appendChild(pp); info.appendChild(ar);
     const acts = el("div", "acts"); if (m.id !== save.ride) acts.appendChild(btn("Ride", () => netSend({ t: "equip", id: m.id }), "go"));
     if (m.lv < World.MAX_LV) { acts.appendChild(coinBtn(World.levelCost(m.lv), () => netSend({ t: "level", id: m.id }), save.coins >= World.levelCost(m.lv))); const cb = btn("Coupon " + save.coupons, () => netSend({ t: "coupon", id: m.id }), "coupon"); cb.disabled = save.coupons < 1; acts.appendChild(cb); }
+    if (World.fuseSet(save.mounts, m.id)) acts.appendChild(btn("Merge", () => netSend({ t: "fuse", id: m.id }), "fuse"));   // four the same: the next skin
     info.appendChild(acts); d.appendChild(info);
     const eggs = el("div", "eggs"); for (const k of Object.keys(EGGS)) { const E = EGGS[k], c = el("div", "eggc"), e = el("i", "egg"); e.style.background = E.c; c.appendChild(e); c.appendChild(el("b", "", E.name)); c.appendChild(oddsRow(E.odds)); const hb = btn("Hatch " + save.eggs[k], () => netSend({ t: "hatch", kind: k }), "go"); hb.disabled = save.eggs[k] < 1 || save.mounts.length >= World.MOUNT_CAP; c.appendChild(hb); eggs.appendChild(c); }
     body.appendChild(d); body.appendChild(eggs); body.appendChild(grid);
@@ -849,9 +874,9 @@ for (const [id, k] of [["mstable", "stable"], ["mup", "up"], ["modds", "odds"], 
 
 // ---- hatching: the egg wobbles three times, cracks, and there's your mount ----
 function hatchShow(kind, m) {
-  const o = $("hatch"), egg = $("hegg"), im = $("himg"), nm = $("hname"), rr = $("hrar"), M = MOUNTS[m.sp], c = RARITY_C[M.r]; o.style.display = "flex"; egg.style.display = "block"; egg.style.background = EGGS[kind] ? EGGS[kind].c : ""; im.style.display = nm.style.display = rr.style.display = "none"; egg.className = kind === "gift" ? "egg gift wob" : "egg wob";   // a new mount as a gift comes in a box
+  const o = $("hatch"), egg = $("hegg"), im = $("himg"), nm = $("hname"), rr = $("hrar"), M = MOUNTS[m.sp], c = RARITY_C[M.r]; o.style.display = "flex"; egg.style.display = "block"; egg.style.background = EGGS[kind] ? EGGS[kind].c : ""; im.style.display = nm.style.display = rr.style.display = "none"; egg.className = kind === "gift" ? "egg gift wob" : kind === "fuse" ? "egg fuse wob" : "egg wob";   // a new mount as a gift comes in a box
   for (const k of [0, 1, 2]) setTimeout(() => sfx("wobble"), 150 + k * 420);
-  setTimeout(() => { egg.style.display = "none"; im.src = portrait(m.sp, m.va); im.style.display = nm.style.display = rr.style.display = "block"; nm.textContent = mountName(m); rr.textContent = RARITY[M.r]; rr.style.color = c; o.style.setProperty("--glow", m.va === 2 ? "#ffd84a" : m.va === 1 ? "#bfe6ff" : c); sfx("hatch"); if (m.va) sfx("shiny"); flash(c); }, 1500);
+  setTimeout(() => { egg.style.display = "none"; im.src = portrait(m.sp, m.va); im.style.display = nm.style.display = rr.style.display = "block"; nm.textContent = mountName(m); rr.textContent = RARITY[M.r]; rr.style.color = c; o.style.setProperty("--glow", m.va === 3 ? "#b06bff" : m.va === 2 ? "#ffd84a" : m.va === 1 ? "#bfe6ff" : c); sfx("hatch"); if (m.va) sfx("shiny"); flash(c); }, 1500);
   setTimeout(() => { o.onclick = () => { o.style.display = "none"; o.onclick = null; }; }, 1900);
 }
 
@@ -945,7 +970,7 @@ function onNet(m) {
       if (stale(m.web, false, m.by)) return;
       setTok(m.token); const again = loggedIn && myName === m.name; myName = m.name; myId = m.id; myRole = m.role || "player"; netOk = true; loggedIn = true; clockOff = m.now - Date.now();
       $("login").style.display = "none"; $("hud").style.display = "block"; if (document.activeElement && document.activeElement.blur) document.activeElement.blur();
-      save = World.cleanData(m.data); shownCoins = save.coins; $("coinn").textContent = fmt(save.coins); remount(); setVolumes(); giftsUi();
+      save = World.cleanData(m.data); shownCoins = save.coins; $("coinn").textContent = fmt(save.coins); remount(); setVolumes(); giftsUi(); if (!again && !save.set.tut && !save.stats.del && tut < 0) setTimeout(() => tutShow(0), 900);
       if (!again) { me.x = m.x; me.z = m.z; me.y = 0; me.yaw = Math.PI / 2; cam.yaw = -Math.PI / 2; msgs.innerHTML = ""; }
       me.foot = false; me.stun = 0; me.transit = null; me.hidden = false;
       for (const p of m.players) addOther(p); setNpc(m); for (const g of gooseMesh) { g.x = g.tx; g.z = g.tz; g.y = g.ty; } for (const d of dogMesh) { d.x = d.tx; d.z = d.tz; d.y = d.ty; } for (const g of goatMesh) { g.x = g.tx; g.z = g.tz; } hudDirty = true; sendPos(true);
@@ -974,7 +999,7 @@ function onNet(m) {
     case "bag": {   // my parcels changed; ev says how
       const ev = m.ev || {}, before = bag.length; bag = m.bag || []; stolen = m.stolen || []; dropped = m.dropped || []; cap = m.cap || 1; setCarry(mine, bagCarry()); setTargets(); syncDropped(); hudDirty = true; cardKey = "";
       const q = bag.find((k) => k.pid === ev.pid);
-      if (ev.k === "grab") { sfx("grab"); me.squash = 0.25; if (q && q.mod === "golden") { sfx("shiny"); banner("GOLDEN PARCEL!", "#ffd84a"); } if (bag.length > 1) popup(bag.length + " / " + cap, "#ffffff", me.x, me.y + 3, me.z); }
+      if (ev.k === "grab") { tutDid("grab"); sfx("grab"); me.squash = 0.25; if (q && q.mod === "golden") { sfx("shiny"); banner("GOLDEN PARCEL!", "#ffd84a"); } if (bag.length > 1) popup(bag.length + " / " + cap, "#ffffff", me.x, me.y + 3, me.z); }
       else if (ev.k === "pickup") { sfx("grab"); me.squash = 0.25; if (ev.bonus) { popup("+" + ev.bonus, "#ffd84a", me.x, me.y + 2.6, me.z); save.coins = ev.coins; flyCoins(me.x, me.y + 2, me.z, 3); } }
       else if (ev.k === "crack") { sfx("crack"); cam.shake = Math.max(cam.shake, 0.35); flash("#e5534b"); popup("-20%", "#ff6b6b", me.x, me.y + 2.8, me.z); emit(me.x, me.y + 1.4, me.z, 12, { colors: ["#c89a5e", "#8a5a34"], speed: 4, up: 3, life: 0.6, size: 0.14 }); }
       else if (ev.k === "lost") { sfx("smash"); cam.shake = Math.max(cam.shake, 0.5); flash("#e5534b"); banner(ev.why === "broke" ? "PARCEL BROKE!" : "PARCEL LOST!", "#ff6b6b"); emit(me.x, me.y + 1.4, me.z, 26, { colors: ["#c89a5e", "#8a5a34", "#fff8e6"], speed: 6, up: 5, life: 0.9 }); }
@@ -984,11 +1009,11 @@ function onNet(m) {
     case "delivered": {
       const h = World.houses[m.house]; sfx("deliver"); emit(h.mx, h.my + 1.6, h.mz, 60, { colors: CONFETTI, speed: 6, up: 8, life: 1.3 }); me.squash = 0.2;
       popup("+" + fmt(m.coins), "#ffd84a", h.mx, h.my + 2.4, h.mz); flyCoins(h.mx, h.my + 1.6, h.mz, 5); houseMesh[m.house].shake = 0.01; houseMesh[m.house].pop = 0.3;
-      save = World.cleanData(m.data); if (m.lvUp) { remount(); setTimeout(levelFx, 300); } delivered(h, m.gift, m.near, m.merges); break;
+      save = World.cleanData(m.data); if (m.lvUp) { remount(); setTimeout(levelFx, 300); } delivered(h, m.gift, m.near, m.merges); tutDid("deliver"); break;
     }
     case "opened": {   // what came out of the parcels I opened
       save = World.cleanData(m.data); if (m.lvUp) remount();
-      if (opening) opening.res = { list: m.list, lvUp: m.lvUp }; else landGifts(m.list, m.lvUp); break;
+      if (opening) opening.res = { list: m.list, lvUp: m.lvUp }; else landGifts(m.list, m.lvUp); tutDid("open"); break;
     }
     case "stun": me.stun = m.s; if (me.transit && me.transit.k !== "pipe") me.transit = null; knockedOff(); sfx("stun"); cam.shake = Math.max(cam.shake, 0.5); flash(m.why === "kick" ? "#ffffff" : "#e5534b"); if (m.why === "dog") sfx("growl"); break;
     case "knock": me.px = m.x; me.pz = m.z; me.vy = m.y; me.ground = false; sfx("kick"); cam.shake = Math.max(cam.shake, 0.5); break;
@@ -999,9 +1024,10 @@ function onNet(m) {
     case "dive": { const g = gooseModel(true); g.g.position.set(m.x + 9, m.y + 14, m.z); g.g.scale.setScalar(1.4); scene.add(g.g); divers.push({ g, x: m.x, y: m.y, z: m.z, t: 0, s: m.s }); if (hyp(m.x - me.x, m.z - me.z) < 40) sfx("honk"); groundMark(m.x, m.y, m.z, World.SKYGOOSE.r, m.s, "#2b3a66"); break; }
     case "fx": onFx(m); break;
     case "leveled": { adopt(m.data); if (m.id === save.ride) { remount(); levelFx(); } else sfx("level"); break; }
+    case "fused": adopt(m.data); selMount = m.m.id; if (panel === "stable") renderPanel(); hatchShow("fuse", m.m); break;
     case "hatched": adopt(m.data); selMount = m.m.id; if (panel === "stable") renderPanel(); hatchShow(m.kind, m.m); break;
     case "upgraded": adopt(m.data); remount(); sfx("buy"); emit(me.x, me.y + 2, me.z, 30, { colors: ["#ffd84a", "#ffffff", "#7ee08a"], speed: 4, up: 5, life: 1 }); break;
-    case "announce": { const a = $("announce"); a.textContent = m.name + " hatched a " + World.VARIANTS[m.va] + " " + MOUNTS[m.sp].name + "!"; a.style.color = m.va === 2 ? "#ffd84a" : "#bfe6ff"; a.classList.remove("go"); void a.offsetWidth; a.classList.add("go"); sfx("shiny"); break; }
+    case "announce": { const a = $("announce"); a.textContent = m.name + (m.fused ? " merged a " : " hatched a ") + World.VARIANTS[m.va] + " " + MOUNTS[m.sp].name + "!"; a.style.color = m.va === 3 ? "#d9a6ff" : m.va === 2 ? "#ffd84a" : "#bfe6ff"; a.classList.remove("go"); void a.offsetWidth; a.classList.add("go"); sfx("shiny"); break; }
     case "chat": { const o = others.get(m.id); chatLine(o ? o.name : m.name, m.text); if (o) bubble(o.rig, m.text); break; }
     case "invited": invites.push({ from: m.from, name: m.name, until: performance.now() + 28000 }); renderInvite(); break;
     case "declined": toast(m.name + " ✕"); break;
