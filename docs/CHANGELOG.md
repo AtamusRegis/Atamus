@@ -6,6 +6,7 @@ and any rule decided. Use `git log` for the code detail (and for the older Atamu
 
 ## 2026-11-10
 
+- **Lighter dirt (owner).** Block sides are a lighter, sandier brown.
 - **Fix: pickup with few mailboxes (owner).** With fewer addresses than your bag holds, the pickup ring no longer keeps flashing "+2" without adding parcels: it adds what's left, once.
 - **Dirt sides, no green roofs, closed gables (owner).** Block sides are dirt brown; town houses and the Cabin no longer get green roofs; player houses' pitched roofs have their gable ends filled in.
 - **Mailbox blue; no more glowing limbs (owner).** Mailboxes are the bright blue of animal control's light. Characters' lit legs and arms no longer blow out pale: the brightest parts ease off, the ground's bounced light is neutral, the night glow is softer, and boost chevrons no longer draw over the feet of anyone standing on them.

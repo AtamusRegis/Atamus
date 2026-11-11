@@ -60,8 +60,8 @@ Asked (owner): a web game on atamus.io (not Roblox), on its own page; the cargo 
   Delete or Del takes it away, a tap elsewhere lets go), and a tap with Erase takes it away. A
   plot placed again moves. The camera zooms out further while editing. ✕ or Escape closes it. Everyone sees each
   change at once; parcels for houses that changed are dropped.
-- **Looks (owner, 2026-11-10):** block tops grass in three shades (roads paved gray), sides earth (drawn in color, dirt
-  brown, owner 2026-11-10), all with a fine
+- **Looks (owner, 2026-11-10):** block tops grass in three shades (roads paved gray), sides earth (drawn in color, a light
+  dirt brown, owner 2026-11-10), all with a fine
   speckled texture; sides against a neighboring block aren't drawn.
 - **Sky (owner, 2026-11-08), the same for everyone:** normally a day lasts 20 minutes (a little more day than night):
   the sun moves, and the sky and fog go through dusk to night (stars, house windows light up, lights dim). Every 4
