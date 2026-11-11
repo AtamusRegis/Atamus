@@ -76,7 +76,7 @@ renderer.shadowMap.enabled = false;   // (owner, 2026-11-09) baked shadows inste
 const scene = new THREE.Scene();
 scene.background = new THREE.Color("#8fd3ff"); scene.fog = new THREE.Fog("#bfe6ff", 150, 560);
 const camera = new THREE.PerspectiveCamera(55, 1, 0.5, 1000);
-{ const hemi = new THREE.HemisphereLight("#ffffff", "#7aa35a", 1.1); hemi.layers.enableAll(); scene.add(hemi); }   // (lights reach the in-color layer too)
+{ const hemi = new THREE.HemisphereLight("#ffffff", "#8c8c8c", 1.1); hemi.layers.enableAll(); scene.add(hemi); }   // (lights reach the in-color layer too; owner 2026-11-10: the light bounced from the ground is neutral, not green, so limbs it lights do not turn pale green)
 const sun = new THREE.DirectionalLight("#fff6e0", 1.6); sun.layers.enableAll(); sun.castShadow = true; sun.shadow.mapSize.set(1024, 1024); sun.shadow.bias = -0.0006; sun.shadow.normalBias = 0.05;   // (owner, 2026-11-08: flickering) no shadow acne
 Object.assign(sun.shadow.camera, { left: -45, right: 45, top: 45, bottom: -45, near: 1, far: 200 }); scene.add(sun, sun.target);
 const dummy = new THREE.Object3D();
@@ -165,7 +165,7 @@ let padMat;
   // (owner, 2026-11-10) chevrons drawn by a shader, with no edge cutting them off: each comes in faintly where the pad
   // starts and fades away as it runs to the far end. uv: x across the pad (3.4 m), y along it (5 m)
   padMat = new THREE.ShaderMaterial({
-    uniforms: { t: { value: 0 }, dir: { value: 1 } }, transparent: true, depthWrite: false, polygonOffset: true, polygonOffsetFactor: -8, polygonOffsetUnits: -8,
+    uniforms: { t: { value: 0 }, dir: { value: 1 } }, transparent: true, depthWrite: false, polygonOffset: true, polygonOffsetFactor: -1, polygonOffsetUnits: -2,   // (owner, 2026-11-10) only a nudge: more drew the chevrons over the feet of anyone standing on them
     vertexShader: "varying vec2 vUv; void main() { vUv = uv; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }",
     fragmentShader: `uniform float t; uniform float dir; varying vec2 vUv;
       void main() {
@@ -194,7 +194,7 @@ function buildPads(parent) {
   for (let i = BOOSTS.length - 1; i >= 0; i--) if (BOOSTS[i].k === "pad") BOOSTS.splice(i, 1);
   for (const p of World.boosts) {
     const g = PAD_G.clone(), pos = g.attributes.position, c = Math.cos(p.yaw), sn = Math.sin(p.yaw);
-    for (let n = 0; n < pos.count; n++) { const lx = pos.getX(n), lz = pos.getZ(n), x = p.x + lx * c + lz * sn, z = p.z - lx * sn + lz * c; pos.setXYZ(n, x, World.surfaceAt(x, z, p.y + 2) + 0.06, z); }
+    for (let n = 0; n < pos.count; n++) { const lx = pos.getX(n), lz = pos.getZ(n), x = p.x + lx * c + lz * sn, z = p.z - lx * sn + lz * c; pos.setXYZ(n, x, World.surfaceAt(x, z, p.y + 2) + 0.08, z); }
     const b = { k: "pad", x: p.x, y: p.y, z: p.z, yaw: p.yaw, r: 3 };
     b.m = padMat.clone(); b.m.uniforms = { t: padMat.uniforms.t, dir: { value: 1 } };   // each pad runs its own way (away from you), on the shared clock
     b.g = new THREE.Mesh(g, b.m); b.g.renderOrder = 2; parent.add(inColor(b.g)); BOOSTS.push(b);
@@ -356,7 +356,7 @@ function buildThings(parent) {
   const wm = new THREE.InstancedMesh(BOX, windowM, Math.max(1, houses.length * 2)); wm.count = houses.length * 2;
   houses.forEach((h, i) => { for (const sd of [-1, 1]) { const lx = sd * 2.8, lz = 4.53; dummy.position.set(h.x + lx * Math.cos(h.yaw) + lz * Math.sin(h.yaw), h.base + 2.5, h.z - lx * Math.sin(h.yaw) + lz * Math.cos(h.yaw)); dummy.rotation.set(0, h.yaw, 0); dummy.scale.set(h.box ? HIDE : 1.5, h.box ? HIDE : 1.3, 0.1); dummy.updateMatrix(); wm.setMatrixAt(i * 2 + (sd > 0 ? 1 : 0), dummy.matrix); } }); parent.add(wm);
   instanced(BOX, "#6b7680", houses.length, (i, d) => { const h = houses[i]; d.position.set(h.mx, h.my + 0.55, h.mz); d.scale.set(0.15, 1.1, 0.15); }, parent);
-  inColor(instanced(BOX, "#2f7de1", houses.length, (i, d) => { const h = houses[i]; d.position.set(h.mx, h.my + 1.25, h.mz); d.scale.set(0.8, 0.45, 0.6); d.rotation.y = h.yaw; }, parent));   // (owner, 2026-11-10) blue, in color: you deliver to them
+  { const mb = inColor(instanced(BOX, "#3a7aff", houses.length, (i, d) => { const h = houses[i]; d.position.set(h.mx, h.my + 1.25, h.mz); d.scale.set(0.8, 0.45, 0.6); d.rotation.y = h.yaw; }, parent)); mb.material = lightB; }   // (owner, 2026-11-10) the blue of animal control's light, in color: you deliver to them
   instanced(TRUNK, "#7a4f28", trees.length, (i, d) => { const t = trees[i], h = pineH(t); d.position.set(t.x, t.y, t.z); d.scale.set(1 + h / 30, h * 0.35, 1 + h / 30); }, parent);
   for (const [a, hh, r] of PINE_TIERS) instanced(PINE_CONE, "#3f8f4a", trees.length, (i, d) => { const t = trees[i], h = pineH(t), w = r * h / 10.5; d.position.set(t.x, t.y + a * h, t.z); d.scale.set(w, hh * h, w); d.rotation.y = (t.x * 0.37 + t.z * 0.11 + a * 2) % 6.28; }, parent);
 }
@@ -542,7 +542,7 @@ const FACE_M = faceMat(SKIN);
 // (owner, 2026-11-09) people and pets stay bright at night: their materials are their own copies that glow with their
 // own colour as it gets dark (nightGlow), and a soft dark spot lies on the ground under each (blobs)
 const CHAR_MATS = new Map();   // (owner, 2026-11-09: light parts too bright) the night glow lifts colors to about half, not past them
-function charMat(m) { if (!CHAR_MATS.has(m)) { const c = m.clone(); c.emissive = m.color ? m.color.clone().multiplyScalar(0.45) : new THREE.Color("#737373"); c.emissiveMap = m.map || null; c.emissiveIntensity = nightGlow; CHAR_MATS.set(m, c); } return CHAR_MATS.get(m); }
+function charMat(m) { if (!CHAR_MATS.has(m)) { const c = m.clone(); c.emissive = m.color ? m.color.clone().multiplyScalar(0.32) : new THREE.Color("#525252"); c.emissiveMap = m.map || null; c.emissiveIntensity = nightGlow; CHAR_MATS.set(m, c); } return CHAR_MATS.get(m); }
 let nightGlow = 0;
 function brighten(g) { g.traverse((o) => { if (o.isMesh && o.material && o.material.isMeshLambertMaterial && !CHAR_MATS.has(o.material) && ![...CHAR_MATS.values()].includes(o.material)) o.material = charMat(o.material); }); return g; }
 const BLOB_TEX = (() => { const c = document.createElement("canvas"); c.width = c.height = 64; const g = c.getContext("2d"), r = g.createRadialGradient(32, 32, 0, 32, 32, 32); r.addColorStop(0, "rgba(0,0,0,0.42)"); r.addColorStop(0.6, "rgba(0,0,0,0.22)"); r.addColorStop(1, "rgba(0,0,0,0)"); g.fillStyle = r; g.fillRect(0, 0, 64, 64); return new THREE.CanvasTexture(c); })();
@@ -1146,11 +1146,12 @@ const sketchMat = new THREE.ShaderMaterial({
     void main() {
       // (owner, 2026-11-09: no outlines, no hatching) the world in plain shades of gray: each pixel's brightness, its
       // textures and shading kept
-      float L = min(1.0, lum(vUv) * gain);   // gain: the night drawn a little lighter
+      float x = lum(vUv) * gain;   // gain: the night drawn a little lighter
+      float L = x < 0.75 ? x : 0.75 + 0.25 * (1.0 - exp(-(x - 0.75) / 0.25));   // (owner, 2026-11-10: lit limbs blew out white) a soft shoulder: the brightest parts ease toward white, never clip
       // (owner, 2026-11-10) grass and trees keep some green: part of their own color where green leads
       vec3 c = pow(max(texture2D(tColor, vUv).rgb, 0.0), vec3(1.0 / 2.2)); float gd = c.g - max(c.r, c.b);
       vec3 tint = (c - vec3(dot(c, vec3(0.299, 0.587, 0.114)))) * 0.9 * smoothstep(0.01, 0.08, gd);
-      gl_FragColor = vec4(clamp(vec3(L) + tint, 0.0, 1.0), 1.0);
+      gl_FragColor = vec4(clamp(vec3(L) + tint * (1.0 - smoothstep(0.7, 1.0, x)), 0.0, 1.0), 1.0);
       gl_FragDepthEXT = min(1.0, texture2D(tDepth, vUv).r + 0.00002);   // the world's depth (a hair farther, so rings on the ground never flicker), so what's drawn in color after is hidden behind things
     }`,
   depthTest: true, depthFunc: THREE.AlwaysDepth, depthWrite: true,

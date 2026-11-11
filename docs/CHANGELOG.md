@@ -6,6 +6,7 @@ and any rule decided. Use `git log` for the code detail (and for the older Atamu
 
 ## 2026-11-10
 
+- **Mailbox blue; no more glowing limbs (owner).** Mailboxes are the bright blue of animal control's light. Characters' lit legs and arms no longer blow out pale: the brightest parts ease off, the ground's bounced light is neutral, the night glow is softer, and boost chevrons no longer draw over the feet of anyone standing on them.
 - **Corner roads (owner).** Build Town has Road Corner (half road, half grass, cut corner to corner) and Half Road (just the road half) to round off turns; vans drive round them.
 - **Greener (owner).** Grass and trees show much more of their green in the gray look.
 - **Pines, blue mailboxes, a hint of green; vehicles in the editor (owner).** Trees are tall pines, three to four blocks high; mailboxes are blue and in color; grass and trees keep a very slight green; helicopters shine a faint red beam down to their circle by day too. In Build Town, vans and helicopters can be selected where they are and deleted.
