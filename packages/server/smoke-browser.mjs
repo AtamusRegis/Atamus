@@ -49,13 +49,13 @@ let step = "open the game page", browser2 = null;
 try {
   step = "create an account"; await join(page, "Nyssary");
   if (!(await page.locator("canvas").count())) problems.push("no game canvas");
+  who("Nyssary").ready = { tier: 0, mod: "express" };   // a known parcel (a fast machine reaches the conveyor during the ride below)
   step = "ride for a moment";
   const z0 = await page.evaluate(() => window.Pets.me.z);
   await page.keyboard.down("KeyW"); await page.waitForTimeout(1500); await page.keyboard.up("KeyW");
   await until(page, (z) => window.Pets.me.z < z - 1, "W didn't move the mount", z0, 3000);
   step = "jump"; await page.keyboard.press("Space"); await until(page, () => window.Pets.me.y > 0.2, "Space didn't jump", null, 3000);
   step = "grab a parcel off the conveyor";
-  who("Nyssary").ready = { tier: 0, mod: "express" };
   for (let i = 0; i < 40 && !(await page.evaluate(() => !!window.Pets.parcel)); i++) { await page.evaluate(() => { const P = window.Pets, q = P.readyAt(), d = Math.hypot(q.x, q.z); P.teleport(q.x * (1 + 1.6 / d), q.z * (1 + 1.6 / d)); }); await page.waitForTimeout(250); }
   await until(page, () => !!window.Pets.parcel, "no parcel grabbed");
   await until(page, () => getComputedStyle(document.getElementById("card")).display !== "none" && getComputedStyle(document.getElementById("way")).display !== "none", "the parcel card didn't show");
