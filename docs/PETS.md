@@ -20,6 +20,8 @@ Asked (owner): a web game on atamus.io (not Roblox), on its own page; the cargo 
   Everything snaps to the grid. Built from `website/pets-world.js`, which the server uses too (the two copies must
   match; `scripts/check.sh` compares them); the server keeps the world in the database (`pet_world`) and sends it with
   the welcome, and every change to everyone.
+- Taking in and drawing the world never stops logging in (owner, 2026-11-10): each part (blocks, things, pads,
+  vehicles, lots, van points, map) is drawn on its own, and one that fails is skipped and logged.
 - **It starts as just the square (owner, 2026-11-10):** a round island of ground tiles the size of the old square
   (tiles whose middle is within 64 m of the center), with the square's buildings, which stay where they are.
 - **Standing on blocks:** blocks are solid boxes (owner, 2026-11-10): pets stand on the highest block top at most a
