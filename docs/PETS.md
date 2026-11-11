@@ -136,7 +136,8 @@ Asked (owner): a web game on atamus.io (not Roblox), on its own page; the cargo 
 - **Gray look (owner, 2026-11-09: no outlines, no hatching):** the world is drawn in plain shades of gray: a screen pass
   turns each pixel into its brightness, keeping textures and shading; nights are brightened so it stays readable.
   Players (riding or on foot) and pets, yours, others' and those in pens, are drawn in full color (owner,
-  2026-11-10); townsfolk stay gray.
+  2026-11-10); townsfolk stay gray. Everything in color is lit with the same night lift as the gray world, so players
+  and pets are evenly lit at any hour.
   Grass and trees keep their green (owner, 2026-11-10: most of a pixel's own color where green leads; stronger the same
   day after "still too gray"). No roof is green (owner, 2026-11-10). The brightest parts ease toward white instead of clipping, and
   the light bounced up from the ground is neutral gray (owner, 2026-11-10: lit limbs were blowing out pale).
@@ -214,9 +215,9 @@ Asked (owner): a web game on atamus.io (not Roblox), on its own page; the cargo 
   lights the ground, houses and pets where it lands, and the beam stops where it hits. **A parcel carrier inside the
   beam (anywhere along it, in the air too) for half a second is caught**; the cone is wider for anyone riding a flier
   or glider. Helicopters circle about 15% faster than before. Entering the beam flashes the helicopter's lights and
-  shows "Animal control!". Helicopters keep circling in daylight with a faint red beam down to their circle (owner,
-  2026-11-10: so the circle comes from somewhere), but their red/blue lights are off and they cannot spot or catch
-  anyone until daylight fades. The server and the page test the same cone (pets-world.js
+  shows "Animal control!". Searchlights catch parcel carriers day and night (owner, 2026-11-10); by day the beam is
+  fainter and the red/blue lights are off. The circle only shows where the light reaches ground; over the void the beam
+  just shines on down. The server and the page test the same cone (pets-world.js
   `beamOf`), the server sending each helicopter's beam heading and reach.
 - **Caught** (an animal control car touching you on the ground, or half a second in a searchlight): you're taken straight to the
   pound's yard (no stun, owner 2026-11-08), your parcels go back to the post office and your wanted level is cleared; 7 s before you can be

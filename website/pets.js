@@ -4,7 +4,7 @@
 // its edge; animal control chases you. Co-op: everyone in a room rides the same town, works on contracts (alone or with a party) and
 // chats. The server (packages/server/src/pets.js) shares players, runs animal control, contracts and chat.
 import * as THREE from "./vendor/three.module.min.js";
-import * as World from "./pets-world.js?v=1793100067";
+import * as World from "./pets-world.js?v=1793100068";
 
 const $ = (id) => document.getElementById(id);
 const TAU = Math.PI * 2, clamp = (v, a, b) => Math.max(a, Math.min(b, v)), hyp = Math.hypot;
@@ -1036,11 +1036,12 @@ function vehiclesDraw(dt) {
     }
     else {
       m.rotor.rotation.y += dt * 28; m.tail.rotation.x += dt * 34; m.body.rotation.x = chasing ? 0.18 : 0.06;
-      const b = World.beamOf(m, beamB), len = (terrain(m.x + Math.sin(m.ba) * m.bd, m.z + Math.cos(m.ba) * m.bd) - b.ly) / Math.min(-0.05, b.dy) + 6;   // to the ground (and a little on: the ground hides it)
+      const b = World.beamOf(m, beamB), spotY = terrain(m.x + Math.sin(m.ba) * m.bd, m.z + Math.cos(m.ba) * m.bd), overGround = spotY > -200;
+      const len = overGround ? (spotY - b.ly) / Math.min(-0.05, b.dy) + 6 : 60;   // to the ground (and a little on: the ground hides it); over the void it just shines on down
       const beamHalf = SPECIES[riding().sp].fly ? World.BEAM.flyHalf : World.BEAM.half;
       tmpV.set(b.dx, b.dy, b.dz); m.beam.position.set(b.lx, b.ly, b.lz); m.beam.quaternion.setFromUnitVectors(DOWN, tmpV); const r = len * Math.tan(beamHalf); m.beam.scale.set(r, len, r);
       m.spot.position.set(b.lx, b.ly, b.lz); m.spot.target.position.set(b.lx + b.dx * len, b.ly + b.dy * len, b.lz + b.dz * len); m.spot.target.updateMatrixWorld();
-      { const gx = m.x + Math.sin(m.ba) * m.bd, gz = m.z + Math.cos(m.ba) * m.bd, gy = terrain(gx, gz), rr = hyp(gx - b.lx, gy - b.ly, gz - b.lz) * Math.tan(beamHalf) + 0.8; m.disc.position.set(gx, gy + 0.14, gz); m.disc.scale.set(rr, 1, rr); m.disc.visible = !me.inst; }   // where its light catches you
+      { const gx = m.x + Math.sin(m.ba) * m.bd, gz = m.z + Math.cos(m.ba) * m.bd, gy = terrain(gx, gz), rr = hyp(gx - b.lx, gy - b.ly, gz - b.lz) * Math.tan(beamHalf) + 0.8; m.disc.position.set(gx, gy + 0.14, gz); m.disc.scale.set(rr, 1, rr); m.disc.visible = !me.inst && overGround; }   // where its light catches you (owner, 2026-11-10: only on the ground, no circle hanging over the void)
       m.spot.angle = beamHalf * 1.15; m.beam.visible = true; searchBeamM.uniforms.o.value = lightsOn ? 0.2 : 0.13; m.spot.intensity = lightsOn ? 8 : 0; m.lens.material.color.set(lightsOn ? "#fffdf2" : "#ff8a8a");   // (owner, 2026-11-10) a faint red beam down to its circle by day too, so the circle comes from somewhere
     }
     m.g.position.set(m.x, m.y, m.z); m.g.rotation.y = m.yaw;
@@ -1162,10 +1163,12 @@ const sketchScene = new THREE.Scene(), sketchCam = new THREE.OrthographicCamera(
 sketchScene.add(new THREE.Mesh(new THREE.PlaneGeometry(2, 2), sketchMat));
 function renderFrame() {
   if (!SKETCH) { camera.layers.enableAll(); renderer.render(scene, camera); return; }
-  sketchMat.uniforms.gain.value = me.inst ? 1 : 1 / Math.max(0.45, 0.45 + 0.55 * skyNow.day);
+  sketchMat.uniforms.gain.value = me.inst ? 1 : 1 / Math.max(0.36, 0.36 + 0.64 * skyNow.day);   // (owner, 2026-11-10: the dark world was back) nights lifted more
   // labels (names, speech bubbles, place labels: layer 1) go on after, as they are, so they stay readable
   camera.layers.set(0); renderer.setRenderTarget(sketchRT); renderer.render(scene, camera); renderer.setRenderTarget(null); renderer.render(sketchScene, sketchCam);
-  const bg = scene.background; scene.background = null; renderer.autoClear = false; camera.layers.set(1); renderer.render(scene, camera); renderer.autoClear = true; camera.layers.set(0); scene.background = bg;
+  // (owner, 2026-11-10) what's drawn in color (players, pets, dirt) gets the same lift as the gray world, so it's never darker than it at night
+  const gain = sketchMat.uniforms.gain.value, lit = scene.children.filter((o) => o.isHemisphereLight || o.isDirectionalLight), was = lit.map((l) => l.intensity); lit.forEach((l) => (l.intensity *= gain));
+  const bg = scene.background; scene.background = null; renderer.autoClear = false; camera.layers.set(1); renderer.render(scene, camera); lit.forEach((l, n) => (l.intensity = was[n])); renderer.autoClear = true; camera.layers.set(0); scene.background = bg;
 }
 function resize() {
   const w = innerWidth, h = innerHeight; renderer.setSize(w, h, false); camera.aspect = w / h; camera.updateProjectionMatrix();
@@ -3322,7 +3325,7 @@ function draw(dt) {
   drawPackages();
   pickRing.material.opacity = 0.55 + Math.sin(clock * 4) * 0.3; bigEgg.rotation.y = clock * 0.6;
   folkStep(dt); talkStep(dt); introStep(dt); cutaway(); poiStep(); waterStep(dt); boostStep(dt); placeCamera(dt); camera.updateMatrixWorld(); const ig = introGuide(), gd = ig || (inArena() ? [obsSpot(OBS[arNext])[0], AR.y, obsSpot(OBS[arNext])[1]] : [tx, ty, tz]); drawGuide(gd[0], gd[1], gd[2], loggedIn && !building && !talk && (!!ig || me.bag.length > 0 || save.settings.followArrowWhenEmpty) && hyp(gd[0] - me.x, gd[2] - me.z) > 6); drawMap(now, gd[0], gd[2], ti !== undefined && houses[ti].sky, loggedIn && !building && !talk); skyStep(dt, camera.position.x, camera.position.y, camera.position.z); underwater();
-  nightGlow = me.inst ? 0 : clamp((1 - skyNow.day) * 0.85, 0, 0.85); for (const m of CHAR_MATS.values()) m.emissiveIntensity = nightGlow; blobStep();
+  nightGlow = me.inst ? 0 : clamp((1 - skyNow.day) * 0.4, 0, 0.4); for (const m of CHAR_MATS.values()) m.emissiveIntensity = nightGlow; blobStep();
   renderFrame();
 }
 function frame(now) {

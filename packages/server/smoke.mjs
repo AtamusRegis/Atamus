@@ -70,9 +70,7 @@ const heliEventsAt = (start, daylightOverride) => {
   return events;
 };
 ok(W.isDaylight(300) && !W.isDaylight(900), "the shared clock identifies daylight and night");
-ok(!heliEventsAt(300).some((e) => e.k === "chase" || e.k === "caught"), "helicopter searchlights do not work in daylight");
-ok(heliEventsAt(900).some((e) => e.k === "caught"), "helicopter searchlights catch parcel carriers at night");
-ok(heliEventsAt(300, false).some((e) => e.k === "caught") && !heliEventsAt(900, true).some((e) => e.k === "caught"), "admin time overrides control searchlights too");
+ok(heliEventsAt(300).some((e) => e.k === "caught") && heliEventsAt(900).some((e) => e.k === "caught"), "helicopter searchlights catch parcel carriers by day and by night (owner, 2026-11-10)");
 
 // ---- the server ----
 const { attachPets } = await import("./src/pets.js");
