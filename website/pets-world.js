@@ -212,13 +212,23 @@ export const BEAM = { half: 0.14, flyHalf: 0.2, turn: 0.45, near: 6, far: 24, ho
 // (owner, 2026-11-10) the vans and helicopters staff placed: a van on a road tile roams the roads joined to it (driving
 // on the right, picking a way at each tile, turning round at a dead end); a helicopter circles its spot, keeping within
 // its radius
-export function makeVehicles() {
-  const vs = [];
+// its radius. old: the vehicles before the world changed (owner, 2026-11-10): those still placed carry on where they are
+// (a van only while its road is still there), so building doesn't send them all back to their starting spots
+export function makeVehicles(old) {
+  const vs = [], fresh = [], keep = new Map((old || []).filter((v) => v.id).map((v) => [v.id, v]));
   for (const t of things) {
-    if (t.k === "van") vs.push({ kind: 0, style: t.id % 3, speed: VAN_SPEEDS[t.id % 3], i: t.i, j: t.j, pi: t.i, pj: t.j, ni: t.i, nj: t.j, x: tileMid(t.i), y: t.y, z: tileMid(t.j), yaw: [0, Math.PI / 2, Math.PI, -Math.PI / 2][t.d], mode: 0, target: 0, t: 0, cool: 0 });
-    else if (t.k === "heli") { const ph = (t.id * 2.4) % TAU; vs.push({ kind: 1, cx: tileMid(t.i), cz: tileMid(t.j), r: t.r, ph, x: tileMid(t.i), y: t.y + HELI.alt, z: tileMid(t.j), yaw: 0, mode: 0, target: 0, t: 0, cool: 0, ba: ph, bd: 15, bw: 0, bt: 0, bn: 0, bp: ph }); }
+    const o = keep.get(t.id);
+    if (t.k === "van") {
+      if (o && o.kind === 0 && (isRoad(o.i, o.j) || isRoad(o.ni, o.nj))) { vs.push(o); continue; }
+      const v = { id: t.id, kind: 0, style: t.id % 3, speed: VAN_SPEEDS[t.id % 3], i: t.i, j: t.j, pi: t.i, pj: t.j, ni: t.i, nj: t.j, x: tileMid(t.i), y: t.y, z: tileMid(t.j), yaw: [0, Math.PI / 2, Math.PI, -Math.PI / 2][t.d], mode: 0, target: 0, t: 0, cool: 0 };
+      vs.push(v); fresh.push(v);
+    } else if (t.k === "heli") {
+      if (o && o.kind === 1) { o.cx = tileMid(t.i); o.cz = tileMid(t.j); o.r = t.r; vs.push(o); continue; }
+      const ph = (t.id * 2.4) % TAU, v = { id: t.id, kind: 1, cx: tileMid(t.i), cz: tileMid(t.j), r: t.r, ph, x: tileMid(t.i), y: t.y + HELI.alt, z: tileMid(t.j), yaw: 0, mode: 0, target: 0, t: 0, cool: 0, ba: ph, bd: 15, bw: 0, bt: 0, bn: 0, bp: ph };
+      vs.push(v); fresh.push(v);
+    }
   }
-  for (const v of vs) placePatrol(v, 0, true);
+  for (const v of fresh) placePatrol(v, 0, true);
   return vs;
 }
 // a van's spot on the right-hand side of its way into tile (ni, nj) from (i, j)

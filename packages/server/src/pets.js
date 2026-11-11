@@ -82,7 +82,7 @@ function finish(g, won) {
 export function attachPets(server, { origins = [], allowLocal = false, store = memStore(), packageEveryMs = 0 } = {}) {   // (owner, 2026-11-09) Package Rush off for now (0); tests pass a period
   // (owner, 2026-11-10) the saved block world (until it's loaded, or if there's none, the starting square)
   let worldSave = null;
-  store.getWorld().then((d) => { if (!d) return; setWorld(d); const w = worldData(); for (const p of online.values()) send(p.ws, { t: "world", all: w }); for (const r of rooms) { r.vs = makeVehicles(); relot(r); } }).catch((e) => console.error("[pets] world load", e.message));
+  store.getWorld().then((d) => { if (!d) return; setWorld(d); for (const r of rooms) r.vs = makeVehicles(r.vs); const w = worldData(); for (const p of online.values()) send(p.ws, { t: "world", all: w }); for (const r of rooms) relot(r); }).catch((e) => console.error("[pets] world load", e.message));
   // Admins can override the clock-driven sky for everyone. It returns to the normal cycle when the server restarts.
   let environment = { weather: "auto", time: "auto" };
   // ---- saving: changed accounts are written every few seconds (and when their player leaves) ----
@@ -140,7 +140,7 @@ export function attachPets(server, { origins = [], allowLocal = false, store = m
       if (my < 2) return reply("Not allowed");
       const done = applyEdits(m.edits); if (!done.length) return;
       for (const p of online.values()) send(p.ws, { t: "world", edits: done });
-      for (const r of rooms) { r.vs = makeVehicles(); relot(r); }
+      for (const r of rooms) { r.vs = makeVehicles(r.vs); relot(r); }   // those still placed carry on where they are; anyone whose house went moves
       clearTimeout(worldSave); worldSave = setTimeout(() => store.saveWorld(worldData()).catch((e) => console.error("[pets] world save", e.message)), 800);
       return;
     }

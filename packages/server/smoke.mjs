@@ -29,6 +29,12 @@ ok(W.roadNext(8, 0).some(([i, j]) => i === 7 && j === 0) && W.roadNext(8, 0).som
 ok(W.roadNext(-8, -8).length === 2 && W.roadNext(7, -8).length === 2 && W.roadNext(-7, -8).length === 2, "corner and half roads join the ring round its corners");
 ok(W.surfaceAt(7 * W.TILE + 5, -8 * W.TILE + 1, 1) === -Infinity && W.surfaceAt(7 * W.TILE + 1, -8 * W.TILE + 5, 1) === 0 && W.terrain(-8 * W.TILE + 1, -8 * W.TILE + 1) === 0, "a half road is empty on its other half, a corner road is solid");
 ok(W.roadDist(-8 * W.TILE + 5, -8 * W.TILE + 5) === 0 && W.roadDist(-8 * W.TILE + 1, -8 * W.TILE + 1) > 1, "a corner road is road on one side, grass on the other");
+{ const vs = W.makeVehicles(), van = vs.find((v) => v.kind === 0); van.x += 1.5; const heliN = vs.filter((v) => v.kind === 1).length;
+  W.applyEdits([{ op: "put", c: [0, 0, 1, 0, 0] }]); const vs2 = W.makeVehicles(vs);
+  ok(vs2.includes(van) && van.x === vs.find((v) => v.id === van.id).x && vs2.length === vs.length, "building keeps the vehicles where they are");
+  W.applyEdits([{ op: "rm", id: van.id }, { op: "del", c: [0, 0, 1] }]); const vs3 = W.makeVehicles(vs2);
+  ok(!vs3.some((v) => v.id === van.id) && vs3.every((v) => vs2.includes(v)) && vs3.filter((v) => v.kind === 1).length === heliN, "taking one away leaves the rest where they are");
+  W.setWorld(testWorld(W)); }
 ok(W.blocked(9 * W.TILE - 0.2, 3, 0) && !W.blocked(0, 0, 0), "a block's side stands in the way");
 { const before = W.houses.length, done = W.applyEdits([{ op: "put", c: [0, 0, 1, 0, 0] }, { op: "add", t: { k: "mailbox", i: 2, j: 2, y: 0 } }, { op: "put", c: [999, 0, 0, 0, 0] }]);
   ok(done.length === 2 && W.terrain(3, 3) === 3 && W.houses.length === before + 1, "edits place blocks and mailboxes (bad ones dropped)");
