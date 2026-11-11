@@ -60,7 +60,8 @@ Asked (owner): a web game on atamus.io (not Roblox), on its own page; the cargo 
   Delete or Del takes it away, a tap elsewhere lets go), and a tap with Erase takes it away. A
   plot placed again moves. The camera zooms out further while editing. ✕ or Escape closes it. Everyone sees each
   change at once; parcels for houses that changed are dropped.
-- **Looks (owner, 2026-11-10):** block tops grass in three shades (roads paved gray), sides earth, all with a fine
+- **Looks (owner, 2026-11-10):** block tops grass in three shades (roads paved gray), sides earth (drawn in color, dirt
+  brown, owner 2026-11-10), all with a fine
   speckled texture; sides against a neighboring block aren't drawn.
 - **Sky (owner, 2026-11-08), the same for everyone:** normally a day lasts 20 minutes (a little more day than night):
   the sun moves, and the sky and fog go through dusk to night (stars, house windows light up, lights dim). Every 4
@@ -132,7 +133,7 @@ Asked (owner): a web game on atamus.io (not Roblox), on its own page; the cargo 
 - **Gray look (owner, 2026-11-09: no outlines, no hatching):** the world is drawn in plain shades of gray: a screen pass
   turns each pixel into its brightness, keeping textures and shading; nights are brightened so it stays readable.
   Grass and trees keep their green (owner, 2026-11-10: most of a pixel's own color where green leads; stronger the same
-  day after "still too gray"), and so do green roofs. The brightest parts ease toward white instead of clipping, and
+  day after "still too gray"). No roof is green (owner, 2026-11-10). The brightest parts ease toward white instead of clipping, and
   the light bounced up from the ground is neutral gray (owner, 2026-11-10: lit limbs were blowing out pale).
   Name tags, place labels and speech
   bubbles are drawn after the pass, in color, still hidden behind buildings; so are the guides and interaction circles (owner,
@@ -393,7 +394,8 @@ Asked (owner): a web game on atamus.io (not Roblox), on its own page; the cargo 
 - **Outside (owner, 2026-11-09):** every lot with an owner has one of **5 ready-made houses**: Cottage, Cabin, Modern,
   Barn or Tower, chosen by its owner (Build, outside on your lot: the 5 names; free to change). **Everyone sees it** (the
   server sends each house, and changes). They're solid, and their roofs can be walked on. Its front door faces the
-  front of the lot.
+  front of the lot. Pitched roofs have their gable ends filled in with the wall color (owner, 2026-11-10); the Cabin's roof
+  is dark brown, not green.
 - **Inside (owner, 2026-11-09):** at the front door, **E (Enter)** takes you inside: your own, or a party member's.
   Inside is the house's own space: a 20 x 20 m floor and the front door, which are always there, with a black void
   round them; whoever is in the same house sees each other there (the server passes on whose house you're in), and
