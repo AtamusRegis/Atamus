@@ -90,7 +90,7 @@
     .arow { text-align: left; border: 0; border-radius: 10px; padding: 6px 10px; background: #f3f7fa; } .arow.on::before { content: "● "; color: var(--green); } .arow.sel { background: #ffe9a8; }
     /* hatching */
     #hatch { position: fixed; inset: 0; z-index: 30; display: none; flex-direction: column; align-items: center; justify-content: center; gap: 8px; background: radial-gradient(circle, var(--glow, #fff) 0, rgba(20,40,60,.82) 62%); }
-    #hegg { width: 120px; height: 156px; } .egg.wob { animation: wob 1.5s; } @keyframes wob { 10%, 38%, 66% { transform: rotate(-14deg); } 20%, 48%, 76% { transform: rotate(14deg); } 28%, 56%, 84% { transform: rotate(0); } 96% { transform: scale(1.25); } }
+    #hegg { width: 120px; height: 156px; } .egg.gift { border-radius: 14px; height: 120px; background: linear-gradient(90deg, transparent 42%, #fff 42% 58%, transparent 58%), linear-gradient(transparent 42%, #fff 42% 58%, transparent 58%), #ff1f8f !important; } .egg.wob { animation: wob 1.5s; } @keyframes wob { 10%, 38%, 66% { transform: rotate(-14deg); } 20%, 48%, 76% { transform: rotate(14deg); } 28%, 56%, 84% { transform: rotate(0); } 96% { transform: scale(1.25); } }
     #himg { width: 220px; height: 220px; animation: popin .35s; } #hname { font-size: 38px; color: #fff; text-shadow: 0 3px 0 rgba(0,0,0,.35); } #hrar { font-size: 22px; padding: 2px 14px; border-radius: 999px; background: rgba(35,48,59,.88); }
     @keyframes popin { from { transform: scale(.2); } 70% { transform: scale(1.15); } }
     /* things that pop up */
@@ -167,6 +167,6 @@
     <button id="lgo" class="btn go" type="submit">Log in</button>
     <button id="lnew" class="btn" type="button">Create account</button>
   </form>
-  <script type="module" src="pets.js?v=1794434634"></script>
+  <script type="module" src="pets.js?v=1794435581"></script>
 </body>
 </html>

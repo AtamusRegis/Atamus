@@ -6,6 +6,11 @@ and any rule decided. Use `git log` for the code detail (and for the older Atamu
 
 ## 2026-11-11
 
+- **The town in one line; a new mount on your second delivery (owner).** The post office is at the west end and one
+  road runs east through Main Street and Maple Suburbs, over the bridge into Goose Marsh, up Cliffside and out to the
+  Floating Islands. The farther out, the more dogs and geese and the quicker the dogs (dogs on the islands too, and
+  sky geese more often). Back alleys run behind the house rows; the zipline tower stands at the suburbs' end. Your
+  second delivery brings a random Uncommon mount, revealed in a gift box.
 - **Easier to see, dangers that roam, a bigger roll (owner).** The town's colors are calmer and the delivery spot is
   hot pink (a tall beam, a spinning marker, a ring and the address), with a pink arrow on the ground round you
   pointing the way (the edge-of-screen arrow is gone; the distance is on the parcel card). Dogs (41) roam their

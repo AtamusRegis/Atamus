@@ -22,7 +22,10 @@ ok(W.dogs.length > 35 && W.dogs.every((d) => W.roamOk(d.hx, d.hz, d.y, d.d)) && 
 ok([0, 1, 2, 3, 4].map((d) => W.housesIn(d).length).join() === "20,30,20,15,12", "five districts of houses");
 for (const h of W.houses) ok(Math.abs(W.surfaceAt(h.mx, h.mz, h.my + 0.3) - h.my) < 0.01 && !W.blocked(h.mx, h.mz, h.my), "mailbox in the open: " + h.name);
 ok(W.blocked(W.houses[0].x, W.houses[0].z, 0) && !W.blocked(W.SPAWN.x, W.SPAWN.z, 0) && W.counterDist(0, 8) === 3, "houses are solid, the post office is open");
-ok(W.surfaceAt(342, 13.5, 10) > 9.5 && W.surfaceAt(348, 14, 10.3) === 10 && W.surfaceAt(600, 0, 80) === -Infinity && W.isleAt(545, 0) === 0, "the mountain road climbs and the islands float");
+ok(W.surfaceAt(792, 13.5, 10) > 9.5 && W.surfaceAt(798, 14, 10.3) === 10 && W.surfaceAt(1050, 0, 80) === -Infinity && W.isleAt(995, 0) === 0, "the mountain road climbs and the islands float");
+{ let y = 0, x = 20; for (; x < 785; x++) { const s = W.surfaceAt(x, 0, y + 0.3); if (s === -Infinity || W.blocked(x, 0, s)) break; y = s; } ok(x >= 785, "one road runs from the post office through town and the marsh to the mountain's foot"); }
+{ const xs = [0, 1, 2, 3, 4].map((d) => W.houses.filter((h) => h.d === d).reduce((a, h) => a + h.x, 0) / W.housesIn(d).length); ok(xs.every((x, d) => !d || x > xs[d - 1]), "each district lies farther out along the line than the last"); }
+ok([0, 1, 2, 3].every((d) => W.DOG_D[d + 1].speed >= W.DOG_D[d].speed) && W.dogs.filter((q) => q.d === 0).length < W.dogs.filter((q) => q.d === 1).length, "harder the farther out: more dogs, and quicker");
 ok(Math.abs(W.rollOdds(0).reduce((a, b) => a + b, 0) - 1) < 1e-9 && Math.abs(W.rollOdds(0)[4] - 0.01) < 1e-9 && W.rollOdds(1)[4] > 0.05 && Math.abs(W.rollOdds(W.stampLuck(10))[4] - 0.03) < 0.004, "roll odds, tier luck and Lucky Stamps");
 ok(W.levelCost(1) === 100 && W.levelCost(5) === 655 && W.levelCost(19) > 470000 && Math.abs(W.mountScale(20) - 2.5) < 0.01 && W.upgradeCost("routes", 0) === 250 && W.upgradeCost("routes", 1) === 450, "level and upgrade costs");
 ok(W.spawnWeights(0).join() === "1,0,0,0,0" && W.districtsOpen(8) === 5 && Math.abs(W.spawnWeights(10)[4] - 0.08) < 0.02 && W.boxDur(10) === 5, "Route Permits open districts; Sturdy Boxes add durability");
@@ -93,11 +96,14 @@ try {
     for (const d of pa.room.dogs) d.cool = Date.now() + 60000;
     await put(a, "smokeA", wrong.mx, wrong.mz, wrong.my); await sleep(200); ok(pa.parcel, "the wrong mailbox takes nothing");
     await put(a, "smokeA", h.mx, h.mz, h.my);
-    const del = await a.wait((m) => m.t === "delivered", "the delivery"); ok(del.coins === 8 && del.roll.tier >= 0 && del.data.coins === W.GOOSE.bonus + 8 + del.roll.coins && del.data.stats.del === 1 && del.data.stamp === (del.roll.tier < 2 ? 1 : 0), "a delivery pays (less 20% for the hit) and rolls");
+    const del = await a.wait((m) => m.t === "delivered", "the delivery");
+    ok(!del.gift, "no gift on the first delivery"); ok(del.coins === 8 && del.roll.tier >= 0 && del.data.coins === W.GOOSE.bonus + 8 + del.roll.coins && del.data.stats.del === 1 && del.data.stamp === (del.roll.tier < 2 ? 1 : 0), "a delivery pays (less 20% for the hit) and rolls");
     await b.wait((m) => m.t === "fx" && m.k === "del" && m.id === wa.id, "B sees the delivery"); }
   // a dog: bark, chase, bite
   { const pa = who("smokeA"), D = W.dogs[0], q = pa.room.dogs[0]; q.cool = 0; pa.stunUntil = 0; pa.graceUntil = 0; await put(a, "smokeA", 0, 7.5); pa.ready = { tier: 0, mod: "" }; a.send({ t: "grab" }); await a.wait((m) => m.t === "parcel" && m.why === "grab", "another parcel");
-    await put(a, "smokeA", q.x + 0.6, q.z + 0.6, q.y); const bite = await a.wait((m) => m.t === "stun" && m.why === "dog", "the dog's bite"); ok(bite.s > 1 && pa.parcel.hits === 1, "a dog's bite stuns and cracks the parcel"); }
+    await put(a, "smokeA", q.x + 0.6, q.z + 0.6, q.y); const bite = await a.wait((m) => m.t === "stun" && m.why === "dog", "the dog's bite"); ok(bite.s > 1 && pa.parcel.hits === 1, "a dog's bite stuns and cracks the parcel");
+    for (const d of pa.room.dogs) d.cool = Date.now() + 60000; await sleep(1200); const h = W.houses[pa.parcel.house]; pa.stunUntil = 0; await put(a, "smokeA", h.mx, h.mz, h.my);
+    const d2 = await a.wait((m) => m.t === "delivered", "the second delivery"); ok(d2.gift && W.MOUNTS[d2.gift.sp].r === 1 && d2.data.mounts.length === 2, "the second delivery brings a new Uncommon mount"); }
   // chat and parties
   a.send({ t: "chat", text: "hello" }); await b.wait((m) => m.t === "chat" && m.text === "hello", "chat");
   a.send({ t: "invite", id: wb.id }); const iv = await b.wait((m) => m.t === "invited", "the invitation"); b.send({ t: "answer", from: iv.from, yes: true });

@@ -73,6 +73,8 @@ One parcel at a time. A parcel that breaks or is lost is gone; the conveyor alwa
 
 ## Mounts
 
+- (owner, 2026-11-11) **A gift on the second delivery:** a random Uncommon mount (Cat, Fox or Deer), shown in a pink
+  box after you close the roll's card.
 - One equipped mount, seen by everyone; the rest wait in the Stable menu. Levels 1 to 20; a mount's size is 1 + 0.079 x
   (level - 1), so 2.5x at level 20. The rider stays the same size.
 - **Twelve mounts, all on the ground** (owner, 2026-11-11: no flying pets): Common Pup (Bark), Piglet (Dash), Bunny
@@ -100,28 +102,34 @@ One parcel at a time. A parcel that breaks or is lost is gone; the conveyor alwa
 
 ## The town
 
-A fixed town made in code (`buildTown` in pets-world.js); about 97 houses.
+A fixed town made in code (`buildTown` in pets-world.js); about 97 houses. (owner, 2026-11-11) **One long line, harder
+the farther out:** the post office at the west end, then one road east through every district, each with more (and
+quicker) dangers than the last, and within a district the dogs are thicker toward its far end. Dogs notice a parcel
+within 8 / 10 / 11 / 12 / 12 m and run 10.5 / 11.5 / 12.5 / 13.5 / 14 m/s, district by district.
 
-- **Post office** at the center: the counter under an open frame. Within 20 m is the **safe zone**.
-- **Main Street** (Bronze): 20 houses round the inner ring road, four avenues, two park ponds (7 geese), 9 dogs.
-- **Maple Suburbs** (Silver): 30 houses round and inside the outer ring, fenced yards, two ponds (10 geese), 18 dogs,
-  8 sprinklers along the ring road.
-- **Goose Marsh** (Gold): east over the bridge. Mud (25% slower; 40% in a pond) crossed by boardwalks, 20 houses on
-  platforms, four ponds with a flock of 5 geese each, 8 dogs on the boardwalks.
+- **Post office** at the west end, on its square: the counter under an open frame. Within 20 m is the **safe zone**.
+  You start just south of it, facing east down the road.
+- **Main Street** (Bronze, x 30-240): 20 houses facing the road, both sides; a back alley behind each row; a park pond
+  (3 geese); 5 dogs.
+- **Maple Suburbs** (Silver, x 250-590): 30 houses facing the road, fenced yards, three ponds (15 geese), 16 dogs, 8
+  sprinklers beside the road. The zipline tower at its east end.
+- **Goose Marsh** (Gold, x 600-780): over the bridge where the road leaves town. Mud (25% slower; 40% in a pond)
+  crossed by boardwalks, 20 houses on platforms, five ponds with a flock of 5 geese each, 13 dogs on the boardwalks.
 - **Cliffside** (Diamond): the mountain past the marsh. Five terraces, 10 m apart, joined by switchback ramps up narrow
-  ledges; 15 houses; 6 dogs; two goats on each of the first four terraces; falling rocks.
-- **Floating Islands** (Sky): six islands 70 to 108 m up, two houses each, joined by jump pads. (owner, 2026-11-11:
+  ledges; 15 houses; 11 dogs; two goats on each of the first four terraces; falling rocks.
+- **Floating Islands** (Sky): six islands 70 to 108 m up off the mountain's far side, two houses each, joined by jump
+  pads; 4 dogs, wind and sky geese (every 8 to 14 s). (owner, 2026-11-11:
   couriers got stuck in houses by the pads) Each island's houses stand as far as they can from its pads, landing
   spots, balloon and middle; anyone who somehow ends up inside something solid is moved out to the nearest clear spot. The **Sky Cannon** on
   top of Cliffside fires you to the first. Falling off costs the parcel 1 hit and puts you back on the last island you
   stood on. A **balloon** on the first and last island takes you back to the post office.
 
-**Shortcuts:** rooftop hops (four roofs, each 2 m higher, up each Cliffside terrace's face: they need a jump of about
-1.4 m, a Common mount's at level 5), back alleys (four lanes between Main Street's houses out to the suburbs, each with
-a boost pad), the sewer pipe (Main Street to the foot of Cliffside in 5 s; a goose sits in it 8 s in every 24, eyes
-showing at both ends, and costs 1 hit), ziplines (a tower east of Main Street down into the marsh; the top of
-Cliffside back to the tower; not with a Heavy parcel), boost pads (x1.6 speed for 2.5 s) on the avenues, alleys and the
-marsh's main boardwalk.
+**Shortcuts:** back alleys (a lane behind each row of houses through Main Street and the suburbs, with boost pads),
+the sewer pipe (Main Street to the foot of Cliffside in 6 s; a goose sits in it 8 s in every 24, eyes showing at both
+ends, and costs 1 hit), ziplines (the tower at the suburbs' east end down into the marsh; the top of Cliffside back to
+the tower; not with a Heavy parcel), boost pads (x1.6 speed for 2.5 s) on the road, the alleys and the marsh's main
+boardwalk, and rooftop hops (four roofs, each 2 m higher, up each Cliffside terrace's face: they need a jump of about
+1.4 m, a Common mount's at level 5).
 
 ## Danger
 
@@ -223,6 +231,8 @@ upgrades, everything, reset), and edit coins and coupons. Everything is logged (
 
 ## Rejected / removed
 
+- (owner, 2026-11-11) The round town (the post office in the middle, Main Street and the suburbs in rings round it,
+  avenues out): replaced by the town in one line.
 - (owner, 2026-11-11) Flying and gliding mounts: the Parrot, Owl and Dragon, and the Glide ability.
 - (owner, 2026-11-11) The edge-of-screen guide arrow (replaced by the arrow on the ground round you); the reward roll
   over the mailbox (moved to the middle of the screen, with the card of what you got); dogs waiting in yards and geese
