@@ -1,8 +1,22 @@
 # Changelog
 
-Pet Delivery Co. Newest first. Add one entry per patch in the same commit, and keep it short: what changed for players
+Critter Courier (Pet Delivery Co. until 2026-11-11). Newest first. Add one entry per patch in the same commit, and keep it short: what changed for players
 and any rule decided. Use `git log` for the code detail (and for the older Atamus prototypes, removed from the tree on
 2026-11-08).
+
+## 2026-11-11
+
+- **Critter Courier (owner).** The game was remade from the Critter Courier design document, replacing Pet Delivery Co.
+  rather than merging with it; the blocky couriers stay. Grab your Ready parcel off the post office conveyor, ride to
+  its address, deliver in the mailbox's ring, and a reward roll spins. Five parcel tiers for five districts (Main
+  Street, Maple Suburbs, Goose Marsh, Cliffside, Floating Islands), four modifiers, durability, the Stamp Meter;
+  twelve mounts in five rarities that grow to 2.5x by level 20, with stats and an ability (Dash, Glide, Double Jump,
+  Bark), eggs from rolls with Shiny and Golden hatches; dogs, geese, sprinklers, falling rocks, goats, wind and sky
+  geese; kicks with a safe zone, grace and a Friendly setting; rooftop hops, back alleys, the sewer pipe, ziplines,
+  boost pads, the Sky Cannon, jump pads and a balloon home; five courier upgrades and postmaster ranks; the Stable,
+  Upgrades, Odds and Settings menus; all the document's effects and sounds. Owner's choices: a fixed town made in code
+  (no editor), a fresh start with logins kept (old data left untouched in the database, unused), full color, and chat,
+  the admin panel and parties kept. Rooms hold 100. The server decides parcels, deliveries, rolls, damage and coins.
 
 ## 2026-11-10
 

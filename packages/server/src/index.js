@@ -36,7 +36,7 @@ app.use(cors({
 if (process.env.ATAMUS_PTR === "1") app.use(express.static(new URL("../../../website/", import.meta.url).pathname));
 app.get("/healthz", (_req, res) => res.json({ ok: true, build: BUILD })); // live health + build marker
 
-// the deploy workflows' calls (build check, update countdown); Pet Delivery Co.'s co-op runs on the WebSocket below
+// the deploy workflows' calls (build check, update countdown); the game runs on the WebSocket below
 app.use("/game", game);
 
 app.use((err, _req, res, _next) => {
@@ -50,10 +50,10 @@ async function main() {
   await migrate();
 
   const server = http.createServer(app);
-  // Pet Delivery Co. (owner, 2026-11-08): accounts, rooms, players, animal control, contracts, chat, trades and houses over a WebSocket at /pets
+  // Critter Courier (owner, 2026-11-11): accounts, rooms, the conveyor, deliveries, kicks, dogs and geese, chat and parties over a WebSocket at /pets
   attachPets(server, { origins: config.allowedOrigins, allowLocal: process.env.ATAMUS_PTR === "1", store: pgStore(pool) });
   server.listen(config.port, "127.0.0.1", () => {
-    console.log(`Pet Delivery Co. server listening on 127.0.0.1:${config.port} (http + ws)`);
+    console.log(`Critter Courier server listening on 127.0.0.1:${config.port} (http + ws)`);
   });
 }
 

@@ -3,7 +3,7 @@
   "version": "0.1.0",
   "private": true,
   "type": "module",
-  "description": "Pet Delivery Co. server: accounts, co-op rooms, animal control, contracts, chat, trades and houses over a WebSocket at /pets.",
+  "description": "Critter Courier server: accounts, rooms, the conveyor, deliveries and rolls, kicks, dogs and geese, mounts, chat and parties over a WebSocket at /pets.",
   "main": "src/index.js",
   "scripts": {
     "start": "node src/index.js",
