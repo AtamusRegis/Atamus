@@ -38,7 +38,11 @@ page.on("pageerror", (e) => problems.push("page error: " + e.message));
 page.on("console", (m) => { if (m.type() === "error" && !m.text().startsWith("Failed to load resource")) problems.push("console error: " + m.text()); });
 // version.json is stamped only by the Pages deploy, so it's missing here
 page.on("response", (r) => { if (r.status() >= 400 && !new URL(r.url()).pathname.endsWith("/version.json")) problems.push(`HTTP ${r.status()} ${r.url()}`); });
-const until = async (pg, fn, what, arg, ms = 12000) => { for (let i = 0; i < ms / 100; i++) { if (await pg.evaluate(fn, arg)) return; await pg.waitForTimeout(100); } throw new Error(what); };
+const until = async (pg, fn, what, arg, ms = 12000) => {
+  for (let i = 0; i < ms / 100; i++) { if (await pg.evaluate(fn, arg)) return; await pg.waitForTimeout(100); }
+  const state = await pg.evaluate(() => { const P = window.Pets, s = P.save; return JSON.stringify({ in: P.loggedIn, coins: s.coins, eggs: s.eggs, mounts: s.mounts.map((m) => m.sp + m.lv), up: s.up, del: s.stats.del, parcel: !!P.parcel, at: [Math.round(P.me.x), Math.round(P.me.z)] }); }).catch(() => "");
+  throw new Error(what + " " + state);
+};
 const join = async (pg, name) => {
   await pg.goto(base + "/pets.html", { waitUntil: "load", timeout: 20000 });
   const user = pg.locator("input[placeholder=Username]"); await user.waitFor({ state: "visible", timeout: 20000 });
@@ -73,10 +77,11 @@ try {
     await page.click("#pclose");
   }
   step = "level the mount and hatch an egg";
+  const had = await page.evaluate(() => { const s = window.Pets.save; return { eggs: s.eggs.basic, mounts: s.mounts.length }; });   // (the roll may have given an egg)
   await page.evaluate(() => { window.Pets.netSend({ t: "admin", op: "quick", cmd: "coins", n: 5000, name: "Nyssary" }); window.Pets.netSend({ t: "admin", op: "give", what: "egg:basic", n: 1, name: "Nyssary" }); });
-  await until(page, () => window.Pets.save.coins >= 5000 && window.Pets.save.eggs.basic === 1, "the admin's gifts didn't arrive");
+  await until(page, (h) => window.Pets.save.coins >= 5000 && window.Pets.save.eggs.basic === h.eggs + 1, "the admin's gifts didn't arrive", had);
   await page.click("#mstable"); await page.click(".btn.buy"); await until(page, () => window.Pets.save.mounts[0].lv === 2, "the level wasn't bought");
-  await page.click(".eggc .btn.go"); await until(page, () => window.Pets.save.mounts.length === 2 && getComputedStyle(document.getElementById("hatch")).display !== "none", "the egg didn't hatch");
+  await page.click(".eggc .btn.go"); await until(page, (h) => window.Pets.save.mounts.length === h.mounts + 1 && getComputedStyle(document.getElementById("hatch")).display !== "none", "the egg didn't hatch", had);
   await page.waitForTimeout(2100); await page.click("#hatch"); await page.click("#pclose");
   await page.click("#mup"); await page.click(".uprow .btn.buy"); await until(page, () => window.Pets.save.up.routes === 1, "the upgrade wasn't bought"); await page.click("#pclose");
   // a second player joins: the first must see them move, and take their kick (out of the post office's safe zone)
