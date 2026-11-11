@@ -55,15 +55,17 @@ export const MOUNTS = {
   bunny: { name: "Bunny", r: 0, ab: "jump2", c: "#e9e4dc", a: "#ffc7d0", size: 0.9 },
   cat: { name: "Cat", r: 1, ab: "dash", c: "#f0a04b", a: "#fff1dc", size: 0.95 },
   fox: { name: "Fox", r: 1, ab: "dash", c: "#e06a2a", a: "#fff4e6", size: 1 },
-  parrot: { name: "Parrot", r: 1, ab: "glide", c: "#e5534b", a: "#ffd84a", size: 1.15 },
+  deer: { name: "Deer", r: 1, ab: "jump2", c: "#b9824f", a: "#f3e3cc", size: 1 },
   raptor: { name: "Raptor", r: 2, ab: "dash", c: "#6f9a3a", a: "#d9d27a", size: 1 },
-  owl: { name: "Owl", r: 2, ab: "glide", c: "#8a6a4a", a: "#e9d6b8", size: 1.1 },
+  stego: { name: "Stegosaurus", r: 2, ab: "bark", c: "#5f9a8a", a: "#e08a3a", size: 0.95 },
   pony: { name: "Pony", r: 2, ab: "jump2", c: "#a9713f", a: "#3b2a1c", size: 1.05 },
   trex: { name: "T-Rex", r: 3, ab: "bark", c: "#5f8f3a", a: "#cfd98a", size: 1 },
-  unicorn: { name: "Unicorn", r: 3, ab: "jump2", c: "#fbf7ff", a: "#ffd1f0", size: 1.05 },
-  dragon: { name: "Dragon", r: 4, ab: "glide", c: "#d8483a", a: "#ffcf5a", size: 1.05 },
+  trike: { name: "Triceratops", r: 3, ab: "dash", c: "#b98a5a", a: "#f0d9a8", size: 0.95 },
+  unicorn: { name: "Unicorn", r: 4, ab: "jump2", c: "#fbf7ff", a: "#ffd1f0", size: 1.05 },
 };
-export const ABILITY = { bark: "Bark", dash: "Dash", glide: "Glide", jump2: "Double Jump" };
+// (owner, 2026-11-11) no flying pets: the Parrot, Owl and Dragon (and gliding) went; anyone who had one has the mount that took its place
+export const MOUNT_MOVED = { parrot: "deer", owl: "stego", dragon: "unicorn" };
+export const ABILITY = { bark: "Bark", dash: "Dash", jump2: "Double Jump" };
 export const MAX_LV = 20, VARIANTS = ["", "Shiny", "Golden"], SHINY = 0.01, GOLDEN = 0.001;
 export const levelCost = (lv) => Math.round(100 * Math.pow(1.6, lv - 1));   // coins to go from lv to lv + 1
 export const xpNeed = (lv) => Math.round(30 * Math.pow(1.42, lv - 1));     // Training XP to go from lv to lv + 1
@@ -73,14 +75,14 @@ export function mountStats(sp, lv) {
   const r = MOUNTS[sp].r, n = lv - 1;
   return { speed: 10 + 0.6 * r + (0.1 + 0.02 * r) * n, jump: 8 + 0.25 * r + (0.08 + 0.01 * r) * n, grip: Math.min(0.6, 0.05 * r + 0.02 * n) };
 }
-export const ABILITY_CD = { bark: [0, 12, 9, 6], dash: [0, 8, 6, 4], glide: [0, 0, 0, 0], jump2: [0, 0, 0, 0] };
+export const ABILITY_CD = { bark: [0, 12, 9, 6], dash: [0, 8, 6, 4], jump2: [0, 0, 0, 0] };
 // eggs: what hatches from each (by rarity), then a mount of that rarity at random
 export const EGGS = { basic: { name: "Basic Egg", c: "#f4ead8", odds: [0.7, 0.25, 0.05, 0, 0] }, rare: { name: "Rare Egg", c: "#7fb4f0", odds: [0, 0.5, 0.38, 0.1, 0.02] }, legendary: { name: "Legendary Egg", c: "#f2c84a", odds: [0, 0, 0.5, 0.38, 0.12] } };
 export const MOUNT_CAP = 60;
 // kicks, dogs, geese (m and seconds)
 export const KICK = { range: 3.6, half: 1.0, cd: 4, stun: 1, grace: 5, farm: 30 };
-export const DOG = { trigger: 10, telegraph: 0.5, chase: 6, speed: 11.5, bite: 1.3, stun: 1.5, cool: 8, leash: 38, home: 7 };
-export const GOOSE = { see: 7, telegraph: 1, lunge: 13, lungeFor: 2.2, touch: 1.4, carry: 7.2, dunk: 3, wander: 2, bonus: 15, cool: 6 };
+export const DOG = { trigger: 10, telegraph: 0.5, chase: 6, speed: 11.5, bite: 1.3, stun: 1.5, cool: 8, leash: 38, roam: 3.2, range: 45 };
+export const GOOSE = { see: 7, telegraph: 1, lunge: 13, lungeFor: 2.2, touch: 1.4, carry: 7.2, dunk: 3, wander: 2.6, roam: 34, bonus: 15, cool: 6 };
 export const GRAB_R = 3.4, DELIVER_R = 3, PICKUP_R = 2.2, SAFE_R = 20, EXPRESS_PER_M = 0.16, EXPRESS_MIN = 14;
 
 // what a courier's saved data must look like (anything else is put right); a new courier gets a Pup
@@ -88,7 +90,7 @@ export function cleanData(d) {
   d = d && typeof d === "object" ? d : {};
   const int = (v, lo, hi, def) => (Number.isFinite(+v) ? clamp(Math.floor(+v), lo, hi) : def);
   const out = { v: 1, coins: int(d.coins, 0, 1e12, 0), coupons: int(d.coupons, 0, 1e6, 0), stamp: int(d.stamp, 0, PITY_EPIC, 0), nextId: int(d.nextId, 1, 1e9, 1), mounts: [], ride: 0, eggs: {}, up: {}, stats: {}, set: {}, fails: int(d.fails, 0, 99, 0) };
-  for (const m of Array.isArray(d.mounts) ? d.mounts.slice(0, MOUNT_CAP) : []) if (m && MOUNTS[m.sp]) out.mounts.push({ id: int(m.id, 1, 1e9, 0) || out.nextId++, sp: m.sp, va: int(m.va, 0, 2, 0), lv: int(m.lv, 1, MAX_LV, 1), xp: int(m.xp, 0, 1e9, 0) });
+  for (const m of Array.isArray(d.mounts) ? d.mounts.slice(0, MOUNT_CAP) : []) if (m && MOUNTS[MOUNT_MOVED[m.sp] || m.sp]) out.mounts.push({ id: int(m.id, 1, 1e9, 0) || out.nextId++, sp: MOUNT_MOVED[m.sp] || m.sp, va: int(m.va, 0, 2, 0), lv: int(m.lv, 1, MAX_LV, 1), xp: int(m.xp, 0, 1e9, 0) });
   if (!out.mounts.length) out.mounts.push({ id: out.nextId++, sp: "pup", va: 0, lv: 1, xp: 0 });
   out.nextId = Math.max(out.nextId, ...out.mounts.map((m) => m.id + 1));
   out.ride = out.mounts.some((m) => m.id === d.ride) ? d.ride : out.mounts[0].id;
@@ -149,7 +151,7 @@ export const ZIP_SPEED = 24, STEP_H = 2;
 export const SPRINKLER = { r: 5, push: 9, every: 6, on: 3 }, sprinklerOn = (s, t) => (t + s.ph) % SPRINKLER.every < SPRINKLER.on;
 export const WIND = { every: 11, on: 3.5, push: 4.5 };
 export function windAt(t) { const n = Math.floor(t / WIND.every), on = t - n * WIND.every < WIND.on, a = ((n * 2654435761) >>> 0) / 4294967296 * TAU; return { on, x: Math.cos(a), z: Math.sin(a) }; }
-export const ROCK = { delay: 1, r: 2.3, stun: 1.5, every: [3, 6] }, GOAT = { see: 9, telegraph: 0.8, speed: 13, run: 1.3, touch: 1.6, knock: 15, cool: 6 }, SKYGOOSE = { delay: 1.4, r: 2.2, every: [9, 16] };
+export const ROCK = { delay: 1, r: 2.3, stun: 1.5, every: [3, 6] }, GOAT = { see: 9, telegraph: 0.8, speed: 13, run: 1.3, touch: 1.6, knock: 15, cool: 6, roam: 2.4 }, SKYGOOSE = { delay: 1.4, r: 2.2, every: [9, 16] };
 export const CANNON = { x: 456, z: 0, y: 50, r: 2.6, to: 0 }, SKY_Y = 40;
 const ISLE_LINKS = [[0, 1], [1, 2], [2, 3], [3, 0], [2, 4], [4, 5], [5, 2]];
 export function districtAt(x, z, y = 0) { return x > 500 && y > SKY_Y ? 4 : x >= CLIFF.x0 ? 3 : x >= MARSH.x0 ? 2 : hyp(x, z) < MAIN_R ? 0 : 1; }
@@ -164,14 +166,13 @@ function house(x, z, y, yaw, d, size = 8) {   // it faces yaw (its door and mail
   houses.push({ id: houses.length, x, z, y, yaw, d, size, mx: x + fx * (size / 2 + 3), mz: z + fz * (size / 2 + 3), my: y, name: n + " " + STREET[d] });
   solid(x, z, size / 2, size / 2, y - 1, y + 5, yaw);
 }
-function yard(h, side, rnd) {   // a fenced yard beside a house (open toward the road) with a dog in it
+function yard(h, side) {   // a fenced yard beside a house, open toward the road
   const fx = Math.sin(h.yaw), fz = Math.cos(h.yaw), rx = fz * side, rz = -fx * side, cx = h.x + rx * 9 + fx * 1, cz = h.z + rz * 9 + fz * 1, Y = 4;
   const P = (a, b) => [cx + rx * a + fx * b, cz + rz * a + fz * b];
   for (const [a0, b0, a1, b1] of [[-Y, -Y, Y, -Y], [Y, -Y, Y, Y], [-Y, -Y, -Y, Y]]) {   // back, far side, near side; the front is open
     const [x0, z0] = P(a0, b0), [x1, z1] = P(a1, b1), yaw = Math.atan2(x1 - x0, z1 - z0);
     solid((x0 + x1) / 2, (z0 + z1) / 2, 0.15, hyp(x1 - x0, z1 - z0) / 2, h.y - 1, h.y + 1.0, yaw); fences.push({ x0, z0, x1, z1, y: h.y });
   }
-  dogs.push({ id: dogs.length, hx: cx, hz: cz, y: h.y, d: h.d, look: Math.floor(rnd() * 3) });
 }
 function pond(x, z, r, y, n, d) { const id = ponds.length; ponds.push({ id, x, z, r, y, d }); for (let k = 0; k < n; k++) { const a = (k / n) * TAU; geese.push({ id: geese.length, pond: id, x: x + Math.cos(a) * (r + 3), z: z + Math.sin(a) * (r + 3), y, d }); } }
 
@@ -204,25 +205,32 @@ function buildTown() {
   roads.push({ k: "ring", r: 60, w: 7, a0: 0, a1: TAU }, { k: "ring", r: 140, w: 7, a0: 0.7, a1: TAU - 0.7 }, { k: "ring", r: 26, w: 5, a0: 0, a1: TAU });
   // ---- Main Street: 20 houses outside its ring ----
   for (let k = 0; k < 20; k++) { const a = ((k + 0.5) / 20) * TAU, x = Math.cos(a) * 76, z = Math.sin(a) * 76; house(x, z, 0, Math.atan2(-x, -z), 0); }
-  for (const k of [3, 8, 13, 18]) yard(houses[k], k % 2 ? 1 : -1, rnd);   // a few dogs
-  pond(-27, -27, 7, 0, 2, 0);                                           // the park pond
+  for (const k of [3, 8, 13, 18]) yard(houses[k], k % 2 ? 1 : -1);
+  pond(-27, -27, 7, 0, 4, 0); pond(30, -38, 5, 0, 3, 0);                // the park ponds
   // ---- Maple Suburbs: 24 houses outside the outer ring, 6 inside it ----
   for (let k = 0; k < 24; k++) { const a = 0.82 + (k / 23) * (TAU - 1.64), x = Math.cos(a) * 158, z = Math.sin(a) * 158; house(x, z, 0, Math.atan2(-x, -z), 1); }
   for (let k = 0; k < 6; k++) { const a = 1.35 + (k / 5) * (TAU - 2.7), x = Math.cos(a) * 121, z = Math.sin(a) * 121; house(x, z, 0, Math.atan2(x, z), 1); }
-  houses.filter((h) => h.d === 1).forEach((h, n) => { if (n % 3 !== 2) yard(h, n % 2 ? 1 : -1, rnd); });   // dogs in most yards
-  pond(-112, 96, 9, 0, 3, 1);
+  houses.filter((h) => h.d === 1).forEach((h, n) => { if (n % 3 !== 2) yard(h, n % 2 ? 1 : -1); });
+  pond(-112, 96, 9, 0, 5, 1); pond(-70, -75, 8, 0, 5, 1);
   // ---- Goose Marsh: 20 houses on platforms beside the boardwalks; four ponds with a flock each ----
   let mh = 0;
   for (const bx of BR) for (const bz of [-84, -52, -24, 24, 52, 84]) { if (mh >= 20) break; const side = (mh++ % 2 ? 1 : -1), x = bx + side * 11.6; rect(x - 5.5, x + 5.5, bz - 5.5, bz + 5.5, 0.12, "plank", -0.6); rect(Math.min(bx, x), Math.max(bx, x), bz - 2, bz + 2, 0.12, "plank", -0.6); house(x + side * 1, bz, 0.12, side > 0 ? -Math.PI / 2 : Math.PI / 2, 2, 7); }
   for (const [x, z] of [[318, -16], [318, 16]]) { rect(x - 5.5, x + 5.5, z - 5.5 + Math.sign(z) * 2, z + 5.5 + Math.sign(z) * 2, 0.12, "plank", -0.6); house(x, z + Math.sign(z) * 3, 0.12, z > 0 ? Math.PI : 0, 2, 7); }
-  for (const [x, z] of [[217, -40], [267, 40], [217, 68], [267, -70]]) pond(x, z, 12, -0.45, 4, 2);
+  for (const [x, z] of [[217, -40], [267, 40], [217, 68], [267, -70]]) pond(x, z, 12, -0.45, 5, 2);
   // ---- Cliffside: three houses on each of the first four terraces' side ledges, three on top; the Sky Cannon on top ----
   for (let n = 1; n <= 4; n++) { const t = TERRACE(n), nx = TERRACE(n + 1), south = n % 2 === 0, z = south ? (t.z1 + nx.z1) / 2 + 2 : (t.z0 + nx.z0) / 2 - 2, xa = nx.x0 + 12; for (let k = 0; k < 3; k++) house(xa + (k * (458 - xa)) / 2, z + (south ? -3.4 : 3.4), t.y, south ? 0 : Math.PI, 3, 6); }
   { const t = TERRACE(5); house(t.x0 + 16, -20, t.y, 0, 3, 6); house(t.x0 + 16, 20, t.y, Math.PI, 3, 6); house(t.x0 + 38, -22, t.y, 0, 3, 6); }
   // ---- the Floating Islands: two houses each; jump pads between them; a balloon home from the first and the last ----
-  ISLES.forEach((s, n) => { for (const sd of [-1, 1]) { const a = n * 1.3 + sd * 1.15, x = s.x + Math.cos(a) * s.r * 0.55, z = s.z + Math.sin(a) * s.r * 0.55; house(x, z, s.y, Math.atan2(s.x - x, s.z - z), 4, 5); } });
   for (const [a, b] of ISLE_LINKS) for (const [f, t] of [[a, b], [b, a]]) { const A = ISLES[f], B = ISLES[t], d = hyp(B.x - A.x, B.z - A.z), ux = (B.x - A.x) / d, uz = (B.z - A.z) / d; pads.push({ x: A.x + ux * (A.r - 3), z: A.z + uz * (A.r - 3), y: A.y, tx: B.x - ux * (B.r - 7), tz: B.z - uz * (B.r - 7), ty: B.y, from: f, to: t }); }
   balloons.push({ x: ISLES[0].x - 12, z: ISLES[0].z + 8, y: ISLES[0].y }, { x: ISLES[5].x + 6, z: ISLES[5].z + 10, y: ISLES[5].y });
+  // each island's two houses stand where they're farthest from its pads, landing spots, balloon and middle (owner, 2026-11-11: couriers landed inside them)
+  ISLES.forEach((s, n) => {
+    const keep = [{ x: s.x, z: s.z }, ...pads.filter((p) => p.from === n), ...pads.filter((p) => p.to === n).map((p) => ({ x: p.tx, z: p.tz })), ...balloons.filter((b) => hyp(b.x - s.x, b.z - s.z) < s.r)]; if (n === CANNON.to) keep.push({ x: s.x - 9, z: s.z });
+    for (let k = 0; k < 2; k++) { let best = null, bs = -1;
+      for (let q = 0; q < 72; q++) { const a = (q / 72) * TAU, x = s.x + Math.cos(a) * s.r * 0.62, z = s.z + Math.sin(a) * s.r * 0.62, yaw = Math.atan2(s.x - x, s.z - z), mx = x + Math.sin(yaw) * 5.5, mz = z + Math.cos(yaw) * 5.5;
+        const sc = Math.min(...keep.map((o) => Math.min(hyp(o.x - x, o.z - z) - 3.6, hyp(o.x - mx, o.z - mz)))); if (sc > bs) { bs = sc; best = { x, z, yaw }; } }
+      house(best.x, best.z, s.y, best.yaw, 4, 5); keep.push({ x: best.x, z: best.z }, { x: best.x + Math.sin(best.yaw) * 5.5, z: best.z + Math.cos(best.yaw) * 5.5 }); }
+  });
   // ---- boost pads on the avenues and the mountain road; trees where there's room ----
   for (let q = 0; q < 4; q++) for (const r of [40, 100]) boosts.push({ x: Math.cos((q * TAU) / 4) * r, z: Math.sin((q * TAU) / 4) * r, y: 0, yaw: Math.atan2(Math.cos((q * TAU) / 4), Math.sin((q * TAU) / 4)) });
   boosts.push({ x: 175, z: 0, y: 0.12, yaw: Math.PI / 2 }, { x: 265, z: 0, y: 0.12, yaw: Math.PI / 2 });
@@ -234,7 +242,7 @@ function buildTown() {
     for (let k = 0; k < 4; k++) { const x = nx.x0 + 26 + 3.2 * k; rect(x, x + 3.2, south ? nx.z1 : nx.z0 - 4, south ? nx.z1 + 4 : nx.z0, t.y + STEP_H * (k + 1), "roof", t.y); } }
   // ---- district hazards ----
   for (let k = 0; k < 8; k++) { const a = 0.9 + (k * (TAU - 1.8)) / 7; sprinklers.push({ x: Math.cos(a) * 140, z: Math.sin(a) * 140, y: 0, ph: k * 1.7 }); }
-  for (let n = 1; n <= 4; n++) { const t = TERRACE(n); goats.push({ id: n - 1, hx: t.x0 + 4, hz: n % 2 ? 40 : -40, y: t.y }); }
+  for (let n = 1; n <= 4; n++) for (const sd of [1, -1]) { const t = TERRACE(n); goats.push({ id: goats.length, hx: t.x0 + 4, hz: sd * 44, y: t.y }); }
   for (let n = 0, tries = 0; n < 130 && tries < 4000; tries++) {
     const x = TOWN.x0 + 6 + rnd() * (TOWN.x1 - TOWN.x0 - 12), z = TOWN.z0 + 6 + rnd() * (TOWN.z1 - TOWN.z0 - 12), r = hyp(x, z), a = Math.atan2(z, x);
     if (r < 32 || Math.abs(r - 60) < 7 || Math.abs(r - 140) < 7 || Math.abs(x) < 7 || Math.abs(z) < 7) continue;
@@ -264,3 +272,13 @@ export const inSafeZone = (x, z, y = 0) => y < 8 && hyp(x - PO.x, z - PO.z) < SA
 export const housesIn = (d) => houses.filter((h) => h.d === d);
 // which island (x, z) is over (or -1)
 export function isleAt(x, z) { for (let n = 0; n < ISLES.length; n++) if (hyp(x - ISLES[n].x, z - ISLES[n].z) <= ISLES[n].r + 0.5) return n; return -1; }
+
+// dogs roam their district (owner, 2026-11-11: not waiting in yards you can ride round): where each starts
+export function roamOk(x, z, y, d) { return Math.abs(surfaceAt(x, z, y + 0.5) - y) < 0.55 && !blocked(x, z, y, 0.6) && !inSafeZone(x, z, y) && hyp(x - PO.x, z - PO.z) > SAFE_R + 4 && districtAt(x, z, y) === d && !inPond(x, z, y); }
+(function populate() {
+  const rnd = rng(77123), put = (n, d, pt) => { for (let k = 0, tries = 0; k < n && tries < 4000; tries++) { const [x, z, y] = pt(); if (!roamOk(x, z, y, d) || dogs.some((q) => hyp(q.hx - x, q.hz - z) < 14)) continue; dogs.push({ id: dogs.length, hx: x, hz: z, y, d, look: Math.floor(rnd() * 3) }); k++; } };
+  put(9, 0, () => { const a = rnd() * TAU, r = 30 + rnd() * 62; return [Math.cos(a) * r, Math.sin(a) * r, 0]; });
+  put(18, 1, () => { const a = rnd() * TAU, r = 100 + rnd() * 95; return [Math.cos(a) * r, Math.sin(a) * r, 0]; });
+  put(8, 2, () => { const b = [192, 242, 292][Math.floor(rnd() * 3)], spine = rnd() < 0.35; return spine ? [MARSH.x0 + 8 + rnd() * 160, (rnd() - 0.5) * 5, 0.12] : [b + (rnd() - 0.5) * 3.5, (rnd() - 0.5) * 190, 0.12]; });
+  put(6, 3, () => { const t = TERRACE(1 + Math.floor(rnd() * 5)); return [t.x0 + 2 + rnd() * (t.x1 - t.x0 - 4), t.z0 + 2 + rnd() * (t.z1 - t.z0 - 4), t.y]; });
+})();

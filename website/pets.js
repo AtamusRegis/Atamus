@@ -4,7 +4,7 @@
 // deliveries, rolls, damage, coins, mounts; this page shows the town (pets-world.js, shared with the server), moves you
 // and asks. Phone first: a thumb joystick, drag to look, pinch to zoom, big buttons.
 import * as THREE from "./vendor/three.module.min.js";
-import * as World from "./pets-world.js?v=1794432301";
+import * as World from "./pets-world.js?v=1794434634";
 
 const $ = (id) => document.getElementById(id);
 const { TAU, clamp, hyp, MOUNTS, TIERS, RARITY, RARITY_C, MODS, EGGS, UPGRADES } = World;
@@ -18,10 +18,10 @@ const el = (tag, cls, text) => { const e = document.createElement(tag); if (cls)
 const canvas = $("gl");
 const renderer = new THREE.WebGLRenderer({ canvas, antialias: !touchy, powerPreference: "high-performance" });
 renderer.setPixelRatio(Math.min(devicePixelRatio || 1, touchy ? 1.5 : 2)); renderer.shadowMap.enabled = !touchy;   // phones keep the soft spots under everyone, not full shadows renderer.shadowMap.type = THREE.PCFSoftShadowMap;
-const scene = new THREE.Scene(); scene.background = new THREE.Color("#8fd3ff"); scene.fog = new THREE.Fog("#c4e9ff", 220, 760);
+const scene = new THREE.Scene(); scene.background = new THREE.Color("#9cc7e6"); scene.fog = new THREE.Fog("#bcd9ec", 220, 760);
 const camera = new THREE.PerspectiveCamera(60, 1, 0.3, 1600);
-scene.add(new THREE.HemisphereLight("#ffffff", "#d9e6c4", 2.6));
-const sun = new THREE.DirectionalLight("#fff3d6", 1.6); sun.castShadow = true; sun.shadow.mapSize.set(touchy ? 1024 : 2048, touchy ? 1024 : 2048); sun.shadow.bias = -0.0006; sun.shadow.normalBias = 0.05;
+scene.add(new THREE.HemisphereLight("#ffffff", "#c9d2bc", 2.05));
+const sun = new THREE.DirectionalLight("#fff3d6", 1.25); sun.castShadow = true; sun.shadow.mapSize.set(touchy ? 1024 : 2048, touchy ? 1024 : 2048); sun.shadow.bias = -0.0006; sun.shadow.normalBias = 0.05;
 Object.assign(sun.shadow.camera, { left: -55, right: 55, top: 55, bottom: -55, near: 1, far: 260 }); scene.add(sun, sun.target);
 function resize() { const w = innerWidth, h = innerHeight; renderer.setSize(w, h, false); camera.aspect = w / h; camera.updateProjectionMatrix(); }
 addEventListener("resize", resize); resize();
@@ -43,8 +43,10 @@ function textSprite(text, { size = 40, color = "#23303b", bg = "rgba(255,255,255
 }
 
 // ---- the town, drawn from the shared world ----
-const KIND_C = { grass: "#7fd45c", mud: "#7d5d40", rock: "#a39c92", plank: "#cfa068", isle: "#8bdc6a", road: "#8f929a", stone: "#b6bac2", roof: "#cf5a40" };
-const HOUSE_C = [["#fff1d6", "#e0604a"], ["#ffe2c2", "#5a8fd6"], ["#d9e8c8", "#7a5a3c"], ["#e6dccf", "#8b5fc7"], ["#ffffff", "#ff8fb8"]];   // walls and roofs, by district
+// (owner, 2026-11-11) the town's colors are kept calm so the delivery marker (POI: the one hot pink thing in town) stands out
+const POI = "#ff1f8f";
+const KIND_C = { grass: "#78b765", mud: "#75583e", rock: "#9a948b", plank: "#b9905f", isle: "#80bd6c", road: "#84878f", stone: "#a9adb5", roof: "#b9573f" };
+const HOUSE_C = [["#efe3cc", "#c8604c"], ["#ecd5b8", "#5c86bd"], ["#cfdcc0", "#7a5a3c"], ["#dcd3c6", "#8368b0"], ["#f1f1ec", "#3fa9a4"]];   // walls and roofs, by district
 const houseMesh = [], dogMesh = [], gooseMesh = [], goatMesh = [], sprinklerMesh = [], pipeEyes = [];
 function rampGeo(s) {   // a wedge: flat at the bottom, rising along z
   const y0 = Math.min(s.ya, s.yb), g = new THREE.BufferGeometry(), A = [s.x0, y0, s.z0], B = [s.x1, y0, s.z0], C = [s.x1, y0, s.z1], D = [s.x0, y0, s.z1], E = [s.x0, s.ya, s.z0], F = [s.x1, s.ya, s.z0], G = [s.x1, s.yb, s.z1], H = [s.x0, s.yb, s.z1];
@@ -108,7 +110,7 @@ function buildTown() {
     const base = new THREE.Mesh(new THREE.CylinderGeometry(C.r + 0.4, C.r + 0.8, 0.5, 20), mat("#3d4650")); base.position.y = 0.25; g.add(base);
     const pad = new THREE.Mesh(new THREE.CylinderGeometry(C.r, C.r, 0.1, 20), basic("#9aa8ff")); pad.position.y = 0.55; g.add(pad);
     const barrel = new THREE.Mesh(new THREE.CylinderGeometry(1.5, 1.9, 6, 14, 1, true), new THREE.MeshLambertMaterial({ color: "#5a6472", side: THREE.DoubleSide })); barrel.position.set(-2.6, 2.2, 0); barrel.rotation.z = -0.9; barrel.castShadow = true; g.add(barrel); }
-  for (const p of World.pads) { const m = new THREE.Mesh(new THREE.CylinderGeometry(1.7, 1.7, 0.16, 18), mat("#ff5ac8")); m.position.set(p.x, p.y + 0.08, p.z); scene.add(m); const r = new THREE.Mesh(new THREE.TorusGeometry(1.7, 0.16, 6, 18).rotateX(Math.PI / 2), mat("#ffffff")); r.position.set(p.x, p.y + 0.16, p.z); scene.add(r); }
+  for (const p of World.pads) { const m = new THREE.Mesh(new THREE.CylinderGeometry(1.7, 1.7, 0.16, 18), mat("#35c4de")); m.position.set(p.x, p.y + 0.08, p.z); scene.add(m); const r = new THREE.Mesh(new THREE.TorusGeometry(1.7, 0.16, 6, 18).rotateX(Math.PI / 2), mat("#ffffff")); r.position.set(p.x, p.y + 0.16, p.z); scene.add(r); }
   { const cv = document.createElement("canvas"); cv.width = cv.height = 128; const g = cv.getContext("2d"); g.fillStyle = "#ffd84a"; g.fillRect(0, 0, 128, 128); g.strokeStyle = "#e0701a"; g.lineWidth = 14; g.lineCap = "round"; g.lineJoin = "round";
     for (const y of [92, 58, 24]) { g.beginPath(); g.moveTo(30, y + 18); g.lineTo(64, y - 8); g.lineTo(98, y + 18); g.stroke(); }
     const t = new THREE.CanvasTexture(cv); t.colorSpace = THREE.SRGBColorSpace; const bm = new THREE.MeshLambertMaterial({ map: t });
@@ -207,6 +209,9 @@ const LOOK = {
   fox: { plan: "quad", body: [0.62, 0.55, 1.25], leg: 0.5, head: 0.55, snout: 0.36, snoutC: "a", ears: "big", tail: "bushy", nose: "#1d232a" },
   pony: { plan: "quad", body: [0.8, 0.8, 1.5], leg: 0.85, neck: 0.6, head: 0.5, snout: 0.4, ears: "point", tail: "hair", mane: true, hooves: "#2a1c12" },
   unicorn: { plan: "quad", body: [0.8, 0.8, 1.5], leg: 0.9, neck: 0.65, head: 0.5, snout: 0.4, ears: "point", tail: "rainbow", mane: "rainbow", horn: true, hooves: "#ffd84a" },
+  deer: { plan: "quad", body: [0.6, 0.62, 1.25], leg: 0.9, neck: 0.5, head: 0.45, snout: 0.3, ears: "side", antlers: true, tail: "stub", spots: true, nose: "#1d232a" },
+  stego: { plan: "quad", body: [1.0, 0.9, 1.7], leg: 0.5, legW: 0.34, head: 0.5, snout: 0.35, low: true, plates: true, tail: "spike" },
+  trike: { plan: "quad", body: [1.1, 0.95, 1.7], leg: 0.55, legW: 0.36, head: 0.75, snout: 0.4, low: true, frill: true, tail: "thick" },
   goat: { plan: "quad", body: [0.6, 0.62, 1.1], leg: 0.55, head: 0.5, snout: 0.3, ears: "side", horns: "curl", beard: true, tail: "stub" },
 };
 const shiny = (c) => "#" + new THREE.Color(c).lerp(new THREE.Color("#ffffff"), 0.45).offsetHSL(0.06, 0.2, 0).getHexString();   // a Shiny's lighter, shifted coat
@@ -395,7 +400,7 @@ function gooseModel(sky) {
 function buildAnimals() {
   const DOG_C = [["#8a5a34", "#e9d6b8"], ["#3d4650", "#cfd6dd"], ["#d9a55a", "#fff4e0"]];
   for (const d of World.dogs) { const [c, a] = DOG_C[d.look], m = petModel({ look: "pup", c, a, size: 0.8 }); m.g.position.set(d.hx, d.y, d.hz); scene.add(m.g); blobUnder(m.g, 1.6);
-    const bang = textSprite("!", { size: 64, color: "#ffffff", bg: "#e5534b" }); bang.position.y = 2.3; bang.visible = false; m.g.add(bang); dogMesh.push({ m, bang, x: d.hx, z: d.hz, yaw: 0, tx: d.hx, tz: d.hz, tyaw: 0, mode: 0, y: d.y }); }
+    const bang = textSprite("!", { size: 64, color: "#ffffff", bg: "#e5534b" }); bang.position.y = 2.3; bang.visible = false; m.g.add(bang); dogMesh.push({ m, bang, x: d.hx, z: d.hz, yaw: 0, tx: d.hx, tz: d.hz, tyaw: 0, mode: 0, y: d.y, ty: d.y }); }
   for (const q of World.geese) { const m = gooseModel(); m.g.position.set(q.x, q.y, q.z); scene.add(m.g); blobUnder(m.g, 1.2); gooseMesh.push({ m, x: q.x, y: q.y, z: q.z, yaw: 0, tx: q.x, ty: q.y, tz: q.z, tyaw: 0, mode: 0, carry: -1, box: null }); }
   for (const q of World.goats) { const m = petModel({ look: "goat", c: "#e9e4dc", a: "#8a7a66", size: 0.95 }); m.g.position.set(q.hx, q.y, q.hz); scene.add(m.g); blobUnder(m.g, 1.7); goatMesh.push({ m, x: q.hx, z: q.hz, yaw: Math.PI / 2, tx: q.hx, tz: q.hz, tyaw: Math.PI / 2, mode: 0, y: q.y }); }
 }
@@ -500,7 +505,7 @@ function tryJump() {
 }
 function useAbility() {
   if (me.stun > 0 || me.transit || me.foot) return; const q = riding(), ab = MOUNTS[q.sp].ab, tier = World.abilityTier(q.lv), t = now(); if (!tier) { sfx("no"); return; }
-  if (ab === "jump2" || ab === "glide") { tryJump(); return; }
+  if (ab === "jump2") { tryJump(); return; }
   if (t < me.abilityAt + World.ABILITY_CD[ab][tier]) return; me.abilityAt = t;
   if (ab === "dash") { me.dash = 0.32 + 0.06 * tier; sfx("dash"); cam.shake = Math.max(cam.shake, 0.15); }
   else { netSend({ t: "ability" }); sfx("bark"); }
@@ -527,7 +532,8 @@ function stepMe(dt) {
   const t = now();
   if (me.stun > 0) { me.stun -= dt; if (me.stun <= 0) { me.stun = 0; me.footT = 2.2; } }
   if (me.transit) { stepTransit(dt); return; }
-  const st = myStats(), q = riding(), ab = MOUNTS[q.sp].ab, tier = World.abilityTier(q.lv);
+  const st = myStats(), q = riding();
+  if (World.blocked(me.x, me.z, me.y)) out: for (let r = 1; r < 16; r++) for (let k = 0; k < 12; k++) { const x = me.x + Math.cos((k / 12) * TAU) * r, z = me.z + Math.sin((k / 12) * TAU) * r; if (!World.blocked(x, z, me.y) && World.surfaceAt(x, z, me.y + 0.5) > -1e9) { me.x = x; me.z = z; break out; } }   // inside something solid (it shouldn't happen): out to the nearest clear spot
   // what the player's asking for, relative to the camera
   let ix = 0, iz = 0;
   if (!chatting && !panelOpen()) { if (keys.has("KeyW") || keys.has("ArrowUp")) iz += 1; if (keys.has("KeyS") || keys.has("ArrowDown")) iz -= 1; if (keys.has("KeyD") || keys.has("ArrowRight")) ix += 1; if (keys.has("KeyA") || keys.has("ArrowLeft")) ix -= 1; }
@@ -536,7 +542,7 @@ function stepMe(dt) {
   if (me.stun > 0) mx = mz = 0;
   const kind = me.ground ? World.groundKind(me.x, me.z, me.y) : "", mud = kind === "mud" && !World.inPond(me.x, me.z, me.y) ? World.MUD_SLOW : kind === "mud" ? 0.6 : 1;
   if (me.boost > 0) me.boost -= dt; if (me.dash > 0) me.dash -= dt;
-  let speed = me.foot ? 5.5 : st.speed * (heavy() ? World.HEAVY_SLOW : 1) * mud * (me.dash > 0 ? 2.4 : me.boost > 0 ? 1.6 : 1) * (me.glide ? 1.12 : 1);
+  let speed = me.foot ? 5.5 : st.speed * (heavy() ? World.HEAVY_SLOW : 1) * mud * (me.dash > 0 ? 2.4 : me.boost > 0 ? 1.6 : 1);
   if (me.dash > 0 && hyp(mx, mz) < 0.1) { mx = Math.sin(me.yaw); mz = Math.cos(me.yaw); }
   const acc = (me.ground ? 70 : 26) * dt, tvx = mx * speed, tvz = mz * speed;
   me.vx += clamp(tvx - me.vx, -acc, acc); me.vz += clamp(tvz - me.vz, -acc, acc);
@@ -545,8 +551,6 @@ function stepMe(dt) {
   // jumping, gliding, falling
   if (jumpTap) { jumpTap = false; tryJump(); }
   me.vy -= GRAV * dt;
-  me.glide = !me.ground && !me.foot && jumpHeld && ab === "glide" && tier > 0 && me.vy < 0 && me.stun <= 0;
-  if (me.glide) me.vy = Math.max(me.vy, -[3.2, 2.3, 1.5][tier - 1]);
   // sprinklers shove you sideways; wind pushes across the islands
   const sn = srvNow();
   for (const s of World.sprinklers) { const d = hyp(me.x - s.x, me.z - s.z); if (d < World.SPRINKLER.r && Math.abs(me.y - s.y) < 2 && World.sprinklerOn(s, sn)) { const k = World.SPRINKLER.push * dt * 3 / Math.max(d, 0.6); me.px += (me.x - s.x) * k; me.pz += (me.z - s.z) * k; } }
@@ -636,7 +640,7 @@ canvas.addEventListener("contextmenu", (e) => e.preventDefault());
 addEventListener("keydown", (e) => {
   if (e.target && (e.target.tagName === "INPUT" || e.target.tagName === "SELECT")) return;
   if (e.code === "Enter") { openChat(); e.preventDefault(); return; }
-  if (e.code === "Escape") { closePanel(); return; }
+  if (e.code === "Escape") { closePanel(); closeRoll(); return; }
   if (e.repeat) return; keys.add(e.code);
   if (e.code === "Space") { jumpHeld = true; jumpTap = true; e.preventDefault(); }
   if (e.code === "KeyF") doKick(); if (e.code === "KeyQ") doWhistle(); if (e.code === "KeyE" || e.code === "ShiftLeft") useAbility();
@@ -662,23 +666,31 @@ function flyCoins(x, y, z, n) {   // coins fly from the mailbox to the counter o
 }
 
 // ---- the reward roll: a slot over the mailbox spins for a second and a half, then lands ----
+// (owner, 2026-11-11) the reward roll is on the screen, big: the reel spins and slows for 2.6 s, lands, then a card shows
+// what you got and stays until you close it (or grab your next parcel)
 let roll = null;
-function startRoll(h, res, lvUp) { heldCoins = res.coins; roll = { h, res, lvUp, t: 0, last: -1 }; $("roll").style.display = "block"; }
+function startRoll(h, res, lvUp) { heldCoins = res.coins; roll = { h, res, lvUp, t: 0, last: -1, n: 0, next: 0 }; $("roll").style.display = "flex"; $("reel").style.display = "block"; $("reel").className = "disp"; $("rcard").style.display = "none"; }
+function closeRoll() { if (roll && !roll.done) return; roll = null; $("roll").style.display = "none"; }
+$("rok").onclick = closeRoll;
 function stepRoll(dt) {
-  if (!roll) return; roll.t += dt; const r = $("roll"), s = toScreen(roll.h.mx, roll.h.my + 3.4, roll.h.mz); r.style.transform = `translate(-50%, -50%) translate(${s.x.toFixed(1)}px, ${s.y.toFixed(1)}px)`; r.style.opacity = s.front ? "1" : "0";
-  if (roll.t < 1.5) {
-    const tease = roll.res.near && roll.t > 1.1, n = tease ? 4 : Math.floor(roll.t / (0.06 + roll.t * 0.07)) % 5;   // a near miss hangs on Legendary before it lets go
-    if (n !== roll.last || tease) { if (n !== roll.last) sfx(tease ? "near" : "tick"); roll.last = n; r.textContent = RARITY[n]; r.style.color = RARITY_C[n]; r.className = tease ? "tease" : ""; }
+  if (!roll) return; roll.t += dt; const r = $("reel"), R = roll.res, c = RARITY_C[R.tier], h = roll.h;
+  if (roll.t < 2.6) {
+    const tease = R.near && roll.t > 1.9;   // a near miss hangs on Legendary before it lets go
+    if (tease) { if (roll.last !== 4) { sfx("near"); roll.last = 4; r.textContent = RARITY[4]; r.style.color = r.style.borderColor = RARITY_C[4]; r.className = "disp tease"; } }
+    else if (roll.t >= roll.next) { roll.next = roll.t + 0.05 + roll.t * roll.t * 0.045; roll.n = (roll.n + 1) % 5; roll.last = roll.n; sfx("tick"); r.textContent = RARITY[roll.n]; r.style.color = r.style.borderColor = RARITY_C[roll.n]; r.className = "disp"; void r.offsetWidth; r.className = "disp flip"; }
   } else if (!roll.done) {
-    roll.done = true; heldCoins = 0; const R = roll.res, c = RARITY_C[R.tier], h = roll.h; r.textContent = RARITY[R.tier]; r.style.color = c; r.className = "land"; sfx("win", R.tier);
-    emit(h.mx, h.my + 2.6, h.mz, 14 + R.tier * 16, { colors: [c, "#ffffff"], speed: 4 + R.tier * 1.5, up: 5, life: 1 + R.tier * 0.2, size: 0.18 }); if (R.tier >= 3) { cam.shake = 0.3 + 0.2 * (R.tier - 3); flash(c); }
-    let dy = 0; const line = (txt, col) => { setTimeout(() => popup(txt, col, h.mx, h.my + 2.2, h.mz), dy); dy += 220; };
-    line("+" + fmt(R.coins), "#ffd84a"); if (R.xp) line("+" + R.xp + " XP", "#7ee08a"); if (R.coupons) line("+" + R.coupons + " Level Coupon" + (R.coupons > 1 ? "s" : ""), "#ff9be0");
-    flyCoins(h.mx, h.my + 2, h.mz, 3 + R.tier * 2);
-    if (R.egg) setTimeout(() => { sfx("egg"); popup(EGGS[R.egg].name + "!", EGGS[R.egg].c, h.mx, h.my + 3, h.mz, true); emit(h.mx, h.my + 2, h.mz, 24, { colors: [EGGS[R.egg].c, "#ffffff"], speed: 3, up: 6, life: 1.1 }); $("mstable").classList.remove("bump"); void $("mstable").offsetWidth; $("mstable").classList.add("bump"); }, dy + 150);
-    if (roll.lvUp) setTimeout(levelFx, dy + 500);
+    roll.done = true; heldCoins = 0; r.textContent = RARITY[R.tier]; r.style.color = r.style.borderColor = c; r.className = "disp land"; sfx("win", R.tier); flash(c); cam.shake = Math.max(cam.shake, 0.2 + 0.15 * R.tier);
+    emit(h.mx, h.my + 2.6, h.mz, 14 + R.tier * 16, { colors: [c, "#ffffff"], speed: 4 + R.tier * 1.5, up: 5, life: 1 + R.tier * 0.2, size: 0.18 }); emit(me.x, me.y + 2.5, me.z, 10 + R.tier * 14, { colors: [c, "#ffffff"], speed: 5 + R.tier, up: 6, life: 1.2, size: 0.18 });
     hudDirty = true; if (panel === "stable" || panel === "odds") renderPanel();
-  } else if (roll.t > 3.1) { roll = null; r.style.display = "none"; }
+  } else if (!roll.shown && roll.t > 3.5) {
+    roll.shown = true; r.style.display = "none"; const card = $("rcard"), list = $("rlist"); card.style.display = "flex"; card.style.setProperty("--rc", c); $("rtitle").textContent = RARITY[R.tier]; $("rtitle").style.background = c; $("rtitle").style.color = R.tier ? "#ffffff" : "#23303b"; list.innerHTML = "";
+    const row = (icon, text, delay, snd) => { const d = el("div", "rrow"); d.appendChild(icon); d.appendChild(el("b", "disp", text)); d.style.animationDelay = delay + "ms"; list.appendChild(d); setTimeout(() => { if (roll && roll.res === R) sfx(snd); }, delay); };
+    let dl = 150; row(el("i", "coin"), "+" + fmt(R.coins), dl, "coin"); flyCoins(me.x, me.y + 2, me.z, 3 + R.tier * 2);
+    if (R.xp) row(el("i", "ixp", "XP"), "+" + R.xp, (dl += 350), "tick");
+    if (R.coupons) row(el("i", "icoupon"), "+" + R.coupons + " Level Coupon" + (R.coupons > 1 ? "s" : ""), (dl += 350), "buy");
+    if (R.egg) { const e = el("i", "egg"); e.style.background = EGGS[R.egg].c; row(e, EGGS[R.egg].name, (dl += 450), "egg"); $("mstable").classList.remove("bump"); void $("mstable").offsetWidth; $("mstable").classList.add("bump"); }
+    if (roll.lvUp) setTimeout(levelFx, dl + 500);
+  }
 }
 function levelFx() { sfx("level"); popup("LEVEL UP!", "#ffd84a", me.x, me.y + 3.2, me.z, true); for (let k = 0; k < 28; k++) { const a = (k / 28) * TAU; parts.length < PN && parts.push({ x: me.x, y: me.y + 0.3, z: me.z, vx: Math.cos(a) * 6, vy: 2.5, vz: Math.sin(a) * 6, t: 0, life: 0.8, size: 0.2, grav: 3, c: k % 2 ? "#ffd84a" : "#ffffff", r: k }); } }
 
@@ -702,15 +714,9 @@ function hud(dt) {
       $("caddr").textContent = World.houses[P.house].name; }
   }
   if (P && P.mod === "express") { const left = Math.max(0, (P.due - (Date.now() + clockOff)) / 1000); $("ctimer").style.display = "block"; $("ctimer").textContent = left.toFixed(1); $("ctimer").classList.toggle("late", left <= 5); } else $("ctimer").style.display = "none";
-  // the waypoint: an arrow at the edge of the screen (or over the spot) with how far it is
-  const w = $("way"), g = stolenBy >= 0 ? gooseMesh[stolenBy] : null, tg = parcel ? (() => { const h = World.houses[parcel.house]; return { x: h.mx, y: h.my + 2.4, z: h.mz }; })() : dropped ? { x: dropped.x, y: dropped.y + 1.5, z: dropped.z } : g ? { x: g.x, y: g.y + 2, z: g.z } : null;
-  if (tg) {
-    V.set(tg.x, tg.y, tg.z).applyMatrix4(camera.matrixWorldInverse); const behind = V.z > 0; V.set(tg.x, tg.y, tg.z).project(camera);
-    let sx = V.x, sy = V.y; if (behind) { sx = -sx; sy = -sy; } const off = behind || Math.abs(sx) > 0.9 || Math.abs(sy) > 0.82;
-    if (off) { const l = Math.max(Math.abs(sx) / 0.9, Math.abs(sy) / 0.82) || 1; sx /= l; sy /= l; if (behind && Math.abs(sy) < 0.82 && Math.abs(sx) < 0.9) { const l2 = hyp(sx, sy) || 1; sx = (sx / l2) * 0.9; sy = (sy / l2) * 0.82; } }
-    w.style.display = "flex"; w.style.transform = `translate(-50%, -50%) translate(${((sx * 0.5 + 0.5) * innerWidth).toFixed(1)}px, ${((-sy * 0.5 + 0.5) * innerHeight).toFixed(1)}px)`;
-    $("wayarrow").style.transform = `rotate(${off ? (Math.atan2(-sy, sx) + Math.PI / 2).toFixed(2) : Math.PI.toFixed(2)}rad)`; $("waydist").textContent = Math.round(hyp(tg.x - me.x, tg.z - me.z, tg.y - 2 - me.y)) + " m"; w.style.color = parcel ? TIERS[parcel.tier].c : "#ff6b6b";
-  } else w.style.display = "none";
+  // the way there: the arrow on the ground round you, and how far on the card
+  const g = stolenBy >= 0 ? gooseMesh[stolenBy] : null, tg = parcel ? (() => { const h = World.houses[parcel.house]; return { x: h.mx, y: h.my, z: h.mz, c: POI }; })() : dropped ? { x: dropped.x, y: dropped.y, z: dropped.z, c: "#ffd84a" } : g ? { x: g.x, y: g.y, z: g.z, c: "#ff3b30" } : null;
+  stepArrow(t, tg); if (tg) $("cdist").textContent = Math.round(hyp(tg.x - me.x, tg.z - me.z, tg.y - me.y)) + " m";
   if (!hudDirty) return; hudDirty = false;
   $("stampn").textContent = save.stamp; $("stampfill").style.height = clamp(save.stamp, 0, 100) + "%";
   const ba = $("bability"); ba.firstChild.textContent = World.ABILITY[ab]; ba.classList.toggle("locked", !tier); ba.dataset.tier = tier;
@@ -869,7 +875,7 @@ function sendPos(force) {
   netSend({ t: "pos", x: +me.x.toFixed(2), y: +me.y.toFixed(2), z: +me.z.toFixed(2), yaw: +me.yaw.toFixed(2), mv, ct: Math.round(performance.now()) }); lastPos = s; lastSent = performance.now();
 }
 function setNpc(m) {
-  for (const [id, x, z, yaw, mode] of m.dogs || []) { const d = dogMesh[id]; if (!d) continue; d.tx = x; d.tz = z; d.tyaw = yaw; if (mode !== d.mode) { if (mode === 1 && hyp(x - me.x, z - me.z) < 45) sfx("bark"); d.mode = mode; d.bang.visible = mode === 1; } }
+  for (const [id, x, z, yaw, mode, y] of m.dogs || []) { const d = dogMesh[id]; if (!d) continue; d.tx = x; d.tz = z; d.tyaw = yaw; if (Number.isFinite(y)) d.ty = y; if (mode !== d.mode) { if (mode === 1 && hyp(x - me.x, z - me.z) < 45) sfx("bark"); d.mode = mode; d.bang.visible = mode === 1; } }
   for (const [id, x, z, y, yaw, mode, carry] of m.geese || []) { const g = gooseMesh[id]; if (!g) continue; g.tx = x; g.tz = z; g.ty = y; g.tyaw = yaw; if (mode !== g.mode) { if (mode === 1 && hyp(x - me.x, z - me.z) < 45) sfx("honk"); if (mode === 4) emit(g.x, g.y + 0.8, g.z, 14, { colors: ["#ffffff", "#e8eef2"], speed: 3, up: 3, life: 0.9, grav: 3 }); g.mode = mode; }
     if (carry !== g.carry) { g.carry = carry; g.m.slot.clear(); if (carry >= 0) { const b = parcelMesh(carry, ""); b.scale.setScalar(0.6); g.m.slot.add(b); } } }
   for (const [id, x, z, yaw, mode] of m.goats || []) { const g = goatMesh[id]; if (!g) continue; g.tx = x; g.tz = z; g.tyaw = yaw; if (mode !== g.mode) { if (mode === 1 && hyp(x - me.x, z - me.z) < 45) { sfx("stomp"); emit(x, g.y + 0.1, z, 10, { colors: ["#c9bfae"], speed: 2.5, up: 1.5, life: 0.5, grav: 4 }); } g.mode = mode; } }
@@ -887,7 +893,7 @@ function onNet(m) {
       save = World.cleanData(m.data); shownCoins = save.coins; $("coinn").textContent = fmt(save.coins); remount(); setVolumes();
       if (!again) { me.x = m.x; me.z = m.z; me.y = 0; me.yaw = Math.PI; cam.yaw = 0; msgs.innerHTML = ""; }
       me.foot = false; me.stun = 0; me.transit = null; me.hidden = false;
-      for (const p of m.players) addOther(p); setNpc(m); for (const g of gooseMesh) { g.x = g.tx; g.z = g.tz; g.y = g.ty; } hudDirty = true; sendPos(true);
+      for (const p of m.players) addOther(p); setNpc(m); for (const g of gooseMesh) { g.x = g.tx; g.z = g.tz; g.y = g.ty; } for (const d of dogMesh) { d.x = d.tx; d.z = d.tz; d.y = d.ty; } for (const g of goatMesh) { g.x = g.tx; g.z = g.tz; } hudDirty = true; sendPos(true);
       break;
     }
     case "auth_err": if (m.why === "expired") { setTok(null); showLogin(); } else showLogin(m.why === "banned" ? "Banned" + untilText(m.until) : ERR[m.why] || ERR.server); break;
@@ -912,7 +918,7 @@ function onNet(m) {
     case "belt": { const pop = !!m.next && JSON.stringify(m.next) !== JSON.stringify(belt.next), slide = belt.next && m.ready && JSON.stringify(m.ready) === JSON.stringify(belt.next); belt = { ready: m.ready, next: m.next }; beltShow(slide, pop); break; }
     case "parcel": {
       const had = parcel; parcel = m.p; stolen = null; stolenBy = -1; setCarry(mine, [parcel.tier, parcel.mod]); setTarget();
-      if (m.why === "grab") { sfx("grab"); me.squash = 0.25; if (parcel.mod === "golden") { sfx("shiny"); banner("GOLDEN PARCEL!", "#ffd84a"); } }
+      if (m.why === "grab") { closeRoll(); sfx("grab"); me.squash = 0.25; if (parcel.mod === "golden") { sfx("shiny"); banner("GOLDEN PARCEL!", "#ffd84a"); } }
       else if (m.why === "pickup") { setDropped(null); sfx("grab"); me.squash = 0.25; if (m.bonus) { popup("+" + m.bonus, "#ffd84a", me.x, me.y + 2.6, me.z); save.coins = m.coins; flyCoins(me.x, me.y + 2, me.z, 3); } }
       else if (had) { sfx("crack"); cam.shake = Math.max(cam.shake, 0.35); flash("#e5534b"); popup("-20%", "#ff6b6b", me.x, me.y + 2.8, me.z); emit(me.x, me.y + 1.4, me.z, 12, { colors: ["#c89a5e", "#8a5a34"], speed: 4, up: 3, life: 0.6, size: 0.14 }); }
       break;
@@ -976,12 +982,26 @@ function beltShow(slide, pop) {
   if (belt.next) { nextMesh = parcelMesh(belt.next.tier, belt.next.mod); nextMesh.position.y = pop ? 4 : 1.16; nextMesh.traverse((o) => { if (o.isMesh) { o.material = o.material.clone(); o.material.transparent = true; o.material.opacity = 0.45; } }); scene.add(nextMesh); if (pop && loggedIn) setTimeout(() => { if (hyp(me.x, me.z) < 40) sfx("pop"); }, 220); }
 }
 function setTarget() {
-  if (targetFx) { scene.remove(targetFx); targetFx = null; } if (!parcel) return; const h = World.houses[parcel.house], c = parcel.mod === "golden" ? "#ffd23a" : TIERS[parcel.tier].c;
+  if (targetFx) { scene.remove(targetFx); targetFx = null; } if (!parcel) return; const h = World.houses[parcel.house];
   targetFx = new THREE.Group(); targetFx.position.set(h.mx, h.my, h.mz);
-  const ring = new THREE.Mesh(new THREE.RingGeometry(World.DELIVER_R - 0.35, World.DELIVER_R, 40).rotateX(-Math.PI / 2), basic(c, 0.95)); ring.position.y = 0.14; const fill = new THREE.Mesh(new THREE.CircleGeometry(World.DELIVER_R - 0.35, 40).rotateX(-Math.PI / 2), basic(c, 0.28)); fill.position.y = 0.12;
-  const beam = new THREE.Mesh(new THREE.CylinderGeometry(0.5, 0.9, 60, 10, 1, true), new THREE.MeshBasicMaterial({ color: c, transparent: true, opacity: 0.22, side: THREE.DoubleSide, depthWrite: false })); beam.position.y = 30;
-  const label = textSprite(h.name, { size: 40, color: "#ffffff", bg: c === "#b8c2cc" ? "#7f8b97" : c }); label.position.y = 5.4; label.scale.multiplyScalar(1.6);
-  targetFx.add(ring, fill, beam, label); targetFx.userData = { ring, label }; scene.add(targetFx);
+  const flat = (geo, c, o, y) => { const m = new THREE.Mesh(geo.rotateX(-Math.PI / 2), new THREE.MeshBasicMaterial({ color: c, transparent: true, opacity: o, depthWrite: false })); m.position.y = y; m.renderOrder = 3; return m; };
+  const ring = flat(new THREE.RingGeometry(World.DELIVER_R - 0.55, World.DELIVER_R, 44), POI, 1, 0.16), edge = flat(new THREE.RingGeometry(World.DELIVER_R, World.DELIVER_R + 0.22, 44), "#ffffff", 1, 0.15), fill = flat(new THREE.CircleGeometry(World.DELIVER_R - 0.55, 44), POI, 0.4, 0.13);
+  const beam = new THREE.Mesh(new THREE.CylinderGeometry(1.1, 1.5, 90, 14, 1, true), new THREE.MeshBasicMaterial({ color: POI, transparent: true, opacity: 0.5, side: THREE.DoubleSide, depthWrite: false })); beam.position.y = 45;
+  const core = new THREE.Mesh(new THREE.CylinderGeometry(0.3, 0.3, 90, 8, 1, true), new THREE.MeshBasicMaterial({ color: "#ffffff", transparent: true, opacity: 0.85, side: THREE.DoubleSide, depthWrite: false })); core.position.y = 45;
+  const gem = new THREE.Mesh(new THREE.OctahedronGeometry(0.9), new THREE.MeshBasicMaterial({ color: POI })); gem.position.y = 4.2; gem.scale.y = 1.4;
+  const label = textSprite(h.name, { size: 44, color: "#ffffff", bg: POI, glow: "#ffffff" }); label.position.y = 6.6; label.scale.multiplyScalar(2);
+  targetFx.add(fill, ring, edge, beam, core, gem, label); targetFx.userData = { ring, label, gem }; scene.add(targetFx);
+}
+// the guide arrow: on the ground a little way out from you, pointing at where to go (owner, 2026-11-11: like the old game's)
+const wayArrow = (() => {
+  const sh = new THREE.Shape(); sh.moveTo(0, 1.7); sh.lineTo(1.25, 0.15); sh.lineTo(0.5, 0.15); sh.lineTo(0.5, -1.2); sh.lineTo(-0.5, -1.2); sh.lineTo(-0.5, 0.15); sh.lineTo(-1.25, 0.15); sh.closePath();
+  const geo = new THREE.ShapeGeometry(sh).rotateX(Math.PI / 2), g = new THREE.Group(), mk = (c, k, o) => { const m = new THREE.Mesh(geo, new THREE.MeshBasicMaterial({ color: c, side: THREE.DoubleSide, depthTest: false, transparent: true })); m.scale.setScalar(k); m.renderOrder = o; g.add(m); return m; };
+  mk("#ffffff", 1.28, 7); g.userData.fill = mk(POI, 1, 8); g.visible = false; scene.add(g); return g;
+})();
+function stepArrow(t, tg) {
+  const d = tg ? hyp(tg.x - me.x, tg.z - me.z) : 0; wayArrow.visible = !!tg && d > 5 && !me.hidden; if (!wayArrow.visible) return;
+  const sc = mine ? mine.sc : 1, R = 3 + 1.3 * sc + Math.sin(t * 5) * 0.35, ux = (tg.x - me.x) / d, uz = (tg.z - me.z) / d;
+  wayArrow.position.set(me.x + ux * R, me.y + 0.3, me.z + uz * R); wayArrow.rotation.y = Math.atan2(ux, uz); wayArrow.scale.setScalar(0.8 + 0.2 * sc); wayArrow.userData.fill.material.color.set(tg.c);
 }
 
 // ---- drawing everyone ----
@@ -1014,7 +1034,7 @@ function stepOthers(dt, t) {
 function stepNpcs(dt, t) {
   const k = 1 - Math.exp(-14 * dt);
   const far = (o) => { const v = Math.abs(o.x - me.x) < 170 && Math.abs(o.z - me.z) < 170; o.m.g.visible = v; return !v; };   // animals a long way off aren't drawn
-  for (const d of dogMesh) { if (far(d)) { d.x = d.tx; d.z = d.tz; continue; } const mv = hyp(d.tx - d.x, d.tz - d.z) > 0.05; d.x += (d.tx - d.x) * k; d.z += (d.tz - d.z) * k; d.yaw += angDiff(d.tyaw, d.yaw) * k; d.m.g.position.set(d.x, d.y, d.z); d.m.g.rotation.y = d.yaw; animatePet(d.m, t + d.x, mv, 11, false); if (d.mode === 1) d.m.g.position.y = d.y + Math.abs(Math.sin(t * 22)) * 0.25; }
+  for (const d of dogMesh) { if (far(d)) { d.x = d.tx; d.z = d.tz; d.y = d.ty; continue; } const mv = hyp(d.tx - d.x, d.tz - d.z) > 0.02; d.x += (d.tx - d.x) * k; d.z += (d.tz - d.z) * k; d.y += (d.ty - d.y) * k; d.yaw += angDiff(d.tyaw, d.yaw) * k; d.m.g.position.set(d.x, d.y, d.z); d.m.g.rotation.y = d.yaw; animatePet(d.m, t + d.x, mv, 11, false); if (d.mode === 1) d.m.g.position.y = d.y + Math.abs(Math.sin(t * 22)) * 0.25; }
   for (const g of gooseMesh) { if (far(g)) { g.x = g.tx; g.z = g.tz; g.y = g.ty; continue; } const mv = hyp(g.tx - g.x, g.tz - g.z) > 0.03; g.x += (g.tx - g.x) * k; g.z += (g.tz - g.z) * k; g.y += (g.ty - g.y) * k; g.yaw += angDiff(g.tyaw, g.yaw) * k; const m = g.m; m.g.position.set(g.x, g.y, g.z); m.g.rotation.y = g.yaw;
     const sw = mv ? Math.sin(t * (g.mode >= 2 ? 22 : 9) + g.x) * 0.6 : 0; m.legs[0].rotation.x = sw; m.legs[1].rotation.x = -sw; m.body.rotation.z = mv ? Math.sin(t * 9 + g.x) * 0.1 : 0;
     const flap = g.mode === 1 ? 0.9 + Math.sin(t * 30) * 0.7 : g.mode === 2 ? 0.7 : 0.05; m.wings[0].rotation.z = -flap; m.wings[1].rotation.z = flap; m.head.rotation.x = g.mode === 1 ? -0.5 : g.mode === 4 ? Math.sin(t * 14) * 0.5 : 0; m.g.rotation.z = g.mode === 4 ? Math.sin(t * 10) * 0.3 : 0; if (g.mode === 5) { m.g.position.y = g.y - 0.25 + Math.sin(t * 9) * 0.12; m.head.rotation.x = 0.5 + Math.sin(t * 9) * 0.4; } }
@@ -1028,7 +1048,7 @@ function stepNpcs(dt, t) {
   beltLag *= Math.exp(-7 * dt);
   if (readyMesh) { const q = readyAt(); readyMesh.position.set(q.x, 1.16 + Math.abs(Math.sin(t * 3)) * 0.18, q.z); readyMesh.rotation.y = t * 0.8; }
   if (nextMesh) { const q = beltPos(beltS() - BELT_GAP - beltLag); nextMesh.position.set(q.x, Math.max(1.16, nextMesh.position.y - dt * 14), q.z); }
-  if (targetFx) { const u = targetFx.userData; u.ring.scale.setScalar(1 + Math.sin(t * 5) * 0.06); u.label.position.y = 5.4 + Math.sin(t * 2.5) * 0.15; }
+  if (targetFx) { const u = targetFx.userData; u.ring.scale.setScalar(1 + Math.sin(t * 5) * 0.06); u.gem.position.y = 4.2 + Math.sin(t * 3) * 0.4; u.gem.rotation.y = t * 2; }
   if (dropMesh) { dropMesh.position.y = dropped.y + 0.3 + Math.abs(Math.sin(t * 4)) * 0.5; dropMesh.rotation.y = t * 2; if (Math.random() < 0.2) emit(dropped.x, dropped.y + 1, dropped.z, 1, { colors: ["#ffd84a"], speed: 1, up: 2, life: 0.6, grav: 0, size: 0.1 }); }
   for (const b of World.balloons) b.g.position.y = b.y + Math.sin(t * 1.2 + b.x) * 0.25;
 }
@@ -1054,6 +1074,6 @@ function frame(tms) {
 }
 buildTown(); buildAnimals(); beltShow(); stepCamera(0.016);
 // for the tests and the console
-window.Pets = { World, me, cam, others, get save() { return save; }, get parcel() { return parcel; }, get belt() { return belt; }, get stolen() { return stolen; }, get dropped() { return dropped; }, get loggedIn() { return loggedIn; }, get panel() { return panel; }, dogMesh, gooseMesh, readyAt, onNet, teleport(x, z, y = 0) { me.x = x; me.z = z; me.y = y; me.vx = me.vz = me.vy = 0; me.transit = null; me.ground = false; sendPos(true); }, netSend, openPanel };
+window.Pets = { World, me, cam, others, get save() { return save; }, get parcel() { return parcel; }, get belt() { return belt; }, get stolen() { return stolen; }, get dropped() { return dropped; }, get loggedIn() { return loggedIn; }, get panel() { return panel; }, dogMesh, gooseMesh, goatMesh, get arrow() { return wayArrow; }, readyAt, onNet, teleport(x, z, y = 0) { me.x = x; me.z = z; me.y = y; me.vx = me.vz = me.vy = 0; me.transit = null; me.ground = false; sendPos(true); }, netSend, openPanel };
 $("lgo").disabled = $("lnew").disabled = true;
 connect(); requestAnimationFrame(frame);

@@ -42,9 +42,7 @@
     #cpips { display: flex; gap: 4px; } #cpips i { width: 14px; height: 14px; border-radius: 4px; background: #d7e1ea; } #cpips i.on { background: #c08a55; box-shadow: inset 0 0 0 2px #8a5a34; }
     #caddr { font-size: 15px; white-space: nowrap; }
     #ctimer { display: none; font-size: 22px; color: var(--blue); line-height: 1; } #ctimer.late { color: var(--red); animation: bump .5s infinite; }
-    #way { position: fixed; left: 0; top: 0; display: none; flex-direction: column; align-items: center; pointer-events: none; color: #fff; filter: drop-shadow(0 2px 0 rgba(0,0,0,.35)); will-change: transform; }
-    #wayarrow { width: 0; height: 0; border-left: 13px solid transparent; border-right: 13px solid transparent; border-bottom: 22px solid currentColor; }
-    #waydist { font-size: 15px; color: #fff; text-shadow: 0 1px 0 rgba(0,0,0,.5), 0 0 6px rgba(0,0,0,.4); margin-top: 2px; }
+    #cdist { font-size: 15px; color: #ff1f8f; }
     /* action buttons, bottom right: Kick, Whistle above it, the ability beside it, Jump */
     .act { position: fixed; border: 0; border-radius: 50%; background: var(--card); box-shadow: 0 4px 0 rgba(0,0,0,.18); display: grid; place-items: center; font-size: 13px; touch-action: none; overflow: hidden; }
     .act span { position: relative; z-index: 1; font-family: "Big Shoulders Display", system-ui, sans-serif; text-transform: uppercase; }
@@ -99,8 +97,15 @@
     #pops { position: fixed; inset: 0; pointer-events: none; overflow: hidden; }
     .pop { position: absolute; left: 0; top: 0; font: 800 24px "Big Shoulders Display", system-ui, sans-serif; text-shadow: 0 2px 0 rgba(0,0,0,.55), 0 0 8px rgba(0,0,0,.35); white-space: nowrap; will-change: transform, opacity; } .pop.big { font-size: 36px; }
     .flycoin { position: absolute; width: 20px; height: 20px; border-radius: 50%; background: radial-gradient(circle at 35% 30%, #fff3b8, #f2b01e 60%, #c98500); border: 2px solid #b87400; transform: translate(-50%, -50%); }
-    #roll { position: fixed; left: 0; top: 0; display: none; pointer-events: none; padding: 4px 16px; border-radius: 14px; background: rgba(35,48,59,.88); font: 800 30px "Big Shoulders Display", system-ui, sans-serif; text-transform: uppercase; white-space: nowrap; box-shadow: 0 4px 0 rgba(0,0,0,.3); }
-    #roll.tease { animation: shake .08s infinite; } #roll.land { animation: popin .3s; } @keyframes shake { 50% { margin-left: 4px; margin-top: -2px; } }
+    #roll { position: fixed; left: 50%; top: 34%; transform: translate(-50%, -50%); display: none; flex-direction: column; align-items: center; pointer-events: none; z-index: 14; }
+    #reel { padding: 6px 34px; border-radius: 22px; border: 6px solid #fff; background: rgba(35,48,59,.92); font-size: clamp(54px, 13vw, 104px); line-height: 1.05; text-transform: uppercase; white-space: nowrap; box-shadow: 0 8px 0 rgba(0,0,0,.3), 0 0 60px rgba(255,255,255,.35); }
+    #reel.flip { animation: flip .09s; } #reel.tease { animation: shake .08s infinite; } #reel.land { animation: landed .7s; } @keyframes flip { from { transform: translateY(-22%) scaleY(.6); opacity: .5; } } @keyframes shake { 50% { margin-left: 6px; margin-top: -3px; } } @keyframes landed { 0% { transform: scale(.5); } 35% { transform: scale(1.45) rotate(-3deg); } 60% { transform: scale(.95); } }
+    #rcard { display: none; flex-direction: column; align-items: stretch; gap: 8px; min-width: min(300px, 80vw); padding: 0 0 12px; border-radius: 22px; background: #fff; box-shadow: 0 8px 0 rgba(0,0,0,.25), 0 0 0 6px var(--rc, #fff), 0 0 70px var(--rc, #fff); pointer-events: auto; overflow: hidden; animation: popin .35s; }
+    #rtitle { padding: 8px 20px; font-size: clamp(34px, 8vw, 52px); text-align: center; text-transform: uppercase; text-shadow: 0 2px 0 rgba(0,0,0,.25); }
+    #rlist { display: flex; flex-direction: column; gap: 6px; padding: 4px 18px; } .rrow { display: flex; align-items: center; gap: 12px; font-size: 26px; opacity: 0; animation: rowin .3s forwards; } .rrow i { flex: none; } .rrow .coin { width: 30px; height: 30px; } .rrow .egg { width: 28px; height: 36px; }
+    .ixp { width: 34px; height: 30px; border-radius: 8px; background: #3fb36b; color: #fff; font: 800 15px/30px system-ui, sans-serif; text-align: center; font-style: normal; } .icoupon { width: 34px; height: 24px; border-radius: 6px; background: #ff7ad1; border: 3px dashed #fff; outline: 2px solid #ff7ad1; }
+    @keyframes rowin { from { opacity: 0; transform: translateX(-24px); } to { opacity: 1; transform: none; } }
+    #rok { align-self: center; padding: 8px 34px; font-size: 20px; }
     #banner { position: fixed; left: 50%; top: 26%; transform: translate(-50%, -50%) scale(0); pointer-events: none; text-align: center; font: 800 64px "Big Shoulders Display", system-ui, sans-serif; text-shadow: 0 4px 0 rgba(0,0,0,.45), 0 0 18px rgba(0,0,0,.3); white-space: nowrap; opacity: 0; }
     #banner i { display: block; font-size: 22px; font-style: normal; } #banner.go { animation: ban 1.4s; } @keyframes ban { 0% { transform: translate(-50%, -50%) scale(.2); opacity: 0; } 12% { transform: translate(-50%, -50%) scale(1.25); opacity: 1; } 22% { transform: translate(-50%, -50%) scale(1); } 80% { opacity: 1; transform: translate(-50%, -50%) scale(1); } 100% { opacity: 0; transform: translate(-50%, -70%) scale(1); } }
     #announce { position: fixed; left: 50%; top: calc(72px + var(--st)); transform: translateX(-50%); padding: 6px 16px; border-radius: 999px; background: rgba(35,48,59,.9); font: 800 20px "Big Shoulders Display", system-ui, sans-serif; white-space: nowrap; pointer-events: none; opacity: 0; } #announce.go { animation: ann 5s; } @keyframes ann { 5%, 90% { opacity: 1; } }
@@ -129,8 +134,7 @@
     <div id="coins" class="pill"><i class="coin"></i><span id="coinn">0</span></div>
     <button id="bchat" title="Chat"><svg viewBox="0 0 24 24"><path d="M4 5h16v11H10l-5 4v-4H4z"/></svg></button>
     <div id="stamp" title="Stamp Meter"><div class="track"><i id="stampfill"></i><u style="bottom:25%"></u><u style="bottom:50%"></u><u style="bottom:75%"></u></div><span id="stampn" class="disp">0</span></div>
-    <div id="card"><div class="row"><span id="ctier" class="disp"></span><span id="cmods"></span><span id="cpips"></span></div><div class="row"><span id="caddr" class="disp"></span><span id="ctimer" class="disp"></span></div></div>
-    <div id="way"><div id="wayarrow"></div><span id="waydist" class="disp"></span></div>
+    <div id="card"><div class="row"><span id="ctier" class="disp"></span><span id="cmods"></span><span id="cpips"></span></div><div class="row"><span id="caddr" class="disp"></span><span id="cdist" class="disp"></span><span id="ctimer" class="disp"></span></div></div>
     <div id="msgs"></div>
     <div id="party"></div>
     <div id="invite"></div>
@@ -145,7 +149,7 @@
     <button id="bjump" class="act" title="Jump"><span>Jump</span></button>
     <button id="bability" class="act" title="Ability"><span>Dash</span></button>
     <button id="bkick" class="act" title="Kick"><span>Kick</span></button>
-    <div id="roll"></div>
+    <div id="roll"><div id="reel" class="disp"></div><div id="rcard"><div id="rtitle" class="disp"></div><div id="rlist"></div><button id="rok" class="btn go" title="OK">✓</button></div></div>
     <div id="announce"></div>
     <form id="chatbar" autocomplete="off"><input id="chatin" maxlength="120" placeholder="Chat" enterkeyhint="send"></form>
   </div>
@@ -163,6 +167,6 @@
     <button id="lgo" class="btn go" type="submit">Log in</button>
     <button id="lnew" class="btn" type="button">Create account</button>
   </form>
-  <script type="module" src="pets.js?v=1794432301"></script>
+  <script type="module" src="pets.js?v=1794434634"></script>
 </body>
 </html>
