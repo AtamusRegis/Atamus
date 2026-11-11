@@ -96,14 +96,17 @@
     #pops { position: fixed; inset: 0; pointer-events: none; overflow: hidden; }
     .pop { position: absolute; left: 0; top: 0; font: 800 24px "Big Shoulders Display", system-ui, sans-serif; text-shadow: 0 2px 0 rgba(0,0,0,.55), 0 0 8px rgba(0,0,0,.35); white-space: nowrap; will-change: transform, opacity; } .pop.big { font-size: 36px; }
     .flycoin { position: absolute; width: 20px; height: 20px; border-radius: 50%; background: radial-gradient(circle at 35% 30%, #fff3b8, #f2b01e 60%, #c98500); border: 2px solid #b87400; transform: translate(-50%, -50%); }
-    /* gifts, on the left: the waiting ones, a small reel, what came out */
+    /* gifts, on the left: the waiting ones (in their rarity's color), the one opening, what came out */
     #gifts { position: fixed; left: calc(56px + var(--sl)); top: calc(178px + var(--st)); width: 176px; display: none; flex-direction: column; align-items: stretch; gap: 6px; z-index: 6; }
     #gq { display: flex; flex-wrap: wrap; gap: 4px; align-items: center; min-height: 0; } #gq b { font-size: 14px; color: #fff; text-shadow: 0 1px 0 rgba(0,0,0,.5); }
-    .gbox { width: 20px; height: 18px; border-radius: 4px; background: linear-gradient(90deg, transparent 40%, var(--gc) 40% 60%, transparent 60%), linear-gradient(transparent 40%, var(--gc) 40% 60%, transparent 60%), #ff1f8f; box-shadow: 0 2px 0 rgba(0,0,0,.25); animation: popin .3s; }
+    .gbox { width: 26px; height: 24px; padding: 0; border: 0; border-radius: 5px; cursor: pointer; background: linear-gradient(90deg, transparent 40%, #fff 40% 60%, transparent 60%), linear-gradient(transparent 40%, #fff 40% 60%, transparent 60%), var(--gc); box-shadow: 0 2px 0 rgba(0,0,0,.3), inset 0 0 0 2px rgba(0,0,0,.18); animation: popin .3s; }
+    .gbox.t3, .gbox.t4 { box-shadow: 0 2px 0 rgba(0,0,0,.3), 0 0 10px var(--gc); animation: popin .3s, glow 1.2s infinite alternate; } @keyframes glow { to { box-shadow: 0 2px 0 rgba(0,0,0,.3), 0 0 18px var(--gc); } }
     #gall { padding: 4px 10px; font-size: 13px; border: 0; border-radius: 10px; background: #ff1f8f; color: #fff; box-shadow: 0 3px 0 rgba(0,0,0,.2); display: none; }
-    #greel { display: none; padding: 4px 10px; border-radius: 12px; border: 3px solid #fff; background: rgba(35,48,59,.9); font-size: 28px; line-height: 1.1; text-align: center; text-transform: uppercase; white-space: nowrap; overflow: hidden; cursor: pointer; box-shadow: 0 3px 0 rgba(0,0,0,.25); }
-    #greel.flip { animation: flip .08s; } #greel.tease { animation: shake .08s infinite; } #greel.land { animation: landed .55s; }
-    @keyframes flip { from { transform: translateY(-18%) scaleY(.7); opacity: .6; } } @keyframes shake { 50% { margin-left: 3px; } } @keyframes landed { 0% { transform: scale(.7); } 40% { transform: scale(1.18); } 70% { transform: scale(.97); } }
+    #gopen { display: none; flex-direction: column; align-items: center; gap: 2px; padding: 8px; border-radius: 14px; background: rgba(35,48,59,.88); cursor: pointer; box-shadow: 0 3px 0 rgba(0,0,0,.25), 0 0 var(--glow, 8px) var(--gc); }
+    .gbig { width: 64px; height: 58px; border-radius: 10px; background: linear-gradient(90deg, transparent 40%, #fff 40% 60%, transparent 60%), linear-gradient(transparent 40%, #fff 40% 60%, transparent 60%), var(--gc); box-shadow: inset 0 0 0 3px rgba(0,0,0,.18); }
+    .gbig.shake1 { animation: gs1 .3s; } .gbig.shake2 { animation: gs2 .3s; } .gbig.shake3 { animation: gs3 .35s; }
+    @keyframes gs1 { 25% { transform: rotate(-8deg); } 75% { transform: rotate(8deg); } } @keyframes gs2 { 25% { transform: rotate(-14deg) scale(1.06); } 75% { transform: rotate(14deg) scale(1.06); } } @keyframes gs3 { 20% { transform: rotate(-20deg) scale(1.12); } 60% { transform: rotate(20deg) scale(1.16); } }
+    #glabel { font-size: 22px; text-transform: uppercase; }
     #gres { display: none; position: relative; flex-direction: column; gap: 3px; padding: 6px 10px 8px; border-radius: 12px; background: var(--card); box-shadow: 0 3px 0 rgba(0,0,0,.18), inset 0 0 0 2px var(--gc, #fff); }
     #gx { position: absolute; right: 2px; top: 0; border: 0; background: none; font-size: 14px; color: #7f8b97; padding: 2px 6px; }
     #gtitle { display: flex; gap: 3px; flex-wrap: wrap; } .gchip { width: 12px; height: 12px; border-radius: 50%; box-shadow: inset 0 0 0 1px rgba(0,0,0,.25); }
@@ -154,7 +157,7 @@
     <button id="bjump" class="act" title="Jump"><span>Jump</span></button>
     <button id="bability" class="act" title="Ability"><span>Dash</span></button>
     <button id="bkick" class="act" title="Kick"><span>Kick</span></button>
-    <div id="gifts"><div id="gq"></div><button id="gall" class="disp">Open all</button><div id="greel" class="disp" title="Skip"></div><div id="gres"><button id="gx" title="Close">✕</button><div id="gtitle"></div><div id="glist"></div></div></div>
+    <div id="gifts"><div id="gq"></div><button id="gall" class="disp">Open all</button><div id="gopen"><i id="gbig" class="gbig"></i><b id="glabel" class="disp"></b></div><div id="gres"><button id="gx" title="Close">✕</button><div id="gtitle"></div><div id="glist"></div></div></div>
     <div id="announce"></div>
     <form id="chatbar" autocomplete="off"><input id="chatin" maxlength="120" placeholder="Chat" enterkeyhint="send"></form>
   </div>
@@ -172,6 +175,6 @@
     <button id="lgo" class="btn go" type="submit">Log in</button>
     <button id="lnew" class="btn" type="button">Create account</button>
   </form>
-  <script type="module" src="pets.js?v=1794437102"></script>
+  <script type="module" src="pets.js?v=1794437497"></script>
 </body>
 </html>

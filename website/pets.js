@@ -672,20 +672,27 @@ function flyCoins(x, y, z, n) {   // coins fly from the mailbox to the counter o
     c.animate([{ transform: "translate(-50%,-50%) scale(1)", offset: 0 }, { transform: `translate(${(Math.random() - 0.5) * 160}px, ${-60 - Math.random() * 80}px) scale(1.2)`, offset: 0.35 }, { transform: `translate(${to.left + 18 - from.x}px, ${to.top + 16 - from.y}px) scale(0.6)`, offset: 1 }], { duration: 650 + k * 60, easing: "ease-in", delay: k * 45 }).onfinish = () => { c.remove(); sfx("coin"); $("coins").classList.remove("bump"); void $("coins").offsetWidth; $("coins").classList.add("bump"); }; }
 }
 
-// ---- gifts (owner, 2026-11-11): every delivery leaves a gift on the left of the screen. Gifts open on their own, one
-// after another: a small reel spins through the rarities and lands, and what you got stays under it until the next one
-// opens or you close it. Tap the reel to skip the spin; with more than one waiting, Open all lands them all at once. ----
+// ---- gifts (owner, 2026-11-11): every delivery leaves a gift on the left of the screen, showing its rarity at once
+// (the box in the rarity's color, the rarity popping up over the mailbox). Gifts wait until you open them: tap one to
+// open it (it shakes, glowing, then bursts; tap again to skip the build-up), or Open all to open every one at once.
+// What came out stays under them until the next opening or you close it. ----
 const gifts = []; let opening = null;
-function addGift(h, res, lvUp, mount) { gifts.push({ h, res, lvUp, mount }); heldCoins += res.coins; giftsUi(); if (!opening) openNext(); else sfx("pop"); }
+const boxC = (tier) => (tier ? RARITY_C[tier] : "#c3ccd5");   // a Common gift is a light gray box (white wouldn't show its ribbon)
+function addGift(h, res, lvUp, mount) {
+  gifts.push({ h, res, lvUp, mount }); heldCoins += res.coins; giftsUi();
+  const c = RARITY_C[res.tier]; popup(RARITY[res.tier] + "!", c, h.mx, h.my + 3.2, h.mz, res.tier >= 2); sfx(res.tier >= 3 ? "shiny" : "pop"); if (res.tier >= 3) emit(h.mx, h.my + 2.6, h.mz, 10 + res.tier * 8, { colors: [c, "#ffffff"], speed: 4, up: 5, life: 1, size: 0.16 });
+}
 function giftsUi() {
-  const q = $("gq"); q.innerHTML = ""; for (let k = 0; k < Math.min(gifts.length, 6); k++) { const b = el("i", "gbox"); b.style.setProperty("--gc", TIERS[gifts[k].h.d].c); q.appendChild(b); }   // its ribbon in the parcel's tier color
-  if (gifts.length > 6) q.appendChild(el("b", "disp", "+" + (gifts.length - 6)));
-  $("gall").style.display = gifts.length + (opening && !opening.done ? 1 : 0) > 1 ? "block" : "none";
+  const q = $("gq"); q.innerHTML = "";
+  gifts.slice(0, 10).forEach((g, n) => { const b = el("button", "gbox t" + g.res.tier); b.style.setProperty("--gc", boxC(g.res.tier)); b.title = RARITY[g.res.tier]; b.onclick = () => openGift(n); b.addEventListener("pointerdown", (e) => e.stopPropagation()); q.appendChild(b); });
+  if (gifts.length > 10) q.appendChild(el("b", "disp", "+" + (gifts.length - 10)));
+  $("gall").style.display = gifts.length > 1 ? "block" : "none";
   $("gifts").style.display = gifts.length || opening || $("gres").style.display === "flex" ? "flex" : "none";
 }
-function openNext() {
-  const g = gifts.shift(); if (!g) { opening = null; giftsUi(); return; }
-  opening = { g, t: 0, n: Math.floor(Math.random() * 5), next: 0, done: false }; $("greel").style.display = "block"; $("greel").className = "disp"; $("gres").style.display = "none"; giftsUi();
+function openGift(n) {   // one gift: it shakes and glows in its rarity's color, then bursts open
+  if (opening && !opening.done) skipGift(); const g = gifts.splice(n, 1)[0]; if (!g) return;
+  const c = boxC(g.res.tier), o = $("gopen"); opening = { g, t: 0, done: false, shook: 0 }; o.style.display = "flex"; o.style.setProperty("--gc", c);
+  $("gbig").className = "gbig"; $("glabel").textContent = RARITY[g.res.tier]; $("glabel").style.color = c; $("gres").style.display = "none"; giftsUi();
 }
 function resultRows(list, R) {   // what came out of a gift (or several): coins, XP, Level Coupons, eggs, a mount
   const row = (icon, text) => { const d = el("div", "grow"); d.appendChild(icon); d.appendChild(el("b", "disp", text)); d.style.animationDelay = list.children.length * 120 + "ms"; list.appendChild(d); };
@@ -693,33 +700,31 @@ function resultRows(list, R) {   // what came out of a gift (or several): coins,
   for (const e of R.eggs) { const i = el("i", "egg"); i.style.background = EGGS[e].c; row(i, EGGS[e].name); }
   for (const m of R.mounts) { const i = el("img", "gmount"); i.src = portrait(m.sp, m.va); row(i, mountName(m)); }
 }
-function landGifts(list) {   // one or more gifts land: the reel shows the best, and their totals go under it
-  const best = Math.max(...list.map((g) => g.res.tier)), c = RARITY_C[best], r = $("greel"), tot = { coins: 0, xp: 0, coupons: 0, eggs: [], mounts: [] };
+function landGifts(list) {   // one or more gifts open: their totals show under the gift column
+  const best = Math.max(...list.map((g) => g.res.tier)), c = RARITY_C[best], tot = { coins: 0, xp: 0, coupons: 0, eggs: [], mounts: [] };
   for (const g of list) { tot.coins += g.res.coins; tot.xp += g.res.xp; tot.coupons += g.res.coupons; if (g.res.egg) tot.eggs.push(g.res.egg); if (g.mount) tot.mounts.push(g.mount); heldCoins -= g.res.coins; }
-  heldCoins = Math.max(0, heldCoins); r.textContent = list.length > 1 ? list.length + " gifts" : RARITY[best]; r.style.color = r.style.borderColor = c; r.className = "disp land";
+  heldCoins = Math.max(0, heldCoins); $("gopen").style.display = "none"; opening = null;
   sfx("win", best); emit(me.x, me.y + 2.4, me.z, 8 + best * 10, { colors: [c, "#ffffff"], speed: 3 + best, up: 5, life: 1, size: 0.16 }); if (best >= 3) { flash(c); cam.shake = Math.max(cam.shake, 0.15 * best); }
   flyCoins(me.x, me.y + 2, me.z, 2 + best * 2); setTimeout(() => sfx("coin"), 200); if (tot.eggs.length) setTimeout(() => sfx("egg"), 350);
   const res = $("gres"), lst = $("glist"); res.style.display = "flex"; res.style.setProperty("--gc", c); lst.innerHTML = "";
   const head = $("gtitle"); head.innerHTML = ""; if (list.length > 1) for (const g of list) { const d = el("i", "gchip"); d.style.background = RARITY_C[g.res.tier]; d.title = RARITY[g.res.tier]; head.appendChild(d); }
+  else { const t = el("b", "disp", RARITY[best]); t.style.color = c === "#ffffff" ? "#6f7d8a" : c; head.appendChild(t); }
   resultRows(lst, tot);
   if (tot.eggs.length) { $("mstable").classList.remove("bump"); void $("mstable").offsetWidth; $("mstable").classList.add("bump"); }
   if (list.some((g) => g.lvUp)) setTimeout(levelFx, 500);
   const m = list.find((g) => g.mount); if (m) setTimeout(() => { selMount = m.mount.id; hatchShow("gift", m.mount); }, 900);
-  hudDirty = true; if (panel === "stable" || panel === "odds") renderPanel();
+  hudDirty = true; giftsUi(); if (panel === "stable" || panel === "odds") renderPanel();
 }
-function skipGift() { if (opening && !opening.done) { opening.done = true; landGifts([opening.g]); opening.wait = 1.6; giftsUi(); } }
-function openAll() { const list = (opening && !opening.done ? [opening.g] : []).concat(gifts.splice(0)); if (!list.length) return; opening = { done: true, wait: 2.5, g: list[0] }; $("greel").style.display = "block"; landGifts(list); giftsUi(); }
-$("greel").onclick = skipGift; $("gall").onclick = openAll; $("gx").onclick = () => { $("gres").style.display = "none"; if (opening && opening.done && !gifts.length) { opening = null; $("greel").style.display = "none"; } giftsUi(); };
-for (const id of ["greel", "gall", "gx"]) $(id).addEventListener("pointerdown", (e) => e.stopPropagation());
+function skipGift() { if (opening && !opening.done) { opening.done = true; landGifts([opening.g]); } }
+function openAll() { const list = (opening && !opening.done ? [opening.g] : []).concat(gifts.splice(0)); if (!list.length) return; landGifts(list); }
+$("gopen").onclick = skipGift; $("gall").onclick = openAll; $("gx").onclick = () => { $("gres").style.display = "none"; giftsUi(); };
+for (const id of ["gopen", "gall", "gx"]) $(id).addEventListener("pointerdown", (e) => e.stopPropagation());
 function levelFx() { sfx("level"); popup("LEVEL UP!", "#ffd84a", me.x, me.y + 3.2, me.z, true); for (let k = 0; k < 28; k++) { const a = (k / 28) * TAU; parts.length < PN && parts.push({ x: me.x, y: me.y + 0.3, z: me.z, vx: Math.cos(a) * 6, vy: 2.5, vz: Math.sin(a) * 6, t: 0, life: 0.8, size: 0.2, grav: 3, c: k % 2 ? "#ffd84a" : "#ffffff", r: k }); } }
-function stepGifts(dt) {
-  if (!opening) return; const o = opening, r = $("greel");
-  if (!o.done) {
-    o.t += dt; const R = o.g.res, tease = R.near && o.t > 1.3;   // a near miss hangs on Legendary before it lets go
-    if (o.t >= 1.8) { o.done = true; o.wait = 2.2; landGifts([o.g]); giftsUi(); return; }
-    if (tease) { if (r.textContent !== RARITY[4]) { sfx("near"); r.textContent = RARITY[4]; r.style.color = r.style.borderColor = RARITY_C[4]; r.className = "disp tease"; } }
-    else if (o.t >= o.next) { o.next = o.t + 0.045 + o.t * o.t * 0.06; o.n = (o.n + 1) % 5; sfx("tick"); r.textContent = RARITY[o.n]; r.style.color = r.style.borderColor = RARITY_C[o.n]; r.className = "disp"; void r.offsetWidth; r.className = "disp flip"; }
-  } else { o.wait -= dt; if (gifts.length && o.wait <= 0) openNext(); }   // the next gift opens once this one's had a moment
+function stepGifts(dt) {   // the build-up: three shakes, each bigger, the glow growing, then it bursts
+  const o = opening; if (!o || o.done) return; o.t += dt; const T = 1.6, b = $("gbig");
+  const n = Math.floor((o.t / T) * 3.4); if (n > o.shook && n <= 3) { o.shook = n; sfx("wobble"); b.className = "gbig"; void b.offsetWidth; b.className = "gbig shake" + n; }
+  $("gopen").style.setProperty("--glow", (8 + (o.t / T) * 40).toFixed(0) + "px");
+  if (o.t >= T) { o.done = true; landGifts([o.g]); }
 }
 let hudDirty = true, shownCoins = 0, heldCoins = 0, cardKey = "", myName = "", myRole = "player", myId = null, loggedIn = false;
 const cdBtn = (id, left, total) => { const b = $(id), k = total > 0 ? clamp(left / total, 0, 1) : 0; b.style.setProperty("--cd", (k * 360).toFixed(0) + "deg"); b.classList.toggle("cool", k > 0); };
