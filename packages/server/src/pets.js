@@ -89,8 +89,10 @@ export function attachPets(server, { origins = [], allowLocal = false, store = m
     const lvUp = W.addXp(m, 5 + 3 * q.tier + roll.xp);
     d.coins += coins + roll.coins; d.coupons += roll.coupons; d.stamp = roll.stamp; if (roll.egg) d.eggs[roll.egg]++;
     d.stats.del++; if (q.mod === "golden") d.stats.golden++; d.fails = 0;
-    p.parcel = null; changed(p);
-    send(p.ws, { t: "delivered", house: q.house, coins, roll: { tier: roll.tier, coins: roll.coins, xp: 5 + 3 * q.tier + roll.xp, coupons: roll.coupons, egg: roll.egg, near: roll.near }, lvUp, data: d });
+    // (owner, 2026-11-11) a courier's second delivery brings a new mount: a random Uncommon
+    let gift = null; if (d.stats.del === 2 && d.mounts.length < W.MOUNT_CAP) { const pool = Object.keys(MOUNTS).filter((k) => MOUNTS[k].r === 1); gift = { id: d.nextId++, sp: pool[Math.floor(Math.random() * pool.length)], va: 0, lv: 1, xp: 0 }; d.mounts.push(gift); }
+    p.parcel = null; changed(p); if (gift) flush(p.acct);
+    send(p.ws, { t: "delivered", house: q.house, coins, roll: { tier: roll.tier, coins: roll.coins, xp: 5 + 3 * q.tier + roll.xp, coupons: roll.coupons, egg: roll.egg, near: roll.near }, lvUp, gift, data: d });
     all(p.room, { t: "fx", k: "del", id: p.id, house: q.house, roll: roll.tier }, p); carry(p);
     if (lvUp) showMount(p);
   }
@@ -372,7 +374,7 @@ export function attachPets(server, { origins = [], allowLocal = false, store = m
       const D = W.dogs[q.id]; q.awake = q.mode !== 0 || near(players, q, 110);
       if (!q.awake) continue;   // asleep while nobody's near
       if (q.mode === 0) {
-        if (now >= q.cool) for (const p of players) if (p.parcel && Math.abs(p.y - q.y) < 3 && hyp(p.x - q.x, p.z - q.z) < DOG.trigger && exposed(p, now)) { q.mode = 1; q.t = DOG.telegraph; q.target = p; q.sx = q.x; q.sz = q.z; break; }   // bark and a red "!"
+        if (now >= q.cool) for (const p of players) if (p.parcel && Math.abs(p.y - q.y) < 3 && hyp(p.x - q.x, p.z - q.z) < W.DOG_D[D.d].trigger && exposed(p, now)) { q.mode = 1; q.t = DOG.telegraph; q.target = p; q.sx = q.x; q.sz = q.z; break; }   // bark and a red "!"
         if (q.mode !== 0) continue;
         if ((q.pause -= dt) > 0) continue;
         if (q.wx === undefined || hyp(q.wx - q.x, q.wz - q.z) < 1 || q.stuck > 0.6) {   // somewhere new to trot to (now and then it stops for a sniff)
@@ -387,7 +389,7 @@ export function attachPets(server, { origins = [], allowLocal = false, store = m
       if (q.mode === 2) {
         if (!p || p.gone || !p.parcel || !exposed(p, now) || Math.abs(p.y - q.y) > 3.5 || hyp(q.x - q.sx, q.z - q.sz) > DOG.leash || (q.t -= dt) <= 0) { q.mode = 0; q.target = null; q.cool = now + DOG.cool * 1000; q.pause = 1.5; q.wx = undefined; continue; }
         const d = hyp(p.x - q.x, p.z - q.z);
-        pace(q, p.x, p.z, DOG.speed * (p.acct.data.fails >= 3 ? 0.8 : 1) * dt, 0.75);   // three failed runs in a row: the dogs ease off
+        pace(q, p.x, p.z, W.DOG_D[D.d].speed * (p.acct.data.fails >= 3 ? 0.8 : 1) * dt, 0.75);   // three failed runs in a row: the dogs ease off
         if (d < DOG.bite) { stun(p, DOG.stun, "dog"); hit(p, "dog"); all(r, { t: "fx", k: "bite", dog: q.id, id: p.id }); q.mode = 0; q.target = null; q.cool = now + DOG.cool * 1000; q.pause = 2; q.wx = undefined; }
         continue;
       }
@@ -457,7 +459,7 @@ export function attachPets(server, { origins = [], allowLocal = false, store = m
         if (!p.nextDive) p.nextDive = now + between(SKYGOOSE.every) * 1000;
         else if (now > p.nextDive) { p.nextDive = now + between(SKYGOOSE.every) * 1000; const k = { p, x: r1(p.x + p.vx * 0.7), z: r1(p.z + p.vz * 0.7), y: r1(p.y), at: now + SKYGOOSE.delay * 1000 }; r.dives.push(k); all(r, { t: "dive", x: k.x, z: k.z, y: k.y, s: SKYGOOSE.delay }); }
       } else p.nextDive = 0;
-      if (p.x > 500 && p.y < 58 && now - p.tpAt > 600) {   // off an island: one hit, and back on the last one stood on
+      if (p.x > W.ISLE_X && p.y < 58 && now - p.tpAt > 600) {   // off an island: one hit, and back on the last one stood on
         const s = p.lastIsle >= 0 ? ISLES[p.lastIsle] : null; hit(p, "fall");
         if (s) teleport(p, s.x, s.z, s.y, "fall"); else teleport(p, CANNON.x - 8, CANNON.z, CANNON.y, "fall");
       }

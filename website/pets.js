@@ -4,7 +4,7 @@
 // deliveries, rolls, damage, coins, mounts; this page shows the town (pets-world.js, shared with the server), moves you
 // and asks. Phone first: a thumb joystick, drag to look, pinch to zoom, big buttons.
 import * as THREE from "./vendor/three.module.min.js";
-import * as World from "./pets-world.js?v=1794434634";
+import * as World from "./pets-world.js?v=1794435581";
 
 const $ = (id) => document.getElementById(id);
 const { TAU, clamp, hyp, MOUNTS, TIERS, RARITY, RARITY_C, MODS, EGGS, UPGRADES } = World;
@@ -66,8 +66,8 @@ function buildTown() {
   }
   // roads
   for (const r of World.roads) {
-    if (r.k === "line") { const m = box(r.w, 0.06, r.r1 - r.r0, r.alley ? "#d2b383" : "#8f929a", Math.cos(r.a) * (r.r0 + r.r1) / 2, 0.03, Math.sin(r.a) * (r.r0 + r.r1) / 2, null, false); m.rotation.y = Math.atan2(Math.cos(r.a), Math.sin(r.a)); }
-    else { const m = new THREE.Mesh(new THREE.RingGeometry(r.r - r.w / 2, r.r + r.w / 2, 96, 1, -r.a1, r.a1 - r.a0).rotateX(-Math.PI / 2), mat("#8f929a")); m.position.y = 0.04; m.receiveShadow = true; scene.add(m); }
+    const len = hyp(r.x1 - r.x0, r.z1 - r.z0), m = box(r.w, 0.06, len, r.alley ? "#c9ab7e" : r.w > 20 ? "#a9adb5" : "#84878f", (r.x0 + r.x1) / 2, 0.03, (r.z0 + r.z1) / 2, null, false); m.rotation.y = Math.atan2(r.x1 - r.x0, r.z1 - r.z0); m.receiveShadow = true;
+    if (!r.alley && r.w < 20) for (let u = 3; u < len - 3; u += 9) box(0.25, 0.07, 3.6, "#e8e2c8", r.x0 + ((r.x1 - r.x0) * u) / len, 0.04, r.z0 + ((r.z1 - r.z0) * u) / len, null, false).rotation.y = m.rotation.y;   // the middle line
   }
   // houses and their mailboxes
   for (const h of World.houses) {
@@ -479,7 +479,7 @@ addEventListener("keydown", () => { const a = audio(); if (a && a.state === "sus
 let save = World.cleanData({});
 const riding = () => save.mounts.find((m) => m.id === save.ride) || save.mounts[0];
 const myStats = () => { const m = riding(); return World.mountStats(m.sp, m.lv); };
-const me = { x: World.SPAWN.x, y: 0, z: World.SPAWN.z, yaw: Math.PI, vx: 0, vz: 0, vy: 0, px: 0, pz: 0, ground: true, moving: false, foot: false, footT: 0, stun: 0, grace: 0, jumps: 0, boost: 0, dash: 0, abilityAt: -99, kickAt: -99, kickT: 0, transit: null, armed: true, mx: 0, my: 0, mz: 0, myaw: 0, hidden: false, glide: false, stepT: 0 };
+const me = { x: World.SPAWN.x, y: 0, z: World.SPAWN.z, yaw: Math.PI / 2, vx: 0, vz: 0, vy: 0, px: 0, pz: 0, ground: true, moving: false, foot: false, footT: 0, stun: 0, grace: 0, jumps: 0, boost: 0, dash: 0, abilityAt: -99, kickAt: -99, kickT: 0, transit: null, armed: true, mx: 0, my: 0, mz: 0, myaw: 0, hidden: false, glide: false, stepT: 0 };
 let mine = null, walker = null, myTag = null, myParcel = null, parcel = null, stolenBy = -1, dropped = null, belt = { ready: null, next: null };
 function makeTag(name, rank, lv) { return textSprite(String(name || "Courier").slice(0, 18), { size: 34, badge: rank ? World.RANK_C[rank] : "", glow: lv >= World.MAX_LV ? "#ffd84a" : "" }); }
 function rigMount(sp, lv, va, shirt, name, rank) {   // a mount with its rider, name tag and (hidden) walking courier
@@ -493,7 +493,7 @@ function setCarry(r, c) { r.slot.clear(); if (c) r.slot.add(parcelMesh(c[0], c[1
 function remount() { unrig(mine); const q = riding(); mine = rigMount(q.sp, q.lv, q.va, save.set.shirt, myName, World.rankOf(World.upTotal(save.up))); setCarry(mine, parcel ? [parcel.tier, parcel.mod] : null); }
 
 // ---- moving ----
-const keys = new Set(), joy = { id: null, x: 0, y: 0, ox: 0, oy: 0 }, cam = { yaw: 0, pitch: 0.42, dist: 12, shake: 0 };
+const keys = new Set(), joy = { id: null, x: 0, y: 0, ox: 0, oy: 0 }, cam = { yaw: -Math.PI / 2, pitch: 0.42, dist: 12, shake: 0 };
 let jumpHeld = false, jumpTap = false, hitStop = 0;
 const GRAV = 24, now = () => performance.now() / 1000;
 let clockOff = 0; const srvNow = () => (Date.now() + clockOff) / 1000;
@@ -554,7 +554,7 @@ function stepMe(dt) {
   // sprinklers shove you sideways; wind pushes across the islands
   const sn = srvNow();
   for (const s of World.sprinklers) { const d = hyp(me.x - s.x, me.z - s.z); if (d < World.SPRINKLER.r && Math.abs(me.y - s.y) < 2 && World.sprinklerOn(s, sn)) { const k = World.SPRINKLER.push * dt * 3 / Math.max(d, 0.6); me.px += (me.x - s.x) * k; me.pz += (me.z - s.z) * k; } }
-  if (me.x > 500 && me.y > World.SKY_Y) { const w = World.windAt(sn); if (w.on) { me.px += w.x * World.WIND.push * dt * 3; me.pz += w.z * World.WIND.push * dt * 3; } }
+  if (me.x > World.ISLE_X && me.y > World.SKY_Y) { const w = World.windAt(sn); if (w.on) { me.px += w.x * World.WIND.push * dt * 3; me.pz += w.z * World.WIND.push * dt * 3; } }
   const pl = hyp(me.px, me.pz); if (pl > 16) { me.px *= 16 / pl; me.pz *= 16 / pl; } const dec = Math.exp(-3.2 * dt); me.px *= dec; me.pz *= dec;
   // sideways, stopping at walls
   const dx = (me.vx + me.px) * dt, dz = (me.vz + me.pz) * dt;
@@ -668,9 +668,9 @@ function flyCoins(x, y, z, n) {   // coins fly from the mailbox to the counter o
 // ---- the reward roll: a slot over the mailbox spins for a second and a half, then lands ----
 // (owner, 2026-11-11) the reward roll is on the screen, big: the reel spins and slows for 2.6 s, lands, then a card shows
 // what you got and stays until you close it (or grab your next parcel)
-let roll = null;
+let roll = null, gift = null;
 function startRoll(h, res, lvUp) { heldCoins = res.coins; roll = { h, res, lvUp, t: 0, last: -1, n: 0, next: 0 }; $("roll").style.display = "flex"; $("reel").style.display = "block"; $("reel").className = "disp"; $("rcard").style.display = "none"; }
-function closeRoll() { if (roll && !roll.done) return; roll = null; $("roll").style.display = "none"; }
+function closeRoll() { if (roll && !roll.done) return; roll = null; $("roll").style.display = "none"; if (gift) { const g = gift; gift = null; selMount = g.id; hatchShow("gift", g); } }   // then a new mount, if one came
 $("rok").onclick = closeRoll;
 function stepRoll(dt) {
   if (!roll) return; roll.t += dt; const r = $("reel"), R = roll.res, c = RARITY_C[R.tier], h = roll.h;
@@ -794,7 +794,7 @@ for (const [id, k] of [["mstable", "stable"], ["mup", "up"], ["modds", "odds"], 
 
 // ---- hatching: the egg wobbles three times, cracks, and there's your mount ----
 function hatchShow(kind, m) {
-  const o = $("hatch"), egg = $("hegg"), im = $("himg"), nm = $("hname"), rr = $("hrar"), M = MOUNTS[m.sp], c = RARITY_C[M.r]; o.style.display = "flex"; egg.style.display = "block"; egg.style.background = EGGS[kind].c; im.style.display = nm.style.display = rr.style.display = "none"; egg.className = "egg wob";
+  const o = $("hatch"), egg = $("hegg"), im = $("himg"), nm = $("hname"), rr = $("hrar"), M = MOUNTS[m.sp], c = RARITY_C[M.r]; o.style.display = "flex"; egg.style.display = "block"; egg.style.background = EGGS[kind] ? EGGS[kind].c : ""; im.style.display = nm.style.display = rr.style.display = "none"; egg.className = kind === "gift" ? "egg gift wob" : "egg wob";   // a new mount as a gift comes in a box
   for (const k of [0, 1, 2]) setTimeout(() => sfx("wobble"), 150 + k * 420);
   setTimeout(() => { egg.style.display = "none"; im.src = portrait(m.sp, m.va); im.style.display = nm.style.display = rr.style.display = "block"; nm.textContent = mountName(m); rr.textContent = RARITY[M.r]; rr.style.color = c; o.style.setProperty("--glow", m.va === 2 ? "#ffd84a" : m.va === 1 ? "#bfe6ff" : c); sfx("hatch"); if (m.va) sfx("shiny"); flash(c); }, 1500);
   setTimeout(() => { o.onclick = () => { o.style.display = "none"; o.onclick = null; }; }, 1900);
@@ -891,7 +891,7 @@ function onNet(m) {
       setTok(m.token); const again = loggedIn && myName === m.name; myName = m.name; myId = m.id; myRole = m.role || "player"; netOk = true; loggedIn = true; clockOff = m.now - Date.now();
       $("login").style.display = "none"; $("hud").style.display = "block"; if (document.activeElement && document.activeElement.blur) document.activeElement.blur();
       save = World.cleanData(m.data); shownCoins = save.coins; $("coinn").textContent = fmt(save.coins); remount(); setVolumes();
-      if (!again) { me.x = m.x; me.z = m.z; me.y = 0; me.yaw = Math.PI; cam.yaw = 0; msgs.innerHTML = ""; }
+      if (!again) { me.x = m.x; me.z = m.z; me.y = 0; me.yaw = Math.PI / 2; cam.yaw = -Math.PI / 2; msgs.innerHTML = ""; }
       me.foot = false; me.stun = 0; me.transit = null; me.hidden = false;
       for (const p of m.players) addOther(p); setNpc(m); for (const g of gooseMesh) { g.x = g.tx; g.z = g.tz; g.y = g.ty; } for (const d of dogMesh) { d.x = d.tx; d.z = d.tz; d.y = d.ty; } for (const g of goatMesh) { g.x = g.tx; g.z = g.tz; } hudDirty = true; sendPos(true);
       break;
@@ -932,7 +932,7 @@ function onNet(m) {
     case "delivered": {
       const h = World.houses[m.house]; parcel = null; setCarry(mine, null); setTarget(); sfx("deliver"); emit(h.mx, h.my + 1.6, h.mz, 60, { colors: CONFETTI, speed: 6, up: 8, life: 1.3 }); me.squash = 0.2;
       popup("+" + fmt(m.coins), "#ffd84a", h.mx, h.my + 2.4, h.mz); flyCoins(h.mx, h.my + 1.6, h.mz, 5); houseMesh[m.house].shake = 0.01; houseMesh[m.house].pop = 0.3;
-      save = World.cleanData(m.data); if (m.lvUp) remount(); startRoll(h, m.roll, m.lvUp); break;
+      save = World.cleanData(m.data); if (m.lvUp) remount(); startRoll(h, m.roll, m.lvUp); gift = m.gift || null; break;
     }
     case "stun": me.stun = m.s; if (me.transit && me.transit.k !== "pipe") me.transit = null; knockedOff(); sfx("stun"); cam.shake = Math.max(cam.shake, 0.5); flash(m.why === "kick" ? "#ffffff" : "#e5534b"); if (m.why === "dog") sfx("growl"); break;
     case "knock": me.px = m.x; me.pz = m.z; me.vy = m.y; me.ground = false; sfx("kick"); cam.shake = Math.max(cam.shake, 0.5); break;
@@ -1041,7 +1041,7 @@ function stepNpcs(dt, t) {
   for (const g of goatMesh) { if (far(g)) { g.x = g.tx; g.z = g.tz; continue; } const mv = hyp(g.tx - g.x, g.tz - g.z) > 0.05; g.x += (g.tx - g.x) * k; g.z += (g.tz - g.z) * k; g.yaw += angDiff(g.tyaw, g.yaw) * k; g.m.g.position.set(g.x, g.y, g.z); g.m.g.rotation.y = g.yaw; animatePet(g.m, t, mv, 13, false); g.m.head.rotation.x = g.mode === 1 ? 0.5 + Math.sin(t * 26) * 0.15 : g.mode === 2 ? 0.6 : 0; }
   const sn = srvNow(), goose = World.pipeGoose(sn); for (const e of pipeEyes) { e.visible = goose; e.position.y = (e === pipeEyes[0] ? World.PIPE.a.y : World.PIPE.b.y) + 0.75 + Math.sin(t * 3) * 0.08; }
   for (const s of sprinklerMesh) if (World.sprinklerOn(s, sn) && hyp(s.x - me.x, s.z - me.z) < 90) { emit(s.x, s.y + 0.6, s.z, 2, { colors: ["#bfe6ff", "#ffffff"], speed: 5.5, up: 4, life: 0.7, grav: 10, size: 0.1 }); if (hyp(s.x - me.x, s.z - me.z) < 14 && Math.random() < 0.03) sfx("hiss"); }
-  if (me.x > 480 && me.y > World.SKY_Y) { const w = World.windAt(sn); if (w.on) { if (!windOn) sfx("wind"); for (let n = 0; n < 2; n++) { const a = Math.random() * TAU, r = Math.random() * 22; parts.length < PN && parts.push({ x: me.x + Math.cos(a) * r - w.x * 8, y: me.y + 0.5 + Math.random() * 4, z: me.z + Math.sin(a) * r - w.z * 8, vx: w.x * 16, vy: Math.sin(t * 5 + n) * 1.5, vz: w.z * 16, t: 0, life: 0.8, size: 0.12, grav: 0, c: "#ffffff", r: n }); } } windOn = w.on; }
+  if (me.x > World.ISLE_X - 20 && me.y > World.SKY_Y) { const w = World.windAt(sn); if (w.on) { if (!windOn) sfx("wind"); for (let n = 0; n < 2; n++) { const a = Math.random() * TAU, r = Math.random() * 22; parts.length < PN && parts.push({ x: me.x + Math.cos(a) * r - w.x * 8, y: me.y + 0.5 + Math.random() * 4, z: me.z + Math.sin(a) * r - w.z * 8, vx: w.x * 16, vy: Math.sin(t * 5 + n) * 1.5, vz: w.z * 16, t: 0, life: 0.8, size: 0.12, grav: 0, c: "#ffffff", r: n }); } } windOn = w.on; }
   for (let i = fallers.length - 1; i >= 0; i--) { const f = fallers[i]; f.t += dt; const u = clamp(f.t / f.s, 0, 1); f.g.position.y = lerp(f.y0, f.y1, u * u); f.g.rotation.x += dt * 4; if (f.t > f.s + 1.2) { scene.remove(f.g); fallers.splice(i, 1); } }
   for (let i = divers.length - 1; i >= 0; i--) { const d = divers[i]; d.t += dt; const u = d.t / d.s, g = d.g.g; if (u < 1) g.position.set(d.x + 9 * (1 - u), d.y + 0.6 + 14 * (1 - u) * (1 - u), d.z); else g.position.set(d.x - 12 * (u - 1), d.y + 0.6 + 16 * (u - 1), d.z); g.rotation.y = -Math.PI / 2; d.g.wings[0].rotation.z = -1.2 + Math.sin(d.t * 20) * 0.4; d.g.wings[1].rotation.z = 1.2 - Math.sin(d.t * 20) * 0.4; if (u > 2) { scene.remove(g); divers.splice(i, 1); } }
   for (const h of houseMesh) { if (h.shake > 0) { h.shake -= dt; h.mb.rotation.z = h.shake > 0 ? Math.sin(t * 40) * 0.25 : 0; } if (h.pop > 0) { h.pop -= dt; h.mb.scale.setScalar(1 + Math.max(0, Math.sin((h.pop / 0.3) * Math.PI)) * 0.4); } }
