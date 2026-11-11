@@ -1132,9 +1132,9 @@ const sketchMat = new THREE.ShaderMaterial({
       // (owner, 2026-11-09: no outlines, no hatching) the world in plain shades of gray: each pixel's brightness, its
       // textures and shading kept
       float L = min(1.0, lum(vUv) * gain);   // gain: the night drawn a little lighter
-      // (owner, 2026-11-10) grass and trees keep a very slight green: a little of their own color where green leads
+      // (owner, 2026-11-10) grass and trees keep some green: part of their own color where green leads
       vec3 c = pow(max(texture2D(tColor, vUv).rgb, 0.0), vec3(1.0 / 2.2)); float gd = c.g - max(c.r, c.b);
-      vec3 tint = (c - vec3(dot(c, vec3(0.299, 0.587, 0.114)))) * 0.22 * smoothstep(0.02, 0.14, gd);
+      vec3 tint = (c - vec3(dot(c, vec3(0.299, 0.587, 0.114)))) * 0.9 * smoothstep(0.01, 0.08, gd);
       gl_FragColor = vec4(clamp(vec3(L) + tint, 0.0, 1.0), 1.0);
       gl_FragDepthEXT = min(1.0, texture2D(tDepth, vUv).r + 0.00002);   // the world's depth (a hair farther, so rings on the ground never flicker), so what's drawn in color after is hidden behind things
     }`,
