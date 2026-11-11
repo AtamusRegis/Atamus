@@ -6,6 +6,7 @@ and any rule decided. Use `git log` for the code detail (and for the older Atamu
 
 ## 2026-11-10
 
+- **Van points by hand; Build Town button (owner).** Van points go anywhere on a road, and admins draw the lines between them (tap a point, tap another; tap a line's middle to remove it); vans drive those lines. Build Town has its own button on screen.
 - **Van points (owner).** Admins mark van points on roads; vans drive from point to point along the roads joining them instead of turning at random.
 - **Rocks, boulders, solid trees (owner).** Build Town has Rock blocks and Boulders to place on blocks like trees; trees and boulders stop you.
 - **Your house in the town (owner).** Every town house stands on an 18 m lot; joining a room you take a random free one, your own house replacing it (turned the same way) until you leave. The editor's Plot pieces are gone. Town houses now sit centered on a tile, so ones already placed move half a tile.
