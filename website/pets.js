@@ -4,7 +4,7 @@
 // its edge; animal control chases you. Co-op: everyone in a room rides the same town, works on contracts (alone or with a party) and
 // chats. The server (packages/server/src/pets.js) shares players, runs animal control, contracts and chat.
 import * as THREE from "./vendor/three.module.min.js";
-import * as World from "./pets-world.js?v=1793100070";
+import * as World from "./pets-world.js?v=1793100071";
 
 const $ = (id) => document.getElementById(id);
 const TAU = Math.PI * 2, clamp = (v, a, b) => Math.max(a, Math.min(b, v)), hyp = Math.hypot;
@@ -95,13 +95,13 @@ const speck = (() => { const cv = document.createElement("canvas"); cv.width = c
 const blockM = new THREE.MeshLambertMaterial({ vertexColors: true, map: speck, side: THREE.DoubleSide });
 const dirtM = new THREE.MeshLambertMaterial({ vertexColors: true, map: speck, side: THREE.DoubleSide, emissive: "#4e3c26" });   // (owner, 2026-11-10: dirt too dark) lit from within a little, so shaded sides stay a light brown
 const waterBlockM = new THREE.MeshLambertMaterial({ vertexColors: true, transparent: true, opacity: 0.78, side: THREE.DoubleSide, depthWrite: true });
-const GRASS_T = [new THREE.Color("#7fc25a"), new THREE.Color("#8bc95f"), new THREE.Color("#96cf63")], EARTH = new THREE.Color("#b08658"), ROAD_T = new THREE.Color("#5c6670"), WATER_T = new THREE.Color("#3f9fd8");
+const GRASS_T = [new THREE.Color("#7fc25a"), new THREE.Color("#8bc95f"), new THREE.Color("#96cf63")], EARTH = new THREE.Color("#b08658"), ROCK_T = [new THREE.Color("#8d8f93"), new THREE.Color("#9a9ca0"), new THREE.Color("#83868b")], ROAD_T = new THREE.Color("#5c6670"), WATER_T = new THREE.Color("#3f9fd8");
 const worldG = new THREE.Group(); scene.add(worldG);
 snowCover = new THREE.Mesh(new THREE.BufferGeometry(), new THREE.MeshLambertMaterial({ color: "#eef7ff", transparent: true, opacity: 0, depthWrite: false, polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -2, side: THREE.DoubleSide })); snowCover.visible = false; snowCover.position.y = 0.025; scene.add(snowCover);
 function blockGeometry() {
   const { TILE: T, STEP: S, DIRS, cellTop } = World, at = new Map(), P = [], C = [], U = [], WP = [], WC = [], TOP = [], DP = [], DC = [], DU = [];   // D: the earth (sides and undersides), drawn in color
   for (const c of World.allCells()) at.set(c.i + "," + c.j + "," + c.k, c);
-  const full = (i, j, k) => { const c = at.get(i + "," + j + "," + k); return !!c && (c.t === "land" || c.t === "road" || c.t === "corner"); };
+  const full = (i, j, k) => { const c = at.get(i + "," + j + "," + k); return !!c && (c.t === "land" || c.t === "road" || c.t === "corner" || c.t === "rock"); };
   const quad = (pts, col, f, uvf, top) => {   // 4 corners in order; f darkens
     const cc = col.clone().multiplyScalar(f), [PP, CC, UU] = col === EARTH ? [DP, DC, DU] : [P, C, U];
     for (const q of [0, 1, 2, 0, 2, 3]) { const [x, y, z] = pts[q]; PP.push(x, y, z); CC.push(cc.r, cc.g, cc.b); const [u, v] = uvf(x, y, z); UU.push(u, v); if (top) TOP.push(x, y, z); }
@@ -131,14 +131,14 @@ function blockGeometry() {
       if (c.t === "half") quad([P3(a, y0), P3(b, y0), P3(b, y1), P3(a, y1)], EARTH, 0.96, sideUV);   // the cut face
       continue;
     }
-    const road = c.t === "road" || c.t === "ramp", hsh = ((c.i * 73856093) ^ (c.j * 19349663)) >>> 0, topC = road ? ROAD_T : GRASS_T[hsh % 3];
+    const road = c.t === "road" || c.t === "ramp", rock = c.t === "rock", hsh = ((c.i * 73856093) ^ (c.j * 19349663)) >>> 0, topC = rock ? ROCK_T[hsh % 3] : road ? ROAD_T : GRASS_T[hsh % 3], sideC = rock ? ROCK_T[(hsh >> 2) % 3] : EARTH;   // (owner, 2026-11-10) rock: stone through and through
     if (!full(c.i, c.j, c.k + 1)) quad(corners.map(([x, z], n) => [x, h[n], z]), topC, 1, topUV, true);
-    if (!full(c.i, c.j, c.k - 1)) quad(corners.map(([x, z]) => [x, y0, z]), EARTH, 0.7, topUV);
+    if (!full(c.i, c.j, c.k - 1)) quad(corners.map(([x, z]) => [x, y0, z]), sideC, rock ? 0.55 : 0.7, topUV);
     function sideCorners(s2) { return s2 === 0 ? [[x0, z1], [x1, z1]] : s2 === 1 ? [[x1, z0], [x1, z1]] : s2 === 2 ? [[x0, z0], [x1, z0]] : [[x0, z0], [x0, z1]]; }
     for (let s2 = 0; s2 < 4; s2++) {
       const [dx, dz] = DIRS[s2]; if (full(c.i + dx, c.j + dz, c.k)) continue;
       const e = sideCorners(s2), ha = cellTop(c, e[0][0], e[0][1]), hb = cellTop(c, e[1][0], e[1][1]); if (ha - y0 < 0.01 && hb - y0 < 0.01) continue;
-      quad([[e[0][0], y0, e[0][1]], [e[1][0], y0, e[1][1]], [e[1][0], hb, e[1][1]], [e[0][0], ha, e[0][1]]], EARTH, s2 % 2 ? 1 : 0.92, sideUV);
+      quad([[e[0][0], y0, e[0][1]], [e[1][0], y0, e[1][1]], [e[1][0], hb, e[1][1]], [e[0][0], ha, e[0][1]]], sideC, rock ? (s2 % 2 ? 0.8 : 0.7) : (s2 % 2 ? 1 : 0.92), sideUV);
     }
   }
   const mk = (pos, col, uv) => { const g = new THREE.BufferGeometry(); g.setAttribute("position", new THREE.Float32BufferAttribute(pos, 3)); g.setAttribute("color", new THREE.Float32BufferAttribute(col, 3)); if (uv) g.setAttribute("uv", new THREE.Float32BufferAttribute(uv, 2)); g.computeVertexNormals(); return g; };
@@ -353,6 +353,7 @@ function setHouse(i, on) {
 // windows either side of the door: they light up at night
 const windowM = new THREE.MeshBasicMaterial({ color: "#6b7f99" }), WINDOW_ON = new THREE.Color("#ffd76a");
 // (owner, 2026-11-10) tall pines, three to four blocks high: a trunk and three tiers of cone
+const BOULDER_G = new THREE.IcosahedronGeometry(1, 0);   // (owner, 2026-11-10) boulders: a chunky stone, squashed a little
 const TRUNK = new THREE.CylinderGeometry(0.22, 0.34, 1, 6).translate(0, 0.5, 0), PINE_CONE = new THREE.ConeGeometry(1, 1, 8).translate(0, 0.5, 0);
 const pineH = (t) => 9 + (t.s - 0.85) * 6;   // 9 to 12 m
 const PINE_TIERS = [[0.2, 0.42, 2.8], [0.42, 0.36, 2.1], [0.62, 0.38, 1.4]];   // where a tier starts, how tall it is (of the height), its radius
@@ -366,6 +367,7 @@ function buildThings(parent) {
   houses.forEach((h, i) => { for (const sd of [-1, 1]) { winAt(h, sd, dummy); dummy.updateMatrix(); wm.setMatrixAt(i * 2 + (sd > 0 ? 1 : 0), dummy.matrix); } }); parent.add(wm); houseWin = wm;
   instanced(BOX, "#6b7680", houses.length, (i, d) => { const h = houses[i]; d.position.set(h.mx, h.my + 0.55, h.mz); d.scale.set(0.15, 1.1, 0.15); }, parent);
   { const mb = inColor(instanced(BOX, "#3a7aff", houses.length, (i, d) => { const h = houses[i]; d.position.set(h.mx, h.my + 1.25, h.mz); d.scale.set(0.8, 0.45, 0.6); d.rotation.y = h.yaw; }, parent)); mb.material = lightB; }   // (owner, 2026-11-10) the blue of animal control's light, in color: you deliver to them
+  instanced(BOULDER_G, "#8f9196", World.boulders.length, (i, d) => { const b = World.boulders[i]; d.position.set(b.x, b.y + b.s * 0.55, b.z); d.scale.set(b.s, b.s * 0.75, b.s * 1.1); d.rotation.set(0, b.yaw, 0.15); }, parent);
   instanced(TRUNK, "#7a4f28", trees.length, (i, d) => { const t = trees[i], h = pineH(t); d.position.set(t.x, t.y, t.z); d.scale.set(1 + h / 30, h * 0.35, 1 + h / 30); }, parent);
   for (const [a, hh, r] of PINE_TIERS) instanced(PINE_CONE, "#3f8f4a", trees.length, (i, d) => { const t = trees[i], h = pineH(t), w = r * h / 10.5; d.position.set(t.x, t.y + a * h, t.z); d.scale.set(w, hh * h, w); d.rotation.y = (t.x * 0.37 + t.z * 0.11 + a * 2) % 6.28; }, parent);
 }
@@ -2667,6 +2669,7 @@ function drawMapLayers() {
       g.fillStyle = PAPER2; g.beginPath(); g.moveTo(...r); g.lineTo(...a); g.lineTo(...b); g.closePath(); g.fill();
       if (c.t === "half") { g.strokeStyle = INK; g.lineWidth = 0.8; g.beginPath(); g.moveTo(...a); g.lineTo(...b); g.stroke(); }
     }
+    else if (c.t === "rock") { g.fillStyle = "#c4c6ca"; g.fillRect(x, z, T, T); }
     else if (c.t === "water") { g.fillStyle = "#d6d8de"; g.fillRect(x, z, T, T); g.strokeStyle = "rgba(29,29,34,.5)"; g.lineWidth = 0.3; g.beginPath(); for (let q = 1; q < 6; q++) { g.moveTo(x, z + q); g.lineTo(x + q, z); g.moveTo(x + q, z + T); g.lineTo(x + T, z + q); } g.stroke(); }
     else g.fillStyle = PAPER;
     if (c.t === "wedge" || c.t === "ramp") { const [dx, dz] = World.DIRS[c.d], mx = x + T / 2, mz = z + T / 2; g.strokeStyle = INK; g.lineWidth = 0.4; g.beginPath(); g.moveTo(mx - dx * 2 - dz * 1.5, mz - dz * 2 + dx * 1.5); g.lineTo(mx + dx * 2, mz + dz * 2); g.lineTo(mx - dx * 2 + dz * 1.5, mz - dz * 2 - dx * 1.5); g.stroke(); }
@@ -2687,6 +2690,7 @@ function drawMapLayers() {
   for (const [x, z, r] of [[PICKUP.x, PICKUP.z, PICKUP.r], [BOARD.x, BOARD.z, BOARD.r], [SHOP.x, SHOP.z, SHOP.r], [TRAIN.x, TRAIN.z, TRAIN.r - 1], [LIFTS[0].x, LIFTS[0].z, 2.2]]) mapRing(g, x, z, r, INK, 0.6);
   for (const h of houses) mapHouse(h.base >= SKY_Y ? mgS : mgG, h);
   for (const t of trees) mapTree(t.y >= SKY_Y ? mgS : mgG, t);
+  for (const b of World.boulders) { const g2 = b.y >= SKY_Y ? mgS : mgG; g2.fillStyle = PAPER2; g2.strokeStyle = INK; g2.lineWidth = 0.4; g2.beginPath(); g2.arc(b.x, b.z, b.s, 0, TAU); g2.fill(); g2.stroke(); }
 }
 const mapEl = $("map"), mapG = mapEl.getContext("2d"), MAP_ZOOMS = [40, 80, 170, 300];   // half the map's width, in metres
 let mapZoom = 1, mapHalf = 80, mapLast = 0;
@@ -2978,7 +2982,7 @@ function buildWorldView() {
 // Erase, tap to take it away). Blocks go against the face you point at (on top, or beside it), or on a chosen level
 // to build in the air; things stand on the tile you point at. Everyone sees each change as it's made. ----
 let wedit = null;   // { tool, d (0-3), lvl (null: against what you point at), r (helicopter radius), p (plot number), px, py, aim }
-const WTOOLS = [["land", "Land"], ["wedge", "Wedge"], ["road", "Road"], ["ramp", "Road Ramp"], ["corner", "Road Corner"], ["half", "Half Road"], ["water", "Water"], ["tree", "Tree"], ["house", "House"], ["mailbox", "Mailbox"], ["boost", "Boost"], ["van", "Van"], ["heli", "Helicopter"], ["erase", "Erase"]];
+const WTOOLS = [["land", "Land"], ["wedge", "Wedge"], ["road", "Road"], ["ramp", "Road Ramp"], ["corner", "Road Corner"], ["half", "Half Road"], ["water", "Water"], ["rock", "Rock"], ["tree", "Tree"], ["boulder", "Boulder"], ["house", "House"], ["mailbox", "Mailbox"], ["boost", "Boost"], ["van", "Van"], ["heli", "Helicopter"], ["erase", "Erase"]];
 const HELI_R = [40, 80, 150, 250];
 const wghost = new THREE.Group(); scene.add(wghost); wghost.visible = false;
 const wOk = new THREE.MeshBasicMaterial({ color: "#ffffff", transparent: true, opacity: 0.45, depthWrite: false }), wBad = new THREE.MeshBasicMaterial({ color: "#ff3b30", transparent: true, opacity: 0.5, depthWrite: false });
@@ -3036,7 +3040,7 @@ function renderWorldBar() {
   el.append(row1, row2);
 }
 const weditLevel = () => Math.floor((me.y + 0.01) / World.STEP) + 1;   // the level of the block above the one I stand on
-const BLOCK_TOOLS = ["land", "wedge", "road", "ramp", "water", "corner", "half"];
+const BLOCK_TOOLS = ["land", "wedge", "road", "ramp", "water", "corner", "half", "rock"];
 const cellAtP = (x, y, z) => [Math.floor(x / World.TILE), Math.floor(z / World.TILE), Math.floor(y / World.STEP) + 1];
 const hasCell = (i, j, k) => [...World.allCells()].some((c) => c.i === i && c.j === j && c.k === k);
 // what a tap at (px, py) would do: { put | del (a cell) | add (a thing) | rm (a thing's id), ok }
@@ -3088,6 +3092,7 @@ function weditAim(px, py) {
     if (t.k === "house") { add(new THREE.BoxGeometry(9, 4.4, 9).translate(0, 2.2, 0), x, t.y, z, YAW[t.d], true); add(new THREE.BoxGeometry(World.PLOT, 0.2, World.PLOT), x, t.y + 0.1, z, 0, true); add(new THREE.BoxGeometry(0.8, 1.4, 0.8), x + World.DIRS[t.d][0] * 7.8, t.y + 0.7, z + World.DIRS[t.d][1] * 7.8); }   // (owner, 2026-11-10) its 3 x 3 lot
     else if (t.k === "heli") { add(new THREE.CylinderGeometry(0.6, 0.6, 14, 8).translate(0, 7, 0), x, t.y, z, 0, true); const ring = add(new THREE.TorusGeometry(t.r, 0.4, 6, 96).rotateX(Math.PI / 2), x, t.y + 0.3, z, 0, true); ring.renderOrder = 5; }
     else if (t.k === "mailbox") add(new THREE.BoxGeometry(0.8, 1.4, 0.8).translate(0, 0.7, 0), x, t.y, z, YAW[t.d], true);
+    else if (t.k === "boulder") add(new THREE.IcosahedronGeometry(2, 0).translate(0, 1.2, 0), x, t.y, z, 0, true);
     else if (t.k === "tree") add(new THREE.ConeGeometry(2.8, 10.5, 8).translate(0, 5.25, 0), x, t.y, z, 0, true);
     else if (t.k === "boost") add(new THREE.BoxGeometry(3.4, 0.2, 5), x, t.y + 0.1, z, YAW[t.d], true);
     else add(new THREE.BoxGeometry(2.4, 2.4, 5).translate(0, 1.2, 0), x, t.y, z, YAW[t.d], true);   // van

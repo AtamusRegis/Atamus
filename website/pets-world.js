@@ -28,14 +28,14 @@ export function rng(seed) { let s = seed; return () => ((s = (s * 16807) % 21474
 // ramp up one step, rising toward its direction), road (a land block paved on top), ramp (a road wedge), water (a
 // block of water, its surface just under the top), corner (owner, 2026-11-10: a flat block cut corner to corner, road
 // on one side, grass on the other, to round a road's turn) and half (the road half of that, nothing on the other side).
-// Blocks can float with nothing under them (floating islands).
+// and rock (owner, 2026-11-10: a block of stone). Blocks can float with nothing under them (floating islands).
 // Things stand on tiles: trees, houses (on a tile, facing a way, with a mailbox at the front of their 3 x 3 lot), lone
 // mailboxes, boost pads (on roads), animal control vans (on roads: they roam every road joined to theirs), helicopters
 // (anywhere, keeping within a chosen radius); every house is also a lot a player can live on (3 x 3 tiles). Only staff (admin) edit it,
 // live, for everyone; the server keeps it. It starts as just the town square: a round island of tiles with the square's
 // buildings, which stay where they are. ----
 export const TILE = 6, STEP = 3;
-export const KINDS = ["land", "wedge", "road", "ramp", "water", "corner", "half"], THINGS = ["tree", "house", "mailbox", "boost", "van", "heli", "plot"];
+export const KINDS = ["land", "wedge", "road", "ramp", "water", "corner", "half", "rock"], THINGS = ["tree", "house", "mailbox", "boost", "van", "heli", "plot", "boulder"];
 export const DIRS = [[0, 1], [1, 0], [0, -1], [-1, 0]];   // a direction 0-3: +z, +x, -z, -x
 const tkey = (i, j) => i + "," + j, ckey = (i, j, k) => i + "," + j + "," + k;
 export const tileOf = (v) => Math.floor(v / TILE), tileMid = (i) => i * TILE + TILE / 2;
@@ -126,7 +126,7 @@ export const SHOP_B = around(0, 44), SHOP = { ...around(0, 31), r: 5 };
 export const TRAIN = { ...around(180, 40), r: 9 };
 export const POUND = around(90, 44), POUND_B = around(90, 47), RELEASE = around(90, 33);
 export const ROAD_HALF = TILE / 2;
-export const houses = [], solids = [], trees = [], boosts = [];
+export const houses = [], solids = [], trees = [], boosts = [], boulders = [];
 // solids: { x, z, c, s (cos / sin of its turn), hw, hd (half sizes), y0, y1 }
 const solid = (x, z, yaw, hw, hd, y0, y1) => solids.push({ x, z, c: Math.cos(yaw), s: Math.sin(yaw), hw, hd, y0, y1 });
 // ---- housing plots (owner, 2026-11-08; placed by staff, 2026-11-10): 20 x 20 m (5 x 5 squares of 4 m) where players
@@ -149,7 +149,7 @@ function derive() {
   cols.clear(); for (const c of cells.values()) { const k = tkey(c.i, c.j); if (!cols.has(k)) cols.set(k, []); cols.get(k).push(c); }
   for (const col of cols.values()) col.sort((a, b) => a.k - b.k);
   roadTiles.clear(); for (const [k, col] of cols) { const top = col[col.length - 1]; if (top.t === "road" || top.t === "ramp" || top.t === "corner" || top.t === "half") roadTiles.set(k, top); }
-  houses.length = 0; solids.length = 0; trees.length = 0; boosts.length = 0;
+  houses.length = 0; solids.length = 0; trees.length = 0; boosts.length = 0; boulders.length = 0;
   PLOTS.length = 0; lotById.clear();
   const rnd = rng(7);
   for (const t of things) {
@@ -159,7 +159,8 @@ function derive() {
       solid(x, z, yaw, 4.5, 4.5, t.y - 4, t.y + 4.4);
       const lot = { id: t.id, x, z, y: t.y, yaw: LOT_YAW[t.d], d: t.d, placed: true }; PLOTS.push(lot); lotById.set(t.id, lot);
     } else if (t.k === "mailbox") { const x = tileMid(t.i), z = tileMid(t.j); houses.push({ x, z, yaw: [0, Math.PI / 2, Math.PI, -Math.PI / 2][t.d], base: t.y, mx: x, mz: z, my: t.y, sky: false, r: rnd(), box: true, id: t.id }); }
-    else if (t.k === "tree") trees.push({ x: tileMid(t.i), z: tileMid(t.j), y: t.y, s: 0.85 + rnd() * 0.5, id: t.id });
+    else if (t.k === "tree") { const x = tileMid(t.i), z = tileMid(t.j); trees.push({ x, z, y: t.y, s: 0.85 + rnd() * 0.5, id: t.id }); solid(x, z, 0, 0.55, 0.55, t.y - 1, t.y + 12); }   // (owner, 2026-11-10) trees are solid: their trunk stops you
+    else if (t.k === "boulder") { const x = tileMid(t.i), z = tileMid(t.j), sz = 1.7 + rnd() * 0.8; boulders.push({ x, z, y: t.y, s: sz, yaw: rnd() * 6.28, id: t.id }); solid(x, z, 0, sz * 0.8, sz * 0.8, t.y - 1, t.y + sz * 1.5); }   // (owner, 2026-11-10) a boulder on a tile, like a tree
     else if (t.k === "boost") boosts.push({ x: tileMid(t.i), z: tileMid(t.j), y: t.y, yaw: [0, Math.PI / 2, Math.PI, -Math.PI / 2][t.d], id: t.id });
   }
   for (const h of houses) { h.d = hyp(h.mx - POST.x, h.mz - POST.z); h.sky = h.base > 30; }

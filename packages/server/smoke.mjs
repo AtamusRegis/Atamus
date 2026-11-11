@@ -35,6 +35,9 @@ ok(W.roadDist(-8 * W.TILE + 5, -8 * W.TILE + 5) === 0 && W.roadDist(-8 * W.TILE 
   W.applyEdits([{ op: "rm", id: van.id }, { op: "del", c: [0, 0, 1] }]); const vs3 = W.makeVehicles(vs2);
   ok(!vs3.some((v) => v.id === van.id) && vs3.every((v) => vs2.includes(v)) && vs3.filter((v) => v.kind === 1).length === heliN, "taking one away leaves the rest where they are");
   W.setWorld(testWorld(W)); }
+{ const t = W.trees[0]; ok(W.blocked(t.x + 0.3, t.z, t.y) && !W.blocked(t.x + 3, t.z, t.y), "trees are solid (their trunk)"); }
+{ const d = W.applyEdits([{ op: "add", t: { k: "boulder", i: 2, j: 1, y: 0 } }, { op: "put", c: [3, 1, 1, W.KINDS.indexOf("rock"), 0] }]); const bo = W.boulders.find((q) => q.id === d[0].t.id);
+  ok(bo && W.blocked(bo.x, bo.z, 0) && W.terrain(3 * W.TILE + 3, W.TILE + 3) === 3, "boulders are solid and rock is a block"); W.applyEdits([{ op: "rm", id: bo.id }, { op: "del", c: [3, 1, 1] }]); }
 ok(W.blocked(9 * W.TILE - 0.2, 3, 0) && !W.blocked(0, 0, 0), "a block's side stands in the way");
 { const before = W.houses.length, done = W.applyEdits([{ op: "put", c: [0, 0, 1, 0, 0] }, { op: "add", t: { k: "mailbox", i: 2, j: 2, y: 0 } }, { op: "put", c: [999, 0, 0, 0, 0] }]);
   ok(done.length === 2 && W.terrain(3, 3) === 3 && W.houses.length === before + 1, "edits place blocks and mailboxes (bad ones dropped)");
