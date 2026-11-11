@@ -129,7 +129,8 @@ Asked (owner): a web game on atamus.io (not Roblox), on its own page; the cargo 
 - Roads are the paved tops of road blocks; pets stand on them like any block.
 - **Gray look (owner, 2026-11-09: no outlines, no hatching):** the world is drawn in plain shades of gray: a screen pass
   turns each pixel into its brightness, keeping textures and shading; nights are brightened so it stays readable.
-  Grass and trees keep a very slight green (owner, 2026-11-10: a little of a pixel's own color where green leads).
+  Grass and trees keep their green (owner, 2026-11-10: most of a pixel's own color where green leads; stronger the same
+  day after "still too gray"), and so do green roofs.
   Name tags, place labels and speech
   bubbles are drawn after the pass, in color, still hidden behind buildings; so are the guides and interaction circles (owner,
   2026-11-09): the guide arrow, the place rings (pickup, board, shops, training yard, lifts) and lift beams, the beams
