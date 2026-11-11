@@ -52,8 +52,8 @@ Asked (owner): a web game on atamus.io (not Roblox), on its own page; the cargo 
   office** (north; blue roof, its **pickup ring**, gold, in front), the **egg shop** (east; pink, a giant egg on top,
   pink ring), the **pound** (south; animal control, striped front, a fenced yard in front) and the **training yard**
   (west; a running track with hurdles, green ring). The lift to your plot stands south of the center.
-- **The town editor (owner, 2026-11-10; admins only):** the Build Town button (top left, beside the menu and chat;
-  admins only) opens a bar of pieces: Land,
+- **The town editor (owner, 2026-11-10; admins only):** the Build Town button (owner, 2026-11-10: a brown house on a
+  green button, as big as the item buttons, at the bottom right above them; admins only) opens a bar of pieces: Land,
   Wedge, Road, Road Ramp, Road Corner, Half Road, Water, Rock, Tree, Boulder, House, Mailbox, Boost, Van, Van Point, Helicopter and Erase, with ⟳ (turn; R on a
   keyboard), the level (− Auto +) and, for a helicopter, its radius. A see-through preview shows
   where the piece goes (red where it can't, or what Erase takes away); a tap (or click) places it. Blocks go against

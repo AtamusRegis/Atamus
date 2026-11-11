@@ -45,6 +45,7 @@
     .btn .n { position: absolute; top: -6px; right: -6px; min-width: 22px; height: 22px; padding: 0 5px; border-radius: 11px; background: var(--red); color: #fff; font-size: 12px; line-height: 22px; text-align: center; }
     #items { display: flex; gap: 8px; }
     #items .btn { min-width: 52px; padding: 10px; }
+    #worldbtn { min-width: 52px; padding: 10px; background: var(--green); display: grid; place-items: center; }   /* (owner, 2026-11-10) Build Town: a brown house on green, as big as the item buttons */
     .ico { display: inline-block; width: 22px; height: 22px; vertical-align: middle; }
     #joy { position: fixed; width: 120px; height: 120px; margin: -60px 0 0 -60px; border-radius: 50%; background: rgba(255,255,255,.28); border: 3px solid rgba(255,255,255,.7); pointer-events: none; display: none; z-index: 4; }
     #joy i { position: absolute; left: 50%; top: 50%; width: 52px; height: 52px; margin: -26px 0 0 -26px; border-radius: 50%; background: rgba(255,255,255,.9); }
@@ -252,7 +253,7 @@
   <canvas id="gl"></canvas>
   <div id="top">
     <div>
-      <div id="tlbar"><button class="rbtn" id="gear" type="button" title="Menu"><svg viewBox="0 0 24 24" width="22" height="22"><path fill="#fff" d="M19.4 13a7.5 7.5 0 0 0 0-2l2.1-1.6-2-3.5-2.5 1a7.6 7.6 0 0 0-1.7-1L15 3h-4l-.4 2.9a7.6 7.6 0 0 0-1.7 1l-2.5-1-2 3.5L6.6 11a7.5 7.5 0 0 0 0 2l-2.1 1.6 2 3.5 2.5-1a7.6 7.6 0 0 0 1.7 1L11 21h4l.4-2.9a7.6 7.6 0 0 0 1.7-1l2.5 1 2-3.5zM13 15.5A3.5 3.5 0 1 1 13 8.5a3.5 3.5 0 0 1 0 7z" transform="translate(-1 0)"/></svg></button><button class="rbtn on" id="chatbtn" type="button" title="Chat"><svg viewBox="0 0 24 24" width="22" height="22"><path fill="#fff" d="M4 4h16a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H10l-5 4v-4H4a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2z"/></svg></button><button class="rbtn" id="worldbtn" type="button" title="Build Town" style="display:none"><svg viewBox="0 0 24 24" width="22" height="22"><path fill="#fff" d="M3 14h8v7H3zM13 14h8v7h-8zM8 6h8v7H8z"/></svg></button></div>
+      <div id="tlbar"><button class="rbtn" id="gear" type="button" title="Menu"><svg viewBox="0 0 24 24" width="22" height="22"><path fill="#fff" d="M19.4 13a7.5 7.5 0 0 0 0-2l2.1-1.6-2-3.5-2.5 1a7.6 7.6 0 0 0-1.7-1L15 3h-4l-.4 2.9a7.6 7.6 0 0 0-1.7 1l-2.5-1-2 3.5L6.6 11a7.5 7.5 0 0 0 0 2l-2.1 1.6 2 3.5 2.5-1a7.6 7.6 0 0 0 1.7 1L11 21h4l.4-2.9a7.6 7.6 0 0 0 1.7-1l2.5 1 2-3.5zM13 15.5A3.5 3.5 0 1 1 13 8.5a3.5 3.5 0 0 1 0 7z" transform="translate(-1 0)"/></svg></button><button class="rbtn on" id="chatbtn" type="button" title="Chat"><svg viewBox="0 0 24 24" width="22" height="22"><path fill="#fff" d="M4 4h16a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H10l-5 4v-4H4a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2z"/></svg></button></div>
       <div id="gearmenu"><button type="button" id="gm-settings">Settings</button><button type="button" id="gm-admin">Admin Panel</button><button type="button" id="gm-logout">Log Out</button></div>
       <div id="rchat"><div id="rmsgs"></div><form id="chatbar" autocomplete="off"><input id="chatin" maxlength="120" enterkeyhint="send"></form></div>
       <span class="pill" id="windp" title="Wind"><svg id="winda" viewBox="0 0 16 16" width="16" height="16" style="transition: transform .3s"><path d="M8 1l6 8h-4v6H6V9H2z" fill="#3a8ee6"/></svg><b id="windn"></b><b id="winde"></b></span>
@@ -272,6 +273,7 @@
   <div id="pin"><svg viewBox="0 0 40 52" width="40" height="52"><path d="M20 50 4 28h10V2h12v26h10z" fill="#ffd35a" stroke="#fff8dc" stroke-width="2.5" stroke-linejoin="round"/></svg></div>
   <div class="pill" id="flykeys" style="display:none"><span><kbd>Space</kbd>Up</span><span><kbd>Shift</kbd>Down</span></div>
   <div id="side">
+    <button class="btn" id="worldbtn" type="button" title="Build Town" style="display:none"><svg viewBox="0 0 24 24" width="30" height="30"><path fill="#8a5a3a" d="M12 3 2 11.5h3V21h5.5v-5.5h3V21H19v-9.5h3z"/></svg></button>
     <div id="items"></div>
     <div id="acts"></div>
     <button class="btn" id="btn-build" type="button" style="display:none">Build</button>
@@ -305,6 +307,6 @@
   <div id="banner"></div>
   <div id="eventflash"><div class="rays"></div><div class="cardfx"><i class="parcel"></i><b id="eventtitle">Package Rush!</b><span id="eventsub">Prize packages are falling!</span></div></div>
   <div id="hatch"><canvas id="hatchc" width="440" height="440"></canvas><span class="nm" id="hatchn"></span><span class="rar" id="hatchr"></span><div class="hatchb"><button class="btn ghost" id="hatchno" type="button">Not now</button><button class="btn green" id="hatchok" type="button">Ride</button></div></div>
-  <script type="module" src="pets.js?v=1794200068"></script>
+  <script type="module" src="pets.js?v=1794200069"></script>
 </body>
 </html>
