@@ -19,13 +19,14 @@ Every rule below is in `website/pets-world.js` (shared with the server, an ident
    game's), and the parcel card shows how far.
 3. **Deliver.** Ride into the glowing ring in front of that mailbox (within 3 m; no button). The server checks it. A
    wrong mailbox just shakes.
-4. **Gift.** Coins pay out and a **gift** lands on the left of the screen (owner, 2026-11-11), already showing its
-   rarity: the box is in the rarity's color (Common light gray; Epic and Legendary glow) and the rarity pops up over the
-   mailbox. Gifts wait until you open them: tap one to open it (it shakes three times, its glow growing, then bursts;
-   tap it while it shakes to skip the build-up), or **Open all** to open every waiting gift at once, showing each one's
-   rarity and the totals. What came out (coins, XP, Level Coupons, eggs, a mount) stays under the gifts until the next
-   opening or you close it. A gift's coins count onto the counter when it opens. The rewards are the server's the
-   moment you deliver, so a gift left unopened when you leave is still yours.
+4. **Open it.** Coins pay out and the delivered parcel lands on the left of the screen (owner, 2026-11-11) with a small
+   sparkle beside it in its rarity's color (Common white, Uncommon green, Rare blue, Epic purple, Legendary gold; the
+   rarer, the bigger and quicker it twinkles), and the rarity pops up over the mailbox. Deliver three and three
+   parcels wait there. Tap one to open it: it builds up (three shakes, its sparkle and glow growing, about 2 s) then
+   shows the prize; tapping while it builds up makes it go faster. **Open all** opens every waiting parcel at once,
+   showing each one's rarity and the totals. What came out (coins, XP, Level Coupons, eggs, a mount) stays under them
+   until the next opening or you close it. A parcel's coins count onto the counter when it opens. The rewards are the
+   server's the moment you deliver, so one left unopened when you leave is still yours.
 
 (owner, 2026-11-11) **A stack of parcels:** a mount carries 1 parcel, one more at levels 5, 10, 15 and 20 (5 at level
 20); ride back into the conveyor to load up. Each has its own address (the same neighborhood as another or a
@@ -146,7 +147,7 @@ of about 2 m).
 - (owner, 2026-11-11: dangers roam, and more of them) **Dogs** (20) roam their district: a short trot somewhere, now
   and then a pause, staying within 45 m of where they started, off the post office's safe zone, out of ponds. A
   courier carrying a parcel within 10 m sets one off: a bark and a red "!" for 0.5 s, then it chases for up to 6 s at
-  11.5 m/s. A bite stuns for 1.5 s and takes 1 hit. It gives up if you outrun it, get a wall between you, take it 38 m
+  11.5 m/s. A bite (not while you're jumping over it) stuns for 1.5 s and takes 1 hit. It gives up if you outrun it, get a wall between you, take it 38 m
   from where it started or reach the safe zone; then it rests 8 s. Scared off (a kick, Bark), it bolts away for 2.5 s.
 - **Geese** (15) roam up to 34 m out from their pond, round houses and fences. One that sees a parcel within 7 m honks and flaps for 1 s, then lunges (13 m/s for
   up to 2.2 s). Touching you it takes one of your parcels (no stun) and waddles to its pond (7.2 m/s), then takes 3 s out in the
@@ -242,6 +243,8 @@ upgrades, everything, reset), and edit coins and coupons. Everything is logged (
 
 ## Rejected / removed
 
+- (owner, 2026-11-11) Gift boxes, and tapping to skip an opening's build-up (now delivered parcels with a rarity
+  sparkle, and a tap speeds the build-up up).
 - (owner, 2026-11-11) The big reward reel in the middle of the screen and its card, then gifts that opened themselves
   with a rarity reel (replaced by gifts showing their rarity, opened when you choose).
 - (owner, 2026-11-11) One parcel at a time (now 1 to 5 by level); the long neighborhoods (20 and 30 houses) and the

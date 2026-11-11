@@ -96,15 +96,19 @@
     #pops { position: fixed; inset: 0; pointer-events: none; overflow: hidden; }
     .pop { position: absolute; left: 0; top: 0; font: 800 24px "Big Shoulders Display", system-ui, sans-serif; text-shadow: 0 2px 0 rgba(0,0,0,.55), 0 0 8px rgba(0,0,0,.35); white-space: nowrap; will-change: transform, opacity; } .pop.big { font-size: 36px; }
     .flycoin { position: absolute; width: 20px; height: 20px; border-radius: 50%; background: radial-gradient(circle at 35% 30%, #fff3b8, #f2b01e 60%, #c98500); border: 2px solid #b87400; transform: translate(-50%, -50%); }
-    /* gifts, on the left: the waiting ones (in their rarity's color), the one opening, what came out */
+    /* delivered parcels, on the left: the waiting ones (a sparkle in their rarity's color), the one opening, what came out */
     #gifts { position: fixed; left: calc(56px + var(--sl)); top: calc(178px + var(--st)); width: 176px; display: none; flex-direction: column; align-items: stretch; gap: 6px; z-index: 6; }
     #gq { display: flex; flex-wrap: wrap; gap: 4px; align-items: center; min-height: 0; } #gq b { font-size: 14px; color: #fff; text-shadow: 0 1px 0 rgba(0,0,0,.5); }
-    .gbox { width: 26px; height: 24px; padding: 0; border: 0; border-radius: 5px; cursor: pointer; background: linear-gradient(90deg, transparent 40%, #fff 40% 60%, transparent 60%), linear-gradient(transparent 40%, #fff 40% 60%, transparent 60%), var(--gc); box-shadow: 0 2px 0 rgba(0,0,0,.3), inset 0 0 0 2px rgba(0,0,0,.18); animation: popin .3s; }
-    .gbox.t3, .gbox.t4 { box-shadow: 0 2px 0 rgba(0,0,0,.3), 0 0 10px var(--gc); animation: popin .3s, glow 1.2s infinite alternate; } @keyframes glow { to { box-shadow: 0 2px 0 rgba(0,0,0,.3), 0 0 18px var(--gc); } }
+    .gtile { position: relative; display: inline-block; flex: none; width: 34px; height: 30px; padding: 0; border: 0; background: none; cursor: pointer; animation: popin .3s; }
+    .gpar { position: absolute; left: 0; bottom: 0; width: 24px; height: 22px; border-radius: 3px; background: linear-gradient(90deg, transparent 42%, #f3e2bf 42% 58%, transparent 58%), linear-gradient(135deg, var(--tc) 0 26%, transparent 26%), #c99a5e; box-shadow: 0 2px 0 rgba(0,0,0,.3), inset 0 0 0 1.5px rgba(80,50,20,.45); }
+    .spark { position: absolute; right: 0; top: 0; width: 14px; height: 14px; background: var(--rc); clip-path: polygon(50% 0, 62% 38%, 100% 50%, 62% 62%, 50% 100%, 38% 62%, 0 50%, 38% 38%); filter: drop-shadow(0 0 3px var(--rc)); animation: twinkle 1.1s ease-in-out infinite; }
+    .spark.r0 { filter: drop-shadow(0 0 1px rgba(0,0,0,.6)); animation-duration: 1.8s; } .spark.r2 { width: 16px; height: 16px; } .spark.r3 { width: 18px; height: 18px; animation-duration: .8s; } .spark.r4 { width: 20px; height: 20px; animation-duration: .6s; filter: drop-shadow(0 0 6px var(--rc)); }
+    .spark.r3::after, .spark.r4::after { content: ""; position: absolute; inset: 30%; background: #fff; clip-path: inherit; }
+    @keyframes twinkle { 0%, 100% { transform: scale(.7) rotate(0deg); opacity: .75; } 50% { transform: scale(1.15) rotate(45deg); opacity: 1; } }
     #gall { padding: 4px 10px; font-size: 13px; border: 0; border-radius: 10px; background: #ff1f8f; color: #fff; box-shadow: 0 3px 0 rgba(0,0,0,.2); display: none; }
-    #gopen { display: none; flex-direction: column; align-items: center; gap: 2px; padding: 8px; border-radius: 14px; background: rgba(35,48,59,.88); cursor: pointer; box-shadow: 0 3px 0 rgba(0,0,0,.25), 0 0 var(--glow, 8px) var(--gc); }
-    .gbig { width: 64px; height: 58px; border-radius: 10px; background: linear-gradient(90deg, transparent 40%, #fff 40% 60%, transparent 60%), linear-gradient(transparent 40%, #fff 40% 60%, transparent 60%), var(--gc); box-shadow: inset 0 0 0 3px rgba(0,0,0,.18); }
-    .gbig.shake1 { animation: gs1 .3s; } .gbig.shake2 { animation: gs2 .3s; } .gbig.shake3 { animation: gs3 .35s; }
+    #gopen { display: none; flex-direction: column; align-items: center; gap: 4px; padding: 10px; border-radius: 14px; background: rgba(35,48,59,.88); cursor: pointer; box-shadow: 0 3px 0 rgba(0,0,0,.25), 0 0 var(--glow, 6px) var(--rc); }
+    .gtile.big { display: block; width: 76px; height: 64px; cursor: inherit; animation: none; } .gtile.big .gpar { width: 56px; height: 50px; border-radius: 6px; } .gtile.big .spark { width: 24px; height: 24px; transform-origin: center; scale: var(--grow, 1); }
+    .gtile.shake1 { animation: gs1 .3s; } .gtile.shake2 { animation: gs2 .3s; } .gtile.shake3 { animation: gs3 .35s; }
     @keyframes gs1 { 25% { transform: rotate(-8deg); } 75% { transform: rotate(8deg); } } @keyframes gs2 { 25% { transform: rotate(-14deg) scale(1.06); } 75% { transform: rotate(14deg) scale(1.06); } } @keyframes gs3 { 20% { transform: rotate(-20deg) scale(1.12); } 60% { transform: rotate(20deg) scale(1.16); } }
     #glabel { font-size: 22px; text-transform: uppercase; }
     #gres { display: none; position: relative; flex-direction: column; gap: 3px; padding: 6px 10px 8px; border-radius: 12px; background: var(--card); box-shadow: 0 3px 0 rgba(0,0,0,.18), inset 0 0 0 2px var(--gc, #fff); }
@@ -157,7 +161,7 @@
     <button id="bjump" class="act" title="Jump"><span>Jump</span></button>
     <button id="bability" class="act" title="Ability"><span>Dash</span></button>
     <button id="bkick" class="act" title="Kick"><span>Kick</span></button>
-    <div id="gifts"><div id="gq"></div><button id="gall" class="disp">Open all</button><div id="gopen"><i id="gbig" class="gbig"></i><b id="glabel" class="disp"></b></div><div id="gres"><button id="gx" title="Close">✕</button><div id="gtitle"></div><div id="glist"></div></div></div>
+    <div id="gifts"><div id="gq"></div><button id="gall" class="disp">Open all</button><div id="gopen"><div id="gbig"></div><b id="glabel" class="disp"></b></div><div id="gres"><button id="gx" title="Close">✕</button><div id="gtitle"></div><div id="glist"></div></div></div>
     <div id="announce"></div>
     <form id="chatbar" autocomplete="off"><input id="chatin" maxlength="120" placeholder="Chat" enterkeyhint="send"></form>
   </div>
@@ -175,6 +179,6 @@
     <button id="lgo" class="btn go" type="submit">Log in</button>
     <button id="lnew" class="btn" type="button">Create account</button>
   </form>
-  <script type="module" src="pets.js?v=1794437497"></script>
+  <script type="module" src="pets.js?v=1794437887"></script>
 </body>
 </html>
