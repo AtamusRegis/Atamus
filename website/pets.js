@@ -64,7 +64,7 @@ const flies = () => !!SPECIES[riding().sp].fly;
 const { terrain, smoothTerrain, inside, ROAD_HALF, houses, trees, blocked, PLAZA, POST, PICKUP, BOARD, SHOP, SHOP_B, TRAIN, POUND, POUND_B, RELEASE, SPAWN } = World;
 let seed = 20261108; const srnd = () => ((seed = (seed * 16807) % 2147483647) / 2147483647);
 const pick2 = (a) => a[Math.floor(srnd() * a.length)];
-const HOUSE_C = ["#f6d9b8", "#cfe6f7", "#f7cfd8", "#d8f0c8", "#fbe7a8", "#e3d4f5", "#f9f4ea"], ROOF_C = ["#c8553d", "#3b6ea8", "#5a8f3e", "#8a5a3a", "#6b5b95"];
+const HOUSE_C = ["#f6d9b8", "#cfe6f7", "#f7cfd8", "#d8f0c8", "#fbe7a8", "#e3d4f5", "#f9f4ea"], ROOF_C = ["#c8553d", "#3b6ea8", "#4a4f57", "#8a5a3a", "#6b5b95"];   // (owner, 2026-11-10) no green roofs
 const houseColors = () => { for (const h of houses) { h.c = HOUSE_C[h.id % HOUSE_C.length]; h.roof = ROOF_C[(h.id * 7) % ROOF_C.length]; } };   // the same for everyone, by the house's id
 const LIMIT = 460;   // how far out anyone can go (the extra plot island is at 400)
 
@@ -94,18 +94,18 @@ const inColor = (o) => { o.traverse((c) => c.layers.set(1)); return o; };
 const speck = (() => { const cv = document.createElement("canvas"); cv.width = cv.height = 128; const x = cv.getContext("2d"); x.fillStyle = "#fff"; x.fillRect(0, 0, 128, 128); for (let k = 0; k < 900; k++) { const v = 205 + Math.floor(Math.random() * 50); x.fillStyle = `rgb(${v},${v},${v})`; x.fillRect(Math.random() * 128, Math.random() * 128, 1 + Math.random() * 2, 1 + Math.random() * 2); } const t = new THREE.CanvasTexture(cv); t.wrapS = t.wrapT = THREE.RepeatWrapping; t.colorSpace = THREE.SRGBColorSpace; t.anisotropy = 4; return t; })();
 const blockM = new THREE.MeshLambertMaterial({ vertexColors: true, map: speck, side: THREE.DoubleSide });
 const waterBlockM = new THREE.MeshLambertMaterial({ vertexColors: true, transparent: true, opacity: 0.78, side: THREE.DoubleSide, depthWrite: true });
-const GRASS_T = [new THREE.Color("#7fc25a"), new THREE.Color("#8bc95f"), new THREE.Color("#96cf63")], EARTH = new THREE.Color("#a0805a"), ROAD_T = new THREE.Color("#5c6670"), WATER_T = new THREE.Color("#3f9fd8");
+const GRASS_T = [new THREE.Color("#7fc25a"), new THREE.Color("#8bc95f"), new THREE.Color("#96cf63")], EARTH = new THREE.Color("#9a7048"), ROAD_T = new THREE.Color("#5c6670"), WATER_T = new THREE.Color("#3f9fd8");
 const worldG = new THREE.Group(); scene.add(worldG);
 snowCover = new THREE.Mesh(new THREE.BufferGeometry(), new THREE.MeshLambertMaterial({ color: "#eef7ff", transparent: true, opacity: 0, depthWrite: false, polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -2, side: THREE.DoubleSide })); snowCover.visible = false; snowCover.position.y = 0.025; scene.add(snowCover);
 function blockGeometry() {
-  const { TILE: T, STEP: S, DIRS, cellTop } = World, at = new Map(), P = [], C = [], U = [], WP = [], WC = [], TOP = [];
+  const { TILE: T, STEP: S, DIRS, cellTop } = World, at = new Map(), P = [], C = [], U = [], WP = [], WC = [], TOP = [], DP = [], DC = [], DU = [];   // D: the earth (sides and undersides), drawn in color
   for (const c of World.allCells()) at.set(c.i + "," + c.j + "," + c.k, c);
   const full = (i, j, k) => { const c = at.get(i + "," + j + "," + k); return !!c && (c.t === "land" || c.t === "road" || c.t === "corner"); };
   const quad = (pts, col, f, uvf, top) => {   // 4 corners in order; f darkens
-    const cc = col.clone().multiplyScalar(f);
-    for (const q of [0, 1, 2, 0, 2, 3]) { const [x, y, z] = pts[q]; P.push(x, y, z); C.push(cc.r, cc.g, cc.b); const [u, v] = uvf(x, y, z); U.push(u, v); if (top) TOP.push(x, y, z); }
+    const cc = col.clone().multiplyScalar(f), [PP, CC, UU] = col === EARTH ? [DP, DC, DU] : [P, C, U];
+    for (const q of [0, 1, 2, 0, 2, 3]) { const [x, y, z] = pts[q]; PP.push(x, y, z); CC.push(cc.r, cc.g, cc.b); const [u, v] = uvf(x, y, z); UU.push(u, v); if (top) TOP.push(x, y, z); }
   };
-  const tri = (pts, col, f, uvf, top) => { const cc = col.clone().multiplyScalar(f); for (const [x, y, z] of pts) { P.push(x, y, z); C.push(cc.r, cc.g, cc.b); const [u, v] = uvf(x, y, z); U.push(u, v); if (top) TOP.push(x, y, z); } };
+  const tri = (pts, col, f, uvf, top) => { const cc = col.clone().multiplyScalar(f), [PP, CC, UU] = col === EARTH ? [DP, DC, DU] : [P, C, U]; for (const [x, y, z] of pts) { PP.push(x, y, z); CC.push(cc.r, cc.g, cc.b); const [u, v] = uvf(x, y, z); UU.push(u, v); if (top) TOP.push(x, y, z); } };
   const wquad = (pts, f) => { const cc = WATER_T.clone().multiplyScalar(f); for (const q of [0, 1, 2, 0, 2, 3]) { const [x, y, z] = pts[q]; WP.push(x, y, z); WC.push(cc.r, cc.g, cc.b); } };
   const topUV = (x, y, z) => [x / 9, z / 9], sideUV = (x, y, z) => [(x + z) / 9, y / 9];
   for (const c of at.values()) {
@@ -142,7 +142,7 @@ function blockGeometry() {
   }
   const mk = (pos, col, uv) => { const g = new THREE.BufferGeometry(); g.setAttribute("position", new THREE.Float32BufferAttribute(pos, 3)); g.setAttribute("color", new THREE.Float32BufferAttribute(col, 3)); if (uv) g.setAttribute("uv", new THREE.Float32BufferAttribute(uv, 2)); g.computeVertexNormals(); return g; };
   const tg = new THREE.BufferGeometry(); tg.setAttribute("position", new THREE.Float32BufferAttribute(TOP, 3)); tg.computeVertexNormals();
-  return { solid: mk(P, C, U), water: mk(WP, WC, null), tops: tg };
+  return { solid: mk(P, C, U), dirt: mk(DP, DC, DU), water: mk(WP, WC, null), tops: tg };
 }
 // the plaza's paving
 { const m = new THREE.Mesh(new THREE.CircleGeometry(PLAZA - 4, 64).rotateX(-Math.PI / 2), mat("#e8dcc4")); m.position.y = 0.06; m.receiveShadow = true; scene.add(m); }
@@ -2294,8 +2294,9 @@ function exteriorBoxes(ext, p, M, G, col) {
   const b = (w, h, d, x, yy, z, color, rx = 0, glass = false) => (glass ? G : M).box(w, h, d, cx + x, y + yy, cz + z, 0, color, rx);
   const solid = (hw, hd, h, x = 0, z = 0) => col.walls.push({ x: cx + x, z: cz + z, c: 1, s: 0, hw, hd, y0: y - 1, y1: y + h });
   const flat = (hw, hd, h, x = 0, z = 0) => col.surfaces.push({ x: cx + x, z: cz + z, c: 1, s: 0, hw, hd, h: y + h });
-  const gable = (w, d, h0, rise, color, x = 0, z = 0) => {   // a pitched roof, ridge along x; walkable both sides
+  const gable = (w, d, h0, rise, color, x = 0, z = 0, wall = null) => {   // a pitched roof, ridge along x; walkable both sides
     const half = d / 2 + 0.6, len = hyp(half, rise), ang = Math.atan2(rise, half);
+    if (wall) { const N = 8; for (let n = 0; n < N; n++) b(w, rise / N + 0.02, Math.max(0.2, d * (1 - (n + 0.5) / N)), x, h0 + rise * (n + 0.5) / N, z, wall); }   // (owner, 2026-11-10) the gable ends filled in under the roof
     b(w + 1.2, 0.3, len, x, h0 + rise / 2, z - half / 2, color, -ang); b(w + 1.2, 0.3, len, x, h0 + rise / 2, z + half / 2, color, ang);
     col.ramps.push({ x: cx + x, z: cz + z - half / 2, c: 1, s: 0, hw: w / 2 + 0.6, hd: half / 2, y0: y + h0, rise }); col.ramps.push({ x: cx + x, z: cz + z + half / 2, c: -1, s: 0, hw: w / 2 + 0.6, hd: half / 2, y0: y + h0, rise });
   };
@@ -2303,10 +2304,10 @@ function exteriorBoxes(ext, p, M, G, col) {
   const win = (x, yy, z, w = 1.6, h = 1.4) => { b(w + 0.3, h + 0.3, 0.16, x, yy, z - 0.05, "#ffffff"); b(w, h, 0.18, x, yy, z - 0.1, "#9fd8ff", 0, true); };
   let fd = 10;
   if (ext === 0) {   // Cottage: cream walls, a red gable roof, a chimney
-    b(12, 5, 10, 0, 2.5, 0, "#f4ead8"); solid(6, 5, 5); gable(12, 10, 5, 3, "#c8553d"); b(1.2, 3, 1.2, 3.5, 7, 1.5, "#9a8f80");
+    b(12, 5, 10, 0, 2.5, 0, "#f4ead8"); solid(6, 5, 5); gable(12, 10, 5, 3, "#c8553d", 0, 0, "#f4ead8"); b(1.2, 3, 1.2, 3.5, 7, 1.5, "#9a8f80");
     door(-5); win(-3.6, 2.8, -5); win(3.6, 2.8, -5); fd = 10;
   } else if (ext === 1) {   // Cabin: log walls, a green roof, a porch
-    for (let k = 0; k < 9; k++) b(12.2, 0.56, 10.2, 0, 0.28 + k * 0.56, 0, k % 2 ? "#8a5a3a" : "#7a4a2a"); solid(6.1, 5.1, 5); gable(12, 10, 5, 2.4, "#4f7a3a");
+    for (let k = 0; k < 9; k++) b(12.2, 0.56, 10.2, 0, 0.28 + k * 0.56, 0, k % 2 ? "#8a5a3a" : "#7a4a2a"); solid(6.1, 5.1, 5); gable(12, 10, 5, 2.4, "#5a3a2a", 0, 0, "#7a4a2a");
     b(6, 0.25, 3, 0, 3.4, -6.3, "#4f7a3a"); for (const x of [-2.8, 2.8]) b(0.3, 3.4, 0.3, x, 1.7, -7.6, "#6b4a2b"); b(6, 0.2, 3, 0, 0.1, -6.3, "#a87a4e"); flat(3, 1.5, 3.55, 0, -6.3);
     door(-5.1, "#5a3a1a"); win(-3.6, 2.8, -5.1); win(3.6, 2.8, -5.1); fd = 10.2;
   } else if (ext === 2) {   // Modern: two white blocks, flat roofs, wide glass
@@ -2314,7 +2315,7 @@ function exteriorBoxes(ext, p, M, G, col) {
     b(9, 4, 8, 2, 6.75, 1, "#e8eef3"); b(9.4, 0.3, 8.4, 2, 8.9, 1, "#3d4650"); col.walls.push({ x: cx + 2, z: cz + 1, c: 1, s: 0, hw: 4.5, hd: 4, y0: y + 4.6, y1: y + 9.05 }); flat(4.7, 4.2, 9.05, 2, 1);
     b(5, 2.6, 0.18, -4, 2, -5.1, "#9fd8ff", 0, true); b(6, 2.4, 0.18, 2, 6.8, -3.1, "#9fd8ff", 0, true); door(-5, "#3d4650", 1.8, 3.2); fd = 10;
   } else if (ext === 3) {   // Barn: red with white trim and a tall two-step roof
-    b(12, 5.5, 12, 0, 2.75, 0, "#b8433a"); solid(6, 6, 5.5); gable(12, 12, 5.5, 4, "#5a3a32");
+    b(12, 5.5, 12, 0, 2.75, 0, "#b8433a"); solid(6, 6, 5.5); gable(12, 12, 5.5, 4, "#5a3a32", 0, 0, "#b8433a");
     b(4, 4, 0.2, 0, 2, -6.1, "#f4f1ea"); b(3.6, 3.6, 0.22, 0, 2, -6.12, "#b8433a"); b(0.25, 5, 0.24, 0, 2, -6.15, "#f4f1ea", 0.78); b(0.25, 5, 0.24, 0, 2, -6.15, "#f4f1ea", -0.78);
     win(0, 6.6, -6.2, 1.6, 1.4); fd = 12;
   } else {   // Tower: grey stone, battlements on a flat top, a flag
@@ -2944,9 +2945,10 @@ $("gm-admin").onclick = () => { gearMenu.style.display = "none"; if (openPanel =
 let worldMeshes = [], houseKey = "";
 function buildWorldView() {
   for (const o of [...worldG.children]) { worldG.remove(o); if (o.userData.own) o.geometry.dispose(); if (o.isInstancedMesh) o.dispose(); }
-  const { solid, water, tops } = blockGeometry();
-  const sm = new THREE.Mesh(solid, blockM), wm = new THREE.Mesh(water, waterBlockM); sm.castShadow = sm.receiveShadow = true; wm.renderOrder = 1; sm.userData.own = wm.userData.own = true;
-  worldG.add(sm, wm); worldMeshes = [sm, wm];
+  const { solid, dirt, water, tops } = blockGeometry();
+  const sm = new THREE.Mesh(solid, blockM), dm = new THREE.Mesh(dirt, blockM), wm = new THREE.Mesh(water, waterBlockM); sm.castShadow = sm.receiveShadow = true; wm.renderOrder = 1; sm.userData.own = dm.userData.own = wm.userData.own = true;
+  inColor(dm);   // (owner, 2026-11-10) the earth down the sides keeps its dirt brown
+  worldG.add(sm, dm, wm); worldMeshes = [sm, dm, wm];
   snowCover.geometry.dispose(); snowCover.geometry = tops;
   buildThings(worldG); buildPads(worldG); for (const b of BOOSTS) if (b.k === "pad") b.g.userData.own = true;
   buildVehicles(); placePlots(); for (const id of plotState.keys()) buildPlot(id);
@@ -3027,7 +3029,7 @@ function weditTarget(px, py) {
   { const vi = vehHit(), t = vehThings()[vi]; if (vi >= 0 && t) return { veh: vi, id: t.id, ok: true }; }
   let hit = null, n = null;
   if (wedit.lvl !== null) { plane.normal.set(0, 1, 0); plane.constant = -(wedit.lvl - 1) * S; if (ray.ray.intersectPlane(plane, hitV)) hit = hitV.clone(); n = new THREE.Vector3(0, 1, 0); }
-  else { const h = ray.intersectObjects(worldMeshes, false)[0]; if (h) { hit = h.point.clone(); n = h.face.normal.clone(); if (n.dot(ray.ray.direction) > 0) n.negate(); } }
+  else { ray.layers.enable(1); const h = ray.intersectObjects(worldMeshes, false)[0]; ray.layers.disable(1); if (h) { hit = h.point.clone(); n = h.face.normal.clone(); if (n.dot(ray.ray.direction) > 0) n.negate(); } }
   if (!hit) return null;
   const inC = cellAtP(hit.x - n.x * 0.1, hit.y - n.y * 0.1, hit.z - n.z * 0.1);   // the block pointed at
   const top = World.surfaceAt(hit.x, hit.z, hit.y + 0.3), ty = top > -Infinity ? top : hit.y;
