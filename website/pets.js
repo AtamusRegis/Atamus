@@ -1,7 +1,7 @@
 // Pet Delivery Co. (owner, 2026-11-08): ride your pet around town delivering mail. Pick up parcels at the post office,
 // ride up to the glowing houses to deliver them, earn coins (and sometimes an item), buy eggs to hatch faster pets,
 // train them. The town is a floating island (pets-world.js, shared with the server); fliers reach the small islands off
-// its edge; animal control chases you. Co-op: everyone in a room rides the same town, works on contracts together and
+// its edge; animal control chases you. Co-op: everyone in a room rides the same town, works on contracts (alone or with a party) and
 // chats. The server (packages/server/src/pets.js) shares players, runs animal control, contracts and chat.
 import * as THREE from "./vendor/three.module.min.js";
 import * as World from "./pets-world.js?v=1793100065";
@@ -248,8 +248,23 @@ const BOOSTS = [];
   for (let n = 0; n < 14; n++) { const a = (n / 14) * TAU + 0.35, r = n % 2 ? 95 : 160, x = Math.cos(a) * r, z = Math.sin(a) * r; BOOSTS.push({ k: "air", x, y: terrain(x, z) + 16 + (n % 3) * 9, z, yaw: a, r: 4 }); }
   for (const [x, z, y] of [[0, -20, 34], [0, 20, 34], [-20, 0, 48], [20, 0, 48], [-70, -70, 76], [70, -70, 76], [-70, 70, 76], [70, 70, 76]]) BOOSTS.push({ k: "air", x, y, z, yaw: Math.atan2(x, z), r: 4 });
   for (const b of BOOSTS) if (b.k === "water") { b.y = World.waterAt(b.x, b.z); b.yaw = 0; }
-  // (owner, 2026-11-09) see-through chevrons, no background
-  const arrowTex = (() => { const c = document.createElement("canvas"); c.width = 64; c.height = 128; const g = c.getContext("2d"); g.lineJoin = "round"; g.lineCap = "round"; for (const y of [22, 62, 102]) { g.beginPath(); g.moveTo(10, y + 20); g.lineTo(32, y); g.lineTo(54, y + 20); g.strokeStyle = "rgba(255,159,26,0.95)"; g.lineWidth = 11; g.stroke(); g.strokeStyle = "rgba(255,244,194,0.95)"; g.lineWidth = 5; g.stroke(); } const t = new THREE.CanvasTexture(c); t.wrapS = t.wrapT = THREE.RepeatWrapping; t.colorSpace = THREE.SRGBColorSpace; t.anisotropy = 4; return t; })();
+  // (owner, 2026-11-10) chevrons drawn by a shader, with no edge cutting them off: each comes in faintly where the pad
+  // starts and fades away as it runs to the far end. uv: x across the pad (3.4 m), y along it (5 m)
+  const padMat = new THREE.ShaderMaterial({
+    uniforms: { t: { value: 0 }, dir: { value: 1 } }, transparent: true, depthWrite: false, polygonOffset: true, polygonOffsetFactor: -8, polygonOffsetUnits: -8,
+    vertexShader: "varying vec2 vUv; void main() { vUv = uv; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }",
+    fragmentShader: `uniform float t; uniform float dir; varying vec2 vUv;
+      void main() {
+        float run = dir > 0.0 ? vUv.y : 1.0 - vUv.y;          // 0 where they come in, 1 where they leave
+        float cx = (vUv.x - 0.5) * 3.4, cy = fract(run * 3.0 - t) * 1.667;
+        float d = abs(cy - (1.15 - abs(cx) * 0.6));             // distance to the chevron's arms (pointing the way it runs)
+        float side = 1.0 - smoothstep(1.15, 1.35, abs(cx));
+        float stroke = (1.0 - smoothstep(0.17, 0.22, d)) * side, core = (1.0 - smoothstep(0.07, 0.11, d)) * side;
+        float fade = smoothstep(0.0, 0.18, run) * (1.0 - smoothstep(0.35, 1.0, run));
+        vec3 col = mix(vec3(1.0, 0.62, 0.1), vec3(1.0, 0.96, 0.76), core);
+        gl_FragColor = vec4(col, stroke * fade * 0.9);
+      }`,
+  });
   const swirlTex = (() => { const c = document.createElement("canvas"); c.width = c.height = 128; const g = c.getContext("2d"); g.translate(64, 64); for (let arm = 0; arm < 3; arm++) { g.beginPath(); for (let t = 0; t < 1; t += 0.01) { const a = arm * (TAU / 3) + t * 7, r = 4 + t * 58; g.lineTo(Math.cos(a) * r, Math.sin(a) * r); } g.strokeStyle = "rgba(255,255,255,0.95)"; g.lineWidth = 7; g.lineCap = "round"; g.stroke(); } const rg = g.createRadialGradient(0, 0, 0, 0, 0, 62); rg.addColorStop(0, "rgba(40,60,190,0.9)"); rg.addColorStop(0.7, "rgba(110,130,255,0.5)"); rg.addColorStop(1, "rgba(150,170,255,0)"); g.globalCompositeOperation = "destination-over"; g.fillStyle = rg; g.beginPath(); g.arc(0, 0, 62, 0, TAU); g.fill(); return new THREE.CanvasTexture(c); })();
   const ringG = new THREE.TorusGeometry(3.2, 0.32, 8, 32), glowG = new THREE.TorusGeometry(3.2, 0.9, 8, 32), swirlG = new THREE.CircleGeometry(2.6, 32).rotateX(-Math.PI / 2);
   for (const b of BOOSTS) {
@@ -258,8 +273,8 @@ const BOOSTS = [];
       for (let zi = 0; zi <= NZ; zi++) for (let xi = 0; xi <= NX; xi++) { const lx = (xi / NX - 0.5) * 3.4, lz = (zi / NZ - 0.5) * 5, x = b.x + lx * c + lz * sn, z = b.z - lx * sn + lz * c; pos.push(x, terrain(x, z) + ROAD_LIFT + 0.05, z); uv.push(xi / NX, zi / NZ); }
       for (let zi = 0; zi < NZ; zi++) for (let xi = 0; xi < NX; xi++) { const a = zi * (NX + 1) + xi, bb = a + 1, cc = a + NX + 1, d = cc + 1; idx.push(a, cc, bb, bb, cc, d); }
       const g = new THREE.BufferGeometry(); g.setAttribute("position", new THREE.Float32BufferAttribute(pos, 3)); g.setAttribute("uv", new THREE.Float32BufferAttribute(uv, 2)); g.setIndex(idx);
-      b.tex = arrowTex.clone(); b.tex.needsUpdate = true; b.dir = 1;   // each pad scrolls its own way: away from me
-      b.g = new THREE.Mesh(g, new THREE.MeshBasicMaterial({ map: b.tex, transparent: true, opacity: 0.8, depthWrite: false, polygonOffset: true, polygonOffsetFactor: -8, polygonOffsetUnits: -8 })); b.g.renderOrder = 2; scene.add(inColor(b.g)); continue;
+      BOOSTS.padT = padMat.uniforms.t; b.m = padMat.clone(); b.m.uniforms = { t: padMat.uniforms.t, dir: { value: 1 } };   // each pad runs its own way (away from you), on the shared clock
+      b.g = new THREE.Mesh(g, b.m); b.g.renderOrder = 2; scene.add(inColor(b.g)); continue;
     }
     const g = new THREE.Group(); g.position.set(b.x, b.y, b.z); g.rotation.y = b.yaw; scene.add(g); b.g = g;
     if (b.k === "air") { b.m = [new THREE.MeshBasicMaterial({ color: "#5fe3ff", transparent: true }), new THREE.MeshBasicMaterial({ color: "#5fe3ff", transparent: true, opacity: 0.25, blending: THREE.AdditiveBlending, depthWrite: false })]; g.add(new THREE.Mesh(ringG, b.m[0]), new THREE.Mesh(glowG, b.m[1])); }
@@ -270,11 +285,12 @@ const BOOSTS = [];
 const boostFor = (b, kind) => kind !== "foot" && (b.k === "pad" || (b.k === "air" ? kind === "fly" || kind === "glide" : swims()));
 function boostStep(dt) {
   const kind = me.foot ? "foot" : moveKind();
+  if (BOOSTS.padT) BOOSTS.padT.value += dt * 0.9;
   for (const b of BOOSTS) {
     if (b.k === "pad") {   // (owner, 2026-11-09) the chevrons always point, and run, away from me along the road
-      const dir = (me.x - b.x) * Math.sin(b.yaw) + (me.z - b.z) * Math.cos(b.yaw) > 0 ? -1 : 1;
-      if (dir !== b.dir) { b.dir = dir; b.tex.repeat.y = dir; }
-      b.tex.offset.y -= dt * 1.5 * dir; continue;
+      // (owner, 2026-11-10) away from where you and the camera are: the midpoint between them
+      const vx = (me.x + camera.position.x) / 2 - b.x, vz = (me.z + camera.position.z) / 2 - b.z;
+      b.m.uniforms.dir.value = vx * Math.sin(b.yaw) + vz * Math.cos(b.yaw) > 0 ? -1 : 1; continue;
     }
     const a = boostFor(b, kind) ? clamp((BOOST_SEE - hyp(b.x - me.x, b.z - me.z, (b.y - me.y) * 0.6)) / BOOST_FADE, 0, 1) : 0;
     b.g.visible = a > 0.01; if (!b.g.visible) continue;
@@ -1445,7 +1461,7 @@ function train(how) {
 }
 function useSnack() { if (save.items.snack <= 0 || me.boostUntil > performance.now()) return; save.items.snack--; persist(); me.boostUntil = performance.now() + SNACK_TIME * 1000; toast(ITEMS.snack.name, ITEMS.snack.c); emitSparks(me.x, me.y + 1, me.z, 30, 5, ["#ff5aa0", "#ffffff"], 0.8, 0); hudKey = ""; }
 
-// ---- contracts (co-op): an order the whole room works on: deliver the goal in parcels before the time's up; the
+// ---- contracts: an order you work on alone, or with your party when you're in one (owner, 2026-11-10; not the room): deliver the goal in parcels before the time's up; the
 // reward is split by how many each player delivered. Falling short, whoever delivered gets something for trying: a
 // Training Ribbon at 75% of the goal, 3 Speed Candies at 40% (owner, 2026-11-08). Online the server runs it; offline you
 // run it alone. ----
@@ -1457,7 +1473,7 @@ const CONTRACTS = [
 ];
 function renderBoard() {
   const el = $("board"); el.innerHTML = "";
-  const n = netOk ? online : 1;
+  const n = netOk && party.length > 1 ? party.length : 1;
   for (const k of CONTRACTS) {
     const running = contract && contract.kind === k.id, goal = running ? contract.goal : k.base + k.per * n, pool = running ? contract.pool : goal * k.pay;
     const d = document.createElement("div"); d.className = "card wide"; d.style.cursor = "default";
@@ -1850,7 +1866,7 @@ for (const l of LIFTS) { const r = new THREE.Mesh(RINGG(2.2), ringM("#2bb3c0"));
 // distance (and hidden while building)
 const POIS = [
   { x: PICKUP.x, y: 7.5, z: PICKUP.z - 1, name: "Post Office", what: "Pick up parcels here" },
-  { x: BOARD.x, y: 4.6, z: BOARD.z - 1.5, name: "Contract Board", what: "Start a contract with your room" },
+  { x: BOARD.x, y: 4.6, z: BOARD.z - 1.5, name: "Contract Board", what: "Start a contract" },
   { x: SHOP.x, y: 4.6, z: SHOP.z, name: "Egg Shop", what: "Buy eggs to hatch new pets" },
   { x: TRAIN.x, y: 4.5, z: TRAIN.z, name: "Training Yard", what: "Train the pet you ride" },
   { x: toWorld(POUND, 0, 3).x, y: 4.4, z: toWorld(POUND, 0, 3).z, name: "Animal Control", what: "Where caught couriers end up" },
@@ -2071,7 +2087,7 @@ const TOWN = [
       i4: { say: ["Right then. Here are two parcels for you."], then: () => introGo("mailbox") },
       i5: { say: ["Take them to the highlighted mailboxes, like that one, to earn some coins.", "Deliver both and I'll give you a voucher for a free egg!"], then: () => introGo("deliver") },
       i7: { say: ["Both delivered! You're a natural, {name}.", "As promised, here's a voucher for a free egg.", "Take it to the Egg Shop and see what hatches!"], then: () => introGo("egg") },
-      i6: { say: ["Look at that! A brand-new pet.", "One more thing: the Contract Board in the middle of the square. Start a contract and everyone in your room delivers together, for a big reward.", "That's everything. Good luck out there, {name}!"], then: () => introGo("done") },
+      i6: { say: ["Look at that! A brand-new pet.", "One more thing: the Contract Board in the middle of the square. Take one on yourself, or with your party, and deliver before time's up for a big reward.", "That's everything. Good luck out there, {name}!"], then: () => introGo("done") },
     },
   },
   {

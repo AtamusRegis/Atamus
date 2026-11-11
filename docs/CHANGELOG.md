@@ -4,6 +4,11 @@ Pet Delivery Co. Newest first. Add one entry per patch in the same commit, and k
 and any rule decided. Use `git log` for the code detail (and for the older Atamus prototypes, removed from the tree on
 2026-11-08).
 
+## 2026-11-10
+
+- **Personal and party contracts (owner).** A contract is yours alone, or your party's when you're in one, never the whole room's.
+- **Chevrons fixed (owner).** Boost chevrons run away from you and the camera, never backwards, and fade out as they go instead of being cut off at the pad's edge.
+
 ## 2026-11-09
 
 - **Polish (owner).** Log Out in the gear menu; thinner rings and telegraph rims; bright red animal control at any hour; short, faint, fewer wind streaks; characters' light parts no longer blow out at night.
