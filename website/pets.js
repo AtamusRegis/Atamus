@@ -4,7 +4,7 @@
 // its edge; animal control chases you. Co-op: everyone in a room rides the same town, works on contracts (alone or with a party) and
 // chats. The server (packages/server/src/pets.js) shares players, runs animal control, contracts and chat.
 import * as THREE from "./vendor/three.module.min.js";
-import * as World from "./pets-world.js?v=1793100071";
+import * as World from "./pets-world.js?v=1793100072";
 
 const $ = (id) => document.getElementById(id);
 const TAU = Math.PI * 2, clamp = (v, a, b) => Math.max(a, Math.min(b, v)), hyp = Math.hypot;
@@ -2976,13 +2976,31 @@ function buildWorldView() {
   buildVehicles(); for (const id of plotState.keys()) buildPlot(id); syncLots();
   for (const f of fades.values()) if (f.g) { scene.remove(f.g.g); ghostPool.push(f.g); } fades.clear();
   const hk = houses.map((h) => h.id).join(); if (hk !== houseKey) { if (houseKey && me.bag.length) { me.bag = []; syncBeams(); hudKey = ""; } houseKey = hk; }   // the houses changed: parcels for old addresses are gone
-  drawMapLayers(); if (wedit) { if (wedit.sel !== undefined && !vehThings().some((t) => t.id === wedit.sel)) { wedit.sel = undefined; renderWorldBar(); } weditAim(wedit.px, wedit.py); }
+  buildVanPoints(); drawMapLayers(); if (wedit) { if (wedit.sel !== undefined && !vehThings().some((t) => t.id === wedit.sel)) { wedit.sel = undefined; renderWorldBar(); } weditAim(wedit.px, wedit.py); }
+}
+// (owner, 2026-11-10) van points, seen only while building: a yellow post on each and a line along the road to each
+// point it's joined to
+const vanPtG = new THREE.Group(); vanPtG.visible = false; scene.add(vanPtG);
+const VANPT_M = new THREE.MeshBasicMaterial({ color: "#ffcc33" }), VANLINK_M = new THREE.LineBasicMaterial({ color: "#ffcc33" }), VANPT_G = new THREE.CylinderGeometry(0.45, 0.45, 3, 10).translate(0, 1.5, 0);
+function buildVanPoints() {
+  for (const o of [...vanPtG.children]) { vanPtG.remove(o); if (o.isLine) o.geometry.dispose(); }
+  const T = World.TILE, seen = new Set();
+  for (const t of World.allThings()) {
+    if (t.k !== "vanpt") continue;
+    const m = new THREE.Mesh(VANPT_G, VANPT_M); m.position.set(World.tileMid(t.i), t.y, World.tileMid(t.j)); vanPtG.add(m);
+    for (const r of World.vanRoutes(t.i, t.j)) {
+      const key = [t.i + "," + t.j, r.k].sort().join("|"); if (seen.has(key)) continue; seen.add(key);
+      const pts = [[t.i, t.j], ...r.path].map(([i, j]) => { const x = World.tileMid(i), z = World.tileMid(j); return new THREE.Vector3(x, World.surfaceAt(x, z, 200) + 0.4, z); });
+      vanPtG.add(new THREE.Line(new THREE.BufferGeometry().setFromPoints(pts), VANLINK_M));
+    }
+  }
+  inColor(vanPtG);
 }
 // ---- building the town (owner, 2026-11-10, admins only): pick a piece, see where it goes, tap to place it (or with
 // Erase, tap to take it away). Blocks go against the face you point at (on top, or beside it), or on a chosen level
 // to build in the air; things stand on the tile you point at. Everyone sees each change as it's made. ----
 let wedit = null;   // { tool, d (0-3), lvl (null: against what you point at), r (helicopter radius), p (plot number), px, py, aim }
-const WTOOLS = [["land", "Land"], ["wedge", "Wedge"], ["road", "Road"], ["ramp", "Road Ramp"], ["corner", "Road Corner"], ["half", "Half Road"], ["water", "Water"], ["rock", "Rock"], ["tree", "Tree"], ["boulder", "Boulder"], ["house", "House"], ["mailbox", "Mailbox"], ["boost", "Boost"], ["van", "Van"], ["heli", "Helicopter"], ["erase", "Erase"]];
+const WTOOLS = [["land", "Land"], ["wedge", "Wedge"], ["road", "Road"], ["ramp", "Road Ramp"], ["corner", "Road Corner"], ["half", "Half Road"], ["water", "Water"], ["rock", "Rock"], ["tree", "Tree"], ["boulder", "Boulder"], ["house", "House"], ["mailbox", "Mailbox"], ["boost", "Boost"], ["van", "Van"], ["vanpt", "Van Point"], ["heli", "Helicopter"], ["erase", "Erase"]];
 const HELI_R = [40, 80, 150, 250];
 const wghost = new THREE.Group(); scene.add(wghost); wghost.visible = false;
 const wOk = new THREE.MeshBasicMaterial({ color: "#ffffff", transparent: true, opacity: 0.45, depthWrite: false }), wBad = new THREE.MeshBasicMaterial({ color: "#ff3b30", transparent: true, opacity: 0.5, depthWrite: false });
@@ -3001,12 +3019,13 @@ const HALF_G = (() => {   // the road half of a tile (its corner at +x +z), 3 m 
 const CUBE_G = new THREE.BoxGeometry(World.TILE, World.STEP, World.TILE).translate(0, World.STEP / 2, 0);
 const levelGrid = new THREE.GridHelper(240, 40, "#ffffff", "#ffffff"); levelGrid.material.transparent = true; levelGrid.material.opacity = 0.35; levelGrid.visible = false; scene.add(levelGrid);
 function openWorldEdit() {
+  vanPtG.visible = true;
   if (myRole !== "admin") return;
   if (building) closeBuild(); closePanels();
   wedit = { tool: "land", d: 0, lvl: null, r: 80, p: 0, px: innerWidth / 2, py: innerHeight / 2, aim: null, camD: cam.goalDist };
   cam.goalDist = 40; renderWorldBar(); $("buildbar").style.display = "flex"; uiKey = "";
 }
-function closeWorldEdit() { if (!wedit) return; cam.goalDist = Math.min(wedit.camD, 45); wedit = null; wghost.visible = false; selBox.visible = false; levelGrid.visible = false; $("buildbar").style.display = "none"; uiKey = ""; }
+function closeWorldEdit() { if (!wedit) return; cam.goalDist = Math.min(wedit.camD, 45); wedit = null; wghost.visible = false; vanPtG.visible = false; selBox.visible = false; levelGrid.visible = false; $("buildbar").style.display = "none"; uiKey = ""; }
 function weditTurn() { if (!wedit) return; wedit.d = (wedit.d + 1) % 4; weditAim(wedit.px, wedit.py); }
 // (owner, 2026-11-10) vans and helicopters can be picked out where they are now: tap one to select it (Delete, or Del,
 // takes it away), or tap it with Erase. vehThings()[n] is the thing vehs[n] was made from (the same order).
@@ -3068,7 +3087,7 @@ function weditTarget(px, py) {
   }
   const t = { k: tl, i: ti, j: tj, y: Math.round(ty * 100) / 100, d: wedit.d };
   if (tl === "heli") t.r = wedit.r;
-  const ok = tl === "van" || tl === "boost" ? World.isRoad(ti, tj) : top > -Infinity;
+  const ok = tl === "van" || tl === "boost" || tl === "vanpt" ? World.isRoad(ti, tj) : top > -Infinity;
   return { add: t, ok };
 }
 const tileMid = World.tileMid;
@@ -3092,6 +3111,7 @@ function weditAim(px, py) {
     if (t.k === "house") { add(new THREE.BoxGeometry(9, 4.4, 9).translate(0, 2.2, 0), x, t.y, z, YAW[t.d], true); add(new THREE.BoxGeometry(World.PLOT, 0.2, World.PLOT), x, t.y + 0.1, z, 0, true); add(new THREE.BoxGeometry(0.8, 1.4, 0.8), x + World.DIRS[t.d][0] * 7.8, t.y + 0.7, z + World.DIRS[t.d][1] * 7.8); }   // (owner, 2026-11-10) its 3 x 3 lot
     else if (t.k === "heli") { add(new THREE.CylinderGeometry(0.6, 0.6, 14, 8).translate(0, 7, 0), x, t.y, z, 0, true); const ring = add(new THREE.TorusGeometry(t.r, 0.4, 6, 96).rotateX(Math.PI / 2), x, t.y + 0.3, z, 0, true); ring.renderOrder = 5; }
     else if (t.k === "mailbox") add(new THREE.BoxGeometry(0.8, 1.4, 0.8).translate(0, 0.7, 0), x, t.y, z, YAW[t.d], true);
+    else if (t.k === "vanpt") add(new THREE.CylinderGeometry(0.5, 0.5, 3, 10).translate(0, 1.5, 0), x, t.y, z, 0, true);
     else if (t.k === "boulder") add(new THREE.IcosahedronGeometry(2, 0).translate(0, 1.2, 0), x, t.y, z, 0, true);
     else if (t.k === "tree") add(new THREE.ConeGeometry(2.8, 10.5, 8).translate(0, 5.25, 0), x, t.y, z, 0, true);
     else if (t.k === "boost") add(new THREE.BoxGeometry(3.4, 0.2, 5), x, t.y + 0.1, z, YAW[t.d], true);

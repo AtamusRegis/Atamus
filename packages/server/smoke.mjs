@@ -38,6 +38,12 @@ ok(W.roadDist(-8 * W.TILE + 5, -8 * W.TILE + 5) === 0 && W.roadDist(-8 * W.TILE 
 { const t = W.trees[0]; ok(W.blocked(t.x + 0.3, t.z, t.y) && !W.blocked(t.x + 3, t.z, t.y), "trees are solid (their trunk)"); }
 { const d = W.applyEdits([{ op: "add", t: { k: "boulder", i: 2, j: 1, y: 0 } }, { op: "put", c: [3, 1, 1, W.KINDS.indexOf("rock"), 0] }]); const bo = W.boulders.find((q) => q.id === d[0].t.id);
   ok(bo && W.blocked(bo.x, bo.z, 0) && W.terrain(3 * W.TILE + 3, W.TILE + 3) === 3, "boulders are solid and rock is a block"); W.applyEdits([{ op: "rm", id: bo.id }, { op: "del", c: [3, 1, 1] }]); }
+{ // (owner, 2026-11-10) van points: vans drive point to point along the roads joining them, never down the spur
+  const d = W.applyEdits([[0, -8], [7, 0], [0, 7]].map(([i, j]) => ({ op: "add", t: { k: "vanpt", i, j, y: 0 } })));
+  ok(W.vanRoutes(0, -8).length === 2 && W.vanRoutes(7, 0).every((r) => r.k !== "9,0"), "van points join along the roads");
+  const vs = W.makeVehicles(), seen = new Set(); for (let n = 0; n < 2500; n++) { W.stepVehicles(vs, [], 0.1, 100 + n * 0.1); for (const v of vs) if (!v.kind) seen.add(v.i + "," + v.j); }
+  ok(!seen.has("8,0") && !seen.has("9,0") && seen.has("7,0") && seen.has("0,7"), "vans keep to the routes between van points");
+  W.applyEdits(d.map((e) => ({ op: "rm", id: e.t.id }))); }
 ok(W.blocked(9 * W.TILE - 0.2, 3, 0) && !W.blocked(0, 0, 0), "a block's side stands in the way");
 { const before = W.houses.length, done = W.applyEdits([{ op: "put", c: [0, 0, 1, 0, 0] }, { op: "add", t: { k: "mailbox", i: 2, j: 2, y: 0 } }, { op: "put", c: [999, 0, 0, 0, 0] }]);
   ok(done.length === 2 && W.terrain(3, 3) === 3 && W.houses.length === before + 1, "edits place blocks and mailboxes (bad ones dropped)");
