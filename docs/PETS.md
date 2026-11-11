@@ -53,7 +53,7 @@ Asked (owner): a web game on atamus.io (not Roblox), on its own page; the cargo 
   pink ring), the **pound** (south; animal control, striped front, a fenced yard in front) and the **training yard**
   (west; a running track with hurdles, green ring). The lift to your plot stands south of the center.
 - **The town editor (owner, 2026-11-10; admins only):** Build Town in the gear menu opens a bar of pieces: Land,
-  Wedge, Road, Road Ramp, Road Corner, Half Road, Water, Rock, Tree, Boulder, House, Mailbox, Boost, Van, Helicopter and Erase, with ⟳ (turn; R on a
+  Wedge, Road, Road Ramp, Road Corner, Half Road, Water, Rock, Tree, Boulder, House, Mailbox, Boost, Van, Van Point, Helicopter and Erase, with ⟳ (turn; R on a
   keyboard), the level (− Auto +) and, for a helicopter, its radius. A see-through preview shows
   where the piece goes (red where it can't, or what Erase takes away); a tap (or click) places it. Blocks go against
   the face pointed at (on top, or beside it), or, with a level chosen, on that level (a grid shows it) to build in the
@@ -199,6 +199,11 @@ Asked (owner): a web game on atamus.io (not Roblox), on its own page; the cargo 
   many as admins place (owner, 2026-11-10). A van roams every road tile joined to the one it was placed on (tiles
   sharing an edge at the same height, up and down ramps), picking a way at each tile and turning round only at a dead
   end, so a road built onto its network becomes part of its beat at once. A helicopter keeps within its radius.
+  **Van points (owner, 2026-11-10):** road tiles admins mark in Build Town. Two points are joined when a road runs
+  from one to the other without passing another point. A van on roads with points drives point to point like streets:
+  at a point it takes a joined point other than the one it came from (back only at a dead end) and follows the shortest
+  road there; off the points it heads to the nearest one. Vans on roads with no points roam as above. The points and
+  their links (yellow posts and lines) show only while building.
   Building or taking a vehicle away leaves every other vehicle where it is (owner, 2026-11-10); a van whose road is
   removed from under it starts again from where it was placed. Online the server runs them for the whole room; offline the page does.
 - They only go after players carrying parcels (owner, 2026-11-08); a chase ends if the bag empties (no star).
