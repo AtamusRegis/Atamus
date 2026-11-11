@@ -78,7 +78,8 @@
     .mgrid { display: grid; grid-template-columns: repeat(auto-fill, minmax(64px, 1fr)); gap: 8px; }
     .mtile { position: relative; aspect-ratio: 1; border: 3px solid var(--line); border-radius: 14px; background: #f3f7fa; padding: 0; overflow: hidden; } .mtile img { width: 100%; height: 100%; display: block; }
     .mtile b { position: absolute; right: 3px; bottom: 2px; font-size: 12px; background: #fff; border-radius: 6px; padding: 0 4px; } .mtile.sel { box-shadow: 0 0 0 3px var(--ink); } .mtile.ride::after { content: ""; position: absolute; left: 4px; top: 4px; width: 10px; height: 10px; border-radius: 50%; background: var(--green); border: 2px solid #fff; }
-    .mtile.va1 { background: #e8f6ff; } .mtile.va2 { background: #fff3c4; }
+    .mtile.va1 { background: #e8f6ff; } .mtile.va2 { background: #fff3c4; } .mtile.va3 { background: linear-gradient(135deg, #ffd1d1, #fff3c4, #d4f7d4, #d1e8ff, #ead1ff); }
+    .btn.fuse { background: linear-gradient(90deg, #ff6b6b, #ffd84a, #7ee08a, #6bb8ff, #b48cff); color: #fff; text-shadow: 0 1px 0 rgba(0,0,0,.35); }
     .rank { display: flex; align-items: center; gap: 8px; font-size: 16px; } .badge { width: 20px; height: 24px; clip-path: polygon(0 0, 100% 0, 100% 62%, 50% 100%, 0 62%); }
     .rank span { margin-left: auto; color: #7f8b97; }
     .uprow { display: grid; grid-template-columns: 1fr auto; gap: 4px 10px; align-items: center; padding: 8px 10px; border-radius: 14px; background: #f3f7fa; } .uprow .val { color: #5a6875; font-size: 13px; } .uprow .max { color: var(--gold); }
@@ -89,7 +90,7 @@
     .arow { text-align: left; border: 0; border-radius: 10px; padding: 6px 10px; background: #f3f7fa; } .arow.on::before { content: "● "; color: var(--green); } .arow.sel { background: #ffe9a8; }
     /* hatching */
     #hatch { position: fixed; inset: 0; z-index: 30; display: none; flex-direction: column; align-items: center; justify-content: center; gap: 8px; background: radial-gradient(circle, var(--glow, #fff) 0, rgba(20,40,60,.82) 62%); }
-    #hegg { width: 120px; height: 156px; } .egg.gift { border-radius: 14px; height: 120px; background: linear-gradient(90deg, transparent 42%, #fff 42% 58%, transparent 58%), linear-gradient(transparent 42%, #fff 42% 58%, transparent 58%), #ff1f8f !important; } .egg.wob { animation: wob 1.5s; } @keyframes wob { 10%, 38%, 66% { transform: rotate(-14deg); } 20%, 48%, 76% { transform: rotate(14deg); } 28%, 56%, 84% { transform: rotate(0); } 96% { transform: scale(1.25); } }
+    #hegg { width: 120px; height: 156px; } .egg.fuse { width: 130px; height: 130px; border-radius: 50%; background: conic-gradient(#ff6b6b, #ffd84a, #7ee08a, #6bb8ff, #b48cff, #ff6b6b) !important; } .egg.gift { border-radius: 14px; height: 120px; background: linear-gradient(90deg, transparent 42%, #fff 42% 58%, transparent 58%), linear-gradient(transparent 42%, #fff 42% 58%, transparent 58%), #ff1f8f !important; } .egg.wob { animation: wob 1.5s; } @keyframes wob { 10%, 38%, 66% { transform: rotate(-14deg); } 20%, 48%, 76% { transform: rotate(14deg); } 28%, 56%, 84% { transform: rotate(0); } 96% { transform: scale(1.25); } }
     #himg { width: 220px; height: 220px; animation: popin .35s; } #hname { font-size: 38px; color: #fff; text-shadow: 0 3px 0 rgba(0,0,0,.35); } #hrar { font-size: 22px; padding: 2px 14px; border-radius: 999px; background: rgba(35,48,59,.88); }
     @keyframes popin { from { transform: scale(.2); } 70% { transform: scale(1.15); } }
     /* things that pop up */
@@ -130,6 +131,12 @@
     #party { position: fixed; left: calc(56px + var(--sl)); top: calc(12px + var(--st)); margin-left: 110px; display: none; gap: 6px; align-items: center; padding: 4px 8px; border-radius: 999px; background: var(--card); font-size: 12px; } #party .me { color: var(--blue); } #party button { border: 0; background: none; padding: 0 2px; }
     #invite, #pmenu { position: fixed; display: none; align-items: center; gap: 8px; padding: 8px 12px; border-radius: 16px; background: var(--card); box-shadow: 0 3px 0 rgba(0,0,0,.14); z-index: 12; }
     #invite { left: 50%; top: calc(110px + var(--st)); transform: translateX(-50%); } #pmenu { transform: translate(-50%, -100%); }
+    /* the new courier's tutorial */
+    #tut { position: fixed; left: 50%; bottom: calc(14px + var(--sb)); transform: translateX(-50%); width: min(380px, calc(100vw - 330px)); min-width: 220px; display: none; flex-direction: column; gap: 4px; padding: 10px 14px; border-radius: 16px; background: var(--card); box-shadow: 0 4px 0 rgba(0,0,0,.18), inset 0 0 0 3px #ff1f8f; z-index: 16; }
+    #tut.in { animation: popin .3s; } #tut .tuth { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; } #tutt { font-size: 22px; color: #ff1f8f; } #tutn { font-size: 12px; color: #7f8b97; }
+    #tutp { margin: 0; font-weight: 600; font-size: 14px; line-height: 1.35; } #tut .acts { justify-content: flex-end; } #tut .btn { padding: 6px 14px; }
+    .tuthi { outline: 3px solid #ff1f8f; outline-offset: 3px; animation: tutpulse 1s infinite alternate; } @keyframes tutpulse { to { outline-color: rgba(255,31,143,.25); outline-offset: 7px; } }
+    @media (max-width: 700px) { #tut { width: min(380px, calc(100vw - 32px)); bottom: auto; top: calc(110px + var(--st)); } }
     /* the joystick */
     #joy { position: fixed; display: none; width: 120px; height: 120px; border-radius: 50%; background: rgba(255,255,255,.28); border: 3px solid rgba(255,255,255,.6); pointer-events: none; } #knob { position: absolute; left: 35px; top: 35px; width: 50px; height: 50px; border-radius: 50%; background: rgba(255,255,255,.9); box-shadow: 0 3px 0 rgba(0,0,0,.2); }
     /* logging in */
@@ -169,6 +176,7 @@
   <div id="banner"><b></b><i></i></div>
   <div id="flash"></div>
   <div id="toast"></div>
+  <div id="tut"><div class="tuth"><b id="tutt" class="disp"></b><span id="tutn" class="disp"></span></div><p id="tutp"></p><div class="acts"><button id="tutskip" class="btn">Skip</button><button id="tutnext" class="btn go">Next</button></div></div>
   <div id="joy"><div id="knob"></div></div>
   <div id="panel"><div id="pbox"><div id="phead"><h2 id="ptitle" class="disp"></h2><button id="pclose" title="Close">✕</button></div><div id="pbody"></div></div></div>
   <div id="hatch"><i id="hegg" class="egg"></i><img id="himg" alt=""><div id="hname" class="disp"></div><div id="hrar" class="disp"></div></div>
@@ -180,6 +188,6 @@
     <button id="lgo" class="btn go" type="submit">Log in</button>
     <button id="lnew" class="btn" type="button">Create account</button>
   </form>
-  <script type="module" src="pets.js?v=1794439332"></script>
+  <script type="module" src="pets.js?v=1794439868"></script>
 </body>
 </html>

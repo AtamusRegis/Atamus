@@ -336,6 +336,14 @@ export function attachPets(server, { origins = [], allowLocal = false, store = m
           if (q.va) { const s = JSON.stringify({ t: "announce", name: me.name, sp: q.sp, va: q.va }); for (const p of online.values()) if (p.ws.readyState === 1) p.ws.send(s); }   // the whole server hears of a Shiny or a Golden
           break;
         }
+        case "fuse": {   // four of the same mount and skin: the best of them gets the next skin, the other three go
+          const four = W.fuseSet(d.mounts, m.id); if (!four) break;
+          const best = four.reduce((a, b) => (b.lv > a.lv || (b.lv === a.lv && b.xp > a.xp) ? b : a)); best.va++;
+          d.mounts = d.mounts.filter((k) => k === best || !four.includes(k)); if (!d.mounts.some((k) => k.id === d.ride)) d.ride = best.id;
+          changed(me); flush(me.acct); send(ws, { t: "fused", m: best, data: d }); showMount(me);
+          if (best.va >= 2) { const s = JSON.stringify({ t: "announce", name: me.name, sp: best.sp, va: best.va, fused: 1 }); for (const p of online.values()) if (p.ws.readyState === 1) p.ws.send(s); }
+          break;
+        }
         case "upgrade": {
           const k = UPGRADES[m.k] ? m.k : ""; if (!k || d.up[k] >= W.UP_MAX || d.coins < W.upgradeCost(k, d.up[k])) break;
           d.coins -= W.upgradeCost(k, d.up[k]); d.up[k]++; changed(me); flush(me.acct); send(ws, { t: "upgraded", k, lv: d.up[k], data: d });
@@ -347,6 +355,7 @@ export function attachPets(server, { origins = [], allowLocal = false, store = m
           if (Number.isFinite(+m.music)) s.music = clamp(Math.floor(+m.music), 0, 10);
           if (Number.isFinite(+m.sfx)) s.sfx = clamp(Math.floor(+m.sfx), 0, 10);
           if (/^#[0-9a-f]{6}$/i.test(m.shirt)) s.shirt = m.shirt;
+          if (m.tut === true) s.tut = true;
           changed(me); if (was !== s.friendly || shirt !== s.shirt) all(room, { t: "look", id: me.id, friendly: s.friendly, shirt: s.shirt }, me); break;
         }
         case "pipe": {   // the sewer pipe: in one end, out the other; a goose inside costs a hit

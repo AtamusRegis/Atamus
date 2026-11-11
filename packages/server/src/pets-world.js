@@ -71,7 +71,15 @@ export const MOUNTS = {
 // (owner, 2026-11-11) no flying pets: the Parrot, Owl and Dragon (and gliding) went; anyone who had one has the mount that took its place
 export const MOUNT_MOVED = { parrot: "deer", owl: "stego", dragon: "unicorn" };
 export const ABILITY = { bark: "Bark", dash: "Dash", jump2: "Double Jump" };
-export const MAX_LV = 20, VARIANTS = ["", "Shiny", "Golden"], SHINY = 0.01, GOLDEN = 0.001;
+export const MAX_LV = 20, VARIANTS = ["", "Shiny", "Golden", "Rainbow"], SHINY = 0.01, GOLDEN = 0.001;
+// (owner, 2026-11-11) four of the same mount with the same skin merge into the best of them (the highest level), which
+// gets the next skin: normal, Shiny, Golden, Rainbow (Rainbow only by merging)
+export const FUSE_N = 4;
+export function fuseSet(mounts, id) {   // the four a merge would take (the chosen one and the lowest-level others), or null
+  const m = mounts.find((k) => k.id === id); if (!m || m.va >= VARIANTS.length - 1) return null;
+  const same = mounts.filter((k) => k.sp === m.sp && k.va === m.va && k.id !== id).sort((a, b) => a.lv - b.lv || a.id - b.id);
+  return same.length >= FUSE_N - 1 ? [m, ...same.slice(0, FUSE_N - 1)] : null;
+}
 export const levelCost = (lv) => Math.round(100 * Math.pow(1.6, lv - 1));   // coins to go from lv to lv + 1
 export const xpNeed = (lv) => Math.round(30 * Math.pow(1.42, lv - 1));     // Training XP to go from lv to lv + 1
 export const bagSize = (lv) => 1 + Math.floor(lv / 5);                      // parcels a mount carries at once (owner, 2026-11-11): 1, then +1 at levels 5, 10, 15 and 20
@@ -96,7 +104,7 @@ export function cleanData(d) {
   d = d && typeof d === "object" ? d : {};
   const int = (v, lo, hi, def) => (Number.isFinite(+v) ? clamp(Math.floor(+v), lo, hi) : def);
   const out = { v: 1, coins: int(d.coins, 0, 1e12, 0), coupons: int(d.coupons, 0, 1e6, 0), stamp: int(d.stamp, 0, PITY_EPIC, 0), nextId: int(d.nextId, 1, 1e9, 1), mounts: [], ride: 0, eggs: {}, up: {}, stats: {}, set: {}, fails: int(d.fails, 0, 99, 0) };
-  for (const m of Array.isArray(d.mounts) ? d.mounts.slice(0, MOUNT_CAP) : []) if (m && MOUNTS[MOUNT_MOVED[m.sp] || m.sp]) out.mounts.push({ id: int(m.id, 1, 1e9, 0) || out.nextId++, sp: MOUNT_MOVED[m.sp] || m.sp, va: int(m.va, 0, 2, 0), lv: int(m.lv, 1, MAX_LV, 1), xp: int(m.xp, 0, 1e9, 0) });
+  for (const m of Array.isArray(d.mounts) ? d.mounts.slice(0, MOUNT_CAP) : []) if (m && MOUNTS[MOUNT_MOVED[m.sp] || m.sp]) out.mounts.push({ id: int(m.id, 1, 1e9, 0) || out.nextId++, sp: MOUNT_MOVED[m.sp] || m.sp, va: int(m.va, 0, 3, 0), lv: int(m.lv, 1, MAX_LV, 1), xp: int(m.xp, 0, 1e9, 0) });
   if (!out.mounts.length) out.mounts.push({ id: out.nextId++, sp: "pup", va: 0, lv: 1, xp: 0 });
   out.nextId = Math.max(out.nextId, ...out.mounts.map((m) => m.id + 1));
   out.ride = out.mounts.some((m) => m.id === d.ride) ? d.ride : out.mounts[0].id;
@@ -105,7 +113,7 @@ export function cleanData(d) {
   out.gifts = (Array.isArray(d.gifts) ? d.gifts : []).slice(0, GIFT_CAP).filter((g) => g && Number.isFinite(+g.gid)).map((g) => ({ gid: int(g.gid, 1, 1e9, 1), r: int(g.r, 0, 4, 0), pt: int(g.pt, 0, 4, 0), ...(Number.isFinite(+g.m) ? { m: int(g.m, 1, 1e9, 1) } : {}) }));
   out.nextGid = Math.max(int(d.nextGid, 1, 1e9, 1), ...out.gifts.map((g) => g.gid + 1));
   for (const k of ["del", "golden", "geese", "kicks"]) out.stats[k] = int(d.stats && d.stats[k], 0, 1e9, 0);
-  out.set = { friendly: !!(d.set && d.set.friendly), music: int(d.set && d.set.music, 0, 10, 5), sfx: int(d.set && d.set.sfx, 0, 10, 7), shirt: /^#[0-9a-f]{6}$/i.test(d.set && d.set.shirt) ? d.set.shirt : "#f2a33a" };
+  out.set = { friendly: !!(d.set && d.set.friendly), music: int(d.set && d.set.music, 0, 10, 5), sfx: int(d.set && d.set.sfx, 0, 10, 7), shirt: /^#[0-9a-f]{6}$/i.test(d.set && d.set.shirt) ? d.set.shirt : "#f2a33a", tut: !!(d.set && d.set.tut) };   // tut: the new-courier tutorial is done
   return out;
 }
 // a new parcel for the conveyor: its tier by the courier's permits, maybe a modifier

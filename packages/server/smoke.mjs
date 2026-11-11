@@ -140,13 +140,18 @@ try {
   b.send({ t: "coupon", id: mid }); b.send({ t: "hatch", kind: "rare" }); b.send({ t: "hatch", kind: "basic" });
   const ha = await b.wait((m) => m.t === "hatched", "the hatch"); ok(ha.kind === "basic" && ha.data.mounts.length === 2 && ha.data.eggs.basic === 1 && W.MOUNTS[ha.m.sp].r <= 2, "an egg hatches a mount; no egg, no hatch");
   b.send({ t: "equip", id: ha.m.id }); await a.wait((m) => m.t === "mount" && m.id === wb.id && m.sp === ha.m.sp, "others see the new mount");
+  // four of the same mount and skin merge into the best one, with the next skin
+  n.send({ t: "admin", op: "give", what: "mount:fox", n: 4, lv: 3, name: "smokeB" }); const gv = await b.wait((m) => m.t === "data" && m.data.mounts.filter((k) => k.sp === "fox" && k.va === 0 && k.lv === 3).length === 4, "four foxes");   // (a Fox may have hatched already)
+  const foxes = gv.data.mounts.filter((k) => k.sp === "fox" && k.va === 0 && k.lv === 3), nFox = gv.data.mounts.filter((k) => k.sp === "fox").length; b.send({ t: "fuse", id: foxes[0].id }); const fu = await b.wait((m) => m.t === "fused", "the merge");
+  ok(fu.m.va === 1 && fu.m.sp === "fox" && fu.data.mounts.filter((k) => k.sp === "fox").length === nFox - 3 && fu.data.mounts.length === gv.data.mounts.length - 3, "four Foxes merge into one Shiny Fox");
+  ok( W.fuseSet([1, 2, 3, 4].map((id) => ({ id, sp: "pup", va: 2, lv: id })), 1).length === 4 && !W.fuseSet([1, 2, 3, 4].map((id) => ({ id, sp: "pup", va: 3, lv: id })), 1), "a merge needs four the same; Rainbow is the last skin");
   b.send({ t: "set", friendly: true }); await a.wait((m) => m.t === "look" && m.id === wb.id && m.friendly, "Friendly");
   { const pa = who("smokeA"), pb = who("smokeB"); pa.stunUntil = 0; pa.graceUntil = 0; pa.kickAt = 0; await put(b, "smokeB", 60, 0); await put(a, "smokeA", 60, -2); a.send({ t: "kick" }); await sleep(200); ok(pb.stunUntil === 0, "Friendly couriers can't be kicked"); }
   n.ws.close();
   // logging in again replaces the old connection and keeps everything
   const b2 = client("B2"); await b2.open; b2.send({ t: "login", user: "smokeB", pass: "pass1234" });
   const wb2 = await b2.wait((m) => m.t === "welcome" && m.name === "smokeB", "login");
-  ok(wb2.data.coins === 4650 && wb2.data.mounts.length === 2 && wb2.data.up.routes === 1 && wb2.data.set.friendly, "a courier's data is kept");
+  ok(wb2.data.coins === 4650 && wb2.data.mounts.length === fu.data.mounts.length && wb2.data.mounts.some((k) => k.sp === "fox" && k.va === 1) && wb2.data.up.routes === 1 && wb2.data.set.friendly, "a courier's data is kept");
   await b.wait((m) => m.t === "kicked", "old connection kicked");
   for (const c of [a, b2]) c.ws.close();
 } catch (e) { fail(e.message); }

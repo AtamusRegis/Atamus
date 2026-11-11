@@ -6,6 +6,9 @@ and any rule decided. Use `git log` for the code detail (and for the older Atamu
 
 ## 2026-11-11
 
+- **Tutorial; merging mounts (owner).** New couriers get a six-step tutorial: picking up parcels, dropping them off,
+  opening them, the Stable, Upgrades and the Stamp Meter. Four of the same mount with the same skin merge into the
+  best of them with the next skin, up to the new Rainbow.
 - **Merging parcels, harder areas, a narrow world (owner).** Unopened parcels are kept (and saved) on the server, their
   contents rolled when opened; four of one rarity merge into the next, with an animation. At least 30% of parcels go
   to your farthest open area. Each area's dogs and geese are quicker and trickier, and a mount shakes off the easier
