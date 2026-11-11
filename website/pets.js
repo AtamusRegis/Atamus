@@ -93,8 +93,9 @@ const inColor = (o) => { o.traverse((c) => c.layers.set(1)); return o; };
 // it is rebuilt whenever staff change the world (buildWorldView). ----
 const speck = (() => { const cv = document.createElement("canvas"); cv.width = cv.height = 128; const x = cv.getContext("2d"); x.fillStyle = "#fff"; x.fillRect(0, 0, 128, 128); for (let k = 0; k < 900; k++) { const v = 205 + Math.floor(Math.random() * 50); x.fillStyle = `rgb(${v},${v},${v})`; x.fillRect(Math.random() * 128, Math.random() * 128, 1 + Math.random() * 2, 1 + Math.random() * 2); } const t = new THREE.CanvasTexture(cv); t.wrapS = t.wrapT = THREE.RepeatWrapping; t.colorSpace = THREE.SRGBColorSpace; t.anisotropy = 4; return t; })();
 const blockM = new THREE.MeshLambertMaterial({ vertexColors: true, map: speck, side: THREE.DoubleSide });
+const dirtM = new THREE.MeshLambertMaterial({ vertexColors: true, map: speck, side: THREE.DoubleSide, emissive: "#6e5636" });   // (owner, 2026-11-10: dirt too dark) lit from within a little, so shaded sides stay a light brown
 const waterBlockM = new THREE.MeshLambertMaterial({ vertexColors: true, transparent: true, opacity: 0.78, side: THREE.DoubleSide, depthWrite: true });
-const GRASS_T = [new THREE.Color("#7fc25a"), new THREE.Color("#8bc95f"), new THREE.Color("#96cf63")], EARTH = new THREE.Color("#9a7048"), ROAD_T = new THREE.Color("#5c6670"), WATER_T = new THREE.Color("#3f9fd8");
+const GRASS_T = [new THREE.Color("#7fc25a"), new THREE.Color("#8bc95f"), new THREE.Color("#96cf63")], EARTH = new THREE.Color("#c9a173"), ROAD_T = new THREE.Color("#5c6670"), WATER_T = new THREE.Color("#3f9fd8");
 const worldG = new THREE.Group(); scene.add(worldG);
 snowCover = new THREE.Mesh(new THREE.BufferGeometry(), new THREE.MeshLambertMaterial({ color: "#eef7ff", transparent: true, opacity: 0, depthWrite: false, polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -2, side: THREE.DoubleSide })); snowCover.visible = false; snowCover.position.y = 0.025; scene.add(snowCover);
 function blockGeometry() {
@@ -120,24 +121,24 @@ function blockGeometry() {
       const rc = [2, 1, 0, 3][c.d], a = corners[(rc + 1) % 4], b = corners[(rc + 3) % 4], r = corners[rc], o = corners[(rc + 2) % 4], hsh = ((c.i * 73856093) ^ (c.j * 19349663)) >>> 0;
       const P3 = (q, y) => [q[0], y, q[1]];
       if (!full(c.i, c.j, c.k + 1)) { tri([P3(r, y1), P3(a, y1), P3(b, y1)], ROAD_T, 1, topUV, true); if (c.t === "corner") tri([P3(o, y1), P3(a, y1), P3(b, y1)], GRASS_T[hsh % 3], 1, topUV, true); }
-      if (!full(c.i, c.j, c.k - 1)) { tri([P3(r, y0), P3(a, y0), P3(b, y0)], EARTH, 0.5, topUV); if (c.t === "corner") tri([P3(o, y0), P3(a, y0), P3(b, y0)], EARTH, 0.5, topUV); }
+      if (!full(c.i, c.j, c.k - 1)) { tri([P3(r, y0), P3(a, y0), P3(b, y0)], EARTH, 0.7, topUV); if (c.t === "corner") tri([P3(o, y0), P3(a, y0), P3(b, y0)], EARTH, 0.7, topUV); }
       for (let s2 = 0; s2 < 4; s2++) {
         if (c.t === "half" && s2 !== c.d && s2 !== (c.d + 1) % 4) continue;
         const [dx, dz] = DIRS[s2]; if (full(c.i + dx, c.j + dz, c.k)) continue;
         const e = s2 === 0 ? [[x0, z1], [x1, z1]] : s2 === 1 ? [[x1, z0], [x1, z1]] : s2 === 2 ? [[x0, z0], [x1, z0]] : [[x0, z0], [x0, z1]];
-        quad([[e[0][0], y0, e[0][1]], [e[1][0], y0, e[1][1]], [e[1][0], y1, e[1][1]], [e[0][0], y1, e[0][1]]], EARTH, s2 % 2 ? 0.86 : 0.74, sideUV);
+        quad([[e[0][0], y0, e[0][1]], [e[1][0], y0, e[1][1]], [e[1][0], y1, e[1][1]], [e[0][0], y1, e[0][1]]], EARTH, s2 % 2 ? 1 : 0.92, sideUV);
       }
-      if (c.t === "half") quad([P3(a, y0), P3(b, y0), P3(b, y1), P3(a, y1)], EARTH, 0.8, sideUV);   // the cut face
+      if (c.t === "half") quad([P3(a, y0), P3(b, y0), P3(b, y1), P3(a, y1)], EARTH, 0.96, sideUV);   // the cut face
       continue;
     }
     const road = c.t === "road" || c.t === "ramp", hsh = ((c.i * 73856093) ^ (c.j * 19349663)) >>> 0, topC = road ? ROAD_T : GRASS_T[hsh % 3];
     if (!full(c.i, c.j, c.k + 1)) quad(corners.map(([x, z], n) => [x, h[n], z]), topC, 1, topUV, true);
-    if (!full(c.i, c.j, c.k - 1)) quad(corners.map(([x, z]) => [x, y0, z]), EARTH, 0.5, topUV);
+    if (!full(c.i, c.j, c.k - 1)) quad(corners.map(([x, z]) => [x, y0, z]), EARTH, 0.7, topUV);
     function sideCorners(s2) { return s2 === 0 ? [[x0, z1], [x1, z1]] : s2 === 1 ? [[x1, z0], [x1, z1]] : s2 === 2 ? [[x0, z0], [x1, z0]] : [[x0, z0], [x0, z1]]; }
     for (let s2 = 0; s2 < 4; s2++) {
       const [dx, dz] = DIRS[s2]; if (full(c.i + dx, c.j + dz, c.k)) continue;
       const e = sideCorners(s2), ha = cellTop(c, e[0][0], e[0][1]), hb = cellTop(c, e[1][0], e[1][1]); if (ha - y0 < 0.01 && hb - y0 < 0.01) continue;
-      quad([[e[0][0], y0, e[0][1]], [e[1][0], y0, e[1][1]], [e[1][0], hb, e[1][1]], [e[0][0], ha, e[0][1]]], EARTH, s2 % 2 ? 0.86 : 0.74, sideUV);
+      quad([[e[0][0], y0, e[0][1]], [e[1][0], y0, e[1][1]], [e[1][0], hb, e[1][1]], [e[0][0], ha, e[0][1]]], EARTH, s2 % 2 ? 1 : 0.92, sideUV);
     }
   }
   const mk = (pos, col, uv) => { const g = new THREE.BufferGeometry(); g.setAttribute("position", new THREE.Float32BufferAttribute(pos, 3)); g.setAttribute("color", new THREE.Float32BufferAttribute(col, 3)); if (uv) g.setAttribute("uv", new THREE.Float32BufferAttribute(uv, 2)); g.computeVertexNormals(); return g; };
@@ -2947,7 +2948,7 @@ let worldMeshes = [], houseKey = "";
 function buildWorldView() {
   for (const o of [...worldG.children]) { worldG.remove(o); if (o.userData.own) o.geometry.dispose(); if (o.isInstancedMesh) o.dispose(); }
   const { solid, dirt, water, tops } = blockGeometry();
-  const sm = new THREE.Mesh(solid, blockM), dm = new THREE.Mesh(dirt, blockM), wm = new THREE.Mesh(water, waterBlockM); sm.castShadow = sm.receiveShadow = true; wm.renderOrder = 1; sm.userData.own = dm.userData.own = wm.userData.own = true;
+  const sm = new THREE.Mesh(solid, blockM), dm = new THREE.Mesh(dirt, dirtM), wm = new THREE.Mesh(water, waterBlockM); sm.castShadow = sm.receiveShadow = true; wm.renderOrder = 1; sm.userData.own = dm.userData.own = wm.userData.own = true;
   inColor(dm);   // (owner, 2026-11-10) the earth down the sides keeps its dirt brown
   worldG.add(sm, dm, wm); worldMeshes = [sm, dm, wm];
   snowCover.geometry.dispose(); snowCover.geometry = tops;
