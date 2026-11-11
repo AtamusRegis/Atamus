@@ -6,6 +6,9 @@ and any rule decided. Use `git log` for the code detail (and for the older Atamu
 
 ## 2026-11-11
 
+- **Gifts on the left (owner).** Each delivery's reward is a gift on the left of the screen instead of the big reel
+  in the middle: a smaller reel spins and lands, and what came out stays until the next gift or you close it. Tap to
+  skip the spin; Open all lands every waiting gift at once.
 - **Short neighborhoods, a stack of parcels, faster empty (owner).** Every district is three houses long, three each
   side of the road (30 houses in all; three Cliffside steps, three islands). A mount carries 1 parcel, one more at
   levels 5, 10, 15 and 20; each goes to its own address with its own marker and card row, and the higher the mount's

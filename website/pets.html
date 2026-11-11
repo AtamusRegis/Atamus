@@ -96,15 +96,21 @@
     #pops { position: fixed; inset: 0; pointer-events: none; overflow: hidden; }
     .pop { position: absolute; left: 0; top: 0; font: 800 24px "Big Shoulders Display", system-ui, sans-serif; text-shadow: 0 2px 0 rgba(0,0,0,.55), 0 0 8px rgba(0,0,0,.35); white-space: nowrap; will-change: transform, opacity; } .pop.big { font-size: 36px; }
     .flycoin { position: absolute; width: 20px; height: 20px; border-radius: 50%; background: radial-gradient(circle at 35% 30%, #fff3b8, #f2b01e 60%, #c98500); border: 2px solid #b87400; transform: translate(-50%, -50%); }
-    #roll { position: fixed; left: 50%; top: 34%; transform: translate(-50%, -50%); display: none; flex-direction: column; align-items: center; pointer-events: none; z-index: 14; }
-    #reel { padding: 6px 34px; border-radius: 22px; border: 6px solid #fff; background: rgba(35,48,59,.92); font-size: clamp(54px, 13vw, 104px); line-height: 1.05; text-transform: uppercase; white-space: nowrap; box-shadow: 0 8px 0 rgba(0,0,0,.3), 0 0 60px rgba(255,255,255,.35); }
-    #reel.flip { animation: flip .09s; } #reel.tease { animation: shake .08s infinite; } #reel.land { animation: landed .7s; } @keyframes flip { from { transform: translateY(-22%) scaleY(.6); opacity: .5; } } @keyframes shake { 50% { margin-left: 6px; margin-top: -3px; } } @keyframes landed { 0% { transform: scale(.5); } 35% { transform: scale(1.45) rotate(-3deg); } 60% { transform: scale(.95); } }
-    #rcard { display: none; flex-direction: column; align-items: stretch; gap: 8px; min-width: min(300px, 80vw); padding: 0 0 12px; border-radius: 22px; background: #fff; box-shadow: 0 8px 0 rgba(0,0,0,.25), 0 0 0 6px var(--rc, #fff), 0 0 70px var(--rc, #fff); pointer-events: auto; overflow: hidden; animation: popin .35s; }
-    #rtitle { padding: 8px 20px; font-size: clamp(34px, 8vw, 52px); text-align: center; text-transform: uppercase; text-shadow: 0 2px 0 rgba(0,0,0,.25); }
-    #rlist { display: flex; flex-direction: column; gap: 6px; padding: 4px 18px; } .rrow { display: flex; align-items: center; gap: 12px; font-size: 26px; opacity: 0; animation: rowin .3s forwards; } .rrow i { flex: none; } .rrow .coin { width: 30px; height: 30px; } .rrow .egg { width: 28px; height: 36px; }
-    .ixp { width: 34px; height: 30px; border-radius: 8px; background: #3fb36b; color: #fff; font: 800 15px/30px system-ui, sans-serif; text-align: center; font-style: normal; } .icoupon { width: 34px; height: 24px; border-radius: 6px; background: #ff7ad1; border: 3px dashed #fff; outline: 2px solid #ff7ad1; }
-    @keyframes rowin { from { opacity: 0; transform: translateX(-24px); } to { opacity: 1; transform: none; } }
-    #rok { align-self: center; padding: 8px 34px; font-size: 20px; }
+    /* gifts, on the left: the waiting ones, a small reel, what came out */
+    #gifts { position: fixed; left: calc(56px + var(--sl)); top: calc(178px + var(--st)); width: 176px; display: none; flex-direction: column; align-items: stretch; gap: 6px; z-index: 6; }
+    #gq { display: flex; flex-wrap: wrap; gap: 4px; align-items: center; min-height: 0; } #gq b { font-size: 14px; color: #fff; text-shadow: 0 1px 0 rgba(0,0,0,.5); }
+    .gbox { width: 20px; height: 18px; border-radius: 4px; background: linear-gradient(90deg, transparent 40%, var(--gc) 40% 60%, transparent 60%), linear-gradient(transparent 40%, var(--gc) 40% 60%, transparent 60%), #ff1f8f; box-shadow: 0 2px 0 rgba(0,0,0,.25); animation: popin .3s; }
+    #gall { padding: 4px 10px; font-size: 13px; border: 0; border-radius: 10px; background: #ff1f8f; color: #fff; box-shadow: 0 3px 0 rgba(0,0,0,.2); display: none; }
+    #greel { display: none; padding: 4px 10px; border-radius: 12px; border: 3px solid #fff; background: rgba(35,48,59,.9); font-size: 28px; line-height: 1.1; text-align: center; text-transform: uppercase; white-space: nowrap; overflow: hidden; cursor: pointer; box-shadow: 0 3px 0 rgba(0,0,0,.25); }
+    #greel.flip { animation: flip .08s; } #greel.tease { animation: shake .08s infinite; } #greel.land { animation: landed .55s; }
+    @keyframes flip { from { transform: translateY(-18%) scaleY(.7); opacity: .6; } } @keyframes shake { 50% { margin-left: 3px; } } @keyframes landed { 0% { transform: scale(.7); } 40% { transform: scale(1.18); } 70% { transform: scale(.97); } }
+    #gres { display: none; position: relative; flex-direction: column; gap: 3px; padding: 6px 10px 8px; border-radius: 12px; background: var(--card); box-shadow: 0 3px 0 rgba(0,0,0,.18), inset 0 0 0 2px var(--gc, #fff); }
+    #gx { position: absolute; right: 2px; top: 0; border: 0; background: none; font-size: 14px; color: #7f8b97; padding: 2px 6px; }
+    #gtitle { display: flex; gap: 3px; flex-wrap: wrap; } .gchip { width: 12px; height: 12px; border-radius: 50%; box-shadow: inset 0 0 0 1px rgba(0,0,0,.25); }
+    #glist { display: flex; flex-direction: column; gap: 3px; } .grow { display: flex; align-items: center; gap: 8px; font-size: 18px; opacity: 0; animation: rowin .25s forwards; } .grow i, .grow img { flex: none; }
+    .grow .coin { width: 18px; height: 18px; } .grow .egg { width: 16px; height: 21px; } .gmount { width: 28px; height: 28px; }
+    .ixp { width: 26px; height: 18px; border-radius: 5px; background: #3fb36b; color: #fff; font: 800 11px/18px system-ui, sans-serif; text-align: center; font-style: normal; } .icoupon { width: 24px; height: 16px; border-radius: 4px; background: #ff7ad1; border: 2px dashed #fff; outline: 1px solid #ff7ad1; }
+    @keyframes rowin { from { opacity: 0; transform: translateX(-14px); } to { opacity: 1; transform: none; } }
     #banner { position: fixed; left: 50%; top: 26%; transform: translate(-50%, -50%) scale(0); pointer-events: none; text-align: center; font: 800 64px "Big Shoulders Display", system-ui, sans-serif; text-shadow: 0 4px 0 rgba(0,0,0,.45), 0 0 18px rgba(0,0,0,.3); white-space: nowrap; opacity: 0; }
     #banner i { display: block; font-size: 22px; font-style: normal; } #banner.go { animation: ban 1.4s; } @keyframes ban { 0% { transform: translate(-50%, -50%) scale(.2); opacity: 0; } 12% { transform: translate(-50%, -50%) scale(1.25); opacity: 1; } 22% { transform: translate(-50%, -50%) scale(1); } 80% { opacity: 1; transform: translate(-50%, -50%) scale(1); } 100% { opacity: 0; transform: translate(-50%, -70%) scale(1); } }
     #announce { position: fixed; left: 50%; top: calc(72px + var(--st)); transform: translateX(-50%); padding: 6px 16px; border-radius: 999px; background: rgba(35,48,59,.9); font: 800 20px "Big Shoulders Display", system-ui, sans-serif; white-space: nowrap; pointer-events: none; opacity: 0; } #announce.go { animation: ann 5s; } @keyframes ann { 5%, 90% { opacity: 1; } }
@@ -148,7 +154,7 @@
     <button id="bjump" class="act" title="Jump"><span>Jump</span></button>
     <button id="bability" class="act" title="Ability"><span>Dash</span></button>
     <button id="bkick" class="act" title="Kick"><span>Kick</span></button>
-    <div id="roll"><div id="reel" class="disp"></div><div id="rcard"><div id="rtitle" class="disp"></div><div id="rlist"></div><button id="rok" class="btn go" title="OK">✓</button></div></div>
+    <div id="gifts"><div id="gq"></div><button id="gall" class="disp">Open all</button><div id="greel" class="disp" title="Skip"></div><div id="gres"><button id="gx" title="Close">✕</button><div id="gtitle"></div><div id="glist"></div></div></div>
     <div id="announce"></div>
     <form id="chatbar" autocomplete="off"><input id="chatin" maxlength="120" placeholder="Chat" enterkeyhint="send"></form>
   </div>
@@ -166,6 +172,6 @@
     <button id="lgo" class="btn go" type="submit">Log in</button>
     <button id="lnew" class="btn" type="button">Create account</button>
   </form>
-  <script type="module" src="pets.js?v=1794436488"></script>
+  <script type="module" src="pets.js?v=1794437102"></script>
 </body>
 </html>
