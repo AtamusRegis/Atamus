@@ -26,14 +26,16 @@ export function rng(seed) { let s = seed; return () => ((s = (s * 16807) % 21474
 // ---- the block world (owner, 2026-11-10): the town is built from blocks on a grid of 6 x 6 m tiles, stacked in steps
 // of 3 m. A block at level k fills y (k-1)*3 to k*3 (level 0 is the ground's top at 0). Kinds: land (grass), wedge (a
 // ramp up one step, rising toward its direction), road (a land block paved on top), ramp (a road wedge), water (a
-// block of water, its surface just under the top). Blocks can float with nothing under them (floating islands).
+// block of water, its surface just under the top), corner (owner, 2026-11-10: a flat block cut corner to corner, road
+// on one side, grass on the other, to round a road's turn) and half (the road half of that, nothing on the other side).
+// Blocks can float with nothing under them (floating islands).
 // Things stand on tiles: trees, houses (on a tile corner, 2 x 2 tiles, facing a way, with a mailbox in front), lone
 // mailboxes, boost pads (on roads), animal control vans (on roads: they roam every road joined to theirs), helicopters
 // (anywhere, keeping within a chosen radius) and housing plots (3 x 3 tiles, by plot number). Only staff (admin) edit it,
 // live, for everyone; the server keeps it. It starts as just the town square: a round island of tiles with the square's
 // buildings, which stay where they are. ----
 export const TILE = 6, STEP = 3;
-export const KINDS = ["land", "wedge", "road", "ramp", "water"], THINGS = ["tree", "house", "mailbox", "boost", "van", "heli", "plot"];
+export const KINDS = ["land", "wedge", "road", "ramp", "water", "corner", "half"], THINGS = ["tree", "house", "mailbox", "boost", "van", "heli", "plot"];
 export const DIRS = [[0, 1], [1, 0], [0, -1], [-1, 0]];   // a direction 0-3: +z, +x, -z, -x
 const tkey = (i, j) => i + "," + j, ckey = (i, j, k) => i + "," + j + "," + k;
 export const tileOf = (v) => Math.floor(v / TILE), tileMid = (i) => i * TILE + TILE / 2;
@@ -83,9 +85,16 @@ export const allCells = () => cells.values();
 // ---- heights ----
 // a cell's top at a point in its tile (a wedge rises across the tile toward its direction)
 export function cellTop(c, x, z) {
+  if (c.t === "half" && !inHalf(c, x, z)) return -Infinity;   // the empty half
   if (c.t !== "wedge" && c.t !== "ramp") return c.k * STEP - (c.t === "water" ? 0.4 : 0);
   const [dx, dz] = DIRS[c.d], u = clamp(dx ? (x - c.i * TILE) / TILE : (z - c.j * TILE) / TILE, 0, 1), f = dx + dz > 0 ? u : 1 - u;
   return (c.k - 1) * STEP + f * STEP;
+}
+// is (x, z) on the road side of a corner or half block? The cut runs corner to corner; the road takes the triangle at
+// the tile corner between its sides d and d + 1 (d 0: +z and +x, 1: +x and -z, 2: -z and -x, 3: -x and +z)
+export function inHalf(c, x, z) {
+  const u = (x - c.i * TILE) / TILE, v = (z - c.j * TILE) / TILE;
+  return c.d === 0 ? u + v >= 1 - 1e-6 : c.d === 1 ? u >= v - 1e-6 : c.d === 2 ? u + v <= 1 + 1e-6 : v >= u - 1e-6;
 }
 export const colAt = (x, z) => cols.get(tkey(tileOf(x), tileOf(z))) || null;
 // the highest surface here at or a little above y (what you'd stand on); -Infinity over nothing
@@ -95,11 +104,11 @@ export function surfaceAt(x, z, y) {
   return best;
 }
 // the top of the highest block here (or -200 off the island)
-export function terrain(x, z) { const col = colAt(x, z); if (!col) return -200; let best = -Infinity; for (const c of col) best = Math.max(best, cellTop(c, x, z)); return best; }
+export function terrain(x, z) { const col = colAt(x, z); if (!col) return -200; let best = -Infinity; for (const c of col) best = Math.max(best, cellTop(c, x, z)); return best === -Infinity ? -200 : best; }
 export const smoothTerrain = (x, z) => Math.max(0, terrain(x, z));
-export const inside = (x, z) => !!colAt(x, z);
+export const inside = (x, z) => terrain(x, z) > -200;
 export function waterAt(x, z) { const col = colAt(x, z); if (!col) return -Infinity; const top = col[col.length - 1]; return top.t === "water" ? cellTop(top, x, z) : -Infinity; }
-export const roadDist = (x, z) => { const col = colAt(x, z); if (!col) return 99; const top = col[col.length - 1]; return top.t === "road" || top.t === "ramp" ? 0 : 99; };
+export const roadDist = (x, z) => { const col = colAt(x, z); if (!col) return 99; const top = col[col.length - 1]; return top.t === "road" || top.t === "ramp" || ((top.t === "corner" || top.t === "half") && inHalf(top, x, z)) ? 0 : 99; };
 // does a block's side stand in the way of someone at y (who can step up 0.6 m)?
 function wallAt(x, z, y) {
   const col = colAt(x, z); if (!col) return false;
@@ -133,7 +142,7 @@ const roadTiles = new Map();   // "i,j" -> the road cell on top
 function derive() {
   cols.clear(); for (const c of cells.values()) { const k = tkey(c.i, c.j); if (!cols.has(k)) cols.set(k, []); cols.get(k).push(c); }
   for (const col of cols.values()) col.sort((a, b) => a.k - b.k);
-  roadTiles.clear(); for (const [k, col] of cols) { const top = col[col.length - 1]; if (top.t === "road" || top.t === "ramp") roadTiles.set(k, top); }
+  roadTiles.clear(); for (const [k, col] of cols) { const top = col[col.length - 1]; if (top.t === "road" || top.t === "ramp" || top.t === "corner" || top.t === "half") roadTiles.set(k, top); }
   houses.length = 0; solids.length = 0; trees.length = 0; boosts.length = 0;
   for (const p of PLOTS) { p.placed = false; p.y = -1000; }
   const rnd = rng(7);
@@ -153,6 +162,7 @@ function derive() {
 // a road tile's height at the middle of one of its edges (side 0-3 as DIRS), or null where it doesn't join (a ramp's sides)
 function edgeY(c, side) {
   if (c.t === "road") return c.k * STEP;
+  if (c.t === "corner" || c.t === "half") return side === c.d || side === (c.d + 1) % 4 ? c.k * STEP : null;   // its two road sides
   if (side === c.d) return c.k * STEP; if (side === (c.d + 2) % 4) return (c.k - 1) * STEP; return null;
 }
 // the road tiles joined to this one (sharing an edge at the same height)

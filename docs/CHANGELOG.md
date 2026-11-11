@@ -6,6 +6,7 @@ and any rule decided. Use `git log` for the code detail (and for the older Atamu
 
 ## 2026-11-10
 
+- **Corner roads (owner).** Build Town has Road Corner (half road, half grass, cut corner to corner) and Half Road (just the road half) to round off turns; vans drive round them.
 - **Greener (owner).** Grass and trees show much more of their green in the gray look.
 - **Pines, blue mailboxes, a hint of green; vehicles in the editor (owner).** Trees are tall pines, three to four blocks high; mailboxes are blue and in color; grass and trees keep a very slight green; helicopters shine a faint red beam down to their circle by day too. In Build Town, vans and helicopters can be selected where they are and deleted.
 - **The block world and town editor (owner).** The world is now built from 6 m blocks on a grid, stacked in 3 m steps: land, wedges, roads, road ramps and water, floating where nothing is under them. It starts as just the square (the same size, in blocks); admins build the rest live with Build Town in the gear menu: blocks, trees, houses, mailboxes (every one a delivery address), boost pads, vans (they roam every road joined to theirs), helicopters (within a chosen radius) and the housing plots. The server keeps the world (`pet_world`). The flat grid town, its lake, islands and fixed routes are gone.

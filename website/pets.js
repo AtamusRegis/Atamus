@@ -4,7 +4,7 @@
 // its edge; animal control chases you. Co-op: everyone in a room rides the same town, works on contracts (alone or with a party) and
 // chats. The server (packages/server/src/pets.js) shares players, runs animal control, contracts and chat.
 import * as THREE from "./vendor/three.module.min.js";
-import * as World from "./pets-world.js?v=1793100066";
+import * as World from "./pets-world.js?v=1793100067";
 
 const $ = (id) => document.getElementById(id);
 const TAU = Math.PI * 2, clamp = (v, a, b) => Math.max(a, Math.min(b, v)), hyp = Math.hypot;
@@ -100,11 +100,12 @@ snowCover = new THREE.Mesh(new THREE.BufferGeometry(), new THREE.MeshLambertMate
 function blockGeometry() {
   const { TILE: T, STEP: S, DIRS, cellTop } = World, at = new Map(), P = [], C = [], U = [], WP = [], WC = [], TOP = [];
   for (const c of World.allCells()) at.set(c.i + "," + c.j + "," + c.k, c);
-  const full = (i, j, k) => { const c = at.get(i + "," + j + "," + k); return !!c && (c.t === "land" || c.t === "road"); };
+  const full = (i, j, k) => { const c = at.get(i + "," + j + "," + k); return !!c && (c.t === "land" || c.t === "road" || c.t === "corner"); };
   const quad = (pts, col, f, uvf, top) => {   // 4 corners in order; f darkens
     const cc = col.clone().multiplyScalar(f);
     for (const q of [0, 1, 2, 0, 2, 3]) { const [x, y, z] = pts[q]; P.push(x, y, z); C.push(cc.r, cc.g, cc.b); const [u, v] = uvf(x, y, z); U.push(u, v); if (top) TOP.push(x, y, z); }
   };
+  const tri = (pts, col, f, uvf, top) => { const cc = col.clone().multiplyScalar(f); for (const [x, y, z] of pts) { P.push(x, y, z); C.push(cc.r, cc.g, cc.b); const [u, v] = uvf(x, y, z); U.push(u, v); if (top) TOP.push(x, y, z); } };
   const wquad = (pts, f) => { const cc = WATER_T.clone().multiplyScalar(f); for (const q of [0, 1, 2, 0, 2, 3]) { const [x, y, z] = pts[q]; WP.push(x, y, z); WC.push(cc.r, cc.g, cc.b); } };
   const topUV = (x, y, z) => [x / 9, z / 9], sideUV = (x, y, z) => [(x + z) / 9, y / 9];
   for (const c of at.values()) {
@@ -113,6 +114,20 @@ function blockGeometry() {
     if (c.t === "water") {
       if (!at.has(c.i + "," + c.j + "," + (c.k + 1))) wquad(corners.map(([x, z], n) => [x, h[n], z]), 1);
       for (let s2 = 0; s2 < 4; s2++) { const [dx, dz] = DIRS[s2], n = at.get((c.i + dx) + "," + (c.j + dz) + "," + c.k); if (n && (n.t === "water" || full(c.i + dx, c.j + dz, c.k))) continue; const e = sideCorners(s2); wquad([[e[0][0], y0, e[0][1]], [e[1][0], y0, e[1][1]], [e[1][0], y1 - 0.4, e[1][1]], [e[0][0], y1 - 0.4, e[0][1]]], 0.8); }
+      continue;
+    }
+    if (c.t === "corner" || c.t === "half") {   // (owner, 2026-11-10) cut corner to corner: road on the side between sides d and d + 1
+      const rc = [2, 1, 0, 3][c.d], a = corners[(rc + 1) % 4], b = corners[(rc + 3) % 4], r = corners[rc], o = corners[(rc + 2) % 4], hsh = ((c.i * 73856093) ^ (c.j * 19349663)) >>> 0;
+      const P3 = (q, y) => [q[0], y, q[1]];
+      if (!full(c.i, c.j, c.k + 1)) { tri([P3(r, y1), P3(a, y1), P3(b, y1)], ROAD_T, 1, topUV, true); if (c.t === "corner") tri([P3(o, y1), P3(a, y1), P3(b, y1)], GRASS_T[hsh % 3], 1, topUV, true); }
+      if (!full(c.i, c.j, c.k - 1)) { tri([P3(r, y0), P3(a, y0), P3(b, y0)], EARTH, 0.5, topUV); if (c.t === "corner") tri([P3(o, y0), P3(a, y0), P3(b, y0)], EARTH, 0.5, topUV); }
+      for (let s2 = 0; s2 < 4; s2++) {
+        if (c.t === "half" && s2 !== c.d && s2 !== (c.d + 1) % 4) continue;
+        const [dx, dz] = DIRS[s2]; if (full(c.i + dx, c.j + dz, c.k)) continue;
+        const e = s2 === 0 ? [[x0, z1], [x1, z1]] : s2 === 1 ? [[x1, z0], [x1, z1]] : s2 === 2 ? [[x0, z0], [x1, z0]] : [[x0, z0], [x0, z1]];
+        quad([[e[0][0], y0, e[0][1]], [e[1][0], y0, e[1][1]], [e[1][0], y1, e[1][1]], [e[0][0], y1, e[0][1]]], EARTH, s2 % 2 ? 0.86 : 0.74, sideUV);
+      }
+      if (c.t === "half") quad([P3(a, y0), P3(b, y0), P3(b, y1), P3(a, y1)], EARTH, 0.8, sideUV);   // the cut face
       continue;
     }
     const road = c.t === "road" || c.t === "ramp", hsh = ((c.i * 73856093) ^ (c.j * 19349663)) >>> 0, topC = road ? ROAD_T : GRASS_T[hsh % 3];
@@ -2624,6 +2639,12 @@ function drawMapLayers() {
   for (const c of tops.values()) {
     const g = layerOf(c), x = c.i * T, z = c.j * T;
     if (c.t === "road" || c.t === "ramp") { g.fillStyle = PAPER2; g.fillRect(x, z, T, T); }
+    else if (c.t === "corner" || c.t === "half") {   // the road's triangle (a half block's other half is empty)
+      const rc = [2, 1, 0, 3][c.d], q = [[x, z], [x + T, z], [x + T, z + T], [x, z + T]], a = q[(rc + 1) % 4], b = q[(rc + 3) % 4], r = q[rc];
+      if (c.t === "half") { g.clearRect(x, z, T, T); g.fillStyle = PAPER; g.beginPath(); g.moveTo(...r); g.lineTo(...a); g.lineTo(...b); g.closePath(); g.fill(); }
+      g.fillStyle = PAPER2; g.beginPath(); g.moveTo(...r); g.lineTo(...a); g.lineTo(...b); g.closePath(); g.fill();
+      if (c.t === "half") { g.strokeStyle = INK; g.lineWidth = 0.8; g.beginPath(); g.moveTo(...a); g.lineTo(...b); g.stroke(); }
+    }
     else if (c.t === "water") { g.fillStyle = "#d6d8de"; g.fillRect(x, z, T, T); g.strokeStyle = "rgba(29,29,34,.5)"; g.lineWidth = 0.3; g.beginPath(); for (let q = 1; q < 6; q++) { g.moveTo(x, z + q); g.lineTo(x + q, z); g.moveTo(x + q, z + T); g.lineTo(x + T, z + q); } g.stroke(); }
     else g.fillStyle = PAPER;
     if (c.t === "wedge" || c.t === "ramp") { const [dx, dz] = World.DIRS[c.d], mx = x + T / 2, mz = z + T / 2; g.strokeStyle = INK; g.lineWidth = 0.4; g.beginPath(); g.moveTo(mx - dx * 2 - dz * 1.5, mz - dz * 2 + dx * 1.5); g.lineTo(mx + dx * 2, mz + dz * 2); g.lineTo(mx - dx * 2 + dz * 1.5, mz - dz * 2 - dx * 1.5); g.stroke(); }
@@ -2936,13 +2957,19 @@ function buildWorldView() {
 // Erase, tap to take it away). Blocks go against the face you point at (on top, or beside it), or on a chosen level
 // to build in the air; things stand on the tile you point at. Everyone sees each change as it's made. ----
 let wedit = null;   // { tool, d (0-3), lvl (null: against what you point at), r (helicopter radius), p (plot number), px, py, aim }
-const WTOOLS = [["land", "Land"], ["wedge", "Wedge"], ["road", "Road"], ["ramp", "Road Ramp"], ["water", "Water"], ["tree", "Tree"], ["house", "House"], ["mailbox", "Mailbox"], ["boost", "Boost"], ["van", "Van"], ["heli", "Helicopter"], ["plot", "Plot"], ["erase", "Erase"]];
+const WTOOLS = [["land", "Land"], ["wedge", "Wedge"], ["road", "Road"], ["ramp", "Road Ramp"], ["corner", "Road Corner"], ["half", "Half Road"], ["water", "Water"], ["tree", "Tree"], ["house", "House"], ["mailbox", "Mailbox"], ["boost", "Boost"], ["van", "Van"], ["heli", "Helicopter"], ["plot", "Plot"], ["erase", "Erase"]];
 const HELI_R = [40, 80, 150, 250];
 const wghost = new THREE.Group(); scene.add(wghost); wghost.visible = false;
 const wOk = new THREE.MeshBasicMaterial({ color: "#ffffff", transparent: true, opacity: 0.45, depthWrite: false }), wBad = new THREE.MeshBasicMaterial({ color: "#ff3b30", transparent: true, opacity: 0.5, depthWrite: false });
 const WEDGE_G = (() => {   // a 6 x 3 x 6 ramp rising toward +z, its base at y 0
   const T = World.TILE, S = World.STEP, h = T / 2, v = [[-h, 0, -h], [h, 0, -h], [h, 0, h], [-h, 0, h], [-h, S, h], [h, S, h]];
   const f = [[0, 2, 1], [0, 3, 2], [3, 4, 5], [3, 5, 2], [0, 1, 5], [0, 5, 4], [0, 4, 3], [1, 2, 5]], pos = [];
+  for (const t of f) for (const n of t) pos.push(...v[n]);
+  const g = new THREE.BufferGeometry(); g.setAttribute("position", new THREE.Float32BufferAttribute(pos, 3)); return g;
+})();
+const HALF_G = (() => {   // the road half of a tile (its corner at +x +z), 3 m tall, its base at y 0
+  const h = World.TILE / 2, S = World.STEP, v = [[h, 0, h], [h, 0, -h], [-h, 0, h], [h, S, h], [h, S, -h], [-h, S, h]];
+  const f = [[0, 1, 2], [3, 5, 4], [0, 4, 1], [0, 3, 4], [0, 2, 5], [0, 5, 3], [1, 4, 5], [1, 5, 2]], pos = [];
   for (const t of f) for (const n of t) pos.push(...v[n]);
   const g = new THREE.BufferGeometry(); g.setAttribute("position", new THREE.Float32BufferAttribute(pos, 3)); return g;
 })();
@@ -2989,7 +3016,7 @@ function renderWorldBar() {
   el.append(row1, row2);
 }
 const weditLevel = () => Math.floor((me.y + 0.01) / World.STEP) + 1;   // the level of the block above the one I stand on
-const BLOCK_TOOLS = ["land", "wedge", "road", "ramp", "water"];
+const BLOCK_TOOLS = ["land", "wedge", "road", "ramp", "water", "corner", "half"];
 const cellAtP = (x, y, z) => [Math.floor(x / World.TILE), Math.floor(z / World.TILE), Math.floor(y / World.STEP) + 1];
 const hasCell = (i, j, k) => [...World.allCells()].some((c) => c.i === i && c.j === j && c.k === k);
 // what a tap at (px, py) would do: { put | del (a cell) | add (a thing) | rm (a thing's id), ok }
@@ -3033,7 +3060,8 @@ function weditAim(px, py) {
   const YAW = [0, Math.PI / 2, Math.PI, -Math.PI / 2];
   if (a.put || a.del) {
     const [i, j, k] = a.put || a.del, kind = a.put ? World.KINDS[a.put[3]] : "land";
-    add(kind === "wedge" || kind === "ramp" ? WEDGE_G : CUBE_G, tileMid(i), (k - 1) * S + 0.01, tileMid(j), a.put ? YAW[wedit.d] : 0).scale.setScalar(a.del ? 1.03 : 1);
+    add(kind === "wedge" || kind === "ramp" ? WEDGE_G : kind === "half" ? HALF_G : CUBE_G, tileMid(i), (k - 1) * S + 0.01, tileMid(j), a.put ? YAW[wedit.d] : 0).scale.setScalar(a.del ? 1.03 : 1);
+    if (kind === "corner") add(HALF_G, tileMid(i), k * S + 0.03, tileMid(j), YAW[wedit.d]).scale.set(1, 0.06, 1);   // which half is road
   } else if (a.rm) {
     const t = a.rm, x = t.k === "house" ? t.i * T : tileMid(t.i), z = t.k === "house" ? t.j * T : tileMid(t.j), w = t.k === "house" ? 2 * T : t.k === "plot" ? World.PLOT : T;
     add(new THREE.BoxGeometry(w, 4, w).translate(0, 2, 0), x, t.y, z, 0, true);
