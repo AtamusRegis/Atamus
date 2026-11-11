@@ -19,14 +19,15 @@ Every rule below is in `website/pets-world.js` (shared with the server, an ident
    game's), and the parcel card shows how far.
 3. **Deliver.** Ride into the glowing ring in front of that mailbox (within 3 m; no button). The server checks it. A
    wrong mailbox just shakes.
-4. **Open it.** Coins pay out and the delivered parcel lands on the left of the screen (owner, 2026-11-11) with a small
-   sparkle beside it in its rarity's color (Common white, Uncommon green, Rare blue, Epic purple, Legendary gold; the
-   rarer, the bigger and quicker it twinkles), and the rarity pops up over the mailbox. Deliver three and three
-   parcels wait there. Tap one to open it: it builds up (three shakes, its sparkle and glow growing, about 2 s) then
-   shows the prize; tapping while it builds up makes it go faster. **Open all** opens every waiting parcel at once,
-   showing each one's rarity and the totals. What came out (coins, XP, Level Coupons, eggs, a mount) stays under them
-   until the next opening or you close it. A parcel's coins count onto the counter when it opens. The rewards are the
-   server's the moment you deliver, so one left unopened when you leave is still yours.
+4. **Open it.** Coins and the parcel's Training XP pay out, and the delivered parcel (a **gift**, kept on the server
+   and saved, so unopened ones are there next time) lands on the left of the screen with a small sparkle beside it in
+   its rarity's color, the rarity popping up over the mailbox. The rarity is rolled on delivery; what's inside is
+   rolled when you open it. **Four of one rarity merge** into one of the next (owner, 2026-11-11), its parcel tier the
+   best of the four, with a little animation (they slide together and the new one pops out); merges chain up to
+   Legendary. Tap a parcel to open it: it builds up (three shakes, its sparkle and glow growing, about 2 s) then shows
+   the prize; tapping while it builds up makes it go faster. **Open all** opens every waiting parcel at once, showing
+   each one's rarity and the totals. What came out (coins, XP, Level Coupons, eggs, a mount) stays under them until
+   the next opening or you close it. Up to 60 can wait; past that the oldest open by themselves.
 
 (owner, 2026-11-11) **A stack of parcels:** a mount carries 1 parcel, one more at levels 5, 10, 15 and 20 (5 at level
 20); ride back into the conveyor to load up. Each has its own address (the same neighborhood as another or a
@@ -53,6 +54,7 @@ A parcel that breaks or is lost is gone; the conveyor always has the next one. *
 | Diamond | Cliffside | x8 | +50% | 10% |
 | Sky | Floating Islands | x15 | +100% | 4% |
 
+- (owner, 2026-11-11) **At least 30% go to the farthest area you've opened**; the rest spread over the ones in between.
 - Tiers for districts you haven't opened never appear. Route Permits also lift the higher tiers' share (Sky to about 8%
   at level 10), and so does the mount's level (owner, 2026-11-11: the higher level, the pricier the parcels and the
   longer the trips): tier n's weight x (1 + n x (level - 1) / 8).
@@ -117,26 +119,31 @@ A parcel that breaks or is lost is gone; the conveyor always has the next one. *
 A fixed town made in code (`buildTown` in pets-world.js); 30 houses. (owner, 2026-11-11) **One line, short
 neighborhoods, harder the farther out:** the post office at the west end, then one road east through every district;
 each district is three houses long, three each side of the road (owner: "do like 3 houses long per neighbourhood").
-Each has more (and quicker) dangers than the last. Dogs notice a parcel within 8 / 10 / 11 / 12 / 12 m and run 10.5 /
-11.5 / 12.5 / 13.5 / 14 m/s, district by district.
+The world is narrow (owner, 2026-11-11): 60 m across, the road down the middle, houses both sides, no back alleys, and
+the going gets rougher farther out.
+Each has more (and quicker) dangers than the last. (owner, 2026-11-11) Each area's animals are quicker and
+trickier: dogs notice a parcel within 8 / 10 / 11 / 12 / 12 m, bark for 0.7 / 0.55 / 0.45 / 0.35 / 0.3 s, run 10.5 /
+11.5 / 12.5 / 13.5 / 14.5 m/s and chase for 4 / 5 / 6 / 7 / 7 s; geese see you from 6 / 7 / 8 / 9 / 9 m, honk for
+1.2 / 1 / 0.8 / 0.65 / 0.6 s and lunge at 11.5 / 13 / 14.5 / 15.5 / 16 m/s. **A mount outgrows the easier areas'
+animals:** its chance to shake off a bite or a goose's grab (no stun, no hit, "SHAKEN OFF!") is 8% a level past
+1 + 4 x the area's number (0 for Main Street, 4 for the islands), up to 85%.
 
 - **Post office** at the west end, on its square: the counter under an open frame. Within 20 m is the **safe zone**.
   You start just south of it, facing east down the road.
 - **Main Street** (Bronze, x 40-90): 6 houses; 2 dogs.
-- **Maple Suburbs** (Silver, x 120-170): 6 houses with fenced yards, a pond (5 geese), 4 dogs, 4 sprinklers beside the
-  road. The zipline tower at its east end.
+- **Maple Suburbs** (Silver, x 120-170): 6 houses, fenced yards by the first two, two small ponds between houses
+  (6 geese), 4 dogs, 4 sprinklers beside the road, and low hedges across half the road, side to side (jump or weave). The zipline tower at its east end.
 - **Goose Marsh** (Gold, x 190-290): over the bridge where the road leaves town. Mud (25% slower; 40% in a pond), a
-  boardwalk on and one across the middle, 6 houses on platforms, two ponds (10 geese), 5 dogs on the boardwalks.
+  broken boardwalk on (gaps of mud to jump), one across the middle, 6 houses on platforms, three ponds (11 geese), 5 dogs.
 - **Cliffside** (Diamond, x 290-415): three steps up the road, 6 m each, a ramp up the road onto each; a house each side
-  on each step; 6 dogs; 4 goats; falling rocks. The **Sky Cannon** at the top.
+  on each step; boulders on each step to ride round; 6 dogs; 4 goats; falling rocks. The **Sky Cannon** at the top.
 - **Floating Islands** (Sky): three islands 32 to 44 m up off Cliffside's far side, two houses each, joined by jump
   pads; 3 dogs, wind and sky geese (every 8 to 14 s). Each island's houses stand as far as they can from its pads,
   landing spots, balloon and middle; anyone who somehow ends up inside something solid is moved out to the nearest
   clear spot. Falling off costs a parcel 1 hit and puts you back on the last island you stood on. A **balloon** on the
   last island takes you back to the post office.
 
-**Shortcuts:** back alleys (a lane behind each row of houses through Main Street and the suburbs, with boost pads),
-the sewer pipe (Main Street to the foot of Cliffside in 4 s; a goose sits in it 8 s in every 24, eyes showing at both
+**Shortcuts:** the sewer pipe (Main Street to the foot of Cliffside in 4 s; a goose sits in it 8 s in every 24, eyes showing at both
 ends, and costs 1 hit), ziplines (the tower at the suburbs' east end down into the marsh; the top of Cliffside back to
 the tower; not with a Heavy parcel), boost pads (x1.6 speed for 2.5 s) on the road, the alleys and the marsh's main
 boardwalk, and rooftop hops (three roofs, each 2 m higher, up the side of each Cliffside step's face: they need a jump
@@ -243,6 +250,8 @@ upgrades, everything, reset), and edit coins and coupons. Everything is logged (
 
 ## Rejected / removed
 
+- (owner, 2026-11-11) Back alleys; the wide (120 m) town; rewards rolled in full on delivery (now the rarity on
+  delivery, the contents on opening).
 - (owner, 2026-11-11) Gift boxes, and tapping to skip an opening's build-up (now delivered parcels with a rarity
   sparkle, and a tap speeds the build-up up).
 - (owner, 2026-11-11) The big reward reel in the middle of the screen and its card, then gifts that opened themselves

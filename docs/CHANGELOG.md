@@ -6,6 +6,11 @@ and any rule decided. Use `git log` for the code detail (and for the older Atamu
 
 ## 2026-11-11
 
+- **Merging parcels, harder areas, a narrow world (owner).** Unopened parcels are kept (and saved) on the server, their
+  contents rolled when opened; four of one rarity merge into the next, with an animation. At least 30% of parcels go
+  to your farthest open area. Each area's dogs and geese are quicker and trickier, and a mount shakes off the easier
+  areas' animals more often as it levels. The world is narrow: the road down the middle, houses both sides, no
+  alleys; hedges on the suburbs' road, a broken boardwalk in the marsh, boulders on Cliffside's steps.
 - **Delivered parcels to open; jumping over dogs (owner).** Each delivery's parcel waits on the left with a sparkle in
   its rarity's color; tap one to open it (tapping during the build-up speeds it up) or Open all. Dogs no longer bite
   a courier jumping over them.

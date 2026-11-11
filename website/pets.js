@@ -4,7 +4,7 @@
 // deliveries, rolls, damage, coins, mounts; this page shows the town (pets-world.js, shared with the server), moves you
 // and asks. Phone first: a thumb joystick, drag to look, pinch to zoom, big buttons.
 import * as THREE from "./vendor/three.module.min.js";
-import * as World from "./pets-world.js?v=1794436488";
+import * as World from "./pets-world.js?v=1794439332";
 
 const $ = (id) => document.getElementById(id);
 const { TAU, clamp, hyp, MOUNTS, TIERS, RARITY, RARITY_C, MODS, EGGS, UPGRADES } = World;
@@ -79,7 +79,7 @@ function buildTown() {
     box(0.14, 1.0, 0.14, "#f4f1ea", 0, 0.5, 0, mb); const bx = box(0.5, 0.42, 0.75, "#3a8ee6", 0, 1.2, 0, mb); box(0.06, 0.34, 0.06, "#e5534b", 0.3, 1.45, 0.2, mb, false);
     houseMesh.push({ g, mb, bx, shake: 0 });
   }
-  for (const f of World.fences) { const len = hyp(f.x1 - f.x0, f.z1 - f.z0), m = box(0.14, 1.0, len, "#fbf7ee", (f.x0 + f.x1) / 2, f.y + 0.5, (f.z0 + f.z1) / 2); m.rotation.y = Math.atan2(f.x1 - f.x0, f.z1 - f.z0); }
+  for (const f of World.fences) { const len = hyp(f.x1 - f.x0, f.z1 - f.z0), m = f.hedge ? box(0.8, 0.9, len, "#4f8f46", (f.x0 + f.x1) / 2, f.y + 0.45, (f.z0 + f.z1) / 2) : box(0.14, 1.0, len, "#fbf7ee", (f.x0 + f.x1) / 2, f.y + 0.5, (f.z0 + f.z1) / 2); m.rotation.y = Math.atan2(f.x1 - f.x0, f.z1 - f.z0); }
   // trees (two instanced shapes)
   { const trunk = new THREE.InstancedMesh(new THREE.CylinderGeometry(0.28, 0.36, 2.2, 7), mat("#8a5a34"), World.trees.length), leaf = new THREE.InstancedMesh(new THREE.ConeGeometry(1.9, 4.6, 8), mat("#3fa650"), World.trees.length), d = new THREE.Object3D();
     World.trees.forEach((t, n) => { d.position.set(t.x, t.y + 1.1 * t.s, t.z); d.scale.setScalar(t.s); d.updateMatrix(); trunk.setMatrixAt(n, d.matrix); d.position.y = t.y + 4.2 * t.s; d.updateMatrix(); leaf.setMatrixAt(n, d.matrix); });
@@ -672,70 +672,86 @@ function flyCoins(x, y, z, n) {   // coins fly from the mailbox to the counter o
     c.animate([{ transform: "translate(-50%,-50%) scale(1)", offset: 0 }, { transform: `translate(${(Math.random() - 0.5) * 160}px, ${-60 - Math.random() * 80}px) scale(1.2)`, offset: 0.35 }, { transform: `translate(${to.left + 18 - from.x}px, ${to.top + 16 - from.y}px) scale(0.6)`, offset: 1 }], { duration: 650 + k * 60, easing: "ease-in", delay: k * 45 }).onfinish = () => { c.remove(); sfx("coin"); $("coins").classList.remove("bump"); void $("coins").offsetWidth; $("coins").classList.add("bump"); }; }
 }
 
-// ---- delivered parcels (owner, 2026-11-11): each delivery leaves its parcel on the left of the screen with a small
-// sparkle beside it in the rarity's color (more sparkle the rarer), and the rarity pops up over the mailbox. A parcel
-// waits until you open it: tap it and it builds up (shakes, its sparkle growing) then shows the prize; tap while it
-// builds up to make it go faster. Open all opens every one at once. What came out stays until the next opening or you
-// close it. ----
-const gifts = []; let opening = null;
-function addGift(h, res, lvUp, mount) {
-  gifts.push({ h, res, lvUp, mount }); heldCoins += res.coins; giftsUi();
-  const c = RARITY_C[res.tier]; popup(RARITY[res.tier] + "!", c, h.mx, h.my + 3.2, h.mz, res.tier >= 2); sfx(res.tier >= 3 ? "shiny" : "pop"); if (res.tier >= 3) emit(h.mx, h.my + 2.6, h.mz, 10 + res.tier * 8, { colors: [c, "#ffffff"], speed: 4, up: 5, life: 1, size: 0.16 });
-}
+// ---- delivered parcels (owner, 2026-11-11): each delivery leaves its parcel (a gift, kept on the server) on the left
+// of the screen with a small sparkle beside it in the rarity's color (more sparkle the rarer), and the rarity pops up
+// over the mailbox. Four of one rarity merge into one of the next, with a little animation. A parcel waits until you
+// open it: tap it and it builds up (shakes, its sparkle growing) then shows the prize; tapping while it builds up makes
+// it go faster. Open all opens every one at once. What came out stays until the next opening or you close it. ----
+let opening = null, merging = false;
 const sparkC = (tier) => (tier ? RARITY_C[tier] : "#ffffff");
+const waiting = () => save.gifts.filter((g) => !opening || !opening.gids.includes(g.gid));
 function parcelTile(g, big) {   // a parcel (its tier's label on the cardboard) and its rarity sparkle
-  const t = el(big ? "i" : "button", big ? "gtile big" : "gtile"); t.style.setProperty("--tc", TIERS[g.h.d].c); t.style.setProperty("--rc", sparkC(g.res.tier));
-  t.appendChild(el("i", "gpar")); const sp = el("i", "spark r" + g.res.tier); t.appendChild(sp); return t;
+  const t = el(big ? "i" : "button", big ? "gtile big" : "gtile"); t.style.setProperty("--tc", TIERS[g.pt].c); t.style.setProperty("--rc", sparkC(g.r));
+  t.appendChild(el("i", "gpar")); t.appendChild(el("i", "spark r" + g.r)); t.dataset.gid = g.gid; return t;
 }
-function giftsUi() {
-  const q = $("gq"); q.innerHTML = "";
-  gifts.slice(0, 10).forEach((g, n) => { const b = parcelTile(g); b.title = RARITY[g.res.tier]; b.onclick = () => openGift(n); b.addEventListener("pointerdown", (e) => e.stopPropagation()); q.appendChild(b); });
-  if (gifts.length > 10) q.appendChild(el("b", "disp", "+" + (gifts.length - 10)));
-  $("gall").style.display = gifts.length > 1 ? "block" : "none";
-  $("gifts").style.display = gifts.length || opening || $("gres").style.display === "flex" ? "flex" : "none";
+function giftsUi(fresh) {
+  if (merging) return; const q = $("gq"), list = waiting(); q.innerHTML = "";
+  list.slice(0, 12).forEach((g) => { const b = parcelTile(g); b.title = RARITY[g.r]; if (fresh && fresh.includes(g.gid)) b.classList.add("fresh"); b.onclick = () => openGift(g.gid); b.addEventListener("pointerdown", (e) => e.stopPropagation()); q.appendChild(b); });
+  if (list.length > 12) q.appendChild(el("b", "disp", "+" + (list.length - 12)));
+  $("gall").style.display = list.length > 1 ? "block" : "none";
+  $("gifts").style.display = list.length || opening || $("gres").style.display === "flex" ? "flex" : "none";
 }
-function openGift(n) {   // one parcel: it shakes, its sparkle growing, then shows the prize
-  if (opening && !opening.done) { opening.done = true; landGifts([opening.g]); } const g = gifts.splice(n, 1)[0]; if (!g) return;
-  const o = $("gopen"); opening = { g, t: 0, done: false, shook: 0, speed: 1 }; o.style.display = "flex"; o.style.setProperty("--rc", sparkC(g.res.tier));
-  const slot = $("gbig"); slot.innerHTML = ""; slot.appendChild(parcelTile(g, true)); $("glabel").textContent = RARITY[g.res.tier]; $("glabel").style.color = sparkC(g.res.tier); $("gres").style.display = "none"; giftsUi();
+// a delivery: its rarity over the mailbox, the parcel on the left; merges (four into one) play out before it settles
+function delivered(h, gift, near, merges) {
+  const c = RARITY_C[gift.r]; popup(RARITY[gift.r] + "!", c, h.mx, h.my + 3.2, h.mz, gift.r >= 2); sfx(near ? "near" : gift.r >= 3 ? "shiny" : "pop");
+  if (gift.r >= 3) emit(h.mx, h.my + 2.6, h.mz, 10 + gift.r * 8, { colors: [c, "#ffffff"], speed: 4, up: 5, life: 1, size: 0.16 });
+  if (!merges || !merges.length) { giftsUi([gift.gid]); return; }
+  merging = true; playMerges(merges.slice());
 }
+function playMerges(ms) {   // the four slide together, flash, and the next rarity pops out
+  const mg = ms.shift(); if (!mg) { merging = false; giftsUi(); return; }
+  const later = new Set(ms.flatMap((k) => [k.to.gid])), shown = save.gifts.filter((g) => g.gid !== mg.to.gid && !later.has(g.gid)).concat(mg.from.map((gid) => ({ gid, r: mg.to.r - 1, pt: mg.to.pt })));
+  const q = $("gq"); q.innerHTML = ""; for (const g of shown) q.appendChild(parcelTile(g)); $("gifts").style.display = "flex";
+  const tiles = mg.from.map((gid) => q.querySelector(`[data-gid="${gid}"]`)).filter(Boolean); if (!tiles.length) { merging = false; giftsUi([mg.to.gid]); return; }
+  const r0 = tiles[0].getBoundingClientRect();
+  tiles.forEach((t, k) => { const r = t.getBoundingClientRect(); t.animate([{ transform: "none" }, { transform: `translate(${r0.left - r.left}px, ${r0.top - r.top}px) scale(.6)`, opacity: k ? 0.2 : 1 }], { duration: 450, delay: 120, easing: "ease-in", fill: "forwards" }); });
+  setTimeout(() => sfx("wobble"), 150);
+  setTimeout(() => { sfx("level"); merging = false; giftsUi([mg.to.gid]); const t = q.querySelector(`[data-gid="${mg.to.gid}"]`); if (t) t.classList.add("merged"); if (ms.length) { merging = true; setTimeout(() => playMerges(ms), 450); } }, 620);
+}
+function openGift(gid) {   // one parcel: it shakes, its sparkle growing, then shows the prize (the server says what's inside)
+  if (opening || merging) return; const g = save.gifts.find((k) => k.gid === gid); if (!g) return;
+  const o = $("gopen"); opening = { gids: [gid], g, t: 0, shook: 0, speed: 1, res: null }; netSend({ t: "open", gids: [gid] }); o.style.display = "flex"; o.style.setProperty("--rc", sparkC(g.r));
+  const slot = $("gbig"); slot.innerHTML = ""; slot.appendChild(parcelTile(g, true)); $("glabel").textContent = RARITY[g.r]; $("glabel").style.color = sparkC(g.r); $("gres").style.display = "none"; giftsUi();
+}
+function openAll() { if (opening || merging) return; const gids = save.gifts.map((g) => g.gid); if (!gids.length) return; opening = { gids, all: true, t: 0, res: null }; netSend({ t: "open", gids }); giftsUi(); }
 function resultRows(list, R) {   // what came out of a gift (or several): coins, XP, Level Coupons, eggs, a mount
   const row = (icon, text) => { const d = el("div", "grow"); d.appendChild(icon); d.appendChild(el("b", "disp", text)); d.style.animationDelay = list.children.length * 120 + "ms"; list.appendChild(d); };
   row(el("i", "coin"), "+" + fmt(R.coins)); if (R.xp) row(el("i", "ixp", "XP"), "+" + R.xp); if (R.coupons) row(el("i", "icoupon"), "+" + R.coupons);
   for (const e of R.eggs) { const i = el("i", "egg"); i.style.background = EGGS[e].c; row(i, EGGS[e].name); }
   for (const m of R.mounts) { const i = el("img", "gmount"); i.src = portrait(m.sp, m.va); row(i, mountName(m)); }
 }
-function landGifts(list) {   // one or more gifts open: their totals show under the gift column
-  const best = Math.max(...list.map((g) => g.res.tier)), c = RARITY_C[best], tot = { coins: 0, xp: 0, coupons: 0, eggs: [], mounts: [] };
-  for (const g of list) { tot.coins += g.res.coins; tot.xp += g.res.xp; tot.coupons += g.res.coupons; if (g.res.egg) tot.eggs.push(g.res.egg); if (g.mount) tot.mounts.push(g.mount); heldCoins -= g.res.coins; }
-  heldCoins = Math.max(0, heldCoins); $("gopen").style.display = "none"; opening = null;
+function landGifts(list, lvUp) {   // what the server says came out: totals under the parcels
+  const best = Math.max(...list.map((g) => g.r)), c = RARITY_C[best], tot = { coins: 0, xp: 0, coupons: 0, eggs: [], mounts: [] };
+  for (const g of list) { tot.coins += g.coins; tot.xp += g.xp; tot.coupons += g.coupons; if (g.egg) tot.eggs.push(g.egg); if (g.mount) tot.mounts.push(g.mount); }
+  $("gopen").style.display = "none"; opening = null;
   sfx("win", best); emit(me.x, me.y + 2.4, me.z, 8 + best * 10, { colors: [c, "#ffffff"], speed: 3 + best, up: 5, life: 1, size: 0.16 }); if (best >= 3) { flash(c); cam.shake = Math.max(cam.shake, 0.15 * best); }
   flyCoins(me.x, me.y + 2, me.z, 2 + best * 2); setTimeout(() => sfx("coin"), 200); if (tot.eggs.length) setTimeout(() => sfx("egg"), 350);
   const res = $("gres"), lst = $("glist"); res.style.display = "flex"; res.style.setProperty("--gc", c); lst.innerHTML = "";
-  const head = $("gtitle"); head.innerHTML = ""; if (list.length > 1) for (const g of list) { const d = el("i", "gchip"); d.style.background = RARITY_C[g.res.tier]; d.title = RARITY[g.res.tier]; head.appendChild(d); }
+  const head = $("gtitle"); head.innerHTML = ""; if (list.length > 1) for (const g of list) { const d = el("i", "gchip"); d.style.background = RARITY_C[g.r]; d.title = RARITY[g.r]; head.appendChild(d); }
   else { const t = el("b", "disp", RARITY[best]); t.style.color = c === "#ffffff" ? "#6f7d8a" : c; head.appendChild(t); }
   resultRows(lst, tot);
   if (tot.eggs.length) { $("mstable").classList.remove("bump"); void $("mstable").offsetWidth; $("mstable").classList.add("bump"); }
-  if (list.some((g) => g.lvUp)) setTimeout(levelFx, 500);
+  if (lvUp) setTimeout(levelFx, 500);
   const m = list.find((g) => g.mount); if (m) setTimeout(() => { selMount = m.mount.id; hatchShow("gift", m.mount); }, 900);
   hudDirty = true; giftsUi(); if (panel === "stable" || panel === "odds") renderPanel();
 }
-function hurryGift() { if (opening && !opening.done) { opening.speed = Math.min(8, opening.speed * 2.5); sfx("tick"); } }   // a tap while it builds up: faster
-function openAll() { const list = (opening && !opening.done ? [opening.g] : []).concat(gifts.splice(0)); if (!list.length) return; landGifts(list); }
+function hurryGift() { if (opening && !opening.all) { opening.speed = Math.min(8, opening.speed * 2.5); sfx("tick"); } }   // a tap while it builds up: faster
 $("gopen").onclick = hurryGift; $("gall").onclick = openAll; $("gx").onclick = () => { $("gres").style.display = "none"; giftsUi(); };
 for (const id of ["gopen", "gall", "gx"]) $(id).addEventListener("pointerdown", (e) => e.stopPropagation());
 function levelFx() { sfx("level"); popup("LEVEL UP!", "#ffd84a", me.x, me.y + 3.2, me.z, true); for (let k = 0; k < 28; k++) { const a = (k / 28) * TAU; parts.length < PN && parts.push({ x: me.x, y: me.y + 0.3, z: me.z, vx: Math.cos(a) * 6, vy: 2.5, vz: Math.sin(a) * 6, t: 0, life: 0.8, size: 0.2, grav: 3, c: k % 2 ? "#ffd84a" : "#ffffff", r: k }); } }
-function stepGifts(dt) {   // the build-up: three shakes, each bigger, the sparkle growing, then the prize
-  const o = opening; if (!o || o.done) return; o.t += dt * o.speed; const T = 2.2, b = $("gbig").firstChild;
-  const n = Math.floor((o.t / T) * 3.4); if (n > o.shook && n <= 3) { o.shook = n; sfx("wobble"); if (b) { b.classList.remove("shake1", "shake2", "shake3"); void b.offsetWidth; b.classList.add("shake" + n); } }
-  $("gopen").style.setProperty("--glow", (6 + (o.t / T) * 36).toFixed(0) + "px"); $("gopen").style.setProperty("--grow", (1 + (o.t / T) * 1.6).toFixed(2));
-  if (o.t >= T) { o.done = true; landGifts([o.g]); }
+function stepGifts(dt) {   // the build-up: three shakes, each bigger, the sparkle growing, then the prize (once the server's said)
+  const o = opening; if (!o) return; o.t += dt * (o.speed || 1);
+  if (o.all) { if (o.res) landGifts(o.res.list, o.res.lvUp); return; }
+  const T = 2.2, b = $("gbig").firstChild, u = Math.min(1, o.t / T);
+  const n = Math.floor(u * 3.4); if (n > o.shook && n <= 3) { o.shook = n; sfx("wobble"); if (b) { b.classList.remove("shake1", "shake2", "shake3"); void b.offsetWidth; b.classList.add("shake" + n); } }
+  $("gopen").style.setProperty("--glow", (6 + u * 36).toFixed(0) + "px"); $("gopen").style.setProperty("--grow", (1 + u * 1.6).toFixed(2));
+  if (o.t >= T && o.res) landGifts(o.res.list, o.res.lvUp);
 }
-let hudDirty = true, shownCoins = 0, heldCoins = 0, cardKey = "", myName = "", myRole = "player", myId = null, loggedIn = false;
+let hudDirty = true, shownCoins = 0, cardKey = "", myName = "", myRole = "player", myId = null, loggedIn = false;
 const cdBtn = (id, left, total) => { const b = $(id), k = total > 0 ? clamp(left / total, 0, 1) : 0; b.style.setProperty("--cd", (k * 360).toFixed(0) + "deg"); b.classList.toggle("cool", k > 0); };
 function hud(dt) {
   // coins count up to what the server says
-  const coinsNow = Math.max(0, save.coins - heldCoins);   // a gift's coins wait for it to open
+  const coinsNow = save.coins;
   if (shownCoins !== coinsNow) { const d = coinsNow - shownCoins; shownCoins = Math.abs(d) < 1 ? coinsNow : shownCoins + d * Math.min(1, dt * 8); $("coinn").textContent = fmt(Math.round(shownCoins)); }
   const t = now(), q = riding(), ab = MOUNTS[q.sp].ab, tier = World.abilityTier(q.lv);
   cdBtn("bkick", me.kickAt + World.KICK.cd - t, World.KICK.cd);
@@ -929,7 +945,7 @@ function onNet(m) {
       if (stale(m.web, false, m.by)) return;
       setTok(m.token); const again = loggedIn && myName === m.name; myName = m.name; myId = m.id; myRole = m.role || "player"; netOk = true; loggedIn = true; clockOff = m.now - Date.now();
       $("login").style.display = "none"; $("hud").style.display = "block"; if (document.activeElement && document.activeElement.blur) document.activeElement.blur();
-      save = World.cleanData(m.data); shownCoins = save.coins; $("coinn").textContent = fmt(save.coins); remount(); setVolumes();
+      save = World.cleanData(m.data); shownCoins = save.coins; $("coinn").textContent = fmt(save.coins); remount(); setVolumes(); giftsUi();
       if (!again) { me.x = m.x; me.z = m.z; me.y = 0; me.yaw = Math.PI / 2; cam.yaw = -Math.PI / 2; msgs.innerHTML = ""; }
       me.foot = false; me.stun = 0; me.transit = null; me.hidden = false;
       for (const p of m.players) addOther(p); setNpc(m); for (const g of gooseMesh) { g.x = g.tx; g.z = g.tz; g.y = g.ty; } for (const d of dogMesh) { d.x = d.tx; d.z = d.tz; d.y = d.ty; } for (const g of goatMesh) { g.x = g.tx; g.z = g.tz; } hudDirty = true; sendPos(true);
@@ -968,7 +984,11 @@ function onNet(m) {
     case "delivered": {
       const h = World.houses[m.house]; sfx("deliver"); emit(h.mx, h.my + 1.6, h.mz, 60, { colors: CONFETTI, speed: 6, up: 8, life: 1.3 }); me.squash = 0.2;
       popup("+" + fmt(m.coins), "#ffd84a", h.mx, h.my + 2.4, h.mz); flyCoins(h.mx, h.my + 1.6, h.mz, 5); houseMesh[m.house].shake = 0.01; houseMesh[m.house].pop = 0.3;
-      save = World.cleanData(m.data); if (m.lvUp) remount(); addGift(h, m.roll, m.lvUp, m.gift || null); break;
+      save = World.cleanData(m.data); if (m.lvUp) { remount(); setTimeout(levelFx, 300); } delivered(h, m.gift, m.near, m.merges); break;
+    }
+    case "opened": {   // what came out of the parcels I opened
+      save = World.cleanData(m.data); if (m.lvUp) remount();
+      if (opening) opening.res = { list: m.list, lvUp: m.lvUp }; else landGifts(m.list, m.lvUp); break;
     }
     case "stun": me.stun = m.s; if (me.transit && me.transit.k !== "pipe") me.transit = null; knockedOff(); sfx("stun"); cam.shake = Math.max(cam.shake, 0.5); flash(m.why === "kick" ? "#ffffff" : "#e5534b"); if (m.why === "dog") sfx("growl"); break;
     case "knock": me.px = m.x; me.pz = m.z; me.vy = m.y; me.ground = false; sfx("kick"); cam.shake = Math.max(cam.shake, 0.5); break;
@@ -1005,6 +1025,7 @@ function onFx(m) {
     case "bite": { const d = dogMesh[m.dog]; if (d && hyp(d.x - me.x, d.z - me.z) < 45) sfx("growl"); break; }
     case "steal": if (o && nearMe) sfx("steal"); break;
     case "skysteal": if (o && nearMe) sfx("steal"); break;
+    case "shake": if (o) { if (mineFx) { popup("SHAKEN OFF!", "#7ee08a", me.x, me.y + 2.8, me.z); sfx("swish"); } emit(o.x, o.y + 1, o.z, 12, { colors: ["#ffffff", "#7ee08a"], speed: 4, up: 2, life: 0.5, size: 0.14 }); } break;
     case "butt": if (o && nearMe && !mineFx) sfx("kick"); break;
     case "pipe": if (o) { o.hideT = m.s; if (nearMe) sfx("pipe"); } break;
   }
