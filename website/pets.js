@@ -816,7 +816,8 @@ let mine = null, myBubble = null;
 let mountKey = "", sentPet = "";
 const petKey = () => riding().sp + "|" + riding().lv;
 function petSync() { const k = petKey(); if (k !== mountKey) mount(); if (netOk && k !== sentPet) { sentPet = k; netSend({ t: "pet", sp: riding().sp, lv: riding().lv }); } }
-function mount() { mountKey = petKey(); if (mine) scene.remove(mine.g); mine = petModel(riding().sp, save.shirt); sizePet(mine, petScale(riding().lv)); scene.add(mine.g); blobUnder(mine.g, 2.2 * (mine.k || 1)); if (myBubble) { mine.g.add(myBubble.s); myBubble.s.position.y = mine.top + 2.4; } }
+// (owner, 2026-11-10) players and pets are drawn in full color (the in-color layer), not gray
+function mount() { mountKey = petKey(); if (mine) scene.remove(mine.g); mine = petModel(riding().sp, save.shirt); sizePet(mine, petScale(riding().lv)); scene.add(inColor(mine.g)); blobUnder(mine.g, 2.2 * (mine.k || 1)); if (myBubble) { mine.g.add(myBubble.s); myBubble.s.position.y = mine.top + 2.4; } }
 mount();
 // the guide (owner, 2026-11-08): a long glowing arrow lying flat around my pet, turned toward where to go; it tilts up
 // only halfway toward a place above or below (fully when the place is well above me), so it never stands on end; a
@@ -839,7 +840,7 @@ function drawGuide(tx, ty, tz, on) {
   else pinEl.style.display = "none";
 }
 // the courier on foot (inside houses): legs that walk, arms that swing against them
-function walkerModel(shirt) { const w = courierModel(shirt); brighten(w.g); scene.add(w.g); w.g.visible = false; blobUnder(w.g, 1.6); return w; }
+function walkerModel(shirt) { const w = courierModel(shirt); brighten(w.g); scene.add(inColor(w.g)); w.g.visible = false; blobUnder(w.g, 1.6); return w; }
 const walker = walkerModel(save.shirt);
 // (owner, 2026-11-09) fliers and gliders point nose-up while climbing and nose-down while diving or gliding down, by
 // how they're really moving (height gained against ground covered); level on the ground. The body turns about its
@@ -1612,7 +1613,7 @@ function nameTag(name, stars) {
 function addOther(p) {
   if (p.id === myId) return; const old = others.get(p.id); dropOther(p.id);
   const sp = SPECIES[p.sp] ? p.sp : "pup", m = petModel(sp, p.shirt || "#3a8ee6"), lv = clamp(p.lv | 0, 1, MAXLV), sc = petScale(lv); sizePet(m, sc); const stars = p.stars || 0, tag = nameTag(String(p.name || "Courier").slice(0, 18), stars);
-  tag.position.y = m.top + 1.2; m.g.add(tag); const y = Number.isFinite(p.y) ? p.y : terrain(p.x, p.z); m.g.position.set(p.x, y, p.z); scene.add(m.g); blobUnder(m.g, 2.2 * (m.k || 1));
+  tag.position.y = m.top + 1.2; m.g.add(tag); const y = Number.isFinite(p.y) ? p.y : terrain(p.x, p.z); m.g.position.set(p.x, y, p.z); scene.add(inColor(m.g)); blobUnder(m.g, 2.2 * (m.k || 1));
   others.set(p.id, { name: p.name, sp, lv, shirt: p.shirt, stars, inst: p.inst || 0, buf: old ? old.buf : [], x: p.x, y, z: p.z, yaw: p.yaw || 0, moving: false, m, tag, bub: null });
 }
 function dropOther(id) { const o = others.get(id); if (!o) return; scene.remove(o.m.g); if (o.walker) scene.remove(o.walker.g); if (o.bub) clearTimeout(o.bub.timer); others.delete(id); }
@@ -2352,7 +2353,7 @@ function buildInside(owner, pieces) {
     if (!PIECES[t.k]) continue; const layer = t.k === "roof" || t.k === "slope" ? t.l + 1 : t.l;
     if (PIECES[t.k].t === "wall") { const M1 = new Merger(), c1 = { walls: [], surfaces: [], ramps: [] }; pieceBoxes(t, o, M1, Gs[layer], c1, Ws[layer]); col.walls.push(...c1.walls); const mat = new THREE.MeshLambertMaterial({ vertexColors: true, transparent: true, opacity: 1 }), mesh = M1.mesh(mat); walls.push({ mesh, mat, rects: c1.walls, layer, a: 1 }); Ms[layer].wallMeshes = (Ms[layer].wallMeshes || []).concat(mesh); continue; }
     pieceBoxes(t, o, Ms[layer], Gs[layer], col, Ws[layer]);
-    if (t.k === "pen" && t.pet) { const pet = (owner === myId ? save.pets : []).find((q) => q.id === t.pet), st = [...plotState.values()].find((s) => s.id === owner), sp = pet ? pet.sp : st && st.penSp && st.penSp[t.pet]; if (sp && SPECIES[sp]) { const m = petModel(sp); m.g.scale.setScalar(0.7); g.add(m.g); const x = o.x + t.x, z = o.z + t.z, y = o.y + t.l * LEVEL_H + 0.25; pens.push({ m, cx: x, cz: z, x, z, y, yaw: 0, tx: x, tz: z, wait: 0 }); } }
+    if (t.k === "pen" && t.pet) { const pet = (owner === myId ? save.pets : []).find((q) => q.id === t.pet), st = [...plotState.values()].find((s) => s.id === owner), sp = pet ? pet.sp : st && st.penSp && st.penSp[t.pet]; if (sp && SPECIES[sp]) { const m = petModel(sp); m.g.scale.setScalar(0.7); g.add(inColor(m.g)); const x = o.x + t.x, z = o.z + t.z, y = o.y + t.l * LEVEL_H + 0.25; pens.push({ m, cx: x, cz: z, x, z, y, yaw: 0, tx: x, tz: z, wait: 0 }); } }
   }
   const layers = [];
   for (let k = 0; k <= LEVELS; k++) {
