@@ -6,6 +6,8 @@ and any rule decided. Use `git log` for the code detail (and for the older Atamu
 
 ## 2026-11-11
 
+- **Gifts you open (owner).** A delivery's gift shows its rarity straight away (its color, and the rarity over the
+  mailbox) and waits on the left until you open it: tap one (it shakes and bursts; tap again to skip), or Open all.
 - **Gifts on the left (owner).** Each delivery's reward is a gift on the left of the screen instead of the big reel
   in the middle: a smaller reel spins and lands, and what came out stays until the next gift or you close it. Tap to
   skip the spin; Open all lands every waiting gift at once.

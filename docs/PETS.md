@@ -19,12 +19,13 @@ Every rule below is in `website/pets-world.js` (shared with the server, an ident
    game's), and the parcel card shows how far.
 3. **Deliver.** Ride into the glowing ring in front of that mailbox (within 3 m; no button). The server checks it. A
    wrong mailbox just shakes.
-4. **Roll.** Coins pay out and a **gift** appears on the left of the screen (owner, 2026-11-11: less in your face, still
-   a lottery). Gifts open by themselves, one after another: a small reel spins through the rarities and slows over
-   1.8 s (a near miss hangs on Legendary), lands, and what came out (coins, XP, Level Coupons, an egg, a mount) stays
-   under it until the next gift opens or you close it. Tap the reel to skip the spin. With more than one waiting, the
-   gifts queue up as little boxes (ribboned in their parcel's tier color) and **Open all** lands them together, showing
-   each one's rarity and the totals. A gift's coins count onto the counter when it opens.
+4. **Gift.** Coins pay out and a **gift** lands on the left of the screen (owner, 2026-11-11), already showing its
+   rarity: the box is in the rarity's color (Common light gray; Epic and Legendary glow) and the rarity pops up over the
+   mailbox. Gifts wait until you open them: tap one to open it (it shakes three times, its glow growing, then bursts;
+   tap it while it shakes to skip the build-up), or **Open all** to open every waiting gift at once, showing each one's
+   rarity and the totals. What came out (coins, XP, Level Coupons, eggs, a mount) stays under the gifts until the next
+   opening or you close it. A gift's coins count onto the counter when it opens. The rewards are the server's the
+   moment you deliver, so a gift left unopened when you leave is still yours.
 
 (owner, 2026-11-11) **A stack of parcels:** a mount carries 1 parcel, one more at levels 5, 10, 15 and 20 (5 at level
 20); ride back into the conveyor to load up. Each has its own address (the same neighborhood as another or a
@@ -241,7 +242,8 @@ upgrades, everything, reset), and edit coins and coupons. Everything is logged (
 
 ## Rejected / removed
 
-- (owner, 2026-11-11) The big reward reel in the middle of the screen and its card (replaced by gifts on the left).
+- (owner, 2026-11-11) The big reward reel in the middle of the screen and its card, then gifts that opened themselves
+  with a rarity reel (replaced by gifts showing their rarity, opened when you choose).
 - (owner, 2026-11-11) One parcel at a time (now 1 to 5 by level); the long neighborhoods (20 and 30 houses) and the
   big marsh, five-terrace mountain and six islands (now three houses long each).
 - (owner, 2026-11-11) The round town (the post office in the middle, Main Street and the suburbs in rings round it,

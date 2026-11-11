@@ -68,8 +68,9 @@ try {
   step = "deliver it and see the roll";
   await page.evaluate(() => { const P = window.Pets, h = P.World.houses[P.parcel.house]; P.teleport(h.mx, h.mz, h.my); });
   await until(page, () => window.Pets.save.stats.del === 1 && !window.Pets.parcel, "the delivery didn't land");
-  await until(page, () => getComputedStyle(document.getElementById("gifts")).display !== "none" && window.Pets.World.RARITY.includes(document.getElementById("greel").textContent), "no gift opening on the left");
-  await page.click("#greel");   // skip the spin
+  await until(page, () => getComputedStyle(document.getElementById("gifts")).display !== "none" && document.querySelectorAll("#gq .gbox").length === 1, "no gift on the left");
+  await page.click("#gq .gbox"); await until(page, () => getComputedStyle(document.getElementById("gopen")).display !== "none", "the gift didn't start opening");
+  await page.click("#gopen");   // skip the build-up
   await until(page, () => getComputedStyle(document.getElementById("gres")).display !== "none" && document.querySelectorAll("#glist .grow").length > 0, "the gift's contents didn't show", null, 8000);
   await page.click("#gx"); await until(page, () => getComputedStyle(document.getElementById("gifts")).display === "none", "the gift didn't close");
   await until(page, () => document.getElementById("coinn").textContent !== "0", "the coin counter didn't move");
