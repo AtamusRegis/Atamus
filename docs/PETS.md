@@ -22,7 +22,9 @@ Asked (owner): a web game on atamus.io (not Roblox), on its own page; the cargo 
   the welcome, and every change to everyone.
 - **It starts as just the square (owner, 2026-11-10):** a round island of ground tiles the size of the old square
   (tiles whose middle is within 64 m of the center), with the square's buildings, which stay where they are.
-- **Standing on blocks:** pets stand on the highest block top at or a little above them (so they go under floating
+- **Standing on blocks:** blocks are solid boxes (owner, 2026-11-10): pets stand on the highest block top at most a
+  step (0.6 m) above them (never lifted onto a higher top), anyone caught inside a block is pushed out sideways the
+  shortest way and falls from there (so they go under floating
   blocks and onto the ones they jump or fly up to), walk up wedges and ramps, step up at most 0.6 m (a block's side is a
   wall), can't step off a block's edge down a drop of more than 1.2 m (owner, 2026-11-10: heights change only on wedges
   and ramps, so nobody walks into a hole they can't leave; fliers fly), and fall off where there are no blocks. The camera never goes inside a block.
