@@ -4,7 +4,7 @@
 // its edge; animal control chases you. Co-op: everyone in a room rides the same town, works on contracts (alone or with a party) and
 // chats. The server (packages/server/src/pets.js) shares players, runs animal control, contracts and chat.
 import * as THREE from "./vendor/three.module.min.js";
-import * as World from "./pets-world.js?v=1793100068";
+import * as World from "./pets-world.js?v=1793100069";
 
 const $ = (id) => document.getElementById(id);
 const TAU = Math.PI * 2, clamp = (v, a, b) => Math.max(a, Math.min(b, v)), hyp = Math.hypot;
@@ -1005,14 +1005,21 @@ function telegraphGeo(rOf, N = 72) {   // a fan from the middle out to rOf(angle
 }
 const losLines = (stars) => telegraphGeo((a) => World.vanSight(Math.cos(a), Math.abs(Math.sin(a)), stars));
 const DISC_G = telegraphGeo(() => 1);
-// (owner, 2026-11-10) the vans and helicopters staff placed, rebuilt with the world
+// (owner, 2026-11-10) the vans and helicopters staff placed, rebuilt with the world: the ones still placed keep their
+// models and carry on where they are; only added ones are made and taken-away ones removed
 function buildVehicles() {
-  for (const m of vehs) { scene.remove(m.g); if (m.beam) scene.remove(m.beam); if (m.spot) scene.remove(m.spot, m.spot.target); if (m.disc) scene.remove(m.disc); }
-  for (let i = blobs.length - 1; i >= 0; i--) if (vehs.some((m) => m.g === blobs[i].g)) { scene.remove(blobs[i].b); blobs.splice(i, 1); }
-  vehs.length = 0; localVs = World.makeVehicles();
+  localVs = World.makeVehicles(localVs);
+  const old = new Map(vehs.map((m) => [m.id, m])), keepIds = new Set(localVs.map((v) => v.id));
+  for (const m of vehs) if (!keepIds.has(m.id)) {
+    scene.remove(m.g); if (m.beam) scene.remove(m.beam); if (m.spot) scene.remove(m.spot, m.spot.target); if (m.disc) scene.remove(m.disc);
+    for (let i = blobs.length - 1; i >= 0; i--) if (blobs[i].g === m.g) { scene.remove(blobs[i].b); blobs.splice(i, 1); }
+    old.delete(m.id);
+  }
+  vehs.length = 0;
   for (const v of localVs) {
+    const was = old.get(v.id); if (was && was.kind === v.kind) { vehs.push(was); continue; }
     const m = v.kind ? heliModel() : vanModel(v.style); scene.add(m.g); blobUnder(m.g, v.kind ? 7 : 5);
-    Object.assign(m, { kind: v.kind, buf: [], x: v.x, y: v.y, z: v.z, yaw: v.yaw, mode: 0, target: 0, pitch: 0 });
+    Object.assign(m, { id: v.id, kind: v.kind, buf: [], x: v.x, y: v.y, z: v.z, yaw: v.yaw, mode: 0, target: 0, pitch: 0 });
     if (!m.kind) { m.los = new THREE.Mesh(losLines(0), telM); m.los.position.y = -0.1; m.los.renderOrder = 2; m.losStars = 0; m.g.add(inColor(m.los)); }
     else { m.disc = new THREE.Mesh(DISC_G, telM); m.disc.renderOrder = 2; scene.add(inColor(m.disc)); }
     vehs.push(m);

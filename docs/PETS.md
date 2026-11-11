@@ -200,7 +200,9 @@ Asked (owner): a web game on atamus.io (not Roblox), on its own page; the cargo 
 - Animal control cars (red, owner 2026-11-09) with light bars patrol the roads and helicopters circle over town, as
   many as admins place (owner, 2026-11-10). A van roams every road tile joined to the one it was placed on (tiles
   sharing an edge at the same height, up and down ramps), picking a way at each tile and turning round only at a dead
-  end, so a road built onto its network becomes part of its beat at once. A helicopter keeps within its radius. Online the server runs them for the whole room; offline the page does.
+  end, so a road built onto its network becomes part of its beat at once. A helicopter keeps within its radius.
+  Building or taking a vehicle away leaves every other vehicle where it is (owner, 2026-11-10); a van whose road is
+  removed from under it starts again from where it was placed. Online the server runs them for the whole room; offline the page does.
 - They only go after players carrying parcels (owner, 2026-11-08); a chase ends if the bag empties (no star).
 - **Animal control cars** come in three silhouettes (compact, van and SUV) and matching speed tiers: slow, standard and
   fast (0.85× / 1× / 1.15× their patrol and chase speeds). They spot parcel carriers farther ahead (21 m) and to
