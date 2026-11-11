@@ -647,7 +647,7 @@ canvas.addEventListener("contextmenu", (e) => e.preventDefault());
 addEventListener("keydown", (e) => {
   if (e.target && (e.target.tagName === "INPUT" || e.target.tagName === "SELECT")) return;
   if (e.code === "Enter") { openChat(); e.preventDefault(); return; }
-  if (e.code === "Escape") { closePanel(); closeRoll(); return; }
+  if (e.code === "Escape") { closePanel(); return; }
   if (e.repeat) return; keys.add(e.code);
   if (e.code === "Space") { jumpHeld = true; jumpTap = true; e.preventDefault(); }
   if (e.code === "KeyF") doKick(); if (e.code === "KeyQ") doWhistle(); if (e.code === "KeyE" || e.code === "ShiftLeft") useAbility();
@@ -672,42 +672,60 @@ function flyCoins(x, y, z, n) {   // coins fly from the mailbox to the counter o
     c.animate([{ transform: "translate(-50%,-50%) scale(1)", offset: 0 }, { transform: `translate(${(Math.random() - 0.5) * 160}px, ${-60 - Math.random() * 80}px) scale(1.2)`, offset: 0.35 }, { transform: `translate(${to.left + 18 - from.x}px, ${to.top + 16 - from.y}px) scale(0.6)`, offset: 1 }], { duration: 650 + k * 60, easing: "ease-in", delay: k * 45 }).onfinish = () => { c.remove(); sfx("coin"); $("coins").classList.remove("bump"); void $("coins").offsetWidth; $("coins").classList.add("bump"); }; }
 }
 
-// ---- the reward roll: a slot over the mailbox spins for a second and a half, then lands ----
-// (owner, 2026-11-11) the reward roll is on the screen, big: the reel spins and slows for 2.6 s, lands, then a card shows
-// what you got and stays until you close it (or grab your next parcel)
-let roll = null, gift = null;
-const rollQueue = [];   // more than one delivery at once: their rolls take turns
-function startRoll(h, res, lvUp) { if (roll) { rollQueue.push([h, res, lvUp]); heldCoins += res.coins; return; } heldCoins = res.coins; roll = { h, res, lvUp, t: 0, last: -1, n: 0, next: 0 }; $("roll").style.display = "flex"; $("reel").style.display = "block"; $("reel").className = "disp"; $("rcard").style.display = "none"; }
-function closeRoll() { if (roll && !roll.done) return; roll = null; $("roll").style.display = "none"; if (rollQueue.length) { const [h, res, lvUp] = rollQueue.shift(); heldCoins -= res.coins; startRoll(h, res, lvUp); return; } if (gift) { const g = gift; gift = null; selMount = g.id; hatchShow("gift", g); } }   // then a new mount, if one came
-$("rok").onclick = closeRoll;
-function stepRoll(dt) {
-  if (!roll) return; roll.t += dt; const r = $("reel"), R = roll.res, c = RARITY_C[R.tier], h = roll.h;
-  if (roll.t < 2.6) {
-    const tease = R.near && roll.t > 1.9;   // a near miss hangs on Legendary before it lets go
-    if (tease) { if (roll.last !== 4) { sfx("near"); roll.last = 4; r.textContent = RARITY[4]; r.style.color = r.style.borderColor = RARITY_C[4]; r.className = "disp tease"; } }
-    else if (roll.t >= roll.next) { roll.next = roll.t + 0.05 + roll.t * roll.t * 0.045; roll.n = (roll.n + 1) % 5; roll.last = roll.n; sfx("tick"); r.textContent = RARITY[roll.n]; r.style.color = r.style.borderColor = RARITY_C[roll.n]; r.className = "disp"; void r.offsetWidth; r.className = "disp flip"; }
-  } else if (!roll.done) {
-    roll.done = true; heldCoins = rollQueue.reduce((a, q) => a + q[1].coins, 0); r.textContent = RARITY[R.tier]; r.style.color = r.style.borderColor = c; r.className = "disp land"; sfx("win", R.tier); flash(c); cam.shake = Math.max(cam.shake, 0.2 + 0.15 * R.tier);
-    emit(h.mx, h.my + 2.6, h.mz, 14 + R.tier * 16, { colors: [c, "#ffffff"], speed: 4 + R.tier * 1.5, up: 5, life: 1 + R.tier * 0.2, size: 0.18 }); emit(me.x, me.y + 2.5, me.z, 10 + R.tier * 14, { colors: [c, "#ffffff"], speed: 5 + R.tier, up: 6, life: 1.2, size: 0.18 });
-    hudDirty = true; if (panel === "stable" || panel === "odds") renderPanel();
-  } else if (!roll.shown && roll.t > 3.5) {
-    roll.shown = true; r.style.display = "none"; const card = $("rcard"), list = $("rlist"); card.style.display = "flex"; card.style.setProperty("--rc", c); $("rtitle").textContent = RARITY[R.tier]; $("rtitle").style.background = c; $("rtitle").style.color = R.tier ? "#ffffff" : "#23303b"; list.innerHTML = "";
-    const row = (icon, text, delay, snd) => { const d = el("div", "rrow"); d.appendChild(icon); d.appendChild(el("b", "disp", text)); d.style.animationDelay = delay + "ms"; list.appendChild(d); setTimeout(() => { if (roll && roll.res === R) sfx(snd); }, delay); };
-    let dl = 150; row(el("i", "coin"), "+" + fmt(R.coins), dl, "coin"); flyCoins(me.x, me.y + 2, me.z, 3 + R.tier * 2);
-    if (R.xp) row(el("i", "ixp", "XP"), "+" + R.xp, (dl += 350), "tick");
-    if (R.coupons) row(el("i", "icoupon"), "+" + R.coupons + " Level Coupon" + (R.coupons > 1 ? "s" : ""), (dl += 350), "buy");
-    if (R.egg) { const e = el("i", "egg"); e.style.background = EGGS[R.egg].c; row(e, EGGS[R.egg].name, (dl += 450), "egg"); $("mstable").classList.remove("bump"); void $("mstable").offsetWidth; $("mstable").classList.add("bump"); }
-    if (roll.lvUp) setTimeout(levelFx, dl + 500);
-  }
+// ---- gifts (owner, 2026-11-11): every delivery leaves a gift on the left of the screen. Gifts open on their own, one
+// after another: a small reel spins through the rarities and lands, and what you got stays under it until the next one
+// opens or you close it. Tap the reel to skip the spin; with more than one waiting, Open all lands them all at once. ----
+const gifts = []; let opening = null;
+function addGift(h, res, lvUp, mount) { gifts.push({ h, res, lvUp, mount }); heldCoins += res.coins; giftsUi(); if (!opening) openNext(); else sfx("pop"); }
+function giftsUi() {
+  const q = $("gq"); q.innerHTML = ""; for (let k = 0; k < Math.min(gifts.length, 6); k++) { const b = el("i", "gbox"); b.style.setProperty("--gc", TIERS[gifts[k].h.d].c); q.appendChild(b); }   // its ribbon in the parcel's tier color
+  if (gifts.length > 6) q.appendChild(el("b", "disp", "+" + (gifts.length - 6)));
+  $("gall").style.display = gifts.length + (opening && !opening.done ? 1 : 0) > 1 ? "block" : "none";
+  $("gifts").style.display = gifts.length || opening || $("gres").style.display === "flex" ? "flex" : "none";
 }
+function openNext() {
+  const g = gifts.shift(); if (!g) { opening = null; giftsUi(); return; }
+  opening = { g, t: 0, n: Math.floor(Math.random() * 5), next: 0, done: false }; $("greel").style.display = "block"; $("greel").className = "disp"; $("gres").style.display = "none"; giftsUi();
+}
+function resultRows(list, R) {   // what came out of a gift (or several): coins, XP, Level Coupons, eggs, a mount
+  const row = (icon, text) => { const d = el("div", "grow"); d.appendChild(icon); d.appendChild(el("b", "disp", text)); d.style.animationDelay = list.children.length * 120 + "ms"; list.appendChild(d); };
+  row(el("i", "coin"), "+" + fmt(R.coins)); if (R.xp) row(el("i", "ixp", "XP"), "+" + R.xp); if (R.coupons) row(el("i", "icoupon"), "+" + R.coupons);
+  for (const e of R.eggs) { const i = el("i", "egg"); i.style.background = EGGS[e].c; row(i, EGGS[e].name); }
+  for (const m of R.mounts) { const i = el("img", "gmount"); i.src = portrait(m.sp, m.va); row(i, mountName(m)); }
+}
+function landGifts(list) {   // one or more gifts land: the reel shows the best, and their totals go under it
+  const best = Math.max(...list.map((g) => g.res.tier)), c = RARITY_C[best], r = $("greel"), tot = { coins: 0, xp: 0, coupons: 0, eggs: [], mounts: [] };
+  for (const g of list) { tot.coins += g.res.coins; tot.xp += g.res.xp; tot.coupons += g.res.coupons; if (g.res.egg) tot.eggs.push(g.res.egg); if (g.mount) tot.mounts.push(g.mount); heldCoins -= g.res.coins; }
+  heldCoins = Math.max(0, heldCoins); r.textContent = list.length > 1 ? list.length + " gifts" : RARITY[best]; r.style.color = r.style.borderColor = c; r.className = "disp land";
+  sfx("win", best); emit(me.x, me.y + 2.4, me.z, 8 + best * 10, { colors: [c, "#ffffff"], speed: 3 + best, up: 5, life: 1, size: 0.16 }); if (best >= 3) { flash(c); cam.shake = Math.max(cam.shake, 0.15 * best); }
+  flyCoins(me.x, me.y + 2, me.z, 2 + best * 2); setTimeout(() => sfx("coin"), 200); if (tot.eggs.length) setTimeout(() => sfx("egg"), 350);
+  const res = $("gres"), lst = $("glist"); res.style.display = "flex"; res.style.setProperty("--gc", c); lst.innerHTML = "";
+  const head = $("gtitle"); head.innerHTML = ""; if (list.length > 1) for (const g of list) { const d = el("i", "gchip"); d.style.background = RARITY_C[g.res.tier]; d.title = RARITY[g.res.tier]; head.appendChild(d); }
+  resultRows(lst, tot);
+  if (tot.eggs.length) { $("mstable").classList.remove("bump"); void $("mstable").offsetWidth; $("mstable").classList.add("bump"); }
+  if (list.some((g) => g.lvUp)) setTimeout(levelFx, 500);
+  const m = list.find((g) => g.mount); if (m) setTimeout(() => { selMount = m.mount.id; hatchShow("gift", m.mount); }, 900);
+  hudDirty = true; if (panel === "stable" || panel === "odds") renderPanel();
+}
+function skipGift() { if (opening && !opening.done) { opening.done = true; landGifts([opening.g]); opening.wait = 1.6; giftsUi(); } }
+function openAll() { const list = (opening && !opening.done ? [opening.g] : []).concat(gifts.splice(0)); if (!list.length) return; opening = { done: true, wait: 2.5, g: list[0] }; $("greel").style.display = "block"; landGifts(list); giftsUi(); }
+$("greel").onclick = skipGift; $("gall").onclick = openAll; $("gx").onclick = () => { $("gres").style.display = "none"; if (opening && opening.done && !gifts.length) { opening = null; $("greel").style.display = "none"; } giftsUi(); };
+for (const id of ["greel", "gall", "gx"]) $(id).addEventListener("pointerdown", (e) => e.stopPropagation());
 function levelFx() { sfx("level"); popup("LEVEL UP!", "#ffd84a", me.x, me.y + 3.2, me.z, true); for (let k = 0; k < 28; k++) { const a = (k / 28) * TAU; parts.length < PN && parts.push({ x: me.x, y: me.y + 0.3, z: me.z, vx: Math.cos(a) * 6, vy: 2.5, vz: Math.sin(a) * 6, t: 0, life: 0.8, size: 0.2, grav: 3, c: k % 2 ? "#ffd84a" : "#ffffff", r: k }); } }
-
-// ---- the HUD ----
+function stepGifts(dt) {
+  if (!opening) return; const o = opening, r = $("greel");
+  if (!o.done) {
+    o.t += dt; const R = o.g.res, tease = R.near && o.t > 1.3;   // a near miss hangs on Legendary before it lets go
+    if (o.t >= 1.8) { o.done = true; o.wait = 2.2; landGifts([o.g]); giftsUi(); return; }
+    if (tease) { if (r.textContent !== RARITY[4]) { sfx("near"); r.textContent = RARITY[4]; r.style.color = r.style.borderColor = RARITY_C[4]; r.className = "disp tease"; } }
+    else if (o.t >= o.next) { o.next = o.t + 0.045 + o.t * o.t * 0.06; o.n = (o.n + 1) % 5; sfx("tick"); r.textContent = RARITY[o.n]; r.style.color = r.style.borderColor = RARITY_C[o.n]; r.className = "disp"; void r.offsetWidth; r.className = "disp flip"; }
+  } else { o.wait -= dt; if (gifts.length && o.wait <= 0) openNext(); }   // the next gift opens once this one's had a moment
+}
 let hudDirty = true, shownCoins = 0, heldCoins = 0, cardKey = "", myName = "", myRole = "player", myId = null, loggedIn = false;
 const cdBtn = (id, left, total) => { const b = $(id), k = total > 0 ? clamp(left / total, 0, 1) : 0; b.style.setProperty("--cd", (k * 360).toFixed(0) + "deg"); b.classList.toggle("cool", k > 0); };
 function hud(dt) {
   // coins count up to what the server says
-  const coinsNow = save.coins - heldCoins;   // the roll's coins wait for the roll to land
+  const coinsNow = Math.max(0, save.coins - heldCoins);   // a gift's coins wait for it to open
   if (shownCoins !== coinsNow) { const d = coinsNow - shownCoins; shownCoins = Math.abs(d) < 1 ? coinsNow : shownCoins + d * Math.min(1, dt * 8); $("coinn").textContent = fmt(Math.round(shownCoins)); }
   const t = now(), q = riding(), ab = MOUNTS[q.sp].ab, tier = World.abilityTier(q.lv);
   cdBtn("bkick", me.kickAt + World.KICK.cd - t, World.KICK.cd);
@@ -930,7 +948,7 @@ function onNet(m) {
     case "bag": {   // my parcels changed; ev says how
       const ev = m.ev || {}, before = bag.length; bag = m.bag || []; stolen = m.stolen || []; dropped = m.dropped || []; cap = m.cap || 1; setCarry(mine, bagCarry()); setTargets(); syncDropped(); hudDirty = true; cardKey = "";
       const q = bag.find((k) => k.pid === ev.pid);
-      if (ev.k === "grab") { if (roll && roll.shown) closeRoll(); sfx("grab"); me.squash = 0.25; if (q && q.mod === "golden") { sfx("shiny"); banner("GOLDEN PARCEL!", "#ffd84a"); } if (bag.length > 1) popup(bag.length + " / " + cap, "#ffffff", me.x, me.y + 3, me.z); }
+      if (ev.k === "grab") { sfx("grab"); me.squash = 0.25; if (q && q.mod === "golden") { sfx("shiny"); banner("GOLDEN PARCEL!", "#ffd84a"); } if (bag.length > 1) popup(bag.length + " / " + cap, "#ffffff", me.x, me.y + 3, me.z); }
       else if (ev.k === "pickup") { sfx("grab"); me.squash = 0.25; if (ev.bonus) { popup("+" + ev.bonus, "#ffd84a", me.x, me.y + 2.6, me.z); save.coins = ev.coins; flyCoins(me.x, me.y + 2, me.z, 3); } }
       else if (ev.k === "crack") { sfx("crack"); cam.shake = Math.max(cam.shake, 0.35); flash("#e5534b"); popup("-20%", "#ff6b6b", me.x, me.y + 2.8, me.z); emit(me.x, me.y + 1.4, me.z, 12, { colors: ["#c89a5e", "#8a5a34"], speed: 4, up: 3, life: 0.6, size: 0.14 }); }
       else if (ev.k === "lost") { sfx("smash"); cam.shake = Math.max(cam.shake, 0.5); flash("#e5534b"); banner(ev.why === "broke" ? "PARCEL BROKE!" : "PARCEL LOST!", "#ff6b6b"); emit(me.x, me.y + 1.4, me.z, 26, { colors: ["#c89a5e", "#8a5a34", "#fff8e6"], speed: 6, up: 5, life: 0.9 }); }
@@ -940,7 +958,7 @@ function onNet(m) {
     case "delivered": {
       const h = World.houses[m.house]; sfx("deliver"); emit(h.mx, h.my + 1.6, h.mz, 60, { colors: CONFETTI, speed: 6, up: 8, life: 1.3 }); me.squash = 0.2;
       popup("+" + fmt(m.coins), "#ffd84a", h.mx, h.my + 2.4, h.mz); flyCoins(h.mx, h.my + 1.6, h.mz, 5); houseMesh[m.house].shake = 0.01; houseMesh[m.house].pop = 0.3;
-      save = World.cleanData(m.data); if (m.lvUp) remount(); startRoll(h, m.roll, m.lvUp); if (m.gift) gift = m.gift; break;
+      save = World.cleanData(m.data); if (m.lvUp) remount(); addGift(h, m.roll, m.lvUp, m.gift || null); break;
     }
     case "stun": me.stun = m.s; if (me.transit && me.transit.k !== "pipe") me.transit = null; knockedOff(); sfx("stun"); cam.shake = Math.max(cam.shake, 0.5); flash(m.why === "kick" ? "#ffffff" : "#e5534b"); if (m.why === "dog") sfx("growl"); break;
     case "knock": me.px = m.x; me.pz = m.z; me.vy = m.y; me.ground = false; sfx("kick"); cam.shake = Math.max(cam.shake, 0.5); break;
@@ -1081,7 +1099,7 @@ function frame(tms) {
   }
   stepOthers(dt, t); stepNpcs(dt, t); stepParts(dt); stepMarks(dt); blobStep(); stepCamera(dt);
   renderer.render(scene, camera);
-  if (loggedIn) { hud(dt); stepRoll(dt); } stepPops(dt);
+  if (loggedIn) { hud(dt); stepGifts(dt); } stepPops(dt);
 }
 buildTown(); buildAnimals(); beltShow(); stepCamera(0.016);
 // for the tests and the console

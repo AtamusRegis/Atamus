@@ -68,9 +68,10 @@ try {
   step = "deliver it and see the roll";
   await page.evaluate(() => { const P = window.Pets, h = P.World.houses[P.parcel.house]; P.teleport(h.mx, h.mz, h.my); });
   await until(page, () => window.Pets.save.stats.del === 1 && !window.Pets.parcel, "the delivery didn't land");
-  await until(page, () => getComputedStyle(document.getElementById("roll")).display !== "none" && window.Pets.World.RARITY.includes(document.getElementById("reel").textContent), "no reward roll shown");
-  await until(page, () => getComputedStyle(document.getElementById("rcard")).display !== "none" && document.querySelectorAll("#rlist .rrow").length > 0, "the roll's reveal card didn't show", null, 20000);
-  await page.waitForTimeout(600); await page.click("#rok"); await until(page, () => getComputedStyle(document.getElementById("roll")).display === "none", "the reveal card didn't close");
+  await until(page, () => getComputedStyle(document.getElementById("gifts")).display !== "none" && window.Pets.World.RARITY.includes(document.getElementById("greel").textContent), "no gift opening on the left");
+  await page.click("#greel");   // skip the spin
+  await until(page, () => getComputedStyle(document.getElementById("gres")).display !== "none" && document.querySelectorAll("#glist .grow").length > 0, "the gift's contents didn't show", null, 8000);
+  await page.click("#gx"); await until(page, () => getComputedStyle(document.getElementById("gifts")).display === "none", "the gift didn't close");
   await until(page, () => document.getElementById("coinn").textContent !== "0", "the coin counter didn't move");
   step = "open the menus";
   for (const [id, title] of [["mstable", "Stable"], ["mup", "Upgrades"], ["modds", "Odds"], ["mset", "Settings"]]) {
