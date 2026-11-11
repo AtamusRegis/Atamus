@@ -1460,7 +1460,8 @@ function fillBag() {
   const isl = air ? houses.map((h, i) => i).filter((i) => houses[i].sky && houses[i].d <= far && (kind === "fly" || houses[i].base < 20)) : [];
   if (town.length < cap + 6) town = houses.map((h, i) => i).filter((i) => !houses[i].sky).sort((a, b) => houses[a].d - houses[b].d).slice(0, cap + 6);
   for (let tries = 0; me.bag.length < cap && tries < 500; tries++) { const i = isl.length && (!town.length || Math.random() < 0.3) ? pick(isl) : pick(town); if (i !== undefined && !taken.has(i)) { taken.add(i); me.bag.push(i); } }
-  toast("+" + (cap - before)); syncBeams(); hudKey = "";
+  const got = me.bag.length - before; if (!got) return;   // (owner, 2026-11-10) every address already in the bag: nothing new, no "+"
+  toast("+" + got); syncBeams(); hudKey = "";
   emitSparks(me.x, me.y + 2, me.z, 20, 4, ["#ffd35a", "#ffffff"], 0.7, -1, 0.8);
 }
 function reach(air) {

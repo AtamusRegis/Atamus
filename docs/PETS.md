@@ -226,7 +226,7 @@ Asked (owner): a web game on atamus.io (not Roblox), on its own page; the cargo 
   your best flier or glider goes over 9 (riding one), from the post office; a new courier's stay close (at least the
   nearest few houses always count). Riding a flier or glider, islands in that reach get parcels too (an island house:
   one standing more than 30 m up).
-- Riding into the pickup ring fills your bag with parcels (as many as your pet's bag holds), each for a house in reach;
+- Riding into the pickup ring fills your bag with parcels (as many as your pet's bag holds, never two for one address: with fewer addresses than that, only the ones not already in your bag, and nothing shown when none are left), each for a house in reach;
   on a flapping flier about 3 in 10 are for island houses in reach (any island), on a glider the low ones only. Switching to a pet that can't fly hands island parcels back.
 - **The guide (owner, 2026-11-08):** a long glowing arrow lying flat around your pet points toward the nearest house
   you have a parcel for (or the post office when the bag's empty); it tilts up only halfway toward a place above or
