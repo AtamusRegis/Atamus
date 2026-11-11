@@ -80,7 +80,7 @@ try {
   const setSkyPhase = (phase) => page.evaluate((p) => { window.Pets.skyOffset = p * window.Pets.World.DAY_S - (Date.now() / 1000) % window.Pets.World.DAY_S; }, phase);
   const waitForLights = async (day) => {
     for (let i = 0; i < 50; i++) {
-      const ready = await page.evaluate((wantDay) => wantDay === (window.Pets.daylight >= 0.5) && window.Pets.vehs.every((v) => v.kind ? v.beam.visible !== wantDay && (v.spot.intensity > 0) !== wantDay : v.lit.visible !== wantDay), day);
+      const ready = await page.evaluate((wantDay) => wantDay === (window.Pets.daylight >= 0.5) && window.Pets.vehs.every((v) => v.kind ? v.beam.visible && (v.beam.material.uniforms.o.value > 0.15) !== wantDay && (v.spot.intensity > 0) !== wantDay : v.lit.visible !== wantDay), day);
       if (ready) return;
       await page.waitForTimeout(100);
     }
