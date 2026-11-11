@@ -6,6 +6,7 @@ and any rule decided. Use `git log` for the code detail (and for the older Atamu
 
 ## 2026-11-10
 
+- **No falling into holes (owner).** The climb-out is gone (it let pets get up walls without a ramp); instead walking pets can't step off a block's edge down a drop, so heights change only on wedges and ramps.
 - **Climb out of holes (owner).** Walking pets push into a block's side up to one block high and climb up onto it, so they can't get stuck in a hole.
 - **Players and pets in color; dirt a step darker (owner).** Couriers and their pets are drawn in full color in the gray world; the dirt sides come down a step from the lighter brown.
 - **Lighter dirt (owner).** Block sides are a lighter, sandier brown.
