@@ -37,7 +37,7 @@ const vans = vs.filter((v) => v.kind === 0);
 ok(new Set(vans.map((v) => v.style)).size === 3 && new Set(vans.map((v) => v.speed)).size === 3, "animal control has three vehicle styles and speeds");
 const spottedAt = (angle, distance, bag = 1) => {
   const v = W.makeVehicles()[0], a = v.yaw + angle, x = v.x + Math.sin(a) * distance, z = v.z + Math.cos(a) * distance;
-  const p = { id: 2, x, y: W.terrain(x, z), z, bag, stars: 0, lastChased: 0, lastStar: 0, immuneUntil: 0 };
+  const p = { id: 2, x, y: v.y, z, bag, stars: 0, lastChased: 0, lastStar: 0, immuneUntil: 0 };   // on the van's level (it may face off the island's edge)
   W.stepVehicles([v], [p], 0, 100); return v.mode === 1;
 };
 ok(spottedAt(0, 20) && spottedAt(Math.PI / 2, 17), "vans see farther ahead and to the sides");
