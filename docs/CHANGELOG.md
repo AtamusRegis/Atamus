@@ -6,6 +6,11 @@ and any rule decided. Use `git log` for the code detail (and for the older Atamu
 
 ## 2026-11-11
 
+- **Short neighborhoods, a stack of parcels, faster empty (owner).** Every district is three houses long, three each
+  side of the road (30 houses in all; three Cliffside steps, three islands). A mount carries 1 parcel, one more at
+  levels 5, 10, 15 and 20; each goes to its own address with its own marker and card row, and the higher the mount's
+  level the more of them are pricier tiers going farther out. Hits land on one parcel at random; geese take one.
+  Empty-handed you ride 1.5x faster. Fixed: getting stuck going up a ramp on a slow frame.
 - **The town in one line; a new mount on your second delivery (owner).** The post office is at the west end and one
   road runs east through Main Street and Maple Suburbs, over the bridge into Goose Marsh, up Cliffside and out to the
   Floating Islands. The farther out, the more dogs and geese and the quicker the dogs (dogs on the islands too, and

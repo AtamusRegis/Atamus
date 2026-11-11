@@ -62,8 +62,8 @@ try {
   step = "grab a parcel off the conveyor";
   for (let i = 0; i < 40 && !(await page.evaluate(() => !!window.Pets.parcel)); i++) { await page.evaluate(() => { const P = window.Pets, q = P.readyAt(), d = Math.hypot(q.x, q.z); P.teleport(q.x * (1 + 1.6 / d), q.z * (1 + 1.6 / d)); }); await page.waitForTimeout(250); }
   await until(page, () => !!window.Pets.parcel, "no parcel grabbed");
-  await until(page, () => getComputedStyle(document.getElementById("card")).display !== "none" && / m$/.test(document.getElementById("cdist").textContent), "the parcel card didn't show");
-  const card = await page.evaluate(() => ({ shown: getComputedStyle(document.getElementById("card")).display, tier: document.getElementById("ctier").textContent, addr: document.getElementById("caddr").textContent, pips: document.querySelectorAll("#cpips i.on").length, timer: getComputedStyle(document.getElementById("ctimer")).display, way: window.Pets.arrow.visible }));
+  await until(page, () => getComputedStyle(document.getElementById("card")).display !== "none" && / m$/.test(document.querySelector("#card .cdist").textContent), "the parcel card didn't show");
+  const card = await page.evaluate(() => ({ shown: getComputedStyle(document.getElementById("card")).display, tier: document.querySelector("#card .ctier").textContent, addr: document.querySelector("#card .caddr").textContent, pips: document.querySelectorAll("#card .cpips i.on").length, timer: document.querySelector("#card .ctimer") ? "block" : "none", way: window.Pets.arrow.visible }));
   if (card.shown === "none" || card.tier !== "Bronze" || !/Main Street/.test(card.addr) || card.pips !== 3 || card.timer === "none" || !card.way) problems.push("the parcel card is wrong: " + JSON.stringify(card));
   step = "deliver it and see the roll";
   await page.evaluate(() => { const P = window.Pets, h = P.World.houses[P.parcel.house]; P.teleport(h.mx, h.mz, h.my); });

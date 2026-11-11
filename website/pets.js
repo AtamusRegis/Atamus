@@ -4,7 +4,7 @@
 // deliveries, rolls, damage, coins, mounts; this page shows the town (pets-world.js, shared with the server), moves you
 // and asks. Phone first: a thumb joystick, drag to look, pinch to zoom, big buttons.
 import * as THREE from "./vendor/three.module.min.js";
-import * as World from "./pets-world.js?v=1794435581";
+import * as World from "./pets-world.js?v=1794436488";
 
 const $ = (id) => document.getElementById(id);
 const { TAU, clamp, hyp, MOUNTS, TIERS, RARITY, RARITY_C, MODS, EGGS, UPGRADES } = World;
@@ -48,8 +48,8 @@ const POI = "#ff1f8f";
 const KIND_C = { grass: "#78b765", mud: "#75583e", rock: "#9a948b", plank: "#b9905f", isle: "#80bd6c", road: "#84878f", stone: "#a9adb5", roof: "#b9573f" };
 const HOUSE_C = [["#efe3cc", "#c8604c"], ["#ecd5b8", "#5c86bd"], ["#cfdcc0", "#7a5a3c"], ["#dcd3c6", "#8368b0"], ["#f1f1ec", "#3fa9a4"]];   // walls and roofs, by district
 const houseMesh = [], dogMesh = [], gooseMesh = [], goatMesh = [], sprinklerMesh = [], pipeEyes = [];
-function rampGeo(s) {   // a wedge: flat at the bottom, rising along z
-  const y0 = Math.min(s.ya, s.yb), g = new THREE.BufferGeometry(), A = [s.x0, y0, s.z0], B = [s.x1, y0, s.z0], C = [s.x1, y0, s.z1], D = [s.x0, y0, s.z1], E = [s.x0, s.ya, s.z0], F = [s.x1, s.ya, s.z0], G = [s.x1, s.yb, s.z1], H = [s.x0, s.yb, s.z1];
+function rampGeo(s) {   // a wedge: flat at the bottom, rising along z (k 2) or x (k 3)
+  const y0 = Math.min(s.ya, s.yb), g = new THREE.BufferGeometry(), A = [s.x0, y0, s.z0], B = [s.x1, y0, s.z0], C = [s.x1, y0, s.z1], D = [s.x0, y0, s.z1], X = s.k === 3, E = [s.x0, s.ya, s.z0], F = [s.x1, X ? s.yb : s.ya, s.z0], G = [s.x1, s.yb, s.z1], H = [s.x0, X ? s.ya : s.yb, s.z1];
   const quads = [[E, H, G, F], [A, E, F, B], [D, C, G, H], [A, D, H, E], [B, F, G, C]], v = [];
   for (const [a, b, c, d] of quads) v.push(...a, ...b, ...c, ...a, ...c, ...d);
   g.setAttribute("position", new THREE.Float32BufferAttribute(v, 3)); g.computeVertexNormals(); return g;
@@ -58,7 +58,7 @@ function buildTown() {
   for (const s of World.slabs) {
     const c = KIND_C[s.kind] || "#cccccc";
     if (s.k === 0) { const h = Math.min(s.y - s.b, 46), m = box(s.x1 - s.x0, h, s.z1 - s.z0, c, (s.x0 + s.x1) / 2, s.y - h / 2, (s.z0 + s.z1) / 2); m.castShadow = s.kind === "roof" || s.kind === "stone"; }
-    else if (s.k === 2) { const m = new THREE.Mesh(rampGeo(s), new THREE.MeshLambertMaterial({ color: c, side: THREE.DoubleSide })); m.receiveShadow = true; scene.add(m); }
+    else if (s.k === 2 || s.k === 3) { const m = new THREE.Mesh(rampGeo(s), new THREE.MeshLambertMaterial({ color: c, side: THREE.DoubleSide })); m.receiveShadow = true; scene.add(m); }
     else {   // an island: grass on top, rock tapering away beneath
       const top = new THREE.Mesh(new THREE.CylinderGeometry(s.r, s.r, 0.8, 40), mat(c)); top.position.set(s.x, s.y - 0.4, s.z); top.receiveShadow = true; scene.add(top);
       const rock = new THREE.Mesh(new THREE.CylinderGeometry(s.r * 0.98, s.r * 0.25, 13, 20), mat("#9a8f84")); rock.position.set(s.x, s.y - 7.3, s.z); scene.add(rock);
@@ -480,7 +480,7 @@ let save = World.cleanData({});
 const riding = () => save.mounts.find((m) => m.id === save.ride) || save.mounts[0];
 const myStats = () => { const m = riding(); return World.mountStats(m.sp, m.lv); };
 const me = { x: World.SPAWN.x, y: 0, z: World.SPAWN.z, yaw: Math.PI / 2, vx: 0, vz: 0, vy: 0, px: 0, pz: 0, ground: true, moving: false, foot: false, footT: 0, stun: 0, grace: 0, jumps: 0, boost: 0, dash: 0, abilityAt: -99, kickAt: -99, kickT: 0, transit: null, armed: true, mx: 0, my: 0, mz: 0, myaw: 0, hidden: false, glide: false, stepT: 0 };
-let mine = null, walker = null, myTag = null, myParcel = null, parcel = null, stolenBy = -1, dropped = null, belt = { ready: null, next: null };
+let mine = null, walker = null, myTag = null, bag = [], stolen = [], dropped = [], cap = 1, belt = { ready: null, next: null };   // my parcels: on the saddle, with geese, on the ground
 function makeTag(name, rank, lv) { return textSprite(String(name || "Courier").slice(0, 18), { size: 34, badge: rank ? World.RANK_C[rank] : "", glow: lv >= World.MAX_LV ? "#ffd84a" : "" }); }
 function rigMount(sp, lv, va, shirt, name, rank) {   // a mount with its rider, name tag and (hidden) walking courier
   const m = petModel(MOUNTS[sp] ? sp : "pup", shirt, va); sizePet(m, World.mountScale(lv)); const tag = makeTag(name, rank, lv); tag.position.y = (m.top + 0.9) / m.g.scale.x; tag.scale.multiplyScalar(1 / m.g.scale.x); m.g.add(tag);
@@ -489,15 +489,16 @@ function rigMount(sp, lv, va, shirt, name, rank) {   // a mount with its rider, 
   return { m, tag, w, slot, sc: m.g.scale.x, va, lv };
 }
 function unrig(r) { if (!r) return; scene.remove(r.m.g, r.w.g); }
-function setCarry(r, c) { r.slot.clear(); if (c) r.slot.add(parcelMesh(c[0], c[1])); }
-function remount() { unrig(mine); const q = riding(); mine = rigMount(q.sp, q.lv, q.va, save.set.shirt, myName, World.rankOf(World.upTotal(save.up))); setCarry(mine, parcel ? [parcel.tier, parcel.mod] : null); }
+function setCarry(r, c) { r.slot.clear(); let y = 0; for (const [tier, mod] of c || []) { const b = parcelMesh(tier, mod); b.position.y = y; b.rotation.y = (y * 1.7) % 0.6 - 0.3; y += b.userData.s; r.slot.add(b); } }   // the parcels stacked up on the saddle
+const bagCarry = () => bag.map((q) => [q.tier, q.mod]);
+function remount() { unrig(mine); const q = riding(); mine = rigMount(q.sp, q.lv, q.va, save.set.shirt, myName, World.rankOf(World.upTotal(save.up))); setCarry(mine, bagCarry()); }
 
 // ---- moving ----
 const keys = new Set(), joy = { id: null, x: 0, y: 0, ox: 0, oy: 0 }, cam = { yaw: -Math.PI / 2, pitch: 0.42, dist: 12, shake: 0 };
 let jumpHeld = false, jumpTap = false, hitStop = 0;
 const GRAV = 24, now = () => performance.now() / 1000;
 let clockOff = 0; const srvNow = () => (Date.now() + clockOff) / 1000;
-const heavy = () => parcel && parcel.mod === "heavy";
+const heavy = () => bag.some((q) => q.mod === "heavy");
 function tryJump() {
   if (me.stun > 0 || me.transit) return; const st = myStats(), q = riding(), ab = MOUNTS[q.sp].ab, tier = World.abilityTier(q.lv);
   if (me.ground) { me.vy = me.foot ? 7.5 : st.jump; me.ground = false; me.jumps = 0; sfx("jump"); emit(me.x, me.y + 0.1, me.z, 5, { colors: ["#e9e2d2"], speed: 2, up: 1, life: 0.4, grav: 2 }); }
@@ -542,7 +543,8 @@ function stepMe(dt) {
   if (me.stun > 0) mx = mz = 0;
   const kind = me.ground ? World.groundKind(me.x, me.z, me.y) : "", mud = kind === "mud" && !World.inPond(me.x, me.z, me.y) ? World.MUD_SLOW : kind === "mud" ? 0.6 : 1;
   if (me.boost > 0) me.boost -= dt; if (me.dash > 0) me.dash -= dt;
-  let speed = me.foot ? 5.5 : st.speed * (heavy() ? World.HEAVY_SLOW : 1) * mud * (me.dash > 0 ? 2.4 : me.boost > 0 ? 1.6 : 1);
+  let speed = me.foot ? 5.5 : st.speed * (heavy() ? World.HEAVY_SLOW : 1) * (bag.length ? 1 : World.EMPTY_FAST) * mud   // (owner, 2026-11-11) a parcel weighs you down: empty-handed you ride back much faster
+    * (me.dash > 0 ? 2.4 : me.boost > 0 ? 1.6 : 1);
   if (me.dash > 0 && hyp(mx, mz) < 0.1) { mx = Math.sin(me.yaw); mz = Math.cos(me.yaw); }
   const acc = (me.ground ? 70 : 26) * dt, tvx = mx * speed, tvz = mz * speed;
   me.vx += clamp(tvx - me.vx, -acc, acc); me.vz += clamp(tvz - me.vz, -acc, acc);
@@ -557,9 +559,14 @@ function stepMe(dt) {
   if (me.x > World.ISLE_X && me.y > World.SKY_Y) { const w = World.windAt(sn); if (w.on) { me.px += w.x * World.WIND.push * dt * 3; me.pz += w.z * World.WIND.push * dt * 3; } }
   const pl = hyp(me.px, me.pz); if (pl > 16) { me.px *= 16 / pl; me.pz *= 16 / pl; } const dec = Math.exp(-3.2 * dt); me.px *= dec; me.pz *= dec;
   // sideways, stopping at walls
-  const dx = (me.vx + me.px) * dt, dz = (me.vz + me.pz) * dt;
-  if (!World.blocked(me.x + dx, me.z, me.y)) me.x += dx; else { me.vx = 0; me.px = 0; }
-  if (!World.blocked(me.x, me.z + dz, me.y)) me.z += dz; else { me.vz = 0; me.pz = 0; }
+  // (in small steps, riding up slopes as it goes, so a slow frame can't jam you against a ramp)
+  const DX = (me.vx + me.px) * dt, DZ = (me.vz + me.pz) * dt, n = Math.max(1, Math.ceil(hyp(DX, DZ) / 0.3));
+  for (let k = 0; k < n; k++) {
+    const dx = DX / n, dz = DZ / n;
+    if (me.vx || me.px) { if (!World.blocked(me.x + dx, me.z, me.y)) me.x += dx; else { me.vx = 0; me.px = 0; } }
+    if (me.vz || me.pz) { if (!World.blocked(me.x, me.z + dz, me.y)) me.z += dz; else { me.vz = 0; me.pz = 0; } }
+    if (me.ground) { const g = World.surfaceAt(me.x, me.z, me.y + 0.1); if (g > me.y && g - me.y < 0.6) me.y = g; }
+  }
   // down (or up a step) onto the ground
   const was = me.ground, y0 = me.y; me.y += me.vy * dt;
   if (World.wallAt(me.x, me.z, me.y) && !World.wallAt(me.x, me.z, y0)) me.y = y0;   // never down into something solid
@@ -590,9 +597,9 @@ const near = (o, r, dy = 1.6) => hyp(me.x - o.x, me.z - o.z) < r && Math.abs(me.
 function nearTrigger() { return World.zips.some((z) => near(z, 2.6) || near({ x: z.tx, z: z.tz, y: z.ty }, 2.6)) || near(World.PIPE.a, World.PIPE.r + 1) || near(World.PIPE.b, World.PIPE.r + 1) || World.pads.some((p) => near(p, 2.4) || near({ x: p.tx, z: p.tz, y: p.ty }, 2.4)) || World.balloons.some((b) => near(b, 4.2)); }
 let askAt = 0, shakeAt = 0;
 function triggers(t) {
-  if (belt.ready && !parcel && stolenBy < 0 && !dropped && hyp(me.x - readyAt().x, me.z - readyAt().z) < 3.3 && Math.abs(me.y) < 2 && t > askAt) { askAt = t + 0.4; netSend({ t: "grab" }); }
+  if (belt.ready && bag.length + stolen.length + dropped.length < cap && hyp(me.x - readyAt().x, me.z - readyAt().z) < 3.3 && Math.abs(me.y) < 2 && t > askAt) { askAt = t + 0.4; netSend({ t: "grab" }); }
   for (const b of World.boosts) if (near(b, 2) && me.boost < 2) { if (me.boost <= 0) { sfx("boost"); cam.shake = Math.max(cam.shake, 0.12); } me.boost = 2.5; }
-  if (parcel && t > shakeAt) for (const h of World.houses) if (h.id !== parcel.house && hyp(me.x - h.mx, me.z - h.mz) < World.DELIVER_R - 0.6 && Math.abs(me.y - h.my) < 2) { shakeAt = t + 1.2; houseMesh[h.id].shake = 0.5; sfx("shake"); break; }   // the wrong mailbox shakes its head
+  if (bag.length && t > shakeAt) for (const h of World.houses) if (!bag.some((q) => q.house === h.id) && hyp(me.x - h.mx, me.z - h.mz) < World.DELIVER_R - 0.6 && Math.abs(me.y - h.my) < 2) { shakeAt = t + 1.2; houseMesh[h.id].shake = 0.5; sfx("shake"); break; }   // the wrong mailbox shakes its head
   if (!me.armed) return;
   for (const z of World.zips) if (near(z, 1.5)) { if (heavy()) { if (t > askAt) { askAt = t + 1; sfx("no"); } } else { const len = hyp(z.tx - z.x, z.ty - z.y, z.tz - z.z); me.transit = { k: "zip", ax: z.x, ay: z.y, az: z.z, bx: z.tx, by: z.ty, bz: z.tz, len, t: 0 }; me.vx = me.vz = me.vy = 0; sfx("zip"); } return; }
   const C = World.CANNON; if (near(C, C.r)) { const I = World.ISLES[C.to]; arc(I.x - 9, I.y, I.z, 3.2, 27, "cannon"); sfx("cannon"); cam.shake = 0.9; banner("SKY CANNON!", "#9aa8ff"); emit(C.x, C.y + 1, C.z, 40, { colors: ["#ffffff", "#c9ced6"], speed: 9, up: 5, life: 0.9, grav: 2, size: 0.4 }); return; }
@@ -669,8 +676,9 @@ function flyCoins(x, y, z, n) {   // coins fly from the mailbox to the counter o
 // (owner, 2026-11-11) the reward roll is on the screen, big: the reel spins and slows for 2.6 s, lands, then a card shows
 // what you got and stays until you close it (or grab your next parcel)
 let roll = null, gift = null;
-function startRoll(h, res, lvUp) { heldCoins = res.coins; roll = { h, res, lvUp, t: 0, last: -1, n: 0, next: 0 }; $("roll").style.display = "flex"; $("reel").style.display = "block"; $("reel").className = "disp"; $("rcard").style.display = "none"; }
-function closeRoll() { if (roll && !roll.done) return; roll = null; $("roll").style.display = "none"; if (gift) { const g = gift; gift = null; selMount = g.id; hatchShow("gift", g); } }   // then a new mount, if one came
+const rollQueue = [];   // more than one delivery at once: their rolls take turns
+function startRoll(h, res, lvUp) { if (roll) { rollQueue.push([h, res, lvUp]); heldCoins += res.coins; return; } heldCoins = res.coins; roll = { h, res, lvUp, t: 0, last: -1, n: 0, next: 0 }; $("roll").style.display = "flex"; $("reel").style.display = "block"; $("reel").className = "disp"; $("rcard").style.display = "none"; }
+function closeRoll() { if (roll && !roll.done) return; roll = null; $("roll").style.display = "none"; if (rollQueue.length) { const [h, res, lvUp] = rollQueue.shift(); heldCoins -= res.coins; startRoll(h, res, lvUp); return; } if (gift) { const g = gift; gift = null; selMount = g.id; hatchShow("gift", g); } }   // then a new mount, if one came
 $("rok").onclick = closeRoll;
 function stepRoll(dt) {
   if (!roll) return; roll.t += dt; const r = $("reel"), R = roll.res, c = RARITY_C[R.tier], h = roll.h;
@@ -679,7 +687,7 @@ function stepRoll(dt) {
     if (tease) { if (roll.last !== 4) { sfx("near"); roll.last = 4; r.textContent = RARITY[4]; r.style.color = r.style.borderColor = RARITY_C[4]; r.className = "disp tease"; } }
     else if (roll.t >= roll.next) { roll.next = roll.t + 0.05 + roll.t * roll.t * 0.045; roll.n = (roll.n + 1) % 5; roll.last = roll.n; sfx("tick"); r.textContent = RARITY[roll.n]; r.style.color = r.style.borderColor = RARITY_C[roll.n]; r.className = "disp"; void r.offsetWidth; r.className = "disp flip"; }
   } else if (!roll.done) {
-    roll.done = true; heldCoins = 0; r.textContent = RARITY[R.tier]; r.style.color = r.style.borderColor = c; r.className = "disp land"; sfx("win", R.tier); flash(c); cam.shake = Math.max(cam.shake, 0.2 + 0.15 * R.tier);
+    roll.done = true; heldCoins = rollQueue.reduce((a, q) => a + q[1].coins, 0); r.textContent = RARITY[R.tier]; r.style.color = r.style.borderColor = c; r.className = "disp land"; sfx("win", R.tier); flash(c); cam.shake = Math.max(cam.shake, 0.2 + 0.15 * R.tier);
     emit(h.mx, h.my + 2.6, h.mz, 14 + R.tier * 16, { colors: [c, "#ffffff"], speed: 4 + R.tier * 1.5, up: 5, life: 1 + R.tier * 0.2, size: 0.18 }); emit(me.x, me.y + 2.5, me.z, 10 + R.tier * 14, { colors: [c, "#ffffff"], speed: 5 + R.tier, up: 6, life: 1.2, size: 0.18 });
     hudDirty = true; if (panel === "stable" || panel === "odds") renderPanel();
   } else if (!roll.shown && roll.t > 3.5) {
@@ -704,19 +712,22 @@ function hud(dt) {
   const t = now(), q = riding(), ab = MOUNTS[q.sp].ab, tier = World.abilityTier(q.lv);
   cdBtn("bkick", me.kickAt + World.KICK.cd - t, World.KICK.cd);
   cdBtn("bability", tier && World.ABILITY_CD[ab][tier] ? me.abilityAt + World.ABILITY_CD[ab][tier] - t : 0, tier ? World.ABILITY_CD[ab][tier] : 0);
-  const P = parcel || stolen;
-  const key = P ? [P.tier, P.mod, P.dur, P.max, P.house, !!parcel, !!dropped].join() : "";
+  // the parcel cards: one row per parcel (a stolen or dropped one faded)
+  const all = [...bag, ...dropped.map((q) => ({ ...q, gone: 1 })), ...stolen.map((q) => ({ ...q, gone: 1 }))], key = all.map((P) => [P.pid, P.dur, P.gone ? 1 : 0].join(":")).join() + "/" + cap;
   if (key !== cardKey) {
-    cardKey = key; const c = $("card"); c.style.display = P ? "flex" : "none";
-    if (P) { const T = TIERS[P.tier]; $("ctier").textContent = T.name; $("ctier").style.background = P.mod === "golden" ? "#ffd23a" : T.c; c.classList.toggle("gone", !parcel);
-      $("cmods").innerHTML = ""; if (P.mod) { const m = el("span", "mod " + P.mod, MODS[P.mod].name); $("cmods").appendChild(m); }
-      $("cpips").innerHTML = ""; for (let k = 0; k < P.max; k++) $("cpips").appendChild(el("i", k < P.dur ? "on" : ""));
-      $("caddr").textContent = World.houses[P.house].name; }
+    cardKey = key; const c = $("card"); c.style.display = all.length ? "flex" : "none"; c.innerHTML = "";
+    for (const P of all) { const T = TIERS[P.tier], r = el("div", "prow" + (P.gone ? " gone" : "")); r.dataset.pid = P.pid; const tc = el("span", "ctier disp", T.name); tc.style.background = P.mod === "golden" ? "#ffd23a" : T.c; r.appendChild(tc);
+      if (P.mod) r.appendChild(el("span", "mod " + P.mod, MODS[P.mod].name)); const pp = el("span", "cpips"); for (let k = 0; k < P.max; k++) pp.appendChild(el("i", k < P.dur ? "on" : "")); r.appendChild(pp);
+      r.appendChild(el("span", "caddr disp", World.houses[P.house].name)); r.appendChild(el("span", "cdist disp")); if (P.mod === "express") r.appendChild(el("span", "ctimer disp")); c.appendChild(r); }
+    if (all.length) { const n = el("div", "pcount disp", all.length + " / " + cap); c.appendChild(n); }
   }
-  if (P && P.mod === "express") { const left = Math.max(0, (P.due - (Date.now() + clockOff)) / 1000); $("ctimer").style.display = "block"; $("ctimer").textContent = left.toFixed(1); $("ctimer").classList.toggle("late", left <= 5); } else $("ctimer").style.display = "none";
-  // the way there: the arrow on the ground round you, and how far on the card
-  const g = stolenBy >= 0 ? gooseMesh[stolenBy] : null, tg = parcel ? (() => { const h = World.houses[parcel.house]; return { x: h.mx, y: h.my, z: h.mz, c: POI }; })() : dropped ? { x: dropped.x, y: dropped.y, z: dropped.z, c: "#ffd84a" } : g ? { x: g.x, y: g.y, z: g.z, c: "#ff3b30" } : null;
-  stepArrow(t, tg); if (tg) $("cdist").textContent = Math.round(hyp(tg.x - me.x, tg.z - me.z, tg.y - me.y)) + " m";
+  for (const r of $("card").children) { const P = all.find((q) => String(q.pid) === r.dataset.pid); if (!P) continue; const h = World.houses[P.house], d = r.querySelector(".cdist"); d.textContent = Math.round(hyp(h.mx - me.x, h.mz - me.z, h.my - me.y)) + " m";
+    const tm = r.querySelector(".ctimer"); if (tm) { const left = Math.max(0, (P.due - (Date.now() + clockOff)) / 1000); tm.textContent = left.toFixed(1); tm.classList.toggle("late", left <= 5); } }
+  // the way there: the arrow on the ground round you points at the nearest address (or a dropped parcel, or a goose with one)
+  let tg = null, best = Infinity; const consider = (x, y, z, c) => { const d = hyp(x - me.x, z - me.z); if (d < best) { best = d; tg = { x, y, z, c }; } };
+  for (const q of bag) { const h = World.houses[q.house]; consider(h.mx, h.my, h.mz, POI); }
+  if (!tg) { for (const q of dropped) consider(q.x, q.y, q.z, "#ffd84a"); for (const q of stolen) { const g = gooseMesh[q.goose]; if (g) consider(g.x, g.y, g.z, "#ff3b30"); } }
+  stepArrow(t, tg);
   if (!hudDirty) return; hudDirty = false;
   $("stampn").textContent = save.stamp; $("stampfill").style.height = clamp(save.stamp, 0, 100) + "%";
   const ba = $("bability"); ba.firstChild.textContent = World.ABILITY[ab]; ba.classList.toggle("locked", !tier); ba.dataset.tier = tier;
@@ -811,7 +822,7 @@ $("bchat").onclick = () => (chatting ? closeChat() : openChat());
 function bubble(rig, text) { if (!rig) return; if (rig.bub) { rig.m.g.remove(rig.bub); clearTimeout(rig.bubT); } const s = textSprite(text.slice(0, 40), { size: 30 }); s.scale.multiplyScalar(1 / rig.sc); s.position.y = (rig.m.top + 2.2) / rig.sc; rig.m.g.add(s); rig.bub = s; rig.bubT = setTimeout(() => { rig.m.g.remove(s); rig.bub = null; }, 5000); }
 
 // ---- other couriers, parties ----
-const others = new Map(); let party = [], invites = [], stolen = null;
+const others = new Map(); let party = [], invites = [];
 function addOther(p) {
   if (p.id === myId) return; const old = others.get(p.id); if (old) unrig(old.rig);
   const rig = rigMount(p.sp, clamp(p.lv | 0, 1, World.MAX_LV), p.va | 0, p.shirt || "#3a8ee6", p.name, p.rank | 0); rig.m.g.position.set(p.x, p.y || 0, p.z); setCarry(rig, p.carry);
@@ -849,7 +860,7 @@ function connect() {
   ws.onmessage = (e) => { let m; try { m = JSON.parse(e.data); } catch (err) { return; } onNet(m); };
   ws.onclose = () => {
     if (ws === sock) ws = null; const was = netOk; netOk = false; myId = null; for (const id of [...others.keys()]) dropOther(id);
-    parcel = null; stolen = null; stolenBy = -1; setDropped(null); belt = { ready: null, next: null }; beltShow(); if (mine) setCarry(mine, null); party = []; renderParty(); hudDirty = true;
+    bag = []; stolen = []; dropped = []; setTargets(); syncDropped(); belt = { ready: null, next: null }; beltShow(); if (mine) setCarry(mine, null); party = []; renderParty(); hudDirty = true;
     $("lgo").disabled = $("lnew").disabled = true; if (was && !document.hidden) toast("Offline");
     if (!kicked) { setTimeout(connect, retry); retry = Math.min(15000, retry * 2); }
   };
@@ -882,8 +893,8 @@ function setNpc(m) {
 }
 const whereOf = (id) => (id === myId ? me : others.get(id));
 function knockedOff() { if (!me.foot) { me.foot = true; me.mx = me.x; me.my = me.y; me.mz = me.z; me.myaw = me.yaw; const a = Math.random() * TAU; me.px += Math.cos(a) * 7; me.pz += Math.sin(a) * 7; me.vy = 5; me.ground = false; } me.dash = 0; me.boost = 0; }
-function setDropped(d) { if (dropMesh) { scene.remove(dropMesh); dropMesh = null; } dropped = d; if (d) { dropMesh = parcelMesh(d.tier, d.mod); dropMesh.position.set(d.x, d.y, d.z); scene.add(dropMesh); } }
-let dropMesh = null;
+const dropMeshes = new Map();   // pid -> a dropped parcel on the ground
+function syncDropped() { for (const [pid, g] of dropMeshes) if (!dropped.some((q) => q.pid === pid)) { scene.remove(g); dropMeshes.delete(pid); } for (const q of dropped) if (!dropMeshes.has(q.pid)) { const g = parcelMesh(q.tier, q.mod); g.position.set(q.x, q.y, q.z); g.userData.q = q; scene.add(g); dropMeshes.set(q.pid, g); } }
 function onNet(m) {
   switch (m.t) {
     case "welcome": {
@@ -916,23 +927,20 @@ function onNet(m) {
     case "look": { const o = others.get(m.id); if (o) addOther(Object.assign({}, o, { friendly: m.friendly, shirt: m.shirt })); break; }
     case "carry": { const o = others.get(m.id); if (o) { o.carry = m.c; setCarry(o.rig, m.c); } break; }
     case "belt": { const pop = !!m.next && JSON.stringify(m.next) !== JSON.stringify(belt.next), slide = belt.next && m.ready && JSON.stringify(m.ready) === JSON.stringify(belt.next); belt = { ready: m.ready, next: m.next }; beltShow(slide, pop); break; }
-    case "parcel": {
-      const had = parcel; parcel = m.p; stolen = null; stolenBy = -1; setCarry(mine, [parcel.tier, parcel.mod]); setTarget();
-      if (m.why === "grab") { closeRoll(); sfx("grab"); me.squash = 0.25; if (parcel.mod === "golden") { sfx("shiny"); banner("GOLDEN PARCEL!", "#ffd84a"); } }
-      else if (m.why === "pickup") { setDropped(null); sfx("grab"); me.squash = 0.25; if (m.bonus) { popup("+" + m.bonus, "#ffd84a", me.x, me.y + 2.6, me.z); save.coins = m.coins; flyCoins(me.x, me.y + 2, me.z, 3); } }
-      else if (had) { sfx("crack"); cam.shake = Math.max(cam.shake, 0.35); flash("#e5534b"); popup("-20%", "#ff6b6b", me.x, me.y + 2.8, me.z); emit(me.x, me.y + 1.4, me.z, 12, { colors: ["#c89a5e", "#8a5a34"], speed: 4, up: 3, life: 0.6, size: 0.14 }); }
-      break;
+    case "bag": {   // my parcels changed; ev says how
+      const ev = m.ev || {}, before = bag.length; bag = m.bag || []; stolen = m.stolen || []; dropped = m.dropped || []; cap = m.cap || 1; setCarry(mine, bagCarry()); setTargets(); syncDropped(); hudDirty = true; cardKey = "";
+      const q = bag.find((k) => k.pid === ev.pid);
+      if (ev.k === "grab") { if (roll && roll.shown) closeRoll(); sfx("grab"); me.squash = 0.25; if (q && q.mod === "golden") { sfx("shiny"); banner("GOLDEN PARCEL!", "#ffd84a"); } if (bag.length > 1) popup(bag.length + " / " + cap, "#ffffff", me.x, me.y + 3, me.z); }
+      else if (ev.k === "pickup") { sfx("grab"); me.squash = 0.25; if (ev.bonus) { popup("+" + ev.bonus, "#ffd84a", me.x, me.y + 2.6, me.z); save.coins = ev.coins; flyCoins(me.x, me.y + 2, me.z, 3); } }
+      else if (ev.k === "crack") { sfx("crack"); cam.shake = Math.max(cam.shake, 0.35); flash("#e5534b"); popup("-20%", "#ff6b6b", me.x, me.y + 2.8, me.z); emit(me.x, me.y + 1.4, me.z, 12, { colors: ["#c89a5e", "#8a5a34"], speed: 4, up: 3, life: 0.6, size: 0.14 }); }
+      else if (ev.k === "lost") { sfx("smash"); cam.shake = Math.max(cam.shake, 0.5); flash("#e5534b"); banner(ev.why === "broke" ? "PARCEL BROKE!" : "PARCEL LOST!", "#ff6b6b"); emit(me.x, me.y + 1.4, me.z, 26, { colors: ["#c89a5e", "#8a5a34", "#fff8e6"], speed: 6, up: 5, life: 0.9 }); }
+      else if (ev.k === "stolen") { sfx("steal"); sfx("honk"); banner("STOLEN!", "#ff6b6b"); cam.shake = Math.max(cam.shake, 0.3); }
+      void before; break;
     }
-    case "lost": {
-      parcel = null; stolen = null; stolenBy = -1; setDropped(null); setCarry(mine, null); setTarget(); sfx("smash"); cam.shake = Math.max(cam.shake, 0.5); flash("#e5534b");
-      banner(m.why === "broke" ? "PARCEL BROKE!" : "PARCEL LOST!", "#ff6b6b"); emit(me.x, me.y + 1.4, me.z, 26, { colors: ["#c89a5e", "#8a5a34", "#fff8e6"], speed: 6, up: 5, life: 0.9 }); break;
-    }
-    case "stolen": stolen = parcel; parcel = null; stolenBy = m.goose; setCarry(mine, null); setTarget(); sfx("steal"); sfx("honk"); banner("STOLEN!", "#ff6b6b"); cam.shake = Math.max(cam.shake, 0.3); break;
-    case "dropped": if (stolen) setDropped({ x: m.x, y: m.y, z: m.z, tier: stolen.tier, mod: stolen.mod }); stolenBy = -1; break;
     case "delivered": {
-      const h = World.houses[m.house]; parcel = null; setCarry(mine, null); setTarget(); sfx("deliver"); emit(h.mx, h.my + 1.6, h.mz, 60, { colors: CONFETTI, speed: 6, up: 8, life: 1.3 }); me.squash = 0.2;
+      const h = World.houses[m.house]; sfx("deliver"); emit(h.mx, h.my + 1.6, h.mz, 60, { colors: CONFETTI, speed: 6, up: 8, life: 1.3 }); me.squash = 0.2;
       popup("+" + fmt(m.coins), "#ffd84a", h.mx, h.my + 2.4, h.mz); flyCoins(h.mx, h.my + 1.6, h.mz, 5); houseMesh[m.house].shake = 0.01; houseMesh[m.house].pop = 0.3;
-      save = World.cleanData(m.data); if (m.lvUp) remount(); startRoll(h, m.roll, m.lvUp); gift = m.gift || null; break;
+      save = World.cleanData(m.data); if (m.lvUp) remount(); startRoll(h, m.roll, m.lvUp); if (m.gift) gift = m.gift; break;
     }
     case "stun": me.stun = m.s; if (me.transit && me.transit.k !== "pipe") me.transit = null; knockedOff(); sfx("stun"); cam.shake = Math.max(cam.shake, 0.5); flash(m.why === "kick" ? "#ffffff" : "#e5534b"); if (m.why === "dog") sfx("growl"); break;
     case "knock": me.px = m.x; me.pz = m.z; me.vy = m.y; me.ground = false; sfx("kick"); cam.shake = Math.max(cam.shake, 0.5); break;
@@ -975,22 +983,25 @@ function onFx(m) {
 }
 
 // ---- the conveyor's two parcels (yours alone), the address you're riding to ----
-let readyMesh = null, nextMesh = null, targetFx = null;
+let readyMesh = null, nextMesh = null; const targetFx = new Map();   // house id -> its marker
 function beltShow(slide, pop) {
   if (readyMesh) scene.remove(readyMesh); if (nextMesh) scene.remove(nextMesh); readyMesh = nextMesh = null;
   if (belt.ready) { readyMesh = parcelMesh(belt.ready.tier, belt.ready.mod); scene.add(readyMesh); beltLag = slide ? BELT_GAP : 0; }
   if (belt.next) { nextMesh = parcelMesh(belt.next.tier, belt.next.mod); nextMesh.position.y = pop ? 4 : 1.16; nextMesh.traverse((o) => { if (o.isMesh) { o.material = o.material.clone(); o.material.transparent = true; o.material.opacity = 0.45; } }); scene.add(nextMesh); if (pop && loggedIn) setTimeout(() => { if (hyp(me.x, me.z) < 40) sfx("pop"); }, 220); }
 }
-function setTarget() {
-  if (targetFx) { scene.remove(targetFx); targetFx = null; } if (!parcel) return; const h = World.houses[parcel.house];
-  targetFx = new THREE.Group(); targetFx.position.set(h.mx, h.my, h.mz);
+function setTargets() {   // a marker over every address I'm carrying a parcel to
+  const want = new Set(bag.map((q) => q.house)); for (const [id, g] of targetFx) if (!want.has(id)) { scene.remove(g); targetFx.delete(id); }
+  for (const id of want) if (!targetFx.has(id)) targetFx.set(id, targetMarker(World.houses[id]));
+}
+function targetMarker(h) {
+  const fx = new THREE.Group(); fx.position.set(h.mx, h.my, h.mz);
   const flat = (geo, c, o, y) => { const m = new THREE.Mesh(geo.rotateX(-Math.PI / 2), new THREE.MeshBasicMaterial({ color: c, transparent: true, opacity: o, depthWrite: false })); m.position.y = y; m.renderOrder = 3; return m; };
   const ring = flat(new THREE.RingGeometry(World.DELIVER_R - 0.55, World.DELIVER_R, 44), POI, 1, 0.16), edge = flat(new THREE.RingGeometry(World.DELIVER_R, World.DELIVER_R + 0.22, 44), "#ffffff", 1, 0.15), fill = flat(new THREE.CircleGeometry(World.DELIVER_R - 0.55, 44), POI, 0.4, 0.13);
   const beam = new THREE.Mesh(new THREE.CylinderGeometry(1.1, 1.5, 90, 14, 1, true), new THREE.MeshBasicMaterial({ color: POI, transparent: true, opacity: 0.5, side: THREE.DoubleSide, depthWrite: false })); beam.position.y = 45;
   const core = new THREE.Mesh(new THREE.CylinderGeometry(0.3, 0.3, 90, 8, 1, true), new THREE.MeshBasicMaterial({ color: "#ffffff", transparent: true, opacity: 0.85, side: THREE.DoubleSide, depthWrite: false })); core.position.y = 45;
   const gem = new THREE.Mesh(new THREE.OctahedronGeometry(0.9), new THREE.MeshBasicMaterial({ color: POI })); gem.position.y = 4.2; gem.scale.y = 1.4;
   const label = textSprite(h.name, { size: 44, color: "#ffffff", bg: POI, glow: "#ffffff" }); label.position.y = 6.6; label.scale.multiplyScalar(2);
-  targetFx.add(fill, ring, edge, beam, core, gem, label); targetFx.userData = { ring, label, gem }; scene.add(targetFx);
+  fx.add(fill, ring, edge, beam, core, gem, label); fx.userData = { ring, label, gem }; scene.add(fx); return fx;
 }
 // the guide arrow: on the ground a little way out from you, pointing at where to go (owner, 2026-11-11: like the old game's)
 const wayArrow = (() => {
@@ -1048,8 +1059,8 @@ function stepNpcs(dt, t) {
   beltLag *= Math.exp(-7 * dt);
   if (readyMesh) { const q = readyAt(); readyMesh.position.set(q.x, 1.16 + Math.abs(Math.sin(t * 3)) * 0.18, q.z); readyMesh.rotation.y = t * 0.8; }
   if (nextMesh) { const q = beltPos(beltS() - BELT_GAP - beltLag); nextMesh.position.set(q.x, Math.max(1.16, nextMesh.position.y - dt * 14), q.z); }
-  if (targetFx) { const u = targetFx.userData; u.ring.scale.setScalar(1 + Math.sin(t * 5) * 0.06); u.gem.position.y = 4.2 + Math.sin(t * 3) * 0.4; u.gem.rotation.y = t * 2; }
-  if (dropMesh) { dropMesh.position.y = dropped.y + 0.3 + Math.abs(Math.sin(t * 4)) * 0.5; dropMesh.rotation.y = t * 2; if (Math.random() < 0.2) emit(dropped.x, dropped.y + 1, dropped.z, 1, { colors: ["#ffd84a"], speed: 1, up: 2, life: 0.6, grav: 0, size: 0.1 }); }
+  for (const fx of targetFx.values()) { const u = fx.userData; u.ring.scale.setScalar(1 + Math.sin(t * 5) * 0.06); u.gem.position.y = 4.2 + Math.sin(t * 3) * 0.4; u.gem.rotation.y = t * 2; }
+  for (const g of dropMeshes.values()) { const dq = g.userData.q; g.position.y = dq.y + 0.3 + Math.abs(Math.sin(t * 4)) * 0.5; g.rotation.y = t * 2; if (Math.random() < 0.2) emit(dq.x, dq.y + 1, dq.z, 1, { colors: ["#ffd84a"], speed: 1, up: 2, life: 0.6, grav: 0, size: 0.1 }); }
   for (const b of World.balloons) b.g.position.y = b.y + Math.sin(t * 1.2 + b.x) * 0.25;
 }
 let windOn = false;
@@ -1074,6 +1085,6 @@ function frame(tms) {
 }
 buildTown(); buildAnimals(); beltShow(); stepCamera(0.016);
 // for the tests and the console
-window.Pets = { World, me, cam, others, get save() { return save; }, get parcel() { return parcel; }, get belt() { return belt; }, get stolen() { return stolen; }, get dropped() { return dropped; }, get loggedIn() { return loggedIn; }, get panel() { return panel; }, dogMesh, gooseMesh, goatMesh, get arrow() { return wayArrow; }, readyAt, onNet, teleport(x, z, y = 0) { me.x = x; me.z = z; me.y = y; me.vx = me.vz = me.vy = 0; me.transit = null; me.ground = false; sendPos(true); }, netSend, openPanel };
+window.Pets = { World, me, cam, others, get save() { return save; }, get parcel() { return bag[0] || null; }, get bag() { return bag; }, get cap() { return cap; }, get belt() { return belt; }, get stolen() { return stolen; }, get dropped() { return dropped; }, get loggedIn() { return loggedIn; }, get panel() { return panel; }, dogMesh, gooseMesh, goatMesh, get arrow() { return wayArrow; }, readyAt, onNet, teleport(x, z, y = 0) { me.x = x; me.z = z; me.y = y; me.vx = me.vz = me.vy = 0; me.transit = null; me.ground = false; sendPos(true); }, netSend, openPanel };
 $("lgo").disabled = $("lnew").disabled = true;
 connect(); requestAnimationFrame(frame);

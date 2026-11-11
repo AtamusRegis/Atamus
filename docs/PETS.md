@@ -23,7 +23,12 @@ Every rule below is in `website/pets-world.js` (shared with the server, an ident
    (a flash in the rarity's color). Then a card shows what you got (coins, XP, Level Coupons, an egg), each line
    popping in, and stays until you close it or grab your next parcel.
 
-One parcel at a time. A parcel that breaks or is lost is gone; the conveyor always has the next one.
+(owner, 2026-11-11) **A stack of parcels:** a mount carries 1 parcel, one more at levels 5, 10, 15 and 20 (5 at level
+20); ride back into the conveyor to load up. Each has its own address (the same neighborhood as another or a
+different one), its own marker, and its own row on the parcel card (with its distance; the card shows how many of how
+many). The ground arrow points to the nearest. Each delivers at its own mailbox and rolls; several rolls take turns.
+A parcel that breaks or is lost is gone; the conveyor always has the next one. **Empty-handed you ride 1.5x faster**
+(owner, 2026-11-11: parcels weigh you down), so the trip back to the post office is quick.
 
 ## The conveyor
 
@@ -44,7 +49,9 @@ One parcel at a time. A parcel that breaks or is lost is gone; the conveyor alwa
 | Sky | Floating Islands | x15 | +100% | 4% |
 
 - Tiers for districts you haven't opened never appear. Route Permits also lift the higher tiers' share (Sky to about 8%
-  at level 10).
+  at level 10), and so does the mount's level (owner, 2026-11-11: the higher level, the pricier the parcels and the
+  longer the trips): tier n's weight x (1 + n x (level - 1) / 8).
+- Every hit (a kick, a bite, a rock, a fall, the pipe's goose) lands on one of your parcels at random.
 - Every parcel has 3 durability (Sturdy Boxes: 4 at level 5, 5 at level 10). Each hit takes 1 and 20% of the delivery
   coins; at 0 it breaks.
 - One parcel in five has a **modifier**: Fragile (1 durability: any hit breaks it; +100% coins), Heavy (the mount is
@@ -102,61 +109,60 @@ One parcel at a time. A parcel that breaks or is lost is gone; the conveyor alwa
 
 ## The town
 
-A fixed town made in code (`buildTown` in pets-world.js); about 97 houses. (owner, 2026-11-11) **One long line, harder
-the farther out:** the post office at the west end, then one road east through every district, each with more (and
-quicker) dangers than the last, and within a district the dogs are thicker toward its far end. Dogs notice a parcel
-within 8 / 10 / 11 / 12 / 12 m and run 10.5 / 11.5 / 12.5 / 13.5 / 14 m/s, district by district.
+A fixed town made in code (`buildTown` in pets-world.js); 30 houses. (owner, 2026-11-11) **One line, short
+neighborhoods, harder the farther out:** the post office at the west end, then one road east through every district;
+each district is three houses long, three each side of the road (owner: "do like 3 houses long per neighbourhood").
+Each has more (and quicker) dangers than the last. Dogs notice a parcel within 8 / 10 / 11 / 12 / 12 m and run 10.5 /
+11.5 / 12.5 / 13.5 / 14 m/s, district by district.
 
 - **Post office** at the west end, on its square: the counter under an open frame. Within 20 m is the **safe zone**.
   You start just south of it, facing east down the road.
-- **Main Street** (Bronze, x 30-240): 20 houses facing the road, both sides; a back alley behind each row; a park pond
-  (3 geese); 5 dogs.
-- **Maple Suburbs** (Silver, x 250-590): 30 houses facing the road, fenced yards, three ponds (15 geese), 16 dogs, 8
-  sprinklers beside the road. The zipline tower at its east end.
-- **Goose Marsh** (Gold, x 600-780): over the bridge where the road leaves town. Mud (25% slower; 40% in a pond)
-  crossed by boardwalks, 20 houses on platforms, five ponds with a flock of 5 geese each, 13 dogs on the boardwalks.
-- **Cliffside** (Diamond): the mountain past the marsh. Five terraces, 10 m apart, joined by switchback ramps up narrow
-  ledges; 15 houses; 11 dogs; two goats on each of the first four terraces; falling rocks.
-- **Floating Islands** (Sky): six islands 70 to 108 m up off the mountain's far side, two houses each, joined by jump
-  pads; 4 dogs, wind and sky geese (every 8 to 14 s). (owner, 2026-11-11:
-  couriers got stuck in houses by the pads) Each island's houses stand as far as they can from its pads, landing
-  spots, balloon and middle; anyone who somehow ends up inside something solid is moved out to the nearest clear spot. The **Sky Cannon** on
-  top of Cliffside fires you to the first. Falling off costs the parcel 1 hit and puts you back on the last island you
-  stood on. A **balloon** on the first and last island takes you back to the post office.
+- **Main Street** (Bronze, x 40-90): 6 houses; 2 dogs.
+- **Maple Suburbs** (Silver, x 120-170): 6 houses with fenced yards, a pond (5 geese), 4 dogs, 4 sprinklers beside the
+  road. The zipline tower at its east end.
+- **Goose Marsh** (Gold, x 190-290): over the bridge where the road leaves town. Mud (25% slower; 40% in a pond), a
+  boardwalk on and one across the middle, 6 houses on platforms, two ponds (10 geese), 5 dogs on the boardwalks.
+- **Cliffside** (Diamond, x 290-415): three steps up the road, 6 m each, a ramp up the road onto each; a house each side
+  on each step; 6 dogs; 4 goats; falling rocks. The **Sky Cannon** at the top.
+- **Floating Islands** (Sky): three islands 32 to 44 m up off Cliffside's far side, two houses each, joined by jump
+  pads; 3 dogs, wind and sky geese (every 8 to 14 s). Each island's houses stand as far as they can from its pads,
+  landing spots, balloon and middle; anyone who somehow ends up inside something solid is moved out to the nearest
+  clear spot. Falling off costs a parcel 1 hit and puts you back on the last island you stood on. A **balloon** on the
+  last island takes you back to the post office.
 
 **Shortcuts:** back alleys (a lane behind each row of houses through Main Street and the suburbs, with boost pads),
-the sewer pipe (Main Street to the foot of Cliffside in 6 s; a goose sits in it 8 s in every 24, eyes showing at both
+the sewer pipe (Main Street to the foot of Cliffside in 4 s; a goose sits in it 8 s in every 24, eyes showing at both
 ends, and costs 1 hit), ziplines (the tower at the suburbs' east end down into the marsh; the top of Cliffside back to
 the tower; not with a Heavy parcel), boost pads (x1.6 speed for 2.5 s) on the road, the alleys and the marsh's main
-boardwalk, and rooftop hops (four roofs, each 2 m higher, up each Cliffside terrace's face: they need a jump of about
-1.4 m, a Common mount's at level 5).
+boardwalk, and rooftop hops (three roofs, each 2 m higher, up the side of each Cliffside step's face: they need a jump
+of about 2 m).
 
 ## Danger
 
-- (owner, 2026-11-11: dangers roam, and more of them) **Dogs** (41) roam their district: a short trot somewhere, now
+- (owner, 2026-11-11: dangers roam, and more of them) **Dogs** (20) roam their district: a short trot somewhere, now
   and then a pause, staying within 45 m of where they started, off the post office's safe zone, out of ponds. A
   courier carrying a parcel within 10 m sets one off: a bark and a red "!" for 0.5 s, then it chases for up to 6 s at
   11.5 m/s. A bite stuns for 1.5 s and takes 1 hit. It gives up if you outrun it, get a wall between you, take it 38 m
   from where it started or reach the safe zone; then it rests 8 s. Scared off (a kick, Bark), it bolts away for 2.5 s.
-- **Geese** (37) roam up to 34 m out from their pond, round houses and fences. One that sees a parcel within 7 m honks and flaps for 1 s, then lunges (13 m/s for
-  up to 2.2 s). Touching you it takes the parcel (no stun) and waddles to its pond (7.2 m/s), then takes 3 s out in the
+- **Geese** (15) roam up to 34 m out from their pond, round houses and fences. One that sees a parcel within 7 m honks and flaps for 1 s, then lunges (13 m/s for
+  up to 2.2 s). Touching you it takes one of your parcels (no stun) and waddles to its pond (7.2 m/s), then takes 3 s out in the
   middle to sink it: then it's lost. **Kick the goose** and the parcel drops where it stands, unharmed: pick it up
   (within 20 s) for 15 coins x the tier. "GOOSE BUSTED!"
 - **Sprinklers** (Suburbs): on 3 s in every 6, they shove you sideways.
 - **Falling rocks** (Cliffside): every 3 to 6 s near a courier on the mountain; a shadow for 1 s, then a 1.5 s stun and
   1 hit within 2.3 m.
-- **Goats** (Cliffside, 8): they wander their terrace; a goat that sees anyone within 9 m stomps for 0.8 s, then
+- **Goats** (Cliffside, 4): they wander their terrace; a goat that sees anyone within 9 m stomps for 0.8 s, then
   charges and knocks them back toward the ledge (no hit); it won't run off its own ledge.
 - **Wind** (Islands): a gust for 3.5 s in every 11 pushes everyone the same way.
 - **Sky geese** (Islands): every 9 to 16 s one dives at a courier carrying a parcel; a shadow circle for 1.4 s, then it
-  takes the parcel for good if you're still within 2.2 m.
+  takes one of your parcels for good if you're still within 2.2 m.
 - **Hidden help:** after three failed runs in a row the dogs chasing you are 20% slower until you deliver.
 - Animals sleep while nobody is near.
 
 ## Kicks
 
-- Reaches 3.6 m in front; every 4 s. On couriers: a 1 s stun (less with Grip), knocked off the mount, 1 hit to the
-  parcel. On geese: dizzy for 3 s (and they drop a stolen parcel). On dogs and goats: sent home. No reward.
+- Reaches 3.6 m in front; every 4 s. On couriers: a 1 s stun (less with Grip), knocked off the mount, 1 hit to one of
+  their parcels. On geese: dizzy for 3 s (and they drop the parcel they stole). On dogs and goats: sent home. No reward.
 - **Protection:** no kicks in the safe zone; 5 s of grace after being kicked (a shimmer); the same courier can crack
   your parcel only once in 30 s; party members can't kick each other; **Friendly** (Settings) means you can't be kicked
   by couriers and can't kick them (animals still apply).
@@ -180,7 +186,8 @@ Platinum 38.
 ## The screen
 
 - Coins top left (they count up; coins fly to it). Chat button under it. The Stamp Meter down the left.
-- The parcel card top center: tier, modifier, durability pips, address, distance, the Express countdown.
+- The parcel card top center: a row per parcel (tier, modifier, durability pips, address, distance, the Express
+  countdown), stolen or dropped ones faded, and how many you carry of how many.
 - Bottom right: Kick (with its cooldown), Whistle above it, the Ability beside it (gray until level 5), Jump.
 - Right edge: Stable, Upgrades, Odds, Settings (Friendly, music and SFX volume, shirt color, Admin for staff, Log out).
 - Controls: WASD or arrows, Space to jump, F kick, Q whistle, E ability, Enter chat; drag to look, wheel to zoom. Touch:
@@ -219,7 +226,7 @@ deliveries for 2 s).
   the `pet_world` table are left in the database untouched, unused.
 - Saved: coins, mounts (id, kind, variant, level, Training XP), the equipped mount, eggs, Level Coupons, upgrades, the
   Stamp Meter, stats (deliveries, Golden parcels, geese busted, kicks landed), settings, failed runs in a row. Not
-  saved: the parcel you carry and the conveyor's parcels.
+  saved: the parcels you carry and the conveyor's parcels.
 - Purchases and hatches save at once; everything else every 60 s and when you leave.
 
 ## Staff
@@ -231,6 +238,8 @@ upgrades, everything, reset), and edit coins and coupons. Everything is logged (
 
 ## Rejected / removed
 
+- (owner, 2026-11-11) One parcel at a time (now 1 to 5 by level); the long neighborhoods (20 and 30 houses) and the
+  big marsh, five-terrace mountain and six islands (now three houses long each).
 - (owner, 2026-11-11) The round town (the post office in the middle, Main Street and the suburbs in rings round it,
   avenues out): replaced by the town in one line.
 - (owner, 2026-11-11) Flying and gliding mounts: the Parrot, Owl and Dragon, and the Glide ability.

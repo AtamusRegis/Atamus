@@ -33,16 +33,15 @@
     #bchat { position: fixed; left: calc(10px + var(--sl)); top: calc(52px + var(--st)); width: 38px; height: 34px; border: 0; border-radius: 12px; background: var(--card); box-shadow: 0 3px 0 rgba(0,0,0,.14); display: grid; place-items: center; }
     #bchat svg, .mbtn svg { width: 22px; height: 22px; fill: none; stroke: var(--ink); stroke-width: 2.2; stroke-linecap: round; stroke-linejoin: round; }
     /* the parcel card, top center */
-    #card { position: fixed; left: 50%; top: calc(10px + var(--st)); transform: translateX(-50%); display: none; flex-direction: column; align-items: center; gap: 4px; padding: 8px 14px; border-radius: 16px; background: var(--card); box-shadow: 0 3px 0 rgba(0,0,0,.14); max-width: calc(100vw - 150px); }
-    #card.gone { opacity: .6; filter: grayscale(.8); }
-    #card .row { display: flex; align-items: center; gap: 8px; }
-    #ctier { padding: 2px 10px; border-radius: 8px; color: #fff; text-shadow: 0 1px 0 rgba(0,0,0,.35); font-size: 16px; }
-    .mod { padding: 2px 8px; border-radius: 8px; color: #fff; font-size: 12px; }
+    #card { position: fixed; left: 50%; top: calc(10px + var(--st)); transform: translateX(-50%); display: none; flex-direction: column; align-items: stretch; gap: 4px; padding: 6px 10px; border-radius: 16px; background: var(--card); box-shadow: 0 3px 0 rgba(0,0,0,.14); max-width: calc(100vw - 150px); }
+    .prow { display: flex; align-items: center; gap: 6px; white-space: nowrap; } .prow.gone { opacity: .45; filter: grayscale(.8); }
+    .ctier { padding: 1px 8px; border-radius: 7px; color: #fff; text-shadow: 0 1px 0 rgba(0,0,0,.35); font-size: 14px; }
+    .mod { padding: 1px 6px; border-radius: 7px; color: #fff; font-size: 11px; }
     .mod.fragile { background: #e5534b; } .mod.heavy { background: #3d4650; } .mod.express { background: #3a8ee6; } .mod.golden { background: #f2b01e; }
-    #cpips { display: flex; gap: 4px; } #cpips i { width: 14px; height: 14px; border-radius: 4px; background: #d7e1ea; } #cpips i.on { background: #c08a55; box-shadow: inset 0 0 0 2px #8a5a34; }
-    #caddr { font-size: 15px; white-space: nowrap; }
-    #ctimer { display: none; font-size: 22px; color: var(--blue); line-height: 1; } #ctimer.late { color: var(--red); animation: bump .5s infinite; }
-    #cdist { font-size: 15px; color: #ff1f8f; }
+    .cpips { display: flex; gap: 3px; } .cpips i { width: 11px; height: 11px; border-radius: 3px; background: #d7e1ea; } .cpips i.on { background: #c08a55; box-shadow: inset 0 0 0 2px #8a5a34; }
+    .caddr { font-size: 14px; overflow: hidden; text-overflow: ellipsis; } .cdist { font-size: 14px; color: #ff1f8f; margin-left: auto; }
+    .ctimer { font-size: 16px; color: var(--blue); } .ctimer.late { color: var(--red); animation: bump .5s infinite; }
+    .pcount { align-self: center; font-size: 12px; color: #7f8b97; }
     /* action buttons, bottom right: Kick, Whistle above it, the ability beside it, Jump */
     .act { position: fixed; border: 0; border-radius: 50%; background: var(--card); box-shadow: 0 4px 0 rgba(0,0,0,.18); display: grid; place-items: center; font-size: 13px; touch-action: none; overflow: hidden; }
     .act span { position: relative; z-index: 1; font-family: "Big Shoulders Display", system-ui, sans-serif; text-transform: uppercase; }
@@ -134,7 +133,7 @@
     <div id="coins" class="pill"><i class="coin"></i><span id="coinn">0</span></div>
     <button id="bchat" title="Chat"><svg viewBox="0 0 24 24"><path d="M4 5h16v11H10l-5 4v-4H4z"/></svg></button>
     <div id="stamp" title="Stamp Meter"><div class="track"><i id="stampfill"></i><u style="bottom:25%"></u><u style="bottom:50%"></u><u style="bottom:75%"></u></div><span id="stampn" class="disp">0</span></div>
-    <div id="card"><div class="row"><span id="ctier" class="disp"></span><span id="cmods"></span><span id="cpips"></span></div><div class="row"><span id="caddr" class="disp"></span><span id="cdist" class="disp"></span><span id="ctimer" class="disp"></span></div></div>
+    <div id="card"></div>
     <div id="msgs"></div>
     <div id="party"></div>
     <div id="invite"></div>
@@ -167,6 +166,6 @@
     <button id="lgo" class="btn go" type="submit">Log in</button>
     <button id="lnew" class="btn" type="button">Create account</button>
   </form>
-  <script type="module" src="pets.js?v=1794435581"></script>
+  <script type="module" src="pets.js?v=1794436488"></script>
 </body>
 </html>
