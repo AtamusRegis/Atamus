@@ -16,12 +16,14 @@ const SPECIES = new Set(["pup", "fox", "dragon"]);
 const fresh = W.cleanData({}, SPECIES);
 ok(fresh.pets.length === 1 && fresh.home.pieces.length > 0, "a new player has a pet and a starter house");
 ok(W.petCap(fresh) === W.HOME.baseCap, "pet cap");
-ok(W.PLOTS.length === 16 && W.PLOTS.every((p) => Number.isFinite(p.x) && Number.isFinite(p.y)), "16 plots");
+
 // (owner, 2026-11-10) the world is blocks staff build: it starts as just the square, then the test town goes on it
 ok(W.inside(0, 0) && !W.inside(0, 90) && W.houses.length === 0 && W.terrain(0, 0) === 0, "the world starts as just the square");
 const { testWorld } = await import("./test-world.mjs");
 W.setWorld(testWorld(W));
-ok(W.houses.length >= 20 && W.isRoad(0, -8) && W.roadNext(0, -8).length === 2, "test town: houses and a road ring");
+ok(W.houses.length >= 20 && W.PLOTS.length === 12 && W.isRoad(0, -8) && W.roadNext(0, -8).length === 2, "test town: houses and a road ring");
+ok(W.PLOTS.length === 12 && W.PLOTS.every((p) => W.lotById.get(p.id) === p && W.houses.some((h) => h.id === p.id && h.x === p.x && h.z === p.z)) && W.PLOT === 18, "every town house is an 18 m lot");
+{ const p = W.PLOTS.find((q) => q.d === 0), [fx, fz] = W.lotPoint(p, 0, -1); ok(Math.abs(fz - p.z - 1) < 1e-9 && Math.abs(fx - p.x) < 1e-9, "a lot's front faces the way its house does"); }
 ok(Math.abs(W.surfaceAt(8 * W.TILE + 3, 3, 1) - 1.5) < 0.01 && W.surfaceAt(9 * W.TILE + 3, 3, 3) === 3, "a ramp climbs one step");
 ok(W.roadNext(8, 0).some(([i, j]) => i === 7 && j === 0) && W.roadNext(8, 0).some(([i, j]) => i === 9 && j === 0), "roads join up and down a ramp");
 ok(W.roadNext(-8, -8).length === 2 && W.roadNext(7, -8).length === 2 && W.roadNext(-7, -8).length === 2, "corner and half roads join the ring round its corners");
@@ -139,6 +141,11 @@ try {
   n.send({ t: "admin", op: "world", edits: [{ op: "put", c: [2, 2, 1, 2, 0] }] });
   const wEd = await b.wait((m) => m.t === "world", "an admin's world edit");
   ok(wEd.edits.length === 1 && wEd.edits[0].c.join() === "2,2,1,2,0" && !W.worldData().cells.some((c) => c[2] === 5), "an admin's block reaches everyone, a player's doesn't land");
+  // (owner, 2026-11-10) A's town house taken down: A moves to another free one, and everyone sees the old lot empty
+  n.send({ t: "admin", op: "world", edits: [{ op: "rm", id: wa.plot }] });
+  const moved = await a.wait((m) => m.t === "myplot" && m.plot >= 0, "A moved to another house");
+  await b.wait((m) => m.t === "plot" && m.plot === wa.plot && !m.id, "the old lot empty");
+  ok(moved.plot !== wa.plot && W.lotById.has(moved.plot) && moved.plot !== wb.plot, "a player whose house is taken down moves to another free one");
   ok(wb.world && Array.isArray(wb.world.cells) && wb.world.cells.length > 100, "the world comes with the welcome");
   n.send({ t: "admin", op: "quick", cmd: "everything", name: "smokeB" });
   const db1 = (await b.wait((m) => m.t === "data", "B's data after Everything")).data;
