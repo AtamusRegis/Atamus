@@ -29,9 +29,9 @@ Asked (owner): a web game on atamus.io (not Roblox), on its own page; the cargo 
   wall), can't step off a block's edge down a drop of more than 1.2 m (owner, 2026-11-10: heights change only on wedges
   and ramps, so nobody walks into a hole they can't leave; fliers fly), and fall off where there are no blocks. The camera never goes inside a block.
 - **Things placed on tiles:** tall pine trees (owner, 2026-11-10: 9 to 12 m, three to four blocks high, a trunk and
-  three tiers); **houses** (on a tile corner, 2 x 2 tiles, facing one of four ways, a blue mailbox (owner, 2026-11-10: in color, as you deliver to it, the blue of animal control's light)
-  7.5 m in front); **mailboxes** on their own; **boost pads** (on road tiles); **animal control vans** (only on road
-  tiles); **helicopters** (anywhere, with a radius: 40, 80, 150 or 250 m); and **housing plots** (by number). Every
+  three tiers); **houses** (owner, 2026-11-10: on a tile, each on a lot of the 3 x 3 tiles round it, facing one of four ways, a blue
+  mailbox at the front of the lot; in color, as you deliver to it, the blue of animal control's light); **mailboxes** on their own; **boost pads** (on road tiles); **animal control vans** (only on road
+  tiles); and **helicopters** (anywhere, with a radius: 40, 80, 150 or 250 m). Every
   mailbox, a house's or a lone one, is a delivery address. With no mailboxes there are no parcels.
 - **Water:** nobody swims now (owner, 2026-11-09: water pets scrapped). The swimming rules below are kept in the code
   for any future swimmer.
@@ -53,15 +53,13 @@ Asked (owner): a web game on atamus.io (not Roblox), on its own page; the cargo 
   pink ring), the **pound** (south; animal control, striped front, a fenced yard in front) and the **training yard**
   (west; a running track with hurdles, green ring). The lift to your plot stands south of the center.
 - **The town editor (owner, 2026-11-10; admins only):** Build Town in the gear menu opens a bar of pieces: Land,
-  Wedge, Road, Road Ramp, Road Corner, Half Road, Water, Tree, House, Mailbox, Boost, Van, Helicopter, Plot and Erase, with ⟳ (turn; R on a
-  keyboard), the level (− Auto +) and, for a helicopter its radius, for a plot its number. A see-through preview shows
+  Wedge, Road, Road Ramp, Road Corner, Half Road, Water, Tree, House, Mailbox, Boost, Van, Helicopter and Erase, with ⟳ (turn; R on a
+  keyboard), the level (− Auto +) and, for a helicopter, its radius. A see-through preview shows
   where the piece goes (red where it can't, or what Erase takes away); a tap (or click) places it. Blocks go against
   the face pointed at (on top, or beside it), or, with a level chosen, on that level (a grid shows it) to build in the
-  air; a block where one already is replaces it. Things stand on the tile pointed at (a house on the nearest tile
-  corner); vans and boosts only on roads. Erase takes away a thing on the tile pointed at first, else the block.
+  air; a block where one already is replaces it. Things stand on the tile pointed at (a house's preview shows its lot); vans and boosts only on roads. Erase takes away a thing on the tile pointed at first, else the block.
   Vans and helicopters can be picked where they are (owner, 2026-11-10): a tap on one selects it (a box follows it,
-  Delete or Del takes it away, a tap elsewhere lets go), and a tap with Erase takes it away. A
-  plot placed again moves. The camera zooms out further while editing. ✕ or Escape closes it. Everyone sees each
+  Delete or Del takes it away, a tap elsewhere lets go), and a tap with Erase takes it away. The camera zooms out further while editing. ✕ or Escape closes it. Everyone sees each
   change at once; parcels for houses that changed are dropped.
 - **Looks (owner, 2026-11-10):** block tops grass in three shades (roads paved gray), sides earth (drawn in color, a light
   dirt brown, owner 2026-11-10), all with a fine
@@ -97,7 +95,7 @@ Asked (owner): a web game on atamus.io (not Roblox), on its own page; the cargo 
   others, bag houses, the guide, vans, home) keep their colors. It shows the blocks from above (owner, 2026-11-10: land
   white, roads gray, water hatched, wedges and ramps with an arrow up, an ink edge where the next tile is missing or a
   different height), the square (post office, egg shop, training track, pound, board and the rings), houses (roof,
-  door, mailbox), lone mailboxes, trees and placed plots; blocks and houses above 50 m are faint until you climb. It's
+  door, mailbox), lone mailboxes, trees and the lots people live on; blocks and houses above 50 m are faint until you climb. It's
   redrawn whenever the world changes. Live on it: everyone's built houses (each square's top piece, roofs white, floors gray; your plot outlined gold),
   the houses in your bag (gold, pink for an island) and where the guide points (a glowing dot, or a chevron on the edge
   pointing the way when it's off the map), vans (lights flashing while they chase), helicopters (rotors turning) and
@@ -392,13 +390,12 @@ Asked (owner): a web game on atamus.io (not Roblox), on its own page; the cargo 
 
 ## Houses on plots (owner, 2026-11-08)
 
-- **Plots** (20 x 20 m, `PLOTS` in pets-world.js; 16 by number): **placed by admins in the town editor (owner,
-  2026-11-10)**, each centered on the tile chosen; a plot not placed yet is nowhere (no outline, no house, no lift
-  ride). Numbers 1-3 are first come first served, 4-5 VIP, 6-10 given out at random and 11-16 for rooms of more than 10
-  players. Each placed plot shows a pale outline and, when someone has it, a sign with their name.
-- Each player in a room gets a plot when they join (the server decides): VIPs one of the two VIP plots; then the
-  three first-come plots; then one of the five at random; then the extra ones.
-  It's freed when they leave (the same order, by number, owner 2026-11-10). **VIP** is given or taken by admins in the Admin panel (from their next login).
+- **Lots (owner, 2026-11-10):** every town house is a lot (18 x 18 m: its 3 x 3 tiles; `PLOTS` / `lotById` in
+  pets-world.js, by the house's id). Each player in a room takes a **random free town house** when they join (the
+  server decides); that town house is hidden and their own house stands on its lot, turned to face the same way, with a
+  pale outline and a sign with their name. Its mailbox stays a delivery address. If staff take the house down, its
+  player moves to another free one; with no free house a player has none until one frees up or is built.
+  It's freed when they leave and the town house comes back. **VIP** (it no longer picks the house) is given or taken by admins in the Admin panel (from their next login).
 - **Outside (owner, 2026-11-09):** every lot with an owner has one of **5 ready-made houses**: Cottage, Cabin, Modern,
   Barn or Tower, chosen by its owner (Build, outside on your lot: the 5 names; free to change). **Everyone sees it** (the
   server sends each house, and changes). They're solid, and their roofs can be walked on. Its front door faces the
@@ -409,7 +406,7 @@ Asked (owner): a web game on atamus.io (not Roblox), on its own page; the cargo 
   round them; whoever is in the same house sees each other there (the server passes on whose house you're in), and
   nobody outside sees them. **E (Leave)** at the front door inside takes you back out in front of it. Pushing against
   walls for 3 s without getting anywhere puts you back by the front door.
-- **Lift:** a lift at the plaza (teal ring and beam; E or Home ▲) takes you to the front of your plot, once it's placed.
+- **Lift:** a lift at the plaza (teal ring and beam; E or Home ▲) takes you to the front of your house's lot.
 - **Building (owner, 2026-11-09)** (Build, inside your own house; Done or ✕ stops): a bar of pieces with prices: Floor
   20, Wall 30, Window 50, Door 60, Roof 25, Slope roof 35, Stairs 80, Pet bed 400, Pet pen 800, Chair 60, Table 100,
   Shelf 90, Cabinet 120, Plant 40, Rug 50, Poster 30; 12 colors behind **one color circle** (a tap opens them, picking one closes them). Putting a piece where the same piece already is (same kind and floor, within half a meter, turned the same way) **doesn't add a second one**: it takes the new color (a window, the view) for free, or nothing happens. The chosen piece follows the pointer **on the floor
@@ -486,6 +483,8 @@ Asked (owner): a web game on atamus.io (not Roblox), on its own page; the cargo 
   Serpent; deleted from saves); whirlpool boosts; Package Rush (off, the code kept).
 - The hilly town (owner, 2026-11-09): plateaus and cliffs, four big hills, winding ring roads and spokes, the small lake
   with two rivers and a terraced stream, standing rocks, and the scattered islands: replaced by the flat grid town.
+- Housing plots as 16 numbered places staff put down, and choosing them by kind (first come, VIP, random, extra) (owner,
+  2026-11-10): replaced by lots on every town house, taken at random.
 - The flat grid town (owner, 2026-11-10): the square island 448 m across, its street grid, about 290 houses, the lake
   and river with its waterfall, the 16 floating islands, the VIP and extra islands with their lifts, and the fixed van
   routes and boost pads: replaced by the block world admins build, starting from just the square.
