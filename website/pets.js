@@ -3197,6 +3197,12 @@ function step(dt) {
     if (ok(nx, me.z)) me.x = nx; if (ok(me.x, nz)) me.z = nz;   // slide along walls
     // shut in a room with no way out (walled over, or dropped in from above): pushing on, you're put out in front of the plot
     if (hyp(me.x - bx, me.z - bz) < v * 0.2 && !flying) stuckFor += dt; else stuckFor = 0;
+    // (owner, 2026-11-10) pushing into a block's side up to one block high (a hole, a raised tile): after a moment the pet
+    // climbs up onto it, so nobody is stuck in a hole
+    if (stuckFor > 0.25 && !inHouse() && !wet && me.y - floorAt(me.x, me.z, me.y) < 0.15) {
+      const cx = me.x + (mx / ml) * 1.2, cz = me.z + (mz / ml) * 1.2, top = World.surfaceAt(cx, cz, me.y + World.STEP);
+      if (top > me.y + 0.5 && top <= me.y + World.STEP + 0.05 && !blocked(cx, cz, top) && !houseWall(cx, cz, top) && World.waterAt(cx, cz) === -Infinity) { me.x = cx; me.z = cz; me.y = top; me.vy = 0; stuckFor = 0; sendPos(true); }
+    }
     if (stuckFor > 3 && inHouse()) { stuckFor = 0; me.x = INT.x + World.FRONT_DOOR.x; me.z = INT.z + World.FRONT_DOOR.z + 2; me.y = INT.y + 0.25; me.vy = 0; cam.y = me.y; sendPos(true); }   // walled in: back by the front door
     me.yaw = lerpYaw(me.yaw, Math.atan2(mx, mz), Math.min(1, dt * 12));   // turn to where it's going (fliers also pitch: flightPitch)
   }

@@ -6,6 +6,7 @@ and any rule decided. Use `git log` for the code detail (and for the older Atamu
 
 ## 2026-11-10
 
+- **Climb out of holes (owner).** Walking pets push into a block's side up to one block high and climb up onto it, so they can't get stuck in a hole.
 - **Players and pets in color; dirt a step darker (owner).** Couriers and their pets are drawn in full color in the gray world; the dirt sides come down a step from the lighter brown.
 - **Lighter dirt (owner).** Block sides are a lighter, sandier brown.
 - **Fix: pickup with few mailboxes (owner).** With fewer addresses than your bag holds, the pickup ring no longer keeps flashing "+2" without adding parcels: it adds what's left, once.
