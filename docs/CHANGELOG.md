@@ -6,6 +6,7 @@ and any rule decided. Use `git log` for the code detail (and for the older Atamu
 
 ## 2026-11-10
 
+- **Vehicles keep going while building (owner).** Placing a block or adding or deleting a vehicle no longer sends every van and helicopter back to its starting spot.
 - **Night lighting, helicopters (owner).** Nights are lighter and players and pets are evenly lit at any hour (no lone bright limb). Helicopter searchlights catch parcel carriers by day too, and their circle no longer hangs in the air over the void.
 - **Solid blocks (owner).** Blocks are solid boxes: no more popping up onto a block from beside it, and anyone caught in a block's side is pushed out and falls instead of getting stuck.
 - **No falling into holes (owner).** The climb-out is gone (it let pets get up walls without a ramp); instead walking pets can't step off a block's edge down a drop, so heights change only on wedges and ramps.
