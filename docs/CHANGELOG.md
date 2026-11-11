@@ -6,6 +6,7 @@ and any rule decided. Use `git log` for the code detail (and for the older Atamu
 
 ## 2026-11-10
 
+- **Fix: the town not drawing (owner).** Rock blocks on some tiles picked a shade that didn't exist, which stopped the whole town drawing (black world, empty map).
 - **Fix: logging in with a bad piece in the town (owner).** Taking in and drawing the town can no longer stop logging in: a part that fails is skipped (and logged), so your pets, coins and staff role always load.
 - **Build Town button (owner).** A green button with a brown house, the size of the item buttons, at the bottom right.
 - **Van points by hand; Build Town button (owner).** Van points go anywhere on a road, and admins draw the lines between them (tap a point, tap another; tap a line's middle to remove it); vans drive those lines. Build Town has its own button on screen.

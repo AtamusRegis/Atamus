@@ -131,7 +131,7 @@ function blockGeometry() {
       if (c.t === "half") quad([P3(a, y0), P3(b, y0), P3(b, y1), P3(a, y1)], EARTH, 0.96, sideUV);   // the cut face
       continue;
     }
-    const road = c.t === "road" || c.t === "ramp", rock = c.t === "rock", hsh = ((c.i * 73856093) ^ (c.j * 19349663)) >>> 0, topC = rock ? ROCK_T[hsh % 3] : road ? ROAD_T : GRASS_T[hsh % 3], sideC = rock ? ROCK_T[(hsh >> 2) % 3] : EARTH;   // (owner, 2026-11-10) rock: stone through and through
+    const road = c.t === "road" || c.t === "ramp", rock = c.t === "rock", hsh = ((c.i * 73856093) ^ (c.j * 19349663)) >>> 0, topC = rock ? ROCK_T[hsh % 3] : road ? ROAD_T : GRASS_T[hsh % 3], sideC = rock ? ROCK_T[(hsh >>> 2) % 3] : EARTH;   // (owner, 2026-11-10) rock: stone through and through
     if (!full(c.i, c.j, c.k + 1)) quad(corners.map(([x, z], n) => [x, h[n], z]), topC, 1, topUV, true);
     if (!full(c.i, c.j, c.k - 1)) quad(corners.map(([x, z]) => [x, y0, z]), sideC, rock ? 0.55 : 0.7, topUV);
     function sideCorners(s2) { return s2 === 0 ? [[x0, z1], [x1, z1]] : s2 === 1 ? [[x1, z0], [x1, z1]] : s2 === 2 ? [[x0, z0], [x1, z0]] : [[x0, z0], [x0, z1]]; }
