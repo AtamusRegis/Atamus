@@ -43,9 +43,12 @@ export const districtsOpen = (routes) => 1 + (routes >= 2) + (routes >= 4) + (ro
 // which tiers a courier's conveyor gives: only open districts; permits lift the higher tiers (Sky to 8%), and so does the
 // mount's level (owner, 2026-11-11: the higher level, the pricier the parcels and the farther the trips)
 export function spawnWeights(routes, lv = 1) {
-  const open = districtsOpen(routes), w = TIERS.map((t, n) => (n < open ? t.w * (1 + (n * routes) / 10) * (1 + (n * (lv - 1)) / 8) : 0)), s = w.reduce((a, b) => a + b, 0);
-  return w.map((v) => v / s);
+  const open = districtsOpen(routes), w = TIERS.map((t, n) => (n < open ? t.w * (1 + (n * routes) / 10) * (1 + (n * (lv - 1)) / 8) : 0)), s = w.reduce((a, b) => a + b, 0), p = w.map((v) => v / s);
+  // (owner, 2026-11-11) at least 30% go to the farthest area you've opened; the rest spread over the ones in between
+  const top = open - 1; if (top > 0 && p[top] < TOP_SHARE) { const rest = 1 - p[top]; for (let n = 0; n < top; n++) p[n] *= (1 - TOP_SHARE) / rest; p[top] = TOP_SHARE; }
+  return p;
 }
+export const TOP_SHARE = 0.3;
 export const stampLuck = (lv) => 0.0405 * lv, payoutMult = (lv) => 1 + 0.1 * lv, pressChance = (lv) => 0.01 * lv, boxDur = (lv) => BASE_DUR + (lv >= 5) + (lv >= 10);
 export const upTotal = (up) => Object.keys(UPGRADES).reduce((a, k) => a + (up[k] || 0), 0);
 export const RANKS = ["", "Bronze", "Silver", "Gold", "Platinum"], RANK_C = ["", "#b9763c", "#b8c2cc", "#f2b01e", "#bfe9ff"];
@@ -99,6 +102,8 @@ export function cleanData(d) {
   out.ride = out.mounts.some((m) => m.id === d.ride) ? d.ride : out.mounts[0].id;
   for (const k of Object.keys(EGGS)) out.eggs[k] = int(d.eggs && d.eggs[k], 0, 9999, 0);
   for (const k of Object.keys(UPGRADES)) out.up[k] = int(d.up && d.up[k], 0, UP_MAX, 0);
+  out.gifts = (Array.isArray(d.gifts) ? d.gifts : []).slice(0, GIFT_CAP).filter((g) => g && Number.isFinite(+g.gid)).map((g) => ({ gid: int(g.gid, 1, 1e9, 1), r: int(g.r, 0, 4, 0), pt: int(g.pt, 0, 4, 0), ...(Number.isFinite(+g.m) ? { m: int(g.m, 1, 1e9, 1) } : {}) }));
+  out.nextGid = Math.max(int(d.nextGid, 1, 1e9, 1), ...out.gifts.map((g) => g.gid + 1));
   for (const k of ["del", "golden", "geese", "kicks"]) out.stats[k] = int(d.stats && d.stats[k], 0, 1e9, 0);
   out.set = { friendly: !!(d.set && d.set.friendly), music: int(d.set && d.set.music, 0, 10, 5), sfx: int(d.set && d.set.sfx, 0, 10, 7), shirt: /^#[0-9a-f]{6}$/i.test(d.set && d.set.shirt) ? d.set.shirt : "#f2a33a" };
   return out;
@@ -122,10 +127,25 @@ export function rewardRoll(tier, mod, up, stamp, rnd = Math.random) {
   let floor = 0; if (stamp >= PITY_EPIC) floor = 3; else if (t < 2 && stamp % PITY_RARE === 0) floor = 2;
   if (mod === "golden") floor = Math.max(floor, 2);
   t = Math.max(t, floor); if (t >= 3) stamp = 0;
-  const R = ROLLS[t], coins = Math.round((R.coins[0] + rnd() * (R.coins[1] - R.coins[0])) * Math.sqrt(TIERS[tier].mult));
+  return { tier: t, stamp, near, ...giftContents(t, tier, up, rnd) };
+}
+// what's inside a gift of rarity t from a parcel of tier pt (decided when it's opened, owner 2026-11-11)
+export function giftContents(t, pt, up, rnd = Math.random) {
+  const R = ROLLS[t], coins = Math.round((R.coins[0] + rnd() * (R.coins[1] - R.coins[0])) * Math.sqrt(TIERS[pt].mult));
   let coupons = R.coupons + (rnd() < R.couponChance ? 1 : 0) + (rnd() < pressChance(up.press) ? 1 : 0), egg = "";
   if (rnd() < R.egg) egg = R.eggs[Math.floor(rnd() * R.eggs.length)];
-  return { tier: t, coins, xp: R.xp, coupons, egg, stamp, near };
+  return { coins, xp: R.xp, coupons, egg };
+}
+// (owner, 2026-11-11) four unopened gifts of one rarity merge into one of the next (its parcel tier: the best of the four)
+export const MERGE_N = 4, GIFT_CAP = 60;
+export function mergeGifts(gifts, nextGid) {   // merges in place; returns the merges made [{ from: [gid x4], to: gift }]
+  const out = []; let again = true;
+  while (again) { again = false;
+    for (let r = 0; r < 4; r++) { const same = gifts.filter((g) => g.r === r); if (same.length < MERGE_N) continue;
+      const four = same.slice(0, MERGE_N), to = { gid: nextGid(), r: r + 1, pt: Math.max(...four.map((g) => g.pt)) }; const m = four.find((g) => g.m); if (m) to.m = m.m;
+      for (const g of four) gifts.splice(gifts.indexOf(g), 1); gifts.push(to); out.push({ from: four.map((g) => g.gid), to }); again = true; break; }
+  }
+  return out;
 }
 export function hatchEgg(kind, rnd = Math.random) {
   const odds = EGGS[kind].odds; let r = rnd(), rar = 0; for (let n = 0; n < odds.length; n++) { if (r < odds[n]) { rar = n; break; } r -= odds[n]; rar = n; }
@@ -145,13 +165,13 @@ export const sprinklers = [], goats = [], zips = [];
 export const slabs = [], solids = [], houses = [], dogs = [], ponds = [], geese = [], trees = [], roads = [], pads = [], boosts = [], balloons = [], fences = [];
 export const PO = { x: 0, z: 0, counter: 5, roof: 13 };   // the counter: a square 10 m across with the conveyor round it; the roof stands on four posts
 // (owner, 2026-11-11: neighborhoods three houses long) every district is short: three houses down each side of the road
-export const SPAWN = { x: 0, z: 17 }, SUBURBS_X = 110, TOWN = { x0: -45, x1: 190, z0: -60, z1: 60 }, MARSH = { x0: 190, x1: 290, z0: -50, z1: 50 }, CLIFF = { x0: 290, x1: 415, z0: -50, z1: 50 };
-export const TERRACE = (n) => ({ x0: 300 + 38 * (n - 1), x1: n === 3 ? 414 : 300 + 38 * n, z0: -36, z1: 36, y: 6 * n });   // n = 1..3: Cliffside's three steps, each with a ramp up the road onto it
+export const SPAWN = { x: 0, z: 17 }, SUBURBS_X = 110, TOWN = { x0: -45, x1: 190, z0: -30, z1: 30 }, MARSH = { x0: 190, x1: 290, z0: -30, z1: 30 }, CLIFF = { x0: 290, x1: 415, z0: -30, z1: 30 };   // (owner, 2026-11-11) narrow: the road down the middle, houses both sides
+export const TERRACE = (n) => ({ x0: 300 + 38 * (n - 1), x1: n === 3 ? 414 : 300 + 38 * n, z0: -27, z1: 27, y: 6 * n });   // n = 1..3: Cliffside's three steps, each with a ramp up the road onto it
 export const ISLES = [{ x: 462, z: 0, y: 32, r: 18 }, { x: 512, z: -16, y: 38, r: 16 }, { x: 562, z: 6, y: 44, r: 17 }];
 export const ISLE_X = 425, FALL_Y = 22;   // past ISLE_X and high up: the Floating Islands; below FALL_Y there, you've fallen off
 const MARSH_X = [212, 240, 268];
 // shortcuts: the sewer pipe (Main Street to the foot of Cliffside; a goose sits in it part of the time), ziplines
-export const PIPE = { a: { x: 66, z: -40, y: 0 }, b: { x: 294, z: -42, y: 0 }, r: 2, time: 4, every: 24, goose: 8 };
+export const PIPE = { a: { x: 54.5, z: -25, y: 0 }, b: { x: 294, z: -24, y: 0 }, r: 2, time: 4, every: 24, goose: 8 };
 export const pipeGoose = (t) => t % PIPE.every < PIPE.goose;   // t: seconds (the server's clock)
 export const ZIP_SPEED = 24, STEP_H = 2;
 // district hazards (the page runs sprinklers and wind off the server's clock; the server runs the rest)
@@ -184,7 +204,7 @@ function yard(h, side) {   // a fenced yard beside a house, open toward the road
 }
 function pond(x, z, r, y, n, d) { const id = ponds.length; ponds.push({ id, x, z, r, y, d }); for (let k = 0; k < n; k++) { const a = (k / n) * TAU; geese.push({ id: geese.length, pond: id, x: x + Math.cos(a) * (r + 3), z: z + Math.sin(a) * (r + 3), y, d }); } }
 const road = (x0, z0, x1, z1, w, alley) => roads.push({ k: "seg", x0, z0, x1, z1, w, alley: alley ? 1 : 0 });
-const row = (x0, d, z, y, size, yard3) => { for (let k = 0; k < 3; k++) for (const sd of [1, -1]) { house(x0 + k * 21, sd * z, y, sd > 0 ? Math.PI : 0, d, size); if (yard3 && k !== 1) yard(houses[houses.length - 1], k ? 1 : -1); } };
+const row = (x0, d, z, y, size, yards) => { for (let k = 0; k < 3; k++) for (const sd of [1, -1]) { house(x0 + k * 21, sd * z, y, sd > 0 ? Math.PI : 0, d, size); if (yards && k === 0) yard(houses[houses.length - 1], -1); } };
 
 function buildTown() {
   const rnd = rng(20261111);
@@ -199,29 +219,31 @@ function buildTown() {
   wall(TOWN.x1, TOWN.x1, TOWN.z0, -6, 6); wall(TOWN.x1, TOWN.x1, 6, TOWN.z1, 6);
   wall(MARSH.x0, MARSH.x1, MARSH.z0, MARSH.z0, 6); wall(MARSH.x0, MARSH.x1, MARSH.z1, MARSH.z1, 6);
   wall(CLIFF.x0, CLIFF.x1, CLIFF.z0, CLIFF.z0, 6); wall(CLIFF.x0, CLIFF.x1, CLIFF.z1, CLIFF.z1, 6); wall(CLIFF.x1, CLIFF.x1, CLIFF.z0, CLIFF.z1, 40);
-  wall(MARSH.x1, MARSH.x1, MARSH.z0, -6, 6); wall(MARSH.x1, MARSH.x1, 6, MARSH.z1, 6);
+  wall(MARSH.x1, MARSH.x1, MARSH.z0, -6, 6); wall(MARSH.x1, MARSH.x1, 6, MARSH.z1, 6); wall(MARSH.x0, MARSH.x0, MARSH.z0, -6, 6); wall(MARSH.x0, MARSH.x0, 6, MARSH.z1, 6);
   // ---- the post office: the counter, and four posts for its roof ----
   solid(PO.x, PO.z, PO.counter, PO.counter, -1, 1.3);
   for (const [sx, sz] of [[-1, -1], [1, -1], [-1, 1], [1, 1]]) solid(PO.x + sx * PO.roof, PO.z + sz * PO.roof, 0.5, 0.5, -1, 7);
-  // ---- the road: the post office's square, then one road east; a back alley behind each row through town ----
-  road(-24, 0, 24, 0, 48); road(24, 0, TOWN.x1 + 2, 0, 8);
-  for (const z of [-32, 32]) { road(34, z, 176, z, 3.5, true); for (const x of [70, 150]) boosts.push({ x, z, y: 0, yaw: Math.PI / 2 }); }
+  // ---- the road: the post office's square, then one road east down the middle ----
+  road(-24, 0, 24, 0, 44); road(24, 0, TOWN.x1 + 2, 0, 8);
   for (const x of [30, 100]) boosts.push({ x, z: 0, y: 0, yaw: Math.PI / 2 });
   // ---- Main Street: three houses each side ----
   row(44, 0, 17, 0, 8, false);
   // ---- Maple Suburbs: three each side, fenced yards, a pond, sprinklers ----
   row(126, 1, 18, 0, 8, true);
-  pond(147, -46, 7, 0, 5, 1);
+  pond(136.5, -22, 4.5, 0, 3, 1); pond(157.5, 22, 4.5, 0, 3, 1);   // ponds in the gaps between the houses
+  // rougher going: low hedges across half the road, side to side (jump them or weave round)
+  for (const [x, sd] of [[121, 1], [141, -1], [161, 1], [178, -1]]) { solid(x, sd * 2, 0.4, 2.1, -1, 0.9); fences.push({ x0: x, z0: sd * 0.2, x1: x, z1: sd * 3.9, y: 0, hedge: 1 }); }
   for (let k = 0; k < 4; k++) sprinklers.push({ x: 118 + k * 20, z: k % 2 ? 7 : -7, y: 0, ph: k * 1.7 });
-  // ---- Goose Marsh: a boardwalk on, three houses each side on platforms, two ponds ----
-  rect(MARSH.x0 - 2, MARSH.x1 + 2, -3.5, 3.5, 0.12, "plank", -0.6);
+  // ---- Goose Marsh: a broken boardwalk on (gaps of mud to jump), three houses each side on platforms, two ponds ----
+  for (const [a, b] of [[MARSH.x0 - 2, 222], [226, 249], [253, 276], [280, MARSH.x1 + 2]]) rect(a, b, -3.5, 3.5, 0.12, "plank", -0.6);
   for (const x of MARSH_X) for (const sd of [1, -1]) { rect(x - 5.5, x + 5.5, Math.min(sd * 8, sd * 19), Math.max(sd * 8, sd * 19), 0.12, "plank", -0.6); house(x, sd * 15, 0.12, sd > 0 ? Math.PI : 0, 2, 7); }
-  rect(MARSH_X[1] - 2.6, MARSH_X[1] + 2.6, -46, 46, 0.12, "plank", -0.6);   // a boardwalk across the middle
-  pond(214, 34, 9, -0.45, 5, 2); pond(266, -34, 9, -0.45, 5, 2);
+  rect(MARSH_X[1] - 2.6, MARSH_X[1] + 2.6, -27, 27, 0.12, "plank", -0.6);   // a boardwalk across the middle
+  pond(226, 23, 4.5, -0.45, 4, 2); pond(254, -23, 4.5, -0.45, 4, 2); pond(200, -14, 4, -0.45, 3, 2);
   boosts.push({ x: 226, z: 0, y: 0.12, yaw: Math.PI / 2 });
   // ---- Cliffside: three steps up the road, a house each side on each; goats; the Sky Cannon at the top ----
-  for (let n = 1; n <= 3; n++) { const t = TERRACE(n); rect(t.x0, t.x1, t.z0, t.z1, t.y, "rock", -40); rampX(t.x0 - 14, t.x0, -4.5, 4.5, t.y - 6, t.y, "road"); house(t.x0 + 15, 17, t.y, Math.PI, 3, 6); house(t.x0 + 15, -17, t.y, 0, 3, 6); }
-  for (let n = 1; n <= 2; n++) { const t = TERRACE(n); for (let k = 0; k < 3; k++) { const x = t.x1 - 3.2 * (3 - k); rect(x, x + 3.2, 22, 30, t.y + STEP_H * (k + 1), "roof", t.y); } }   // rooftop hops: up the side of each step's face to the next
+  for (let n = 1; n <= 3; n++) { const t = TERRACE(n); rect(t.x0, t.x1, t.z0, t.z1, t.y, "rock", -40); rampX(t.x0 - 14, t.x0, -4.5, 4.5, t.y - 6, t.y, "road"); house(t.x0 + 15, 17, t.y, Math.PI, 3, 6); house(t.x0 + 15, -17, t.y, 0, 3, 6);
+    for (const [dx, z] of [[24, n % 2 ? 6 : -6], [30, n % 2 ? -7 : 7]]) solid(t.x0 + dx, z, 1.3, 1.3, t.y - 1, t.y + 2.2); }   // boulders on each step to ride round
+  for (let n = 1; n <= 2; n++) { const t = TERRACE(n); for (let k = 0; k < 3; k++) { const x = t.x1 - 3.2 * (3 - k); rect(x, x + 3.2, 20, 26, t.y + STEP_H * (k + 1), "roof", t.y); } }   // rooftop hops: up the side of each step's face to the next
   // ---- the Floating Islands: jump pads between them; a balloon home from the last ----
   for (const [a, b] of ISLE_LINKS) for (const [f, t] of [[a, b], [b, a]]) { const A = ISLES[f], B = ISLES[t], d = hyp(B.x - A.x, B.z - A.z), ux = (B.x - A.x) / d, uz = (B.z - A.z) / d; pads.push({ x: A.x + ux * (A.r - 3), z: A.z + uz * (A.r - 3), y: A.y, tx: B.x - ux * (B.r - 7), tz: B.z - uz * (B.r - 7), ty: B.y, from: f, to: t }); }
   balloons.push({ x: ISLES[2].x + 6, z: ISLES[2].z + 9, y: ISLES[2].y });
@@ -234,15 +256,15 @@ function buildTown() {
       house(best.x, best.z, s.y, best.yaw, 4, 5); keep.push({ x: best.x, z: best.z }, { x: best.x + Math.sin(best.yaw) * 5.5, z: best.z + Math.cos(best.yaw) * 5.5 }); }
   });
   // ---- the zipline tower at the suburbs' end, down to the marsh's far side; and from the top step back to it ----
-  rect(178, 186, 24, 32, 10, "stone"); ramp(178, 186, 32, 56, 10, 0, "stone");
-  zips.push({ x: 182, z: 26, y: 10, tx: 284, tz: 0, ty: 0.12 }, { x: TERRACE(3).x0 + 30, z: 30, y: 18, tx: 182, tz: 29.5, ty: 10 });
+  rampX(176, 186, 19, 27, 0, 6, "stone"); rect(186, 189.4, 19, 27, 6, "stone");
+  zips.push({ x: 187.7, z: 21, y: 6, tx: 284, tz: 0, ty: 0.12 }, { x: TERRACE(3).x0 + 30, z: 20, y: 18, tx: 187.7, tz: 25, ty: 6 });
   // ---- goats: one on each step, and one more on the top ----
-  for (let n = 1; n <= 3; n++) { const t = TERRACE(n); goats.push({ id: goats.length, hx: t.x0 + 6, hz: n % 2 ? 26 : -26, y: t.y }); }
-  goats.push({ id: goats.length, hx: TERRACE(3).x0 + 26, hz: -24, y: TERRACE(3).y });
+  for (let n = 1; n <= 3; n++) { const t = TERRACE(n); goats.push({ id: goats.length, hx: t.x0 + 6, hz: n % 2 ? 22 : -22, y: t.y }); }
+  goats.push({ id: goats.length, hx: TERRACE(3).x0 + 26, hz: -10, y: TERRACE(3).y });
   // ---- trees where there's room ----
-  for (let n = 0, tries = 0; n < 45 && tries < 4000; tries++) {
+  for (let n = 0, tries = 0; n < 24 && tries < 4000; tries++) {
     const x = TOWN.x0 + 6 + rnd() * (TOWN.x1 - TOWN.x0 - 12), z = TOWN.z0 + 6 + rnd() * (TOWN.z1 - TOWN.z0 - 12);
-    if (hyp(x, z) < 32 || Math.abs(z) < 8 || Math.abs(Math.abs(z) - 32) < 4.5 || (x > 172 && z > 18) || hyp(x - PIPE.a.x, z - PIPE.a.z) < 6 || sprinklers.some((q) => hyp(q.x - x, q.z - z) < 4)) continue;
+    if (hyp(x, z) < 26 || Math.abs(z) < 23 || (x > 172 && z > 16) || hyp(x - PIPE.a.x, z - PIPE.a.z) < 6 || sprinklers.some((q) => hyp(q.x - x, q.z - z) < 4)) continue;
     if (houses.some((h) => hyp(h.x - x, h.z - z) < 12 || hyp(h.mx - x, h.mz - z) < 5) || fences.some((f) => hyp((f.x0 + f.x1) / 2 - x, (f.z0 + f.z1) / 2 - z) < 6) || ponds.some((p) => hyp(p.x - x, p.z - z) < p.r + 4) || trees.some((t) => hyp(t.x - x, t.z - z) < 5)) continue;
     trees.push({ x, z, y: 0, s: 0.8 + rnd() * 0.6 }); solid(x, z, 0.45, 0.45, -1, 8); n++;
   }
@@ -271,13 +293,18 @@ export function isleAt(x, z) { for (let n = 0; n < ISLES.length; n++) if (hyp(x 
 
 // dogs roam their district (owner, 2026-11-11: not waiting in yards you can ride round): where each starts
 // each district's dogs are quicker to notice you and faster than the last (owner, 2026-11-11: harder the farther out)
-export const DOG_D = [{ trigger: 8, speed: 10.5 }, { trigger: 10, speed: 11.5 }, { trigger: 11, speed: 12.5 }, { trigger: 12, speed: 13.5 }, { trigger: 12, speed: 14 }];
+export const DOG_D = [{ trigger: 8, speed: 10.5, telegraph: 0.7, chase: 4 }, { trigger: 10, speed: 11.5, telegraph: 0.55, chase: 5 }, { trigger: 11, speed: 12.5, telegraph: 0.45, chase: 6 }, { trigger: 12, speed: 13.5, telegraph: 0.35, chase: 7 }, { trigger: 12, speed: 14.5, telegraph: 0.3, chase: 7 }];
+// geese farther out see you sooner, honk for less time and lunge faster
+export const GOOSE_D = [{ see: 6, telegraph: 1.2, lunge: 11.5 }, { see: 7, telegraph: 1, lunge: 13 }, { see: 8, telegraph: 0.8, lunge: 14.5 }, { see: 9, telegraph: 0.65, lunge: 15.5 }, { see: 9, telegraph: 0.6, lunge: 16 }];
+// (owner, 2026-11-11) a mount outgrows the easier areas' animals: its chance to shake off a bite or a goose's grab
+// (no stun, no hit, the parcel kept) grows with its level, 8% a level past 4 x the area's number, up to 85%
+export const shakeOff = (lv, d) => clamp((lv - 1 - 4 * d) * 0.08, 0, 0.85);
 export function roamOk(x, z, y, d) { return Math.abs(surfaceAt(x, z, y + 0.5) - y) < 0.55 && !blocked(x, z, y, 0.6) && !inSafeZone(x, z, y) && hyp(x - PO.x, z - PO.z) > SAFE_R + 4 && districtAt(x, z, y) === d && !inPond(x, z, y); }
 (function populate() {   // dogs, more of them the farther out
   const rnd = rng(77123), put = (n, d, pt) => { for (let k = 0, tries = 0; k < n && tries < 6000; tries++) { const [x, z, y] = pt(); if (!roamOk(x, z, y, d) || dogs.some((q) => hyp(q.hx - x, q.hz - z) < 10)) continue; dogs.push({ id: dogs.length, hx: x, hz: z, y, d, look: Math.floor(rnd() * 3) }); k++; } };
-  put(2, 0, () => [40 + rnd() * 65, (rnd() - 0.5) * 100, 0]);
-  put(4, 1, () => [112 + rnd() * 75, (rnd() - 0.5) * 100, 0]);
-  put(5, 2, () => rnd() < 0.6 ? [MARSH.x0 + 4 + rnd() * 92, (rnd() - 0.5) * 5, 0.12] : [MARSH_X[1] + (rnd() - 0.5) * 3.5, (rnd() - 0.5) * 88, 0.12]);
+  put(2, 0, () => [40 + rnd() * 65, (rnd() - 0.5) * 50, 0]);
+  put(4, 1, () => [112 + rnd() * 75, (rnd() - 0.5) * 50, 0]);
+  put(5, 2, () => rnd() < 0.6 ? [MARSH.x0 + 4 + rnd() * 92, (rnd() - 0.5) * 5, 0.12] : [MARSH_X[1] + (rnd() - 0.5) * 3.5, (rnd() - 0.5) * 50, 0.12]);
   put(6, 3, () => { const t = TERRACE(1 + Math.floor(rnd() * 3)); return [t.x0 + 2 + rnd() * (t.x1 - t.x0 - 4), t.z0 + 2 + rnd() * (t.z1 - t.z0 - 4), t.y]; });
   put(3, 4, () => { const I = ISLES[1 + Math.floor(rnd() * 2)], a = rnd() * TAU, r = rnd() * I.r * 0.7; return [I.x + Math.cos(a) * r, I.z + Math.sin(a) * r, I.y]; });
 })();

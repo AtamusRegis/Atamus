@@ -89,18 +89,34 @@ export function attachPets(server, { origins = [], allowLocal = false, store = m
     const q = { pid: ++p.pids, tier: c.tier, mod: c.mod, dur: max, max, hits: 0, house: h.id, t0: now, due: c.mod === "express" ? now + 1000 * (Math.max(W.EXPRESS_MIN, hyp(h.mx, h.mz) * W.EXPRESS_PER_M) + EXPRESS_EXTRA[c.tier]) : 0 };
     p.bag.push(q); p.ready = null; sendBag(p, { k: "grab", pid: q.pid }); carry(p); fillBelt(p);
   }
+  // (owner, 2026-11-11) a delivery pays its coins and leaves a gift of a rarity rolled now; what's inside is decided when
+  // it's opened. Four unopened gifts of one rarity merge into one of the next.
   function deliver(p, q) {
     const d = p.acct.data, m = mountOf(p), now = Date.now(), late = q.mod === "express" && now > q.due;
-    const coins = W.deliveryCoins(q.tier, q.mod, d.up.payout, q.hits, late), roll = W.rewardRoll(q.tier, q.mod, d.up, d.stamp);
-    const lvUp = W.addXp(m, 5 + 3 * q.tier + roll.xp);
-    d.coins += coins + roll.coins; d.coupons += roll.coupons; d.stamp = roll.stamp; if (roll.egg) d.eggs[roll.egg]++;
-    d.stats.del++; if (q.mod === "golden") d.stats.golden++; d.fails = 0;
-    // (owner, 2026-11-11) a courier's second delivery brings a new mount: a random Uncommon
-    let gift = null; if (d.stats.del === 2 && d.mounts.length < W.MOUNT_CAP) { const pool = Object.keys(MOUNTS).filter((k) => MOUNTS[k].r === 1); gift = { id: d.nextId++, sp: pool[Math.floor(Math.random() * pool.length)], va: 0, lv: 1, xp: 0 }; d.mounts.push(gift); }
-    drop(p.bag, q); changed(p); if (gift) flush(p.acct);
-    send(p.ws, { t: "delivered", pid: q.pid, house: q.house, coins, roll: { tier: roll.tier, coins: roll.coins, xp: 5 + 3 * q.tier + roll.xp, coupons: roll.coupons, egg: roll.egg, near: roll.near }, lvUp, gift, data: d });
+    const coins = W.deliveryCoins(q.tier, q.mod, d.up.payout, q.hits, late), roll = W.rewardRoll(q.tier, q.mod, d.up, d.stamp), xp = 5 + 3 * q.tier;
+    const lvUp = W.addXp(m, xp);
+    d.coins += coins; d.stamp = roll.stamp; d.stats.del++; if (q.mod === "golden") d.stats.golden++; d.fails = 0;
+    const gift = { gid: d.nextGid++, r: roll.tier, pt: q.tier };
+    // a courier's second delivery brings a new mount (a random Uncommon), revealed when that gift is opened
+    if (d.stats.del === 2 && d.mounts.length < W.MOUNT_CAP) { const pool = Object.keys(MOUNTS).filter((k) => MOUNTS[k].r === 1), nm = { id: d.nextId++, sp: pool[Math.floor(Math.random() * pool.length)], va: 0, lv: 1, xp: 0 }; d.mounts.push(nm); gift.m = nm.id; }
+    d.gifts.push(gift); const merges = W.mergeGifts(d.gifts, () => d.nextGid++);
+    const over = d.gifts.length > W.GIFT_CAP ? d.gifts.slice(0, d.gifts.length - W.GIFT_CAP) : [];   // too many waiting: the oldest open by themselves
+    if (over.length) openGifts(p, over.map((g) => g.gid), true);
+    drop(p.bag, q); changed(p); flush(p.acct);
+    send(p.ws, { t: "delivered", pid: q.pid, house: q.house, coins, xp, gift, near: roll.near, merges, lvUp, data: d });
     sendBag(p, { k: "delivered", pid: q.pid });
     all(p.room, { t: "fx", k: "del", id: p.id, house: q.house, roll: roll.tier }, p); carry(p);
+    if (lvUp) { showMount(p); sendBag(p, { k: "mount" }); }
+  }
+  function openGifts(p, gids, quiet) {   // open these gifts: roll what's inside each and add it
+    const d = p.acct.data, m = mountOf(p), list = []; let lvUp = 0;
+    for (const gid of new Set(gids)) {
+      const g = d.gifts.find((k) => k.gid === gid); if (!g) continue; d.gifts.splice(d.gifts.indexOf(g), 1);
+      const c = W.giftContents(g.r, g.pt, d.up); d.coins += c.coins; d.coupons += c.coupons; if (c.egg) d.eggs[c.egg]++; lvUp += W.addXp(m, c.xp);
+      const mount = g.m ? d.mounts.find((k) => k.id === g.m) || null : null; list.push({ gid, r: g.r, ...c, mount });
+    }
+    if (!list.length) return; changed(p); flush(p.acct);
+    if (!quiet) send(p.ws, { t: "opened", list, lvUp, data: d });
     if (lvUp) { showMount(p); sendBag(p, { k: "mount" }); }
   }
   const kickable = (me, x, z, y, extra = 0) => { const fx = Math.sin(me.yaw), fz = Math.cos(me.yaw), dx = x - me.x, dz = z - me.z, along = dx * fx + dz * fz; return Math.abs(y - me.y) < 2.6 && along > -0.6 && along < KICK.range + extra && Math.abs(dx * fz - dz * fx) < KICK.half + 0.9 + extra; };
@@ -301,6 +317,7 @@ export function attachPets(server, { origins = [], allowLocal = false, store = m
           break;
         }
         case "grab": grab(me); break;
+        case "open": if (Array.isArray(m.gids)) openGifts(me, m.gids.slice(0, W.GIFT_CAP).map((g) => +g)); break;
         case "kick": kick(me); break;
         case "ability": bark(me); break;
         case "equip": { const q = d.mounts.find((k) => k.id === m.id); if (q && d.ride !== q.id) { d.ride = q.id; changed(me); pushData(me); showMount(me); sendBag(me, { k: "mount" }); } break; }
@@ -381,7 +398,7 @@ export function attachPets(server, { origins = [], allowLocal = false, store = m
       const D = W.dogs[q.id]; q.awake = q.mode !== 0 || near(players, q, 110);
       if (!q.awake) continue;   // asleep while nobody's near
       if (q.mode === 0) {
-        if (now >= q.cool) for (const p of players) if (p.bag.length && Math.abs(p.y - q.y) < 3 && hyp(p.x - q.x, p.z - q.z) < W.DOG_D[D.d].trigger && exposed(p, now)) { q.mode = 1; q.t = DOG.telegraph; q.target = p; q.sx = q.x; q.sz = q.z; break; }   // bark and a red "!"
+        if (now >= q.cool) for (const p of players) if (p.bag.length && Math.abs(p.y - q.y) < 3 && hyp(p.x - q.x, p.z - q.z) < W.DOG_D[D.d].trigger && exposed(p, now)) { q.mode = 1; q.t = W.DOG_D[D.d].telegraph; q.target = p; q.sx = q.x; q.sz = q.z; break; }   // bark and a red "!"
         if (q.mode !== 0) continue;
         if ((q.pause -= dt) > 0) continue;
         if (q.wx === undefined || hyp(q.wx - q.x, q.wz - q.z) < 1 || q.stuck > 0.6) {   // somewhere new to trot to (now and then it stops for a sniff)
@@ -392,13 +409,14 @@ export function attachPets(server, { origins = [], allowLocal = false, store = m
         continue;
       }
       const p = q.target;
-      if (q.mode === 1) { if (p) q.yaw = Math.atan2(p.x - q.x, p.z - q.z); q.t -= dt; if (q.t <= 0) { q.mode = 2; q.t = DOG.chase; } continue; }
+      if (q.mode === 1) { if (p) q.yaw = Math.atan2(p.x - q.x, p.z - q.z); q.t -= dt; if (q.t <= 0) { q.mode = 2; q.t = W.DOG_D[D.d].chase; } continue; }
       if (q.mode === 2) {
         if (!p || p.gone || !p.bag.length || !exposed(p, now) || Math.abs(p.y - q.y) > 3.5 || hyp(q.x - q.sx, q.z - q.sz) > DOG.leash || (q.t -= dt) <= 0) { q.mode = 0; q.target = null; q.cool = now + DOG.cool * 1000; q.pause = 1.5; q.wx = undefined; continue; }
         const d = hyp(p.x - q.x, p.z - q.z);
         pace(q, p.x, p.z, W.DOG_D[D.d].speed * (p.acct.data.fails >= 3 ? 0.8 : 1) * dt, 0.75);   // three failed runs in a row: the dogs ease off
         if (d < DOG.bite && p.y - q.y < 0.8) {   // (owner, 2026-11-11) a courier jumping over a dog isn't bitten
-          stun(p, DOG.stun, "dog"); hit(p, "dog"); all(r, { t: "fx", k: "bite", dog: q.id, id: p.id }); q.mode = 0; q.target = null; q.cool = now + DOG.cool * 1000; q.pause = 2; q.wx = undefined; }
+          if (Math.random() < W.shakeOff(mountOf(p).lv, D.d)) all(r, { t: "fx", k: "shake", id: p.id });   // outgrown: the mount shakes it off
+          else { stun(p, DOG.stun, "dog"); hit(p, "dog"); all(r, { t: "fx", k: "bite", dog: q.id, id: p.id }); } q.mode = 0; q.target = null; q.cool = now + DOG.cool * 1000; q.pause = 2; q.wx = undefined; }
         continue;
       }
       // scared off (a kick, a Bark): it bolts back toward where it started, then carries on
@@ -419,14 +437,15 @@ export function attachPets(server, { origins = [], allowLocal = false, store = m
         continue;
       }
       if (g.mode === 0) {
-        if (!(now < g.cool)) for (const p of players) if (p.bag.length && Math.abs(p.y - g.y) < 2.5 && hyp(p.x - g.x, p.z - g.z) < GOOSE.see && exposed(p, now)) { g.mode = 1; g.t = GOOSE.telegraph; g.target = p; break; }   // honk and flap
+        if (!(now < g.cool)) for (const p of players) if (p.bag.length && Math.abs(p.y - g.y) < 2.5 && hyp(p.x - g.x, p.z - g.z) < W.GOOSE_D[G.d].see && exposed(p, now)) { g.mode = 1; g.t = W.GOOSE_D[G.d].telegraph; g.target = p; break; }   // honk and flap
         if (g.mode === 0) { if (hyp(g.wx - g.x, g.wz - g.z) < 0.5 || Math.random() < 0.003) { const a = Math.random() * W.TAU, d = P.r + 1.5 + Math.random() * GOOSE.roam; g.wx = P.x + Math.cos(a) * d; g.wz = P.z + Math.sin(a) * d; } const ox = g.x, oz = g.z; go(g.wx, g.wz, GOOSE.wander); if (W.blocked(g.x, g.z, g.y, 0.3) && !W.blocked(ox, oz, g.y, 0.3)) { g.x = ox; g.z = oz; g.wx = ox; g.wz = oz; } }   // geese roam well away from their pond (owner, 2026-11-11), round houses and fences
         continue;
       }
       const p = g.target;
       if (g.mode === 1) { if (p) g.yaw = Math.atan2(p.x - g.x, p.z - g.z); if ((g.t -= dt) <= 0) { g.mode = 2; g.t = GOOSE.lungeFor; } continue; }
       if (!p || p.gone || !p.bag.length || !exposed(p, now) || (g.t -= dt) <= 0) { g.mode = 0; g.target = null; g.cool = now + GOOSE.cool * 1000; continue; }
-      if (go(p.x, p.z, GOOSE.lunge) < GOOSE.touch && Math.abs(p.y - g.y) < 2.5) {   // it has the parcel (no stun): off to the pond
+      if (go(p.x, p.z, W.GOOSE_D[G.d].lunge) < GOOSE.touch && Math.abs(p.y - g.y) < 2.5) {   // it has the parcel (no stun): off to the pond
+        if (Math.random() < W.shakeOff(mountOf(p).lv, G.d)) { all(r, { t: "fx", k: "shake", id: p.id }); g.mode = 4; g.t = 1.5; g.target = null; continue; }   // outgrown: shaken off
         const q = pick1(p.bag); drop(p.bag, q); q.goose = g.id; p.stolen.push(q); g.carry = { p, parcel: q }; g.mode = 3; g.target = null;
         sendBag(p, { k: "stolen", pid: q.pid, goose: g.id }); carry(p); all(r, { t: "fx", k: "steal", goose: g.id, id: p.id }, p);
       }
