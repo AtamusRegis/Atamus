@@ -1649,7 +1649,7 @@ function onNet(m) {
   switch (m.t) {
     case "welcome": {
       if (stale(m.web, false, m.by)) return;
-      if (m.world) { World.setWorld(m.world); buildWorldView(); }
+      if (m.world) safeWorld(() => World.setWorld(m.world));
       sentPet = "";   // tell the room again what I ride once I'm in
       setTok(m.token); if (registering) { try { localStorage.setItem("petdelivery.claimed", "1"); } catch (e) { /* private mode */ } registering = false; }
       const again = loggedIn && myName === m.name; myName = m.name; myId = m.id; netOk = true; loggedIn = true; $("login").style.display = "none"; if (document.activeElement && document.activeElement.blur) document.activeElement.blur();
@@ -1696,7 +1696,7 @@ function onNet(m) {
     case "chase": case "caught": case "escaped": case "stars": onVehEvent(m.t, m.stars || 0); break;
     case "reload": stale(m.web, true, m.by); break;
     case "contract": setContract(m.c); break;
-    case "world": if (m.all) World.setWorld(m.all); else if (m.edits) World.applyEdits(m.edits); buildWorldView(); break;
+    case "world": safeWorld(() => { if (m.all) World.setWorld(m.all); else if (m.edits) World.applyEdits(m.edits); }); break;
     case "done": contractOver(m.won, m.pay || 0, m.progress || 0, !!m.helped); break;
     case "package_event": setPackageEvent(m.event, !!m.event); break;
     case "package_taken": if (packageEvent) packageEvent.boxes.delete(m.id); dropPrize(m.id); hudKey = ""; break;
@@ -2965,6 +2965,10 @@ $("gm-admin").onclick = () => { gearMenu.style.display = "none"; if (openPanel =
 // ---- the world as it is now (owner, 2026-11-10): the blocks, houses, trees, pads, vans, helicopters, plots and the map,
 // all rebuilt from the shared world whenever staff change it ----
 let worldMeshes = [], houseKey = "";
+// (owner, 2026-11-10: a bad piece once stopped the whole login) the world is taken in and drawn so that nothing in it can
+// stop the rest: a failing step is logged and skipped, and logging in carries on
+function safeWorld(take) { try { take(); } catch (e) { console.error("[pets] world", e); } try { buildWorldView(); } catch (e) { console.error("[pets] world view", e); } }
+const safely = (name, f) => { try { f(); } catch (e) { console.error("[pets] " + name, e); } };
 function buildWorldView() {
   for (const o of [...worldG.children]) { worldG.remove(o); if (o.userData.own) o.geometry.dispose(); if (o.isInstancedMesh) o.dispose(); }
   const { solid, dirt, water, tops } = blockGeometry();
@@ -2972,11 +2976,11 @@ function buildWorldView() {
   inColor(dm);   // (owner, 2026-11-10) the earth down the sides keeps its dirt brown
   worldG.add(sm, dm, wm); worldMeshes = [sm, dm, wm];
   snowCover.geometry.dispose(); snowCover.geometry = tops;
-  buildThings(worldG); buildPads(worldG); for (const b of BOOSTS) if (b.k === "pad") b.g.userData.own = true;
-  buildVehicles(); for (const id of plotState.keys()) buildPlot(id); syncLots();
+  safely("things", () => buildThings(worldG)); safely("pads", () => { buildPads(worldG); for (const b of BOOSTS) if (b.k === "pad") b.g.userData.own = true; });
+  safely("vehicles", buildVehicles); for (const id of plotState.keys()) safely("lot", () => buildPlot(id)); safely("lots", syncLots);
   for (const f of fades.values()) if (f.g) { scene.remove(f.g.g); ghostPool.push(f.g); } fades.clear();
   const hk = houses.map((h) => h.id).join(); if (hk !== houseKey) { if (houseKey && me.bag.length) { me.bag = []; syncBeams(); hudKey = ""; } houseKey = hk; }   // the houses changed: parcels for old addresses are gone
-  buildVanPoints(); drawMapLayers(); if (wedit) { if (wedit.sel !== undefined && !vehThings().some((t) => t.id === wedit.sel)) { wedit.sel = undefined; renderWorldBar(); } weditAim(wedit.px, wedit.py); }
+  safely("van points", buildVanPoints); safely("map", drawMapLayers); if (wedit) { if (wedit.sel !== undefined && !vehThings().some((t) => t.id === wedit.sel)) { wedit.sel = undefined; renderWorldBar(); } weditAim(wedit.px, wedit.py); }
 }
 // (owner, 2026-11-10) van points, seen only while building: a yellow post on each and a straight line to each point
 // it's joined to
@@ -3138,8 +3142,8 @@ function weditTap(px, py) {
   return true;
 }
 // (owner, 2026-11-10) Build Town is a button on screen (admins only), not in the menu
-$("worldbtn").onclick = () => { gearMenu.style.display = "none"; if (wedit) closeWorldEdit(); else openWorldEdit(); };
-const showWorldBtn = () => { $("worldbtn").style.display = myRole === "admin" ? "" : "none"; $("worldbtn").classList.toggle("on", !!wedit); };
+if ($("worldbtn")) $("worldbtn").onclick = () => { gearMenu.style.display = "none"; if (wedit) closeWorldEdit(); else openWorldEdit(); };
+const showWorldBtn = () => { if (!$("worldbtn")) return; $("worldbtn").style.display = myRole === "admin" ? "" : "none"; $("worldbtn").classList.toggle("on", !!wedit); };
 // (owner, 2026-11-09) staff chat commands, never sent as chat: /coins 1m, /allpets, /maxlv, /items, /treats, /everything
 // (or /all), /unwanted, each on yourself or a player named after it (/coins 50k Name); /kick Name, /mute Name 1h, /ban
 // Name 7d (minutes, or m / h / d, perma, off)
