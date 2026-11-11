@@ -3134,10 +3134,20 @@ function roofTop(x, z, y) {
   }
   return best;
 }
+// (owner, 2026-11-10) blocks are solid boxes: anyone caught inside one (falling down a side, landing on an edge) is pushed
+// out sideways the shortest way to open air, and falls (or walks on) from there; never stuck in it, never lifted on top
+function unstick() {
+  if (inHouse() || me.inst || inArena(me.x, me.z)) return;
+  const inBlock = (x, z) => { const col = World.colAt(x, z); if (!col) return false; for (const c of col) { if (c.t === "water") continue; const top = World.cellTop(c, x, z), bottom = (c.k - 1) * World.STEP; if (top > me.y + 0.6 && bottom < me.y + 1.5) return true; } return false; };
+  if (!inBlock(me.x, me.z)) return;
+  const T = World.TILE, i = Math.floor(me.x / T), j = Math.floor(me.z / T), u = me.x - i * T, v = me.z - j * T, R = 0.8;
+  const out = [[i * T - R, me.z, u], [(i + 1) * T + R, me.z, T - u], [me.x, j * T - R, v], [me.x, (j + 1) * T + R, T - v]].sort((a, b) => a[2] - b[2]);
+  for (const [x, z] of out) if (!inBlock(x, z) && !blocked(x, z, me.y)) { me.x = x; me.z = z; return; }
+}
 function groundAt(x, z, y) {
   const rf = roofTop(x, z, y); if (rf > -Infinity) return rf;
   if (inArena(x, z) && y > AR.y - 3) return AR.y + arenaFloor(x, z);
-  const sy = World.surfaceAt(x, z, y); if (sy === -Infinity) return -200;   // (owner, 2026-11-10) the blocks: the highest top at or a step above me
+  const sy = World.surfaceAt(x, z, y - 0.6); if (sy === -Infinity) return -200;   // (owner, 2026-11-10) the blocks: the highest top at most a step (0.6 m) above me; higher is a side, never a step up
   // (owner, 2026-11-09) in the water: a swimmer goes down to the bottom (it swims, below), a flier or glider hovers
   // over it, and anyone else would float (but is put back on the shore: only swimmers go in the water)
   const w = World.waterAt(x, z); if (w > -Infinity) return waterMode === "swim" ? terrain(x, z) + 0.25 : waterMode === "hover" ? w + 0.8 : w - SWIM_SINK;
@@ -3204,6 +3214,7 @@ function step(dt) {
     if (stuckFor > 3 && inHouse()) { stuckFor = 0; me.x = INT.x + World.FRONT_DOOR.x; me.z = INT.z + World.FRONT_DOOR.z + 2; me.y = INT.y + 0.25; me.vy = 0; cam.y = me.y; sendPos(true); }   // walled in: back by the front door
     me.yaw = lerpYaw(me.yaw, Math.atan2(mx, mz), Math.min(1, dt * 12));   // turn to where it's going (fliers also pitch: flightPitch)
   }
+  unstick();
   const floor = floorAt(me.x, me.z, me.y);
   const held = loggedIn && !typing(), upH = flyUp || (held && keys.has("Space")), downH = flyDown || (held && (keys.has("ShiftLeft") || keys.has("ShiftRight")));
   if (kind === "fly" && !flying && !stunned && (upH || jumpQueued > now)) { me.flying = true; jumpQueued = 0; me.y = Math.max(me.y, floor) + 0.6; }   // Space on the ground: take off
