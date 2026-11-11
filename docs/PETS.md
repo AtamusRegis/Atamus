@@ -26,7 +26,7 @@ Asked (owner): a web game on atamus.io (not Roblox), on its own page; the cargo 
   blocks and onto the ones they jump or fly up to), walk up wedges and ramps, step up at most 0.6 m (a block's side is a
   wall), and fall off where there are no blocks. The camera never goes inside a block.
 - **Things placed on tiles:** tall pine trees (owner, 2026-11-10: 9 to 12 m, three to four blocks high, a trunk and
-  three tiers); **houses** (on a tile corner, 2 x 2 tiles, facing one of four ways, a blue mailbox (owner, 2026-11-10: in color, as you deliver to it)
+  three tiers); **houses** (on a tile corner, 2 x 2 tiles, facing one of four ways, a blue mailbox (owner, 2026-11-10: in color, as you deliver to it, the blue of animal control's light)
   7.5 m in front); **mailboxes** on their own; **boost pads** (on road tiles); **animal control vans** (only on road
   tiles); **helicopters** (anywhere, with a radius: 40, 80, 150 or 250 m); and **housing plots** (by number). Every
   mailbox, a house's or a lone one, is a delivery address. With no mailboxes there are no parcels.
@@ -132,7 +132,8 @@ Asked (owner): a web game on atamus.io (not Roblox), on its own page; the cargo 
 - **Gray look (owner, 2026-11-09: no outlines, no hatching):** the world is drawn in plain shades of gray: a screen pass
   turns each pixel into its brightness, keeping textures and shading; nights are brightened so it stays readable.
   Grass and trees keep their green (owner, 2026-11-10: most of a pixel's own color where green leads; stronger the same
-  day after "still too gray"), and so do green roofs.
+  day after "still too gray"), and so do green roofs. The brightest parts ease toward white instead of clipping, and
+  the light bounced up from the ground is neutral gray (owner, 2026-11-10: lit limbs were blowing out pale).
   Name tags, place labels and speech
   bubbles are drawn after the pass, in color, still hidden behind buildings; so are the guides and interaction circles (owner,
   2026-11-09): the guide arrow, the place rings (pickup, board, shops, training yard, lifts) and lift beams, the beams
