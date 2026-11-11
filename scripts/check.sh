@@ -11,6 +11,6 @@ for f in packages/server/src/*.js website/*.js scripts/*.mjs; do
   node --input-type=module --check < "$f" 2>/dev/null || node --input-type=commonjs --check < "$f" 2>/dev/null \
     || { echo "SYNTAX ERROR: $f"; node --input-type=module --check < "$f" || true; fail=1; }
 done
-# Pet Delivery Co.'s world is one file used by both the page and the server: the two copies must match
+# The game's world is one file used by both the page and the server: the two copies must match
 cmp -s website/pets-world.js packages/server/src/pets-world.js || { echo "MISMATCH: website/pets-world.js and packages/server/src/pets-world.js differ (copy one over the other)"; fail=1; }
 [ $fail -eq 0 ] && echo "check: all files parse" || exit 1

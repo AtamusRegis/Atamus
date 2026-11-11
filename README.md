@@ -1,7 +1,7 @@
-# Pet Delivery Co.
+# Critter Courier
 
-A co-op, phone-first 3D browser game: ride your pet around a floating town delivering mail, hatch and train pets,
-build a house on your plot, and play with friends.
+A phone-first 3D browser game: grab a parcel off the post office conveyor, ride your mount to its address past dogs,
+geese and other couriers' kicks, deliver it and roll for rewards; hatch and level mounts and play alongside friends.
 
 - Website (GitHub Pages, from `website/`): https://atamus.io — the game is `pets.html`
 - Game server (Node behind Caddy, from `packages/server/`): https://play.atamus.io, WebSocket `/pets`

@@ -1,8 +1,10 @@
-# Pet Delivery Co.: working notes for Claude
+# Critter Courier: working notes for Claude
 
-Pet Delivery Co. is a co-op, phone-first 3D browser game (Three.js, 1 unit = 1 m): ride your pet around a floating
-town delivering mail, hatch and train pets, build a house on your plot, play with friends. The website is on GitHub
-Pages (atamus.io); the co-op server is Node behind Caddy (play.atamus.io, WebSocket `/pets`). Claude writes the code and
+Critter Courier is a phone-first 3D browser game (Three.js, 1 unit = 1 m): grab a parcel off the post office conveyor,
+ride your mount to its address past dogs, geese and other couriers' kicks, deliver it and roll for rewards; hatch and
+level mounts, buy courier upgrades, play alongside up to 100 others. (owner, 2026-11-11) It replaced Pet Delivery Co.,
+remade from the Critter Courier design document; the file names (`pets.*`, `/pets`) stayed. The website is on GitHub
+Pages (atamus.io); the game server is Node behind Caddy (play.atamus.io, WebSocket `/pets`). Claude writes the code and
 runs deploys. Two developers now work on this repository, each with their own Claude: follow **Working together** below.
 
 **Before you change anything:**
@@ -11,8 +13,8 @@ runs deploys. Two developers now work on this repository, each with their own Cl
    owner rejected.
 2. Skim the top of `docs/CHANGELOG.md` to see what changed recently.
 3. `main` is the one source of truth (owner, 2026-11-08): everything deploys from it; the older Atamus prototypes were
-   removed (they're in git history only). **Old database data stays untouched** (older tables are left in the live
-   database, unused).
+   removed (they're in git history only). **Old database data stays untouched** (older tables, and Pet Delivery Co.'s
+   `data` column and `pet_world` table, are left in the live database, unused; couriers' data is the `courier` column).
 
 **In the same commit as any change to behavior:**
 
@@ -42,20 +44,24 @@ These docs are the project's memory between sessions. If they disagree with the 
 website/              GitHub Pages site (atamus.io)
   index.html          the front page (Updates list); style.css + theme.css + front-updates.js for it
   pets.html           the game page and HUD; its <meta name="pets-server"> (and CSP connect-src) name the game server
-  pets.js             the whole client: town, riding, parcels, eggs, training, items, houses and building, co-op client
-  pets-world.js       the world, shared with the server: the blocks and things staff build, plots, animal control, the
-                      player-data rules (cleanData). packages/server/src/pets-world.js must be an identical copy
-                      (scripts/check.sh compares them)
+  pets.js             the whole client: drawing the town, riding, the conveyor and parcels, the HUD and menus (Stable,
+                      Upgrades, Odds, Settings, Admin), effects and sounds, the server connection
+  pets-world.js       the town and the rules, shared with the server: the fixed town (buildTown), tiers, modifiers,
+                      roll odds, mounts, eggs, upgrades, dogs / geese / hazard numbers, the courier-data rules
+                      (cleanData). packages/server/src/pets-world.js must be an identical copy (scripts/check.sh
+                      compares them)
   vendor/             Three.js (self-hosted); fonts/, assets/ (logo), favicon, CNAME
 packages/server/src/
   index.js            Express bootstrap: /healthz {build}, the deploy workflows' /game routes, the /pets socket; in the
                       PTR it also serves website/
-  pets.js             the co-op: WebSocket /pets, accounts, rooms of 16, positions, animal control, contracts, chat,
-                      parties, trades, housing plots, staff (admin panel)
-  petstore.js         accounts and the world in Postgres (pet_accounts, pet_tokens, pet_admin_log, pet_world) or in memory
+  pets.js             the game server: WebSocket /pets, accounts, rooms of 100, positions, the conveyor, deliveries
+                      and reward rolls, parcel damage, kicks, dogs, geese, goats, rocks, sky geese, mounts, eggs,
+                      upgrades, chat, parties, staff (admin panel)
+  petstore.js         accounts in Postgres (pet_accounts with couriers' data in its courier column, pet_tokens,
+                      pet_admin_log) or in memory
   pets-world.js       copy of website/pets-world.js (keep identical)
   build.js            SERVER_BUILD, website build polling (a new site build reloads players), the update countdown
-  gamehttp.js         the deploy workflows' calls; db.js the schema (Pet Delivery Co.'s tables); config.js; hash.js
+  gamehttp.js         the deploy workflows' calls; db.js the schema; config.js; hash.js
 packages/server/smoke.mjs   the smoke test (npm run smoke); smoke-browser.mjs the game page in headless Chrome
                             (npm run smoke:browser)
 scripts/
@@ -155,9 +161,10 @@ integrate / check / merge loop above is the workflow (`check.yml` already runs o
 **The checks** (what the required `check` job runs, `.github/workflows/check.yml`, on every pull request merged with
 the current `main`): `scripts/task.sh checks`, which is `bash scripts/check.sh` (every JS file parses, the two
 `pets-world.js` copies match) and `cd packages/server && npm run smoke` (the world's rules, and the real `/pets` server in
-memory with two players: register, welcome with plots, positions, saves and stale saves, house changes, chat, logging
-in again) and `npm run smoke:browser` (the same in-memory server serving `website/`; `pets.html` in headless Chrome
-loads, creates an account and rides, and a second player who joins is seen moving, with no page or console errors or failed requests: the only check that runs
+memory with players: register, the conveyor, a grab, kicks, a goose, a delivery and its roll, a dog, chat, a party,
+staff commands, upgrades, levels, eggs, logging in again) and `npm run smoke:browser` (the same in-memory server
+serving `website/`; `pets.html` in headless Chrome loads, creates an account, rides, grabs, delivers and rolls, opens
+the menus, buys and hatches, and a second player who joins is seen moving and lands a kick, with no page or console errors or failed requests: the only check that runs
 `website/pets.js`; set `CHROME` if it can't find Chrome, it skips locally without one but never in CI). Seconds. For gameplay changes also look at the game itself when it's worth it (`scripts/ptr.sh start`).
 
 **GitHub settings this relies on** (set once by an owner with admin rights: `scripts/protect-main.sh`; a Claude session
@@ -172,7 +179,8 @@ nothing enforces these rules, so follow them anyway and say so in reports.
 1. Make the change (if you touch `website/pets-world.js`, copy it over `packages/server/src/pets-world.js`).
 2. Run `scripts/task.sh checks`.
 3. If you touched client files, bump the `?v=` cache-buster on `pets.js` in `website/pets.html` (and on
-   `style.css` / `front-updates.js` in `index.html` if you changed those).
+   `pets-world.js` inside `pets.js` when the world changed; on `style.css` / `front-updates.js` in `index.html` if you
+   changed those).
 4. Update `docs/PETS.md` and `docs/CHANGELOG.md` (and the front page for a new feature).
 5. Commit, ending the message with the attribution lines, then `scripts/task.sh finish`. Merging into `main` deploys
    (website to GitHub Pages, server over the deploy key); a new website build reloads connected players onto it.

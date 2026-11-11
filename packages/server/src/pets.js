@@ -1,168 +1,158 @@
-// Pet Delivery Co. co-op (owner, 2026-11-08): a WebSocket at /pets.
-// - Accounts: username / password (or a remembered token); each account's data (pets, coins, items, home) is kept here
-//   and saved to the store (petstore.js). The page runs the game and sends its data back; a save is taken when it's
-//   based on the latest copy (rev), otherwise the page is sent the latest copy.
-// - Rooms of up to 16: where everyone is (10 times a second, stamped with the server's clock so pages play it back
-//   smoothly), which pet they ride, animal control (pets-world.js, the same file the page uses) and wanted levels,
-//   contracts (personal, or shared with your party: every delivery in it counts, the reward split by deliveries) and chat.
-// - Parties and trades between players, checked and carried out here.
-// - Housing (owner, 2026-11-10): each player in a room takes a random free town house's lot (its id is their plot); their
-//   own house (kept in their data) stands there, seen by everyone, until they leave and the town house comes back.
-// - The block world (owner, 2026-11-10): staff (admin) build the town from blocks; their edits go to everyone at once,
-//   rebuild every room's animal control, and are saved (one copy, in the store).
+// Critter Courier (owner, 2026-11-11: the game remade from the design document): a WebSocket at /pets.
+// The server decides everything that matters; the page shows it and asks: grab, kick, equip, buy a level, use a coupon,
+// hatch an egg, buy an upgrade, use a shortcut.
+// - Accounts: username / password (or a remembered token); each courier's data (coins, mounts, eggs, coupons, upgrades,
+//   the Stamp Meter, stats, settings) is kept here and saved to the store (petstore.js) every minute, when they leave,
+//   and at once after a purchase or a hatch.
+// - Rooms of up to 100 sharing one town: where everyone is (10 times a second, stamped with the server's clock), which
+//   mount they ride, the parcel on their saddle.
+// - The conveyor (each courier's own Ready and Next parcels), deliveries (checked here: the right mailbox, an unbroken
+//   parcel), reward rolls and the Stamp Meter, parcel damage, kicks, dogs, geese, goats, falling rocks, sky geese, the
+//   sewer pipe's goose and falling off the islands.
+// - Chat, parties and the staff panel.
 // Connections that go quiet are dropped; logging in again replaces the old connection. A new website build reloads
 // everyone onto it.
 import { WebSocketServer } from "ws";
-import { makeVehicles, stepVehicles, cleanData, petCap, penPets, setWorld, worldData, applyEdits, PLOTS, lotById } from "./pets-world.js";
-import { makePackageEvent, packageEventView, packageReward, takePackage } from "./package-events.js";
+import * as W from "./pets-world.js";
 import { onWebsiteUpdate, websiteBuild, websiteBy } from "./build.js";
 import { hashSecret, verifySecret } from "./hash.js";
 import { memStore } from "./petstore.js";
 
-const ROOM_MAX = 16, SNAP_MS = 50, DEL_GAP_MS = 900, CHAT_GAP_MS = 1200, BEAT_MS = 10000, SAVE_MS = 3000, INVITE_MS = 30000, PARTY_MAX = 6;
-const SPECIES = new Set(["pup", "raptor", "trex", "parrot", "owl", "dragon"]);   // (owner, 2026-11-09) six pets: ground and air (water scrapped; their pets dropped)
-const AIR_MOUNTS = new Set(["parrot", "owl", "dragon"]);
-// (owner, 2026-11-08) three kinds of contract: the goal grows with the party (owner, 2026-11-10: contracts are yours
-// alone, or your party's when you're in one, not the room's); the reward is per parcel of the goal
-const CONTRACTS = { rush: { time: 150, base: 3, per: 3, pay: 22 }, quick: { time: 240, base: 5, per: 4, pay: 26 }, big: { time: 420, base: 10, per: 8, pay: 30 } };   // (owner, 2026-11-08: more time)
+const { cleanData, MOUNTS, EGGS, UPGRADES, TIERS, KICK, DOG, GOOSE, GOAT, ROCK, SKYGOOSE, PIPE, ISLES, CANNON, hyp, clamp } = W;
+const ROOM_MAX = 100, TICK_MS = 50, CHAT_GAP_MS = 1200, BEAT_MS = 10000, SAVE_MS = 60000, INVITE_MS = 30000, PARTY_MAX = 6, SPEED_CAP = 60, DROP_S = 20;
+const EXPRESS_EXTRA = [0, 0, 8, 40, 45];   // seconds on top for the districts whose roads wind
 const rooms = [], online = new Map();   // account id -> player
 let nextId = 1;
 
 const cleanChat = (s) => String(s || "").replace(/[\p{C}<>]/gu, "").replace(/\s+/g, " ").trim().slice(0, 120);
 const num = (v, lim) => (Number.isFinite(+v) ? Math.max(-lim, Math.min(lim, +v)) : 0);
-const color = (c) => (/^#[0-9a-f]{6}$/i.test(c) ? c : "#3a8ee6");
-const r2 = (v) => Math.round(v * 100) / 100;
+const r1 = (v) => Math.round(v * 10) / 10, r2 = (v) => Math.round(v * 100) / 100;
 const NAME_RE = /^[A-Za-z0-9_]{3,16}$/;
-// (owner, 2026-11-08) staff: Nyssary is always admin and the only one who makes or removes admins; admins make
-// moderators and give items; moderators (and up) mute, kick and ban those below them
+// staff: Nyssary is always admin and the only one who makes or removes admins; admins make moderators and give things;
+// moderators (and up) mute, kick and ban those below them
 const OWNER = "nyssary", RANK = { player: 0, moderator: 1, admin: 2 };
 const rankOf = (a) => (a.name.toLowerCase() === OWNER ? 3 : RANK[a.role] || 0);
-const GIVE_ITEMS = new Set(["snack", "ribbon", "ticket"]);
+const between = ([a, b]) => a + Math.random() * (b - a);
 
-function roomFor(packageEveryMs) {
-  let r = rooms.find((q) => q.players.size < ROOM_MAX);
-  if (!r) { const now = Date.now(); r = { players: new Map(), packageEvent: null, nextPackageEvent: now + packageEveryMs, packageEveryMs, vs: makeVehicles(), last: now, plots: new Map() }; rooms.push(r); }
+function makeRoom() {
+  const r = { players: new Map(), last: Date.now(), tick: 0, slow: 0, rocks: [], dives: [] };
+  r.dogs = W.dogs.map((d) => ({ id: d.id, x: d.hx, z: d.hz, yaw: 0, mode: 0, t: 0, target: null, cool: 0, sent: true }));
+  r.geese = W.geese.map((g) => ({ id: g.id, x: g.x, z: g.z, y: g.y, yaw: 0, mode: 0, t: 0, target: null, carry: null, wx: g.x, wz: g.z, awake: false }));
+  r.goats = W.goats.map((g) => ({ id: g.id, x: g.hx, z: g.hz, yaw: Math.PI / 2, mode: 0, t: 0, dx: 0, dz: 0, cool: 0, sent: true }));
   return r;
 }
+function roomFor() { let r = rooms.find((q) => q.players.size < ROOM_MAX); if (!r) { r = makeRoom(); rooms.push(r); } return r; }
 const send = (ws, o) => { if (ws && ws.readyState === 1) ws.send(JSON.stringify(o)); };
 const all = (r, o, skip) => { const s = JSON.stringify(o); for (const p of r.players.values()) if (p !== skip && p.ws.readyState === 1) p.ws.send(s); };
-const pub = (p) => ({ id: p.id, name: p.name, sp: p.sp, lv: p.lv, shirt: p.shirt, x: p.x, y: p.y, z: p.z, yaw: p.yaw, stars: p.stars, inst: p.inst, ft: p.ft });
-const plotMsg = (plot, p) => {
-  if (!p) return { t: "plot", plot, id: 0, name: "", pieces: [], ext: 0 };
-  const d = p.acct.data, penSp = {};   // which kind of pet is in each playpen, so others see it
-  for (const t of d.home.pieces) if (t.k === "pen" && t.pet) { const q = d.pets.find((x) => x.id === t.pet); if (q) penSp[t.pet] = q.sp; }
-  return { t: "plot", plot, id: p.id, name: p.name, pieces: d.home.pieces, ext: d.home.ext | 0, penSp };   // ext: the house outside (owner, 2026-11-09)
-};
-function assignPlot(r, p) {   // a random town house nobody in the room lives in (none free: no house for now)
-  const free = PLOTS.filter((l) => !r.plots.has(l.id)); if (!free.length) { p.plot = -1; return; }
-  const pick = free[Math.floor(Math.random() * free.length)].id; r.plots.set(pick, p); p.plot = pick;
-}
-// after the world changes: anyone whose house is gone moves to another, and anyone without one gets one if there's room
-function relot(r) {
-  for (const [id, p] of [...r.plots]) if (!lotById.has(id)) { r.plots.delete(id); all(r, plotMsg(id, null)); p.plot = -1; send(p.ws, { t: "myplot", plot: -1 }); }
-  for (const p of r.players.values()) if (p.plot < 0) { assignPlot(r, p); if (p.plot >= 0) { send(p.ws, { t: "myplot", plot: p.plot }); all(r, plotMsg(p.plot, p), p); } }
-}
-// a contract belongs to your party when you're in one, or to you
-const groupOf = (p) => p.party || p, membersOf = (g) => (g.members ? [...g.members] : [g]);
-function contractFor(p) {
-  const c = groupOf(p).contract; if (!c) return null;
-  return { kind: c.kind, goal: c.goal, done: c.done, mine: c.by.get(p.id) || 0, left: Math.max(0, (c.ends - Date.now()) / 1000), pool: c.pool };
-}
-function sendContract(g) { for (const p of membersOf(g)) send(p.ws, { t: "contract", c: contractFor(p) }); }
-function finish(g, won) {
-  const c = g.contract; g.contract = null;
-  for (const p of membersOf(g)) {
-    // (owner, 2026-11-08) won: a share by deliveries; lost: whoever delivered gets a consolation by how close the party came
-    const n = c.by.get(p.id) || 0, pay = won && n > 0 ? Math.round((c.pool * n) / c.done) : 0;
-    send(p.ws, { t: "done", won, pay, progress: c.done / c.goal, helped: n > 0 });
-  }
-  sendContract(g);
-}
+const mountOf = (p) => { const d = p.acct.data; return d.mounts.find((m) => m.id === d.ride) || d.mounts[0]; };
+const statsOf = (p) => { const m = mountOf(p); return W.mountStats(m.sp, m.lv); };
+const pub = (p) => { const m = mountOf(p), d = p.acct.data; return { id: p.id, name: p.name, sp: m.sp, lv: m.lv, va: m.va, shirt: d.set.shirt, rank: W.rankOf(W.upTotal(d.up)), friendly: d.set.friendly, x: p.x, y: p.y, z: p.z, yaw: p.yaw, carry: p.parcel ? [p.parcel.tier, p.parcel.mod] : null }; };
+const parcelView = (q) => (q ? { tier: q.tier, mod: q.mod, dur: q.dur, max: q.max, hits: q.hits, house: q.house, due: q.due } : null);
+const dogView = (d) => [d.id, r1(d.x), r1(d.z), r2(d.yaw), d.mode], gooseView = (g) => [g.id, r1(g.x), r1(g.z), r1(g.y), r2(g.yaw), g.mode, g.carry ? g.carry.parcel.tier : -1], goatView = (g) => [g.id, r1(g.x), r1(g.z), r2(g.yaw), g.mode];
 
-export function attachPets(server, { origins = [], allowLocal = false, store = memStore(), packageEveryMs = 0 } = {}) {   // (owner, 2026-11-09) Package Rush off for now (0); tests pass a period
-  // (owner, 2026-11-10) the saved block world (until it's loaded, or if there's none, the starting square)
-  let worldSave = null;
-  store.getWorld().then((d) => { if (!d) return; setWorld(d); for (const r of rooms) r.vs = makeVehicles(r.vs); const w = worldData(); for (const p of online.values()) send(p.ws, { t: "world", all: w }); for (const r of rooms) relot(r); }).catch((e) => console.error("[pets] world load", e.message));
-  // Admins can override the clock-driven sky for everyone. It returns to the normal cycle when the server restarts.
-  let environment = { weather: "auto", time: "auto" };
-  // ---- saving: changed accounts are written every few seconds (and when their player leaves) ----
+export function attachPets(server, { origins = [], allowLocal = false, store = memStore() } = {}) {
+  // ---- saving ----
   const dirty = new Set();
   const flush = async (acct) => { dirty.delete(acct); try { await store.save(acct.id, acct.data, acct.rev); } catch (e) { console.error("[pets] save", e.message); dirty.add(acct); } };
   setInterval(() => { for (const a of [...dirty]) flush(a); }, SAVE_MS).unref();
   const changed = (p) => { p.acct.rev++; dirty.add(p.acct); };
-  const pushData = (p) => send(p.ws, { t: "data", rev: p.acct.rev, data: p.acct.data });
+  const pushData = (p) => send(p.ws, { t: "data", data: p.acct.data });
+  const showMount = (p) => { const m = mountOf(p); all(p.room, { t: "mount", id: p.id, sp: m.sp, lv: m.lv, va: m.va }, p); };
+
+  // ---- parcels ----
+  const fillBelt = (p) => { const up = p.acct.data.up; if (!p.ready) { p.ready = p.next || W.rollParcel(up); p.next = null; } if (!p.next) p.next = W.rollParcel(up); send(p.ws, { t: "belt", ready: p.ready, next: p.next }); };
+  const carry = (p) => all(p.room, { t: "carry", id: p.id, c: p.parcel ? [p.parcel.tier, p.parcel.mod] : null }, p);
+  function lose(p, why) {   // the parcel is gone (broken, stolen for good): back to the conveyor
+    if (!p.parcel && !p.stolen && !p.dropped) return; p.parcel = null; p.stolen = null; p.dropped = null;
+    const d = p.acct.data; d.fails = Math.min(99, d.fails + 1); changed(p);
+    send(p.ws, { t: "lost", why }); carry(p); all(p.room, { t: "fx", k: "break", id: p.id, x: r1(p.x), y: r1(p.y), z: r1(p.z) }, p);
+  }
+  function hit(p, why) {   // one hit: a durability pip and 20% of the payout
+    const q = p.parcel; if (!q) return;
+    q.dur--; q.hits++;
+    if (q.dur <= 0) return lose(p, "broke");
+    send(p.ws, { t: "parcel", p: parcelView(q), why }); all(p.room, { t: "fx", k: "crack", id: p.id }, p);
+  }
+  function stun(p, secs, why) {
+    const s = secs * (1 - statsOf(p).grip); p.stunUntil = Date.now() + s * 1000;
+    send(p.ws, { t: "stun", s, why }); all(p.room, { t: "fx", k: "stun", id: p.id, s }, p);
+  }
+  function grab(p) {
+    const now = Date.now(); if (p.parcel || p.stolen || p.dropped || !p.ready || now < p.stunUntil || W.counterDist(p.x, p.z) > W.GRAB_R + 1.2 || Math.abs(p.y) > 3) return;
+    const d = p.acct.data, c = p.ready, hs = W.housesIn(c.tier), h = hs[Math.floor(Math.random() * hs.length)], max = c.mod === "fragile" ? 1 : W.boxDur(d.up.boxes);
+    p.parcel = { tier: c.tier, mod: c.mod, dur: max, max, hits: 0, house: h.id, t0: now, due: c.mod === "express" ? now + 1000 * (Math.max(W.EXPRESS_MIN, hyp(h.mx, h.mz) * W.EXPRESS_PER_M) + EXPRESS_EXTRA[c.tier]) : 0 };
+    p.ready = null; send(p.ws, { t: "parcel", p: parcelView(p.parcel), why: "grab" }); carry(p); fillBelt(p);
+  }
+  function deliver(p) {
+    const q = p.parcel, d = p.acct.data, m = mountOf(p), now = Date.now(), late = q.mod === "express" && now > q.due;
+    const coins = W.deliveryCoins(q.tier, q.mod, d.up.payout, q.hits, late), roll = W.rewardRoll(q.tier, q.mod, d.up, d.stamp);
+    const lvUp = W.addXp(m, 5 + 3 * q.tier + roll.xp);
+    d.coins += coins + roll.coins; d.coupons += roll.coupons; d.stamp = roll.stamp; if (roll.egg) d.eggs[roll.egg]++;
+    d.stats.del++; if (q.mod === "golden") d.stats.golden++; d.fails = 0;
+    p.parcel = null; changed(p);
+    send(p.ws, { t: "delivered", house: q.house, coins, roll: { tier: roll.tier, coins: roll.coins, xp: 5 + 3 * q.tier + roll.xp, coupons: roll.coupons, egg: roll.egg, near: roll.near }, lvUp, data: d });
+    all(p.room, { t: "fx", k: "del", id: p.id, house: q.house, roll: roll.tier }, p); carry(p);
+    if (lvUp) showMount(p);
+  }
+  const kickable = (me, x, z, y, extra = 0) => { const fx = Math.sin(me.yaw), fz = Math.cos(me.yaw), dx = x - me.x, dz = z - me.z, along = dx * fx + dz * fz; return Math.abs(y - me.y) < 2.6 && along > -0.6 && along < KICK.range + extra && Math.abs(dx * fz - dz * fx) < KICK.half + 0.9 + extra; };
+  function kick(me) {
+    const now = Date.now(), r = me.room; if (now < me.kickAt + KICK.cd * 1000 - 150 || now < me.stunUntil) return;
+    me.kickAt = now; let landed = false; const d = me.acct.data;
+    if (!W.inSafeZone(me.x, me.z, me.y)) {
+      if (!d.set.friendly) for (const p of r.players.values()) {
+        if (p === me || p.acct.data.set.friendly || (me.party && me.party === p.party) || W.inSafeZone(p.x, p.z, p.y) || now < p.graceUntil || now < p.stunUntil || !kickable(me, p.x, p.z, p.y)) continue;
+        landed = true; stun(p, KICK.stun, "kick"); p.graceUntil = p.stunUntil + KICK.grace * 1000; all(r, { t: "fx", k: "grace", id: p.id, s: (p.graceUntil - now) / 1000 });
+        if (now - (p.cracked.get(me.acct.id) || 0) > KICK.farm * 1000) { p.cracked.set(me.acct.id, now); hit(p, "kick"); }   // the same courier cracks your parcel once in 30 s
+      }
+      for (const g of r.geese) if (g.mode !== 4 && kickable(me, g.x, g.z, g.y, 0.5)) {
+        landed = true;
+        if (g.carry) {   // GOOSE BUSTED: the parcel drops where it stands, whole
+          const o = g.carry.p; o.stolen = null; o.dropped = { parcel: g.carry.parcel, x: g.x, z: g.z, y: g.y, until: now + DROP_S * 1000 }; g.carry = null;
+          send(o.ws, { t: "dropped", x: r1(g.x), z: r1(g.z), y: r1(g.y), s: DROP_S }); d.stats.geese++;
+          all(r, { t: "fx", k: "busted", id: me.id, x: r1(g.x), y: r1(g.y), z: r1(g.z) });
+        }
+        g.mode = 4; g.t = 3; g.target = null;
+      }
+      for (const q of r.dogs) if (q.mode && kickable(me, q.x, q.z, W.dogs[q.id].y, 0.4)) { landed = true; q.mode = 3; q.target = null; q.cool = now + DOG.cool * 1000; all(r, { t: "fx", k: "yelp", dog: q.id }); }
+      for (const g of r.goats) if (kickable(me, g.x, g.z, W.goats[g.id].y, 0.4)) { landed = true; g.mode = 3; g.cool = now + GOAT.cool * 1000; }
+    }
+    if (landed) { d.stats.kicks++; changed(me); }
+    all(r, { t: "fx", k: "kick", id: me.id, hit: landed ? 1 : 0 });
+  }
+  function bark(me) {   // the Bark ability: dogs near turn tail
+    const m = mountOf(me), tier = W.abilityTier(m.lv), now = Date.now(); if (MOUNTS[m.sp].ab !== "bark" || !tier || now < me.abilityAt + W.ABILITY_CD.bark[tier] * 1000 - 150) return;
+    me.abilityAt = now; const R = 7 + 3.5 * tier;
+    for (const q of me.room.dogs) if (q.mode && hyp(q.x - me.x, q.z - me.z) < R) { q.mode = 3; q.target = null; q.cool = now + DOG.cool * 1000; all(me.room, { t: "fx", k: "yelp", dog: q.id }); }
+    all(me.room, { t: "fx", k: "bark", id: me.id, r: R });
+  }
+  function teleport(p, x, z, y, why) { p.x = x; p.z = z; p.y = y; p.tpAt = Date.now(); p.lx = x; p.lz = z; p.lt = p.tpAt; send(p.ws, { t: "tp", x, z, y, why }); }
 
   // ---- parties ----
-  const invites = new Map();   // "to:from:kind" -> expiry
-  function sendParty(party) { const ms = [...party.members].map((q) => ({ id: q.id, name: q.name })); for (const q of party.members) { send(q.ws, { t: "party", members: ms }); send(q.ws, { t: "contract", c: contractFor(q) }); } }
+  const invites = new Map();   // "to:from" -> expiry
+  function sendParty(party) { const ms = [...party.members].map((q) => ({ id: q.id, name: q.name })); for (const q of party.members) send(q.ws, { t: "party", members: ms }); }
   function leaveParty(p) {
-    const party = p.party; if (!party) return; party.members.delete(p); p.party = null; send(p.ws, { t: "party", members: [] }); send(p.ws, { t: "contract", c: contractFor(p) });
-    if (party.members.size < 2) { for (const q of party.members) { q.party = null; send(q.ws, { t: "party", members: [] }); send(q.ws, { t: "contract", c: contractFor(q) }); } } else sendParty(party);
+    const party = p.party; if (!party) return; party.members.delete(p); p.party = null; send(p.ws, { t: "party", members: [] });
+    if (party.members.size < 2) { for (const q of party.members) { q.party = null; send(q.ws, { t: "party", members: [] }); } } else sendParty(party);
   }
-  // ---- trades ----
-  function endTrade(T, why, done) { for (const s of [T.a, T.b]) { s.p.trade = null; send(s.p.ws, { t: "trade_end", why, done: !!done }); } }
-  function sendTrade(T) {
-    const view = (s) => ({ pets: s.pets.map((id) => s.p.acct.data.pets.find((q) => q.id === id)).filter(Boolean), coins: s.coins, ready: s.ready });
-    send(T.a.p.ws, { t: "trade", name: T.b.p.name, me: view(T.a), them: view(T.b) });
-    send(T.b.p.ws, { t: "trade", name: T.a.p.name, me: view(T.b), them: view(T.a) });
-  }
-  function doTrade(T) {
-    const A = T.a, B = T.b, da = A.p.acct.data, db = B.p.acct.data;
-    const okSide = (s, d, other) => {
-      const pens = penPets(d), mine = new Set(d.pets.map((q) => q.id));
-      if (!s.pets.every((id) => mine.has(id) && !pens.has(id))) return false;
-      if (s.coins > d.coins) return false;
-      if (d.pets.length - s.pets.length < 1) return false;   // everyone keeps a pet
-      return other.pets.length <= s.pets.length || d.pets.length - s.pets.length + other.pets.length <= petCap(d);
-    };
-    if (!okSide(A, da, B) || !okSide(B, db, A)) return endTrade(T, "failed");
-    const move = (from, to, ids) => {
-      const out = from.pets.filter((q) => ids.includes(q.id)); from.pets = from.pets.filter((q) => !ids.includes(q.id));
-      if (!from.pets.some((q) => q.id === from.ride)) from.ride = from.pets[0].id;
-      for (const q of out) to.pets.push({ id: to.nextId++, sp: q.sp, lv: q.lv });
-    };
-    move(da, db, A.pets); move(db, da, B.pets);
-    da.coins += B.coins - A.coins; db.coins += A.coins - B.coins;
-    changed(A.p); changed(B.p); flush(A.p.acct); flush(B.p.acct); pushData(A.p); pushData(B.p);
-    endTrade(T, "done", true);
-  }
-  // ---- the admin panel (owner, 2026-11-08) ----
-  const staffView = (a, p) => ({ id: a.id, name: a.name, role: rankOf(a) === 3 ? "owner" : a.role, vip: !!a.vip, online: !!p, muted: a.muteUntil > Date.now() ? (a.muteUntil === Infinity ? -1 : a.muteUntil) : 0, banned: a.banUntil > Date.now() ? (a.banUntil === Infinity ? -1 : a.banUntil) : 0 });
+  // ---- the staff panel ----
+  const staffView = (a, p) => ({ id: a.id, name: a.name, role: rankOf(a) === 3 ? "owner" : a.role, online: !!p, muted: a.muteUntil > Date.now() ? (a.muteUntil === Infinity ? -1 : a.muteUntil) : 0, banned: a.banUntil > Date.now() ? (a.banUntil === Infinity ? -1 : a.banUntil) : 0 });
+  const inv = (d) => ({ coins: d.coins, coupons: d.coupons, eggs: d.eggs, mounts: d.mounts, ride: d.ride, up: d.up, stamp: d.stamp });
   async function admin(me, m) {
     const my = rankOf(me.acct); if (my < 1) return;
     const reply = (msg) => send(me.ws, { t: "admin_msg", msg });
     if (m.op === "list") {
       const list = [...online.values()].map((p) => staffView(p.acct, p));
       if (m.q && /^[A-Za-z0-9_]{1,16}$/.test(m.q)) for (const a of await store.search(m.q)) if (!online.has(a.id)) list.push(staffView(a, null));
-      send(me.ws, { t: "admin_list", list, q: m.q || "", environment }); return;
+      send(me.ws, { t: "admin_list", list, q: m.q || "" }); return;
     }
-    if (m.op === "world") {   // (owner, 2026-11-10) building the town
-      if (my < 2) return reply("Not allowed");
-      const done = applyEdits(m.edits); if (!done.length) return;
-      for (const p of online.values()) send(p.ws, { t: "world", edits: done });
-      for (const r of rooms) { r.vs = makeVehicles(r.vs); relot(r); }   // those still placed carry on where they are; anyone whose house went moves
-      clearTimeout(worldSave); worldSave = setTimeout(() => store.saveWorld(worldData()).catch((e) => console.error("[pets] world save", e.message)), 800);
-      return;
-    }
-    if (m.op === "environment") {
-      if (my < 2) return reply("Not allowed");
-      const weather = ["auto", "clear", "rain", "snow", "storm", "fog"].includes(m.weather) ? m.weather : null;
-      const time = ["auto", "sunrise", "day", "sunset", "night"].includes(m.time) ? m.time : null;
-      if (!weather || !time) return reply("Unknown");
-      environment = { weather, time };
-      for (const p of online.values()) send(p.ws, { t: "environment", environment });
-      store.log(me.name, "World", "environment", `${weather}, ${time}`).catch(() => {});
-      console.log(`[pets] ${me.name} environment World ${weather}, ${time}`);
-      reply("Done"); return;
-    }
-    // the target: by account id (the panel) or by name (chat commands)
+    // the target: by account id (the panel) or by name
     const nm = typeof m.name === "string" && NAME_RE.test(m.name) ? m.name.toLowerCase() : null;
     const p = nm ? [...online.values()].find((q) => q.name.toLowerCase() === nm) : online.get(+m.id), a = p ? p.acct : nm ? await store.byName(nm) : await store.byId(+m.id);
     if (!a) return reply("Not found");
     const theirs = rankOf(a);
     if (theirs >= my && a.id !== me.acct.id) return reply("Not allowed");
     const log = (action, detail) => { store.log(me.name, a.name, action, detail).catch(() => {}); console.log(`[pets] ${me.name} ${action} ${a.name} ${detail || ""}`); };
-    const putData = async (d) => { a.data = d; if (p) { changed(p); pushData(p); flush(p.acct); } else { a.rev++; await store.save(a.id, a.data, a.rev); } };
+    const putData = async (d) => { a.data = cleanData(d); if (p) { changed(p); pushData(p); flush(p.acct); showMount(p); all(p.room, { t: "rank", id: p.id, rank: W.rankOf(W.upTotal(a.data.up)) }); } else { a.rev++; await store.save(a.id, a.data, a.rev); } };
     const until = (mins) => (mins === "perma" ? Infinity : Date.now() + Math.max(1, Math.min(525600, +mins || 60)) * 60000);
     switch (m.op) {
       case "role": {
@@ -171,61 +161,51 @@ export function attachPets(server, { origins = [], allowLocal = false, store = m
         a.role = role; await store.setRole(a.id, role); if (p) send(p.ws, { t: "role", role }); log("role", role); break;
       }
       case "mute": { const u = m.mins === "off" ? 0 : until(m.mins); a.muteUntil = u; await store.setMute(a.id, u); if (p) send(p.ws, { t: "muted", until: u === Infinity ? -1 : u }); log("mute", String(m.mins)); break; }
-      case "vip": {   // (owner, 2026-11-08) admins give or take VIP (the VIP island's plots, from their next login)
-        if (my < 2) return reply("Not allowed");
-        a.vip = !!m.on; await store.setVip(a.id, a.vip); if (p) send(p.ws, { t: "vip", on: a.vip }); log("vip", String(a.vip)); break;
-      }
       case "kick": if (p) { send(p.ws, { t: "kicked", why: "kick" }); p.ws.terminate(); } log("kick"); break;
       case "ban": {
         const u = m.mins === "off" ? 0 : until(m.mins); a.banUntil = u; await store.setBan(a.id, u);
         if (u && p) { send(p.ws, { t: "kicked", why: "banned", until: u === Infinity ? -1 : u }); p.ws.terminate(); }
         log("ban", String(m.mins)); break;
       }
-      case "give": {   // admins: coins, an item, Treats or a pet
+      case "give": {   // admins: coins, Level Coupons, an egg or a mount
         if (my < 2) return reply("Not allowed");
-        const n = Math.max(1, Math.min(1e7, Math.floor(+m.n || 1))), what = String(m.what || ""), d = cleanData(a.data, SPECIES);
+        const n = Math.max(1, Math.min(1e7, Math.floor(+m.n || 1))), what = String(m.what || ""), d = cleanData(a.data);
         if (what === "coins") d.coins += n;
-        else if (GIVE_ITEMS.has(what)) d.items[what] += n;
-        else if (what.startsWith("treat:") && SPECIES.has(what.slice(6))) d.treats[what.slice(6)] = (d.treats[what.slice(6)] || 0) + n;
-        else if (what.startsWith("pet:") && SPECIES.has(what.slice(4))) { const lv = Math.max(1, Math.min(20, Math.floor(+m.lv || 1))); for (let k = 0; k < Math.min(n, 50); k++) d.pets.push({ id: d.nextId++, sp: what.slice(4), lv }); }
+        else if (what === "coupons") d.coupons += n;
+        else if (what.startsWith("egg:") && EGGS[what.slice(4)]) d.eggs[what.slice(4)] += n;
+        else if (what.startsWith("mount:") && MOUNTS[what.slice(6)]) { const lv = clamp(Math.floor(+m.lv || 1), 1, W.MAX_LV), va = clamp(Math.floor(+m.va || 0), 0, 2); for (let k = 0; k < Math.min(n, 20) && d.mounts.length < W.MOUNT_CAP; k++) d.mounts.push({ id: d.nextId++, sp: what.slice(6), va, lv, xp: 0 }); }
         else return reply("Unknown");
         await putData(d); log("give", what + " x" + n); break;
       }
-      // (owner, 2026-11-09) admins' quick commands, on themselves or anyone below them: coins, one of every pet they don't
-      // have, every pet to the top level, 100 of each item, 100 Treats of every kind, everything at once (with a million
-      // coins), and clearing wanted stars (online only)
+      // admins' quick commands, on themselves or anyone below them
       case "quick": {
         if (my < 2) return reply("Not allowed");
         const cmd = String(m.cmd || ""), every = cmd === "everything";
-        if (cmd === "unwanted") { if (!p) return reply("Offline"); p.stars = 0; p.lastChased = Date.now(); send(p.ws, { t: "stars", stars: 0 }); log("quick", cmd); break; }
-        if (!["coins", "allpets", "maxlv", "items", "treats", "everything"].includes(cmd)) return reply("Unknown");
-        const d = cleanData(a.data, SPECIES);
-        if (cmd === "coins" || every) d.coins = Math.min(1e9, d.coins + (every ? 1e6 : Math.max(1, Math.min(1e9, Math.floor(+m.n || 0)))));
-        if (cmd === "allpets" || every) { const have = new Set(d.pets.map((q) => q.sp)); for (const sp of SPECIES) if (!have.has(sp)) d.pets.push({ id: d.nextId++, sp, lv: every ? 20 : 1 }); }
-        if (cmd === "maxlv" || every) for (const q of d.pets) q.lv = 20;
-        if (cmd === "items" || every) for (const k of GIVE_ITEMS) d.items[k] = Math.min(1e6, d.items[k] + 100);
-        if (cmd === "treats" || every) for (const sp of SPECIES) d.treats[sp] = Math.min(1e6, (d.treats[sp] || 0) + 100);
+        if (!["coins", "allmounts", "maxlv", "eggs", "coupons", "upgrades", "everything", "reset"].includes(cmd)) return reply("Unknown");
+        let d = cleanData(a.data);
+        if (cmd === "reset") d = cleanData({ set: d.set });
+        if (cmd === "coins" || every) d.coins = Math.min(1e12, d.coins + (every ? 1e7 : Math.max(1, Math.min(1e9, Math.floor(+m.n || 0)))));
+        if (cmd === "allmounts" || every) { const have = new Set(d.mounts.map((q) => q.sp)); for (const sp of Object.keys(MOUNTS)) if (!have.has(sp)) d.mounts.push({ id: d.nextId++, sp, va: 0, lv: every ? W.MAX_LV : 1, xp: 0 }); }
+        if (cmd === "maxlv" || every) for (const q of d.mounts) { q.lv = W.MAX_LV; q.xp = 0; }
+        if (cmd === "eggs" || every) for (const k of Object.keys(EGGS)) d.eggs[k] += 10;
+        if (cmd === "coupons" || every) d.coupons += 20;
+        if (cmd === "upgrades" || every) for (const k of Object.keys(UPGRADES)) d.up[k] = W.UP_MAX;
         await putData(d); log("quick", cmd + (cmd === "coins" ? " " + m.n : "")); break;
       }
-      // (owner, 2026-11-09) admins see and edit anyone's inventory (below them, or their own): coins, items, Treats, pets
-      case "inspect": {
+      case "inspect": { if (my < 2) return reply("Not allowed"); send(me.ws, { t: "admin_data", id: a.id, name: a.name, data: inv(cleanData(a.data)) }); return; }
+      case "edit": {   // coins, coupons, eggs, upgrades, and each mount's level (0 takes it away)
         if (my < 2) return reply("Not allowed");
-        const d = cleanData(a.data, SPECIES);
-        send(me.ws, { t: "admin_data", id: a.id, name: a.name, data: { coins: d.coins, items: d.items, treats: d.treats, pets: d.pets, ride: d.ride } }); return;
-      }
-      case "edit": {
-        if (my < 2) return reply("Not allowed");
-        const d = cleanData(a.data, SPECIES), num = (v, hi) => Math.max(0, Math.min(hi, Math.floor(+v) || 0));
-        if (m.coins !== undefined) d.coins = num(m.coins, 1e12);
-        if (m.items && typeof m.items === "object") for (const k of Object.keys(d.items)) if (m.items[k] !== undefined) d.items[k] = num(m.items[k], 1e6);
-        if (m.treats && typeof m.treats === "object") for (const sp of Object.keys(m.treats)) if (SPECIES.has(sp)) { const n = num(m.treats[sp], 1e6); if (n) d.treats[sp] = n; else delete d.treats[sp]; }
-        if (m.pets && typeof m.pets === "object") {   // { pet id: level, or 0 to take it away }
-          for (const q of d.pets) if (m.pets[q.id] !== undefined) q.lv = Math.floor(+m.pets[q.id]) || 0;
-          const keep = d.pets.filter((q) => q.lv > 0); if (keep.length) d.pets = keep.map((q) => ({ ...q, lv: Math.max(1, Math.min(20, q.lv)) }));
-          if (!d.pets.some((q) => q.id === d.ride)) d.ride = d.pets[0].id;
+        const d = cleanData(a.data), n = (v, hi) => Math.max(0, Math.min(hi, Math.floor(+v) || 0));
+        if (m.coins !== undefined) d.coins = n(m.coins, 1e12);
+        if (m.coupons !== undefined) d.coupons = n(m.coupons, 1e6);
+        if (m.eggs && typeof m.eggs === "object") for (const k of Object.keys(EGGS)) if (m.eggs[k] !== undefined) d.eggs[k] = n(m.eggs[k], 9999);
+        if (m.up && typeof m.up === "object") for (const k of Object.keys(UPGRADES)) if (m.up[k] !== undefined) d.up[k] = n(m.up[k], W.UP_MAX);
+        if (m.mounts && typeof m.mounts === "object") {
+          for (const q of d.mounts) if (m.mounts[q.id] !== undefined) q.lv = Math.floor(+m.mounts[q.id]) || 0;
+          const keep = d.mounts.filter((q) => q.lv > 0); if (keep.length) d.mounts = keep; else for (const q of d.mounts) q.lv = Math.max(1, q.lv);
         }
-        await putData(cleanData(d, SPECIES)); log("edit", JSON.stringify({ coins: m.coins, items: m.items, treats: m.treats, pets: m.pets }).slice(0, 300));
-        send(me.ws, { t: "admin_data", id: a.id, name: a.name, data: (({ coins, items, treats, pets, ride }) => ({ coins, items, treats, pets, ride }))(cleanData(a.data, SPECIES)) });
+        await putData(d); log("edit", JSON.stringify({ coins: m.coins, coupons: m.coupons, eggs: m.eggs, up: m.up, mounts: m.mounts }).slice(0, 300));
+        send(me.ws, { t: "admin_data", id: a.id, name: a.name, data: inv(a.data) });
         break;
       }
       default: return;
@@ -252,7 +232,7 @@ export function attachPets(server, { origins = [], allowLocal = false, store = m
           if (!NAME_RE.test(user)) return authErr("name");
           if (pass.length < 4 || pass.length > 64) return authErr("pass");
           if (m.t === "register") {
-            acct = await store.create(user, await hashSecret(pass), cleanData(m.data, SPECIES));
+            acct = await store.create(user, await hashSecret(pass), cleanData({}));
             if (!acct) return authErr("taken");
           } else {
             acct = await store.byName(user);
@@ -263,30 +243,29 @@ export function attachPets(server, { origins = [], allowLocal = false, store = m
         if (!acct || ws.readyState !== 1) return;
         if (acct.banUntil > Date.now()) return authErr("banned", acct.banUntil === Infinity ? -1 : acct.banUntil);
         if (acct.name.toLowerCase() === OWNER && acct.role !== "admin") { acct.role = "admin"; store.setRole(acct.id, "admin"); }
-        const wasOld = !!(acct.data && acct.data.home && !Array.isArray(acct.data.home.pieces));
-        acct.data = cleanData(acct.data, SPECIES); if (wasOld) { acct.rev++; dirty.add(acct); }   // a home from before plots, turned into a house (and the refund) once
+        const fresh = !acct.data || !acct.data.v;   // an account from before the remake starts as a new courier
+        acct.data = cleanData(acct.data); if (fresh) { acct.rev++; dirty.add(acct); }
         const old = online.get(acct.id);
         if (old) { send(old.ws, { t: "kicked" }); old.ws.terminate(); gone(old); acct = old.acct; }   // logged in again: the old connection goes
-        room = roomFor(packageEveryMs);
-        me = { id: nextId++, ws, room, acct, name: acct.name, sp: SPECIES.has(m.sp) ? m.sp : "pup", lv: Math.max(1, Math.min(20, m.lv | 0)), shirt: color(m.shirt),
-          x: num(m.x, 6000), y: num(m.y, 300), z: num(m.z, 6000), yaw: 0, mv: 0, lastDel: 0, lastChat: 0, stars: old ? old.stars : 0, lastChased: 0, lastStar: 0, immuneUntil: 0, inst: 0, party: null, trade: null, plot: -1, ft: 0 };
-        me.airMount = AIR_MOUNTS.has(me.sp);
+        room = roomFor();
+        me = { id: nextId++, ws, room, acct, name: acct.name, x: W.SPAWN.x + (Math.random() - 0.5) * 8, y: 0, z: W.SPAWN.z + Math.random() * 4, yaw: Math.PI, mv: 0, ct: 0, vx: 0, vz: 0, lx: 0, lz: 0, lt: 0, tpAt: now, flags: 0, sus: 0,
+          lastChat: 0, party: null, ready: null, next: null, parcel: null, stolen: null, dropped: null, stunUntil: 0, graceUntil: 0, kickAt: 0, abilityAt: 0, cracked: new Map(), lastIsle: -1, nextRock: 0, nextDive: 0, pipeAt: 0 };
+        me.lx = me.x; me.lz = me.z; me.lt = now;
         online.set(acct.id, me);
-        assignPlot(room, me);
-        send(ws, { t: "welcome", world: worldData(), web: websiteBuild(), by: websiteBy(), id: me.id, name: me.name, role: rankOf(acct) >= 2 ? "admin" : acct.role, token, data: acct.data, rev: acct.rev, players: [...room.players.values()].map(pub), contract: null, packageEvent: packageEventView(room.packageEvent), stars: me.stars, vip: !!acct.vip, plot: me.plot, plots: [...room.plots].map(([i, p]) => plotMsg(i, p)), environment });
+        send(ws, { t: "welcome", web: websiteBuild(), by: websiteBy(), now, id: me.id, name: me.name, role: rankOf(acct) >= 2 ? "admin" : acct.role, token, data: acct.data, x: me.x, z: me.z, players: [...room.players.values()].map(pub),
+          dogs: room.dogs.filter((d) => d.mode).map(dogView), geese: room.geese.map(gooseView), goats: room.goats.map(goatView) });
         room.players.set(me.id, me);
         all(room, { t: "join", p: pub(me) }, me);
-        if (me.plot >= 0) all(room, plotMsg(me.plot, me), me);
-        send(ws, { t: "contract", c: contractFor(me) });
+        fillBelt(me);
       } catch (e) { console.error("[pets] auth", e.message); authErr("server"); }
       finally { busy = false; }
     }
     function gone(p) {
       if (p.gone) return; p.gone = true;
-      if (p.trade) endTrade(p.trade, "left");
       leaveParty(p);
       const r = p.room; if (r && r.players.get(p.id) === p) {
-        if (p.plot >= 0 && r.plots.get(p.plot) === p) { r.plots.delete(p.plot); all(r, plotMsg(p.plot, null)); }
+        for (const g of r.geese) { if (g.carry && g.carry.p === p) g.carry = null; if (g.target === p) { g.target = null; g.mode = 0; } }
+        for (const d of r.dogs) if (d.target === p) { d.target = null; d.mode = 3; }
         r.players.delete(p.id); all(r, { t: "leave", id: p.id });
         if (!r.players.size) rooms.splice(rooms.indexOf(r), 1);
       }
@@ -297,106 +276,195 @@ export function attachPets(server, { origins = [], allowLocal = false, store = m
       let m; try { m = JSON.parse(raw); } catch { return; }
       if (!me) { if (m.t === "login" || m.t === "register" || m.t === "resume") auth(m); return; }
       if (me.gone) return;
-      const d = me.acct.data;
+      const d = me.acct.data, now = Date.now();
       switch (m.t) {
-        // (owner, 2026-11-08: rubber-banding) each position carries the sender's own clock, passed on so others replay it at its true pace
-        case "pos": me.x = num(m.x, 6000); me.y = num(m.y, 300); me.z = num(m.z, 6000); me.yaw = num(m.yaw, 10); me.mv = m.mv ? 1 : 0; me.ct = Number.isFinite(+m.ct) ? +m.ct : 0; me.bag = Math.max(0, Math.min(99, m.bag | 0)); me.ft = m.ft ? 1 : 0; me.inst = Math.max(0, Math.min(1e9, m.inst | 0)); me.fresh = true; break;   // inst: whose house I'm inside (0 outside)
-        case "pet": if (SPECIES.has(m.sp)) { me.sp = m.sp; me.airMount = AIR_MOUNTS.has(me.sp); me.lv = Math.max(1, Math.min(20, m.lv | 0)); all(room, { t: "pet", id: me.id, sp: me.sp, lv: me.lv }, me); } break;
-        case "save": {
-          if (m.rev !== me.acct.rev) { pushData(me); break; }
-          const before = JSON.stringify(d.home);
-          me.acct.data = cleanData(m.data, SPECIES); changed(me); send(ws, { t: "saved", rev: me.acct.rev });
-          if (JSON.stringify(me.acct.data.home) !== before && me.plot >= 0) all(room, plotMsg(me.plot, me), me);   // everyone sees the house change
+        // each position carries the sender's own clock, passed on so others replay it at its true pace
+        case "pos": {
+          if (now - me.tpAt < 250) break;   // still on its way from before a teleport
+          const x = num(m.x, 2000), y = num(m.y, 400), z = num(m.z, 2000), dt = (now - me.lt) / 1000;
+          if (dt > 0.2) {   // the speed cap: far faster than anything in town moves
+            const v = hyp(x - me.lx, z - me.lz) / dt; me.vx = (x - me.lx) / dt; me.vz = (z - me.lz) / dt;
+            if (v > SPEED_CAP && now - me.tpAt > 1500) { me.flags++; me.sus = now; }
+            me.lx = x; me.lz = z; me.lt = now;
+          }
+          me.x = x; me.y = y; me.z = z; me.yaw = num(m.yaw, 10); me.mv = clamp(m.mv | 0, 0, 255); me.ct = Number.isFinite(+m.ct) ? +m.ct : 0; me.fresh = true;
+          const n = W.isleAt(x, z); if (n >= 0 && Math.abs(y - ISLES[n].y) < 3) me.lastIsle = n;
           break;
         }
-        case "chat": {   // (owner, 2026-11-08)
-          const now = Date.now(), text = cleanChat(m.text); if (!text || now - me.lastChat < CHAT_GAP_MS) break;
+        case "grab": grab(me); break;
+        case "kick": kick(me); break;
+        case "ability": bark(me); break;
+        case "equip": { const q = d.mounts.find((k) => k.id === m.id); if (q && d.ride !== q.id) { d.ride = q.id; changed(me); pushData(me); showMount(me); } break; }
+        case "level": {   // pay coins for a level
+          const q = d.mounts.find((k) => k.id === m.id); if (!q || q.lv >= W.MAX_LV || d.coins < W.levelCost(q.lv)) break;
+          d.coins -= W.levelCost(q.lv); q.lv++; if (q.lv >= W.MAX_LV) q.xp = 0; changed(me); flush(me.acct); send(ws, { t: "leveled", id: q.id, lv: q.lv, data: d }); if (q.id === d.ride) showMount(me); break;
+        }
+        case "coupon": {   // a Level Coupon: one whole level
+          const q = d.mounts.find((k) => k.id === m.id); if (!q || q.lv >= W.MAX_LV || d.coupons < 1) break;
+          d.coupons--; q.lv++; if (q.lv >= W.MAX_LV) q.xp = 0; changed(me); flush(me.acct); send(ws, { t: "leveled", id: q.id, lv: q.lv, data: d }); if (q.id === d.ride) showMount(me); break;
+        }
+        case "hatch": {
+          const kind = EGGS[m.kind] ? m.kind : ""; if (!kind || d.eggs[kind] < 1 || d.mounts.length >= W.MOUNT_CAP) break;
+          const h = W.hatchEgg(kind), q = { id: d.nextId++, sp: h.sp, va: h.va, lv: 1, xp: 0 };
+          d.eggs[kind]--; d.mounts.push(q); changed(me); flush(me.acct); send(ws, { t: "hatched", kind, m: q, data: d });
+          if (q.va) { const s = JSON.stringify({ t: "announce", name: me.name, sp: q.sp, va: q.va }); for (const p of online.values()) if (p.ws.readyState === 1) p.ws.send(s); }   // the whole server hears of a Shiny or a Golden
+          break;
+        }
+        case "upgrade": {
+          const k = UPGRADES[m.k] ? m.k : ""; if (!k || d.up[k] >= W.UP_MAX || d.coins < W.upgradeCost(k, d.up[k])) break;
+          d.coins -= W.upgradeCost(k, d.up[k]); d.up[k]++; changed(me); flush(me.acct); send(ws, { t: "upgraded", k, lv: d.up[k], data: d });
+          all(room, { t: "rank", id: me.id, rank: W.rankOf(W.upTotal(d.up)) }); break;
+        }
+        case "set": {   // settings: Friendly, the volumes, the shirt
+          const s = d.set, was = s.friendly, shirt = s.shirt;
+          if (typeof m.friendly === "boolean") s.friendly = m.friendly;
+          if (Number.isFinite(+m.music)) s.music = clamp(Math.floor(+m.music), 0, 10);
+          if (Number.isFinite(+m.sfx)) s.sfx = clamp(Math.floor(+m.sfx), 0, 10);
+          if (/^#[0-9a-f]{6}$/i.test(m.shirt)) s.shirt = m.shirt;
+          changed(me); if (was !== s.friendly || shirt !== s.shirt) all(room, { t: "look", id: me.id, friendly: s.friendly, shirt: s.shirt }, me); break;
+        }
+        case "pipe": {   // the sewer pipe: in one end, out the other; a goose inside costs a hit
+          if (now < me.stunUntil || now - me.pipeAt < 2000) break;
+          const a = hyp(me.x - PIPE.a.x, me.z - PIPE.a.z) < PIPE.r + 1.5 && Math.abs(me.y - PIPE.a.y) < 2, b = hyp(me.x - PIPE.b.x, me.z - PIPE.b.z) < PIPE.r + 1.5 && Math.abs(me.y - PIPE.b.y) < 2; if (!a && !b) break;
+          me.pipeAt = now + PIPE.time * 1000; const out = a ? PIPE.b : PIPE.a, goose = W.pipeGoose(now / 1000);
+          me.x = out.x; me.z = out.z; me.y = out.y; me.tpAt = now + PIPE.time * 1000; me.lx = out.x; me.lz = out.z; me.lt = me.tpAt;
+          send(ws, { t: "piped", x: out.x, z: out.z, y: out.y, s: PIPE.time, goose }); all(room, { t: "fx", k: "pipe", id: me.id, s: PIPE.time }, me);
+          if (goose) hit(me, "pipe"); break;
+        }
+        case "balloon": { const b = W.balloons.find((q) => hyp(me.x - q.x, me.z - q.z) < 4 && Math.abs(me.y - q.y) < 3); if (b && now >= me.stunUntil) teleport(me, W.SPAWN.x, W.SPAWN.z + 6, 0, "balloon"); break; }
+        case "chat": {
+          const text = cleanChat(m.text); if (!text || now - me.lastChat < CHAT_GAP_MS) break;
           if (me.acct.muteUntil > now) { send(ws, { t: "muted", until: me.acct.muteUntil === Infinity ? -1 : me.acct.muteUntil }); break; }
           me.lastChat = now; all(room, { t: "chat", id: me.id, name: me.name, text }, me); break;
         }
-        case "start": { const g = groupOf(me); if (!g.contract) {
-          const kind = CONTRACTS[m.kind] ? m.kind : "big", k = CONTRACTS[kind], goal = k.base + k.per * membersOf(g).length;
-          g.contract = { kind, goal, done: 0, by: new Map(), ends: Date.now() + k.time * 1000, pool: goal * k.pay };
-          sendContract(g);
-        } } break;
-        case "del": {
-          const now = Date.now(); if (now - me.lastDel < DEL_GAP_MS) break;   // no faster than a pet can deliver
-          me.lastDel = now; all(room, { t: "fx", id: me.id, k: "del" }, me);   // (owner, 2026-11-08) the others see its confetti
-          const g = groupOf(me), c = g.contract; if (!c) break;
-          c.done++; c.by.set(me.id, (c.by.get(me.id) || 0) + 1);
-          if (c.done >= c.goal) finish(g, true); else sendContract(g);
-          break;
-        }
-        case "package": {
-          const event = room.packageEvent, box = event && event.boxes.get(m.id | 0);
-          if (!box || me.inst || Math.hypot(me.x - box.x, me.y - box.y, me.z - box.z) > 4) break;
-          takePackage(event, m.id); const reward = packageReward(d, petCap(d));
-          if (reward.kind === "xp") { me.sp = reward.sp; me.lv = reward.lv; all(room, { t: "pet", id: me.id, sp: me.sp, lv: me.lv }, me); }
-          changed(me); pushData(me); flush(me.acct);
-          all(room, { t: "package_taken", id: box.id, by: me.id }); send(ws, { t: "package_reward", reward });
-          break;
-        }
-        // (owner, 2026-11-08) inviting another player (F next to them): to a party or a trade; to your house (your party)
-        case "invite": {
-          const to = room.players.get(m.id); if (!to || to === me) break;
-          const kind = m.kind === "trade" ? "trade" : "party";
-          if (kind === "party" && me.party && me.party === to.party) break;
-          invites.set(`${to.id}:${me.id}:${kind}`, Date.now() + INVITE_MS); send(to.ws, { t: "invited", from: me.id, name: me.name, kind }); break;
-        }
+        case "invite": { const to = room.players.get(m.id); if (!to || to === me || (me.party && me.party === to.party)) break; invites.set(`${to.id}:${me.id}`, now + INVITE_MS); send(to.ws, { t: "invited", from: me.id, name: me.name }); break; }
         case "answer": {
-          const kind = ["party", "trade", "home"].includes(m.kind) ? m.kind : "", key = `${me.id}:${m.from}:${kind}`, exp = invites.get(key); invites.delete(key);
-          const from = room.players.get(m.from); if (!from || !exp || exp < Date.now() || !m.yes) { if (from && kind) send(from.ws, { t: "declined", name: me.name, kind }); break; }
-          if (kind === "party") {
-            if (me.party && me.party !== from.party) leaveParty(me);
-            const party = from.party || (from.party = { members: new Set([from]) });
-            if (party.members.size >= PARTY_MAX) break;
-            party.members.add(me); me.party = party; sendParty(party);
-          } else if (kind === "trade") {
-            if (me.trade || from.trade) break;
-            const T = { a: { p: from, pets: [], coins: 0, ready: false }, b: { p: me, pets: [], coins: 0, ready: false } }; from.trade = me.trade = T; sendTrade(T);
-          }
-          break;
+          const key = `${me.id}:${m.from}`, exp = invites.get(key); invites.delete(key);
+          const from = room.players.get(m.from); if (!from || !exp || exp < now || !m.yes) { if (from) send(from.ws, { t: "declined", name: me.name }); break; }
+          if (me.party && me.party !== from.party) leaveParty(me);
+          const party = from.party || (from.party = { members: new Set([from]) });
+          if (party.members.size >= PARTY_MAX) break;
+          party.members.add(me); me.party = party; sendParty(party); break;
         }
         case "party_leave": leaveParty(me); break;
         case "admin": admin(me, m).catch((e) => { console.error("[pets] admin", e.message); send(ws, { t: "admin_msg", msg: "Failed" }); }); break;
-        case "trade_offer": {
-          const T = me.trade; if (!T) break; const s = T.a.p === me ? T.a : T.b, pens = penPets(d), mine = new Set(d.pets.map((q) => q.id));
-          s.pets = [...new Set((Array.isArray(m.pets) ? m.pets : []).filter((id) => mine.has(id) && !pens.has(id)))].slice(0, 12);
-          s.coins = Math.max(0, Math.min(d.coins, Math.floor(+m.coins || 0)));
-          T.a.ready = T.b.ready = false; sendTrade(T); break;
-        }
-        case "trade_ready": {
-          const T = me.trade; if (!T) break; const s = T.a.p === me ? T.a : T.b; s.ready = !!m.on;
-          if (T.a.ready && T.b.ready) doTrade(T); else sendTrade(T); break;
-        }
-        case "trade_cancel": if (me.trade) endTrade(me.trade, "cancel"); break;
       }
     });
     ws.on("close", () => { if (me) gone(me); });
     ws.on("error", () => {});
   });
-  // (owner, 2026-11-08) a new website build is live: everyone reloads onto it
+  // a new website build is live: everyone reloads onto it
   onWebsiteUpdate((v, by) => { const s = JSON.stringify({ t: "reload", web: v, by }); for (const ws of wss.clients) if (ws.readyState === 1) ws.send(s); });
   // a connection that doesn't answer a ping within 10 s is dropped
   setInterval(() => { for (const ws of wss.clients) { if (!ws.alive) { ws.terminate(); continue; } ws.alive = false; try { ws.ping(); } catch { /* closing */ } } }, BEAT_MS).unref();
-  // animal control (for those out in town), where everyone is, and contracts running out of time
+
+  // ---- the town's dangers, 20 times a second; where everyone is, 10 times a second ----
+  const walk = (o, dx, dz, y) => { if (!W.blocked(o.x + dx, o.z, y, 0.4)) o.x += dx; if (!W.blocked(o.x, o.z + dz, y, 0.4)) o.z += dz; };
+  const exposed = (p, now) => now >= p.graceUntil && now >= p.stunUntil && now >= p.tpAt && !W.inSafeZone(p.x, p.z, p.y);
+  function stepDogs(r, players, dt, now) {
+    for (const q of r.dogs) {
+      const D = W.dogs[q.id];
+      if (q.mode === 0) {
+        if (now < q.cool) continue;
+        for (const p of players) if (p.parcel && Math.abs(p.y - D.y) < 3 && hyp(p.x - D.hx, p.z - D.hz) < DOG.trigger && exposed(p, now)) { q.mode = 1; q.t = DOG.telegraph; q.target = p; q.sent = false; break; }   // bark and a red "!"
+        continue;
+      }
+      const p = q.target;
+      if (q.mode === 1) { if (p) q.yaw = Math.atan2(p.x - q.x, p.z - q.z); q.t -= dt; if (q.t <= 0) { q.mode = 2; q.t = DOG.chase; } continue; }
+      if (q.mode === 2) {
+        if (!p || p.gone || !p.parcel || !exposed(p, now) || Math.abs(p.y - D.y) > 3.5 || hyp(q.x - D.hx, q.z - D.hz) > DOG.leash || (q.t -= dt) <= 0) { q.mode = 3; q.target = null; q.cool = now + DOG.cool * 1000; continue; }
+        const dx = p.x - q.x, dz = p.z - q.z, d = hyp(dx, dz) || 1, sp = DOG.speed * (p.acct.data.fails >= 3 ? 0.8 : 1) * dt;   // three failed runs in a row: the dogs ease off
+        q.yaw = Math.atan2(dx, dz); walk(q, (dx / d) * sp, (dz / d) * sp, D.y);
+        if (d < DOG.bite) { stun(p, DOG.stun, "dog"); hit(p, "dog"); all(r, { t: "fx", k: "bite", dog: q.id, id: p.id }); q.mode = 3; q.target = null; q.cool = now + DOG.cool * 1000; }
+        continue;
+      }
+      const dx = D.hx - q.x, dz = D.hz - q.z, d = hyp(dx, dz);   // trotting home
+      if (d < 0.6) { q.mode = 0; q.x = D.hx; q.z = D.hz; q.sent = false; continue; }
+      q.yaw = Math.atan2(dx, dz); const sp = Math.min(d, 7 * dt); q.x += (dx / d) * sp; q.z += (dz / d) * sp;
+    }
+  }
+  function stepGeese(r, players, dt, now) {
+    for (const g of r.geese) {
+      const G = W.geese[g.id], P = W.ponds[G.pond];
+      g.awake = !!g.carry || g.mode !== 0 || players.some((p) => Math.abs(p.x - P.x) < 75 && Math.abs(p.z - P.z) < 75 && Math.abs(p.y - P.y) < 12);
+      if (!g.awake) continue;   // asleep while nobody's near
+      const go = (tx, tz, sp) => { const dx = tx - g.x, dz = tz - g.z, d = hyp(dx, dz) || 1, s = Math.min(d, sp * dt); g.yaw = Math.atan2(dx, dz); g.x += (dx / d) * s; g.z += (dz / d) * s; const s2 = W.surfaceAt(g.x, g.z, P.y + 1.4); g.y = s2 > -100 ? s2 : P.y; return d; };
+      if (g.mode === 4) { if ((g.t -= dt) <= 0) { g.mode = 0; g.cool = now + GOOSE.cool * 1000; } continue; }   // dizzy from a kick
+      if (g.carry) {   // waddling to the pond with a parcel
+        if (g.mode !== 5) { if (go(P.x, P.z, GOOSE.carry) < 1) { g.mode = 5; g.t = GOOSE.dunk; } }   // out in the middle of its pond, it takes a moment to sink the parcel
+        else if ((g.t -= dt) <= 0) { const o = g.carry.p; g.carry = null; g.mode = 0; g.cool = now + GOOSE.cool * 1000; lose(o, "goose"); }
+        continue;
+      }
+      if (g.mode === 0) {
+        if (!(now < g.cool)) for (const p of players) if (p.parcel && Math.abs(p.y - g.y) < 2.5 && hyp(p.x - g.x, p.z - g.z) < GOOSE.see && exposed(p, now)) { g.mode = 1; g.t = GOOSE.telegraph; g.target = p; break; }   // honk and flap
+        if (g.mode === 0) { if (hyp(g.wx - g.x, g.wz - g.z) < 0.5 || Math.random() < 0.004) { const a = Math.random() * W.TAU, d = P.r + 1.5 + Math.random() * 7; g.wx = P.x + Math.cos(a) * d; g.wz = P.z + Math.sin(a) * d; } go(g.wx, g.wz, GOOSE.wander); }
+        continue;
+      }
+      const p = g.target;
+      if (g.mode === 1) { if (p) g.yaw = Math.atan2(p.x - g.x, p.z - g.z); if ((g.t -= dt) <= 0) { g.mode = 2; g.t = GOOSE.lungeFor; } continue; }
+      if (!p || p.gone || !p.parcel || !exposed(p, now) || (g.t -= dt) <= 0) { g.mode = 0; g.target = null; g.cool = now + GOOSE.cool * 1000; continue; }
+      if (go(p.x, p.z, GOOSE.lunge) < GOOSE.touch && Math.abs(p.y - g.y) < 2.5) {   // it has the parcel (no stun): off to the pond
+        g.carry = { p, parcel: p.parcel }; p.stolen = p.parcel; p.parcel = null; g.mode = 3; g.target = null;
+        send(p.ws, { t: "stolen", goose: g.id }); carry(p); all(r, { t: "fx", k: "steal", goose: g.id, id: p.id }, p);
+      }
+    }
+  }
+  function stepGoats(r, players, dt, now) {
+    for (const g of r.goats) {
+      const G = W.goats[g.id];
+      if (g.mode === 0) { if (now < g.cool) continue; for (const p of players) if (Math.abs(p.y - G.y) < 2.5 && hyp(p.x - g.x, p.z - g.z) < GOAT.see && now >= p.stunUntil && now >= p.tpAt) { const d = hyp(p.x - g.x, p.z - g.z) || 1; g.mode = 1; g.t = GOAT.telegraph; g.dx = (p.x - g.x) / d; g.dz = (p.z - g.z) / d; g.yaw = Math.atan2(g.dx, g.dz); g.sent = false; break; } continue; }   // it stomps
+      if (g.mode === 1) { if ((g.t -= dt) <= 0) { g.mode = 2; g.t = GOAT.run; } continue; }
+      if (g.mode === 2) {
+        const nx = g.x + g.dx * GOAT.speed * dt, nz = g.z + g.dz * GOAT.speed * dt;
+        if (W.surfaceAt(nx, nz, G.y + 0.3) === G.y && !W.blocked(nx, nz, G.y, 0.4)) { g.x = nx; g.z = nz; } else g.t = 0;   // it won't run off its ledge
+        for (const p of players) if (Math.abs(p.y - G.y) < 2.5 && hyp(p.x - g.x, p.z - g.z) < GOAT.touch && now >= p.tpAt) { send(p.ws, { t: "knock", x: -0.85 * GOAT.knock + g.dx * 4, z: g.dz * 6, y: 6 }); all(r, { t: "fx", k: "butt", goat: g.id, id: p.id }); g.t = 0; }   // toward the ledge
+        if ((g.t -= dt) <= 0) { g.mode = 3; g.cool = now + GOAT.cool * 1000; }
+        continue;
+      }
+      const dx = G.hx - g.x, dz = G.hz - g.z, d = hyp(dx, dz);
+      if (d < 0.5) { g.mode = 0; g.sent = false; continue; }
+      g.yaw = Math.atan2(dx, dz); const s = Math.min(d, 5 * dt); g.x += (dx / d) * s; g.z += (dz / d) * s;
+    }
+  }
+  function stepSky(r, players, now) {   // falling rocks on Cliffside; diving sky geese and the long drop on the islands
+    for (const p of players) {
+      const dist = W.districtAt(p.x, p.z, p.y);
+      if (dist === 3 && p.y > 1 && p.y < 49) {
+        if (!p.nextRock) p.nextRock = now + between(ROCK.every) * 1000;
+        else if (now > p.nextRock) { p.nextRock = now + between(ROCK.every) * 1000; const k = { x: r1(p.x + p.vx * 0.8 + (Math.random() - 0.5) * 3), z: r1(p.z + p.vz * 0.8 + (Math.random() - 0.5) * 3), y: r1(p.y), at: now + ROCK.delay * 1000 }; r.rocks.push(k); all(r, { t: "rock", x: k.x, z: k.z, y: k.y, s: ROCK.delay }); }
+      } else p.nextRock = 0;
+      if (dist === 4 && p.parcel && p.lastIsle >= 0) {
+        if (!p.nextDive) p.nextDive = now + between(SKYGOOSE.every) * 1000;
+        else if (now > p.nextDive) { p.nextDive = now + between(SKYGOOSE.every) * 1000; const k = { p, x: r1(p.x + p.vx * 0.7), z: r1(p.z + p.vz * 0.7), y: r1(p.y), at: now + SKYGOOSE.delay * 1000 }; r.dives.push(k); all(r, { t: "dive", x: k.x, z: k.z, y: k.y, s: SKYGOOSE.delay }); }
+      } else p.nextDive = 0;
+      if (p.x > 500 && p.y < 58 && now - p.tpAt > 600) {   // off an island: one hit, and back on the last one stood on
+        const s = p.lastIsle >= 0 ? ISLES[p.lastIsle] : null; hit(p, "fall");
+        if (s) teleport(p, s.x, s.z, s.y, "fall"); else teleport(p, CANNON.x - 8, CANNON.z, CANNON.y, "fall");
+      }
+      if (p.dropped) {   // a parcel a goose dropped: the courier picks it up whole, with a few coins for the trouble
+        const q = p.dropped;
+        if (now > q.until) lose(p, "goose");
+        else if (hyp(p.x - q.x, p.z - q.z) < W.PICKUP_R && Math.abs(p.y - q.y) < 3 && now >= p.stunUntil) { p.parcel = q.parcel; p.dropped = null; const bonus = GOOSE.bonus * TIERS[q.parcel.tier].mult; p.acct.data.coins += bonus; changed(p); send(p.ws, { t: "parcel", p: parcelView(p.parcel), why: "pickup", bonus, coins: p.acct.data.coins }); carry(p); }
+      }
+      if (p.parcel && now >= p.stunUntil && now - p.sus > 2000 && now >= p.tpAt) { const h = W.houses[p.parcel.house]; if (Math.abs(p.y - h.my) < 2.5 && hyp(p.x - h.mx, p.z - h.mz) < W.DELIVER_R) deliver(p); }   // delivered: in the zone in front of its mailbox
+    }
+    for (let n = r.rocks.length - 1; n >= 0; n--) { const k = r.rocks[n]; if (now < k.at) continue; r.rocks.splice(n, 1); for (const p of players) if (Math.abs(p.y - k.y) < 3 && hyp(p.x - k.x, p.z - k.z) < ROCK.r && now >= p.stunUntil && now >= p.tpAt) { stun(p, ROCK.stun, "rock"); hit(p, "rock"); } }
+    for (let n = r.dives.length - 1; n >= 0; n--) { const k = r.dives[n]; if (now < k.at) continue; r.dives.splice(n, 1); const p = k.p; if (!p.gone && p.parcel && Math.abs(p.y - k.y) < 3 && hyp(p.x - k.x, p.z - k.z) < SKYGOOSE.r && now >= p.graceUntil) { all(r, { t: "fx", k: "skysteal", id: p.id }, p); lose(p, "skygoose"); } }
+  }
   setInterval(() => {
     const now = Date.now();
     for (const [k, exp] of invites) if (exp < now) invites.delete(k);
     for (const r of rooms) {
-      const dt = Math.min(0.5, (now - r.last) / 1000); r.last = now;
+      const dt = Math.min(0.25, (now - r.last) / 1000); r.last = now;
       const players = [...r.players.values()];
-      const daylight = environment.time === "auto" ? undefined : environment.time === "day";
-      for (const e of stepVehicles(r.vs, players.filter((p) => !p.inst), dt, now / 1000, daylight)) { const p = r.players.get(e.id); if (p) send(p.ws, { t: e.k, stars: e.stars || 0 }); }
-      if (r.tick = !r.tick) all(r, { t: "veh", ts: now, v: r.vs.map((v) => v.kind ? [r2(v.x), r2(v.y), r2(v.z), r2(v.yaw), v.mode, v.target, r2(v.ba), r2(v.bd)] : [r2(v.x), r2(v.y), r2(v.z), r2(v.yaw), v.mode, v.target]) });   // vehicles 10 times a second (a helicopter adds its searchlight)
-      if (players.length > 1) { const ps = players.filter((p) => p.fresh || r.tick).map((p) => { p.fresh = false; return [p.id, p.x, p.z, p.yaw, p.mv, p.y, p.stars, p.inst, p.ct || 0, p.ft]; }); if (ps.length) all(r, { t: "snap", ts: now, ps }); }
-      for (const g of new Set(players.map(groupOf))) if (g.contract && now > g.contract.ends) finish(g, false);
-      if (r.packageEvent && (now > r.packageEvent.ends || !r.packageEvent.boxes.size)) { r.packageEvent = null; all(r, { t: "package_event", event: null }); }
-      if (!r.packageEvent && r.packageEveryMs > 0 && now >= r.nextPackageEvent) {
-        r.packageEvent = makePackageEvent(now, players.length); r.nextPackageEvent = now + r.packageEveryMs;
-        all(r, { t: "package_event", event: packageEventView(r.packageEvent, now) });
-      }
+      stepDogs(r, players, dt, now); stepGeese(r, players, dt, now); stepGoats(r, players, dt, now); stepSky(r, players, now);
+      if ((r.tick = (r.tick + 1) % 2)) continue;
+      const dg = r.dogs.filter((d) => d.mode || !d.sent), gs = r.geese.filter((g) => g.awake), gt = r.goats.filter((g) => g.mode || !g.sent);
+      for (const d of dg) d.sent = true; for (const g of gt) g.sent = true;
+      r.slow = (r.slow + 1) % 10; const ps = players.length > 1 ? players.filter((p) => p.fresh || !r.slow).map((p) => { p.fresh = false; return [p.id, r2(p.x), r2(p.z), r2(p.yaw), p.mv, r2(p.y), p.ct || 0]; }) : [];
+      if (ps.length || dg.length || gs.length || gt.length) all(r, { t: "snap", ts: now, ps, dogs: dg.map(dogView), geese: gs.map(gooseView), goats: gt.map(goatView) });
     }
-  }, SNAP_MS).unref();
+  }, TICK_MS).unref();
+  wss.game = { rooms, online };   // for the tests
   return wss;
 }
