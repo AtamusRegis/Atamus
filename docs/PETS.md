@@ -23,7 +23,8 @@ Asked (owner): a web game on atamus.io (not Roblox), on its own page; the cargo 
 - **Standing on blocks:** pets stand on the highest block top at or a little above them (so they go under floating
   blocks and onto the ones they jump or fly up to), walk up wedges and ramps, step up at most 0.6 m (a block's side is a
   wall), and fall off where there are no blocks. The camera never goes inside a block.
-- **Things placed on tiles:** trees; **houses** (on a tile corner, 2 x 2 tiles, facing one of four ways, a red mailbox
+- **Things placed on tiles:** tall pine trees (owner, 2026-11-10: 9 to 12 m, three to four blocks high, a trunk and
+  three tiers); **houses** (on a tile corner, 2 x 2 tiles, facing one of four ways, a blue mailbox (owner, 2026-11-10: in color, as you deliver to it)
   7.5 m in front); **mailboxes** on their own; **boost pads** (on road tiles); **animal control vans** (only on road
   tiles); **helicopters** (anywhere, with a radius: 40, 80, 150 or 250 m); and **housing plots** (by number). Every
   mailbox, a house's or a lone one, is a delivery address. With no mailboxes there are no parcels.
@@ -52,7 +53,9 @@ Asked (owner): a web game on atamus.io (not Roblox), on its own page; the cargo 
   where the piece goes (red where it can't, or what Erase takes away); a tap (or click) places it. Blocks go against
   the face pointed at (on top, or beside it), or, with a level chosen, on that level (a grid shows it) to build in the
   air; a block where one already is replaces it. Things stand on the tile pointed at (a house on the nearest tile
-  corner); vans and boosts only on roads. Erase takes away a thing on the tile pointed at first, else the block. A
+  corner); vans and boosts only on roads. Erase takes away a thing on the tile pointed at first, else the block.
+  Vans and helicopters can be picked where they are (owner, 2026-11-10): a tap on one selects it (a box follows it,
+  Delete or Del takes it away, a tap elsewhere lets go), and a tap with Erase takes it away. A
   plot placed again moves. The camera zooms out further while editing. ✕ or Escape closes it. Everyone sees each
   change at once; parcels for houses that changed are dropped.
 - **Looks (owner, 2026-11-10):** block tops grass in three shades (roads paved gray), sides earth, all with a fine
@@ -126,6 +129,7 @@ Asked (owner): a web game on atamus.io (not Roblox), on its own page; the cargo 
 - Roads are the paved tops of road blocks; pets stand on them like any block.
 - **Gray look (owner, 2026-11-09: no outlines, no hatching):** the world is drawn in plain shades of gray: a screen pass
   turns each pixel into its brightness, keeping textures and shading; nights are brightened so it stays readable.
+  Grass and trees keep a very slight green (owner, 2026-11-10: a little of a pixel's own color where green leads).
   Name tags, place labels and speech
   bubbles are drawn after the pass, in color, still hidden behind buildings; so are the guides and interaction circles (owner,
   2026-11-09): the guide arrow, the place rings (pickup, board, shops, training yard, lifts) and lift beams, the beams
@@ -200,8 +204,9 @@ Asked (owner): a web game on atamus.io (not Roblox), on its own page; the cargo 
   lights the ground, houses and pets where it lands, and the beam stops where it hits. **A parcel carrier inside the
   beam (anywhere along it, in the air too) for half a second is caught**; the cone is wider for anyone riding a flier
   or glider. Helicopters circle about 15% faster than before. Entering the beam flashes the helicopter's lights and
-  shows "Animal control!". Helicopters keep circling in daylight, but their searchlights and red/blue lights are off
-  and cannot spot or catch anyone until daylight fades. The server and the page test the same cone (pets-world.js
+  shows "Animal control!". Helicopters keep circling in daylight with a faint red beam down to their circle (owner,
+  2026-11-10: so the circle comes from somewhere), but their red/blue lights are off and they cannot spot or catch
+  anyone until daylight fades. The server and the page test the same cone (pets-world.js
   `beamOf`), the server sending each helicopter's beam heading and reach.
 - **Caught** (an animal control car touching you on the ground, or half a second in a searchlight): you're taken straight to the
   pound's yard (no stun, owner 2026-11-08), your parcels go back to the post office and your wanted level is cleared; 7 s before you can be

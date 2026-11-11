@@ -328,7 +328,10 @@ let houseParts = [];
 function setHouse(i, on) { for (const [m, f] of houseParts) { dummy.rotation.set(0, 0, 0); f(houses[i], dummy); if (!on) dummy.scale.set(HIDE, HIDE, HIDE); dummy.updateMatrix(); m.setMatrixAt(i, dummy.matrix); m.instanceMatrix.needsUpdate = true; } }
 // windows either side of the door: they light up at night
 const windowM = new THREE.MeshBasicMaterial({ color: "#6b7f99" }), WINDOW_ON = new THREE.Color("#ffd76a");
-const TRUNK = new THREE.CylinderGeometry(0.25, 0.3, 2, 6), LEAF = new THREE.SphereGeometry(1.6, 8, 6);
+// (owner, 2026-11-10) tall pines, three to four blocks high: a trunk and three tiers of cone
+const TRUNK = new THREE.CylinderGeometry(0.22, 0.34, 1, 6).translate(0, 0.5, 0), PINE_CONE = new THREE.ConeGeometry(1, 1, 8).translate(0, 0.5, 0);
+const pineH = (t) => 9 + (t.s - 0.85) * 6;   // 9 to 12 m
+const PINE_TIERS = [[0.2, 0.42, 2.8], [0.42, 0.36, 2.1], [0.62, 0.38, 1.4]];   // where a tier starts, how tall it is (of the height), its radius
 function buildThings(parent) {
   houseColors();
   const walls = instanced(BOX, "#ffffff", houses.length, (i, d) => wallAt(houses[i], d), parent); houses.forEach((h, i) => walls.setColorAt(i, new THREE.Color(h.c)));
@@ -338,9 +341,9 @@ function buildThings(parent) {
   const wm = new THREE.InstancedMesh(BOX, windowM, Math.max(1, houses.length * 2)); wm.count = houses.length * 2;
   houses.forEach((h, i) => { for (const sd of [-1, 1]) { const lx = sd * 2.8, lz = 4.53; dummy.position.set(h.x + lx * Math.cos(h.yaw) + lz * Math.sin(h.yaw), h.base + 2.5, h.z - lx * Math.sin(h.yaw) + lz * Math.cos(h.yaw)); dummy.rotation.set(0, h.yaw, 0); dummy.scale.set(h.box ? HIDE : 1.5, h.box ? HIDE : 1.3, 0.1); dummy.updateMatrix(); wm.setMatrixAt(i * 2 + (sd > 0 ? 1 : 0), dummy.matrix); } }); parent.add(wm);
   instanced(BOX, "#6b7680", houses.length, (i, d) => { const h = houses[i]; d.position.set(h.mx, h.my + 0.55, h.mz); d.scale.set(0.15, 1.1, 0.15); }, parent);
-  instanced(BOX, "#e5534b", houses.length, (i, d) => { const h = houses[i]; d.position.set(h.mx, h.my + 1.25, h.mz); d.scale.set(0.8, 0.45, 0.6); d.rotation.y = h.yaw; }, parent);
-  instanced(TRUNK, "#7a4f28", trees.length, (i, d) => { const t = trees[i]; d.position.set(t.x, t.y + t.s, t.z); d.scale.set(t.s, t.s, t.s); }, parent);
-  instanced(LEAF, "#4fae4a", trees.length, (i, d) => { const t = trees[i]; d.position.set(t.x, t.y + 2.6 * t.s, t.z); d.scale.set(t.s, t.s, t.s); }, parent);
+  inColor(instanced(BOX, "#2f7de1", houses.length, (i, d) => { const h = houses[i]; d.position.set(h.mx, h.my + 1.25, h.mz); d.scale.set(0.8, 0.45, 0.6); d.rotation.y = h.yaw; }, parent));   // (owner, 2026-11-10) blue, in color: you deliver to them
+  instanced(TRUNK, "#7a4f28", trees.length, (i, d) => { const t = trees[i], h = pineH(t); d.position.set(t.x, t.y, t.z); d.scale.set(1 + h / 30, h * 0.35, 1 + h / 30); }, parent);
+  for (const [a, hh, r] of PINE_TIERS) instanced(PINE_CONE, "#3f8f4a", trees.length, (i, d) => { const t = trees[i], h = pineH(t), w = r * h / 10.5; d.position.set(t.x, t.y + a * h, t.z); d.scale.set(w, hh * h, w); d.rotation.y = (t.x * 0.37 + t.z * 0.11 + a * 2) % 6.28; }, parent);
 }
 // ---- the sky (owner, 2026-11-08): a day and night cycle, rain now and then, wind, god rays, more clouds; the same for
 // everyone (all timed off the clock) ----
@@ -1021,7 +1024,7 @@ function vehiclesDraw(dt) {
       tmpV.set(b.dx, b.dy, b.dz); m.beam.position.set(b.lx, b.ly, b.lz); m.beam.quaternion.setFromUnitVectors(DOWN, tmpV); const r = len * Math.tan(beamHalf); m.beam.scale.set(r, len, r);
       m.spot.position.set(b.lx, b.ly, b.lz); m.spot.target.position.set(b.lx + b.dx * len, b.ly + b.dy * len, b.lz + b.dz * len); m.spot.target.updateMatrixWorld();
       { const gx = m.x + Math.sin(m.ba) * m.bd, gz = m.z + Math.cos(m.ba) * m.bd, gy = terrain(gx, gz), rr = hyp(gx - b.lx, gy - b.ly, gz - b.lz) * Math.tan(beamHalf) + 0.8; m.disc.position.set(gx, gy + 0.14, gz); m.disc.scale.set(rr, 1, rr); m.disc.visible = !me.inst; }   // where its light catches you
-      m.spot.angle = beamHalf * 1.15; m.beam.visible = lightsOn; m.spot.intensity = lightsOn ? 8 : 0; m.lens.material.color.set(lightsOn ? "#fffdf2" : "#35363a");
+      m.spot.angle = beamHalf * 1.15; m.beam.visible = true; searchBeamM.uniforms.o.value = lightsOn ? 0.2 : 0.13; m.spot.intensity = lightsOn ? 8 : 0; m.lens.material.color.set(lightsOn ? "#fffdf2" : "#ff8a8a");   // (owner, 2026-11-10) a faint red beam down to its circle by day too, so the circle comes from somewhere
     }
     m.g.position.set(m.x, m.y, m.z); m.g.rotation.y = m.yaw;
     if (m.los) { m.los.visible = !chasing && !me.inst; if (m.losStars !== (me.stars | 0)) { m.losStars = me.stars | 0; m.los.geometry.dispose(); m.los.geometry = losLines(m.losStars); } }
@@ -1129,7 +1132,10 @@ const sketchMat = new THREE.ShaderMaterial({
       // (owner, 2026-11-09: no outlines, no hatching) the world in plain shades of gray: each pixel's brightness, its
       // textures and shading kept
       float L = min(1.0, lum(vUv) * gain);   // gain: the night drawn a little lighter
-      gl_FragColor = vec4(vec3(L), 1.0);
+      // (owner, 2026-11-10) grass and trees keep a very slight green: a little of their own color where green leads
+      vec3 c = pow(max(texture2D(tColor, vUv).rgb, 0.0), vec3(1.0 / 2.2)); float gd = c.g - max(c.r, c.b);
+      vec3 tint = (c - vec3(dot(c, vec3(0.299, 0.587, 0.114)))) * 0.22 * smoothstep(0.02, 0.14, gd);
+      gl_FragColor = vec4(clamp(vec3(L) + tint, 0.0, 1.0), 1.0);
       gl_FragDepthEXT = min(1.0, texture2D(tDepth, vUv).r + 0.00002);   // the world's depth (a hair farther, so rings on the ground never flicker), so what's drawn in color after is hidden behind things
     }`,
   depthTest: true, depthFunc: THREE.AlwaysDepth, depthWrite: true,
@@ -1187,6 +1193,7 @@ addEventListener("keydown", (e) => {
   }
   keys.add(e.code); if (e.code === "Escape") { if (building) closeBuild(); if (wedit) closeWorldEdit(); closePanels(); }
   if (e.code === "KeyR" && wedit) weditTurn();
+  if ((e.code === "Delete" || e.code === "Backspace") && wedit) weditDeleteSel();
   if ((e.code === "Enter" || e.code === "Slash") && loggedIn) { e.preventDefault(); openChat(); }
   if (e.code === "Space") { e.preventDefault(); if (!e.repeat) jumpQueued = performance.now() + 150; }   // (owner, 2026-11-08) a press each time, never held (a flier holds it: step)
   if (e.code === "KeyF") runAct("E"); if (e.code === "KeyE") runAct("E"); if (e.code === "KeyG") runAct("G"); if (e.code === "KeyR" && building) turnBuild(e.shiftKey ? -15 : 15); if ((e.code === "Delete" || e.code === "Backspace") && building) deleteSel();
@@ -2602,7 +2609,7 @@ function mapHouse(g, h) {   // seen from above: its roof (a pyramid), the door a
   g.fillStyle = INK; g.fillRect(-0.9, 4.3, 1.8, 0.9);
   g.restore(); g.fillStyle = INK; g.fillRect(h.mx - 0.5, h.mz - 0.5, 1, 1);
 }
-function mapTree(g, t) { g.fillStyle = PAPER; g.strokeStyle = INK; g.lineWidth = 0.35; g.beginPath(); g.arc(t.x, t.z, 1.7 * t.s, 0, TAU); g.fill(); g.stroke(); }
+function mapTree(g, t) { g.fillStyle = PAPER; g.strokeStyle = INK; g.lineWidth = 0.35; g.beginPath(); g.arc(t.x, t.z, 2.8 * pineH(t) / 10.5, 0, TAU); g.fill(); g.stroke(); }
 const mapRing = (g, x, z, r, c, w = 0.9) => { g.strokeStyle = c; g.lineWidth = w; g.beginPath(); g.arc(x, z, r, 0, TAU); g.stroke(); };
 const mapPlotLine = (g, p, c, w) => { g.save(); g.setLineDash([2, 1.5]); g.strokeStyle = c; g.lineWidth = w; g.strokeRect(p.x - PLOT / 2, p.z - PLOT / 2, PLOT, PLOT); g.restore(); };
 // (owner, 2026-11-10) the map drawn from the blocks: each tile seen from above (land paper, roads gray, water hatched,
@@ -2923,7 +2930,7 @@ function buildWorldView() {
   buildVehicles(); placePlots(); for (const id of plotState.keys()) buildPlot(id);
   for (const f of fades.values()) if (f.g) { scene.remove(f.g.g); ghostPool.push(f.g); } fades.clear();
   const hk = houses.map((h) => h.id).join(); if (hk !== houseKey) { if (houseKey && me.bag.length) { me.bag = []; syncBeams(); hudKey = ""; } houseKey = hk; }   // the houses changed: parcels for old addresses are gone
-  drawMapLayers(); if (wedit) weditAim(wedit.px, wedit.py);
+  drawMapLayers(); if (wedit) { if (wedit.sel !== undefined && !vehThings().some((t) => t.id === wedit.sel)) { wedit.sel = undefined; renderWorldBar(); } weditAim(wedit.px, wedit.py); }
 }
 // ---- building the town (owner, 2026-11-10, admins only): pick a piece, see where it goes, tap to place it (or with
 // Erase, tap to take it away). Blocks go against the face you point at (on top, or beside it), or on a chosen level
@@ -2947,8 +2954,25 @@ function openWorldEdit() {
   wedit = { tool: "land", d: 0, lvl: null, r: 80, p: 0, px: innerWidth / 2, py: innerHeight / 2, aim: null, camD: cam.goalDist };
   cam.goalDist = 40; renderWorldBar(); $("buildbar").style.display = "flex"; uiKey = "";
 }
-function closeWorldEdit() { if (!wedit) return; cam.goalDist = Math.min(wedit.camD, 45); wedit = null; wghost.visible = false; levelGrid.visible = false; $("buildbar").style.display = "none"; uiKey = ""; }
+function closeWorldEdit() { if (!wedit) return; cam.goalDist = Math.min(wedit.camD, 45); wedit = null; wghost.visible = false; selBox.visible = false; levelGrid.visible = false; $("buildbar").style.display = "none"; uiKey = ""; }
 function weditTurn() { if (!wedit) return; wedit.d = (wedit.d + 1) % 4; weditAim(wedit.px, wedit.py); }
+// (owner, 2026-11-10) vans and helicopters can be picked out where they are now: tap one to select it (Delete, or Del,
+// takes it away), or tap it with Erase. vehThings()[n] is the thing vehs[n] was made from (the same order).
+const vehThings = () => World.allThings().filter((t) => t.k === "van" || t.k === "heli");
+const selBox = new THREE.Mesh(new THREE.BoxGeometry(1, 1, 1), wOk); selBox.visible = false; selBox.renderOrder = 5; scene.add(inColor(selBox));
+function vehHit() {   // the vehicle under the ray (its sight shape doesn't count)
+  let best = -1, bd = Infinity; ray.layers.enable(1);   // they're drawn in color (layer 1)
+  vehs.forEach((m, i) => { const h = ray.intersectObject(m.g, true).find((x) => x.object !== m.los); if (h && h.distance < bd) { bd = h.distance; best = i; } });
+  ray.layers.disable(1); return best;
+}
+function weditDeleteSel() { if (!wedit || wedit.sel === undefined) return; adminSend({ op: "world", edits: [{ op: "rm", id: wedit.sel }] }); wedit.sel = undefined; renderWorldBar(); }
+function weditMark() {   // a box round the selected vehicle (or the one pointed at), following it
+  const sel = wedit && wedit.sel !== undefined ? vehThings().findIndex((t) => t.id === wedit.sel) : -1, hov = wedit && wedit.aim && wedit.aim.veh !== undefined ? wedit.aim.veh : -1, n = sel >= 0 ? sel : hov, m = vehs[n];
+  selBox.visible = !!m; if (!m) return;
+  selBox.material = wedit.tool === "erase" && n === hov ? wBad : wOk;
+  const [w, h, l] = m.kind ? [7, 5, 11] : [3.4, 3.4, 6.6];
+  selBox.scale.set(w, h, l); selBox.position.set(m.g.position.x, m.g.position.y + h / 2 - (m.kind ? 1 : 0.2), m.g.position.z); selBox.rotation.y = m.g.rotation.y;
+}
 function renderWorldBar() {
   const el = $("buildbar"); el.innerHTML = "";
   const row1 = document.createElement("div"), row2 = document.createElement("div"); row1.className = row2.className = "bbrow";
@@ -2960,6 +2984,7 @@ function renderWorldBar() {
   tool(row2, "+", false, () => { wedit.lvl = (wedit.lvl === null ? weditLevel() : wedit.lvl) + 1; wedit.lvl = clamp(wedit.lvl, -9, 60); renderWorldBar(); weditAim(wedit.px, wedit.py); });
   if (wedit.tool === "heli") tool(row2, wedit.r + " m", true, () => { wedit.r = HELI_R[(HELI_R.indexOf(wedit.r) + 1) % HELI_R.length]; renderWorldBar(); weditAim(wedit.px, wedit.py); });
   if (wedit.tool === "plot") tool(row2, "Plot " + (wedit.p + 1), true, () => { wedit.p = (wedit.p + 1) % PLOTS.length; renderWorldBar(); weditAim(wedit.px, wedit.py); });
+  if (wedit.sel !== undefined) tool(row2, "Delete", false, weditDeleteSel, "red");
   tool(row2, "✕", false, closeWorldEdit);
   el.append(row1, row2);
 }
@@ -2971,6 +2996,7 @@ const hasCell = (i, j, k) => [...World.allCells()].some((c) => c.i === i && c.j 
 function weditTarget(px, py) {
   const T = World.TILE, S = World.STEP, tl = wedit.tool;
   ndc.set((px / innerWidth) * 2 - 1, -(py / innerHeight) * 2 + 1); ray.setFromCamera(ndc, camera);
+  { const vi = vehHit(), t = vehThings()[vi]; if (vi >= 0 && t) return { veh: vi, id: t.id, ok: true }; }
   let hit = null, n = null;
   if (wedit.lvl !== null) { plane.normal.set(0, 1, 0); plane.constant = -(wedit.lvl - 1) * S; if (ray.ray.intersectPlane(plane, hitV)) hit = hitV.clone(); n = new THREE.Vector3(0, 1, 0); }
   else { const h = ray.intersectObjects(worldMeshes, false)[0]; if (h) { hit = h.point.clone(); n = h.face.normal.clone(); if (n.dot(ray.ray.direction) > 0) n.negate(); } }
@@ -3002,7 +3028,7 @@ function weditAim(px, py) {
   const a = weditTarget(px, py); wedit.aim = a;
   for (const c of [...wghost.children]) { wghost.remove(c); if (c.userData.own) c.geometry.dispose(); }
   levelGrid.visible = wedit.lvl !== null; if (wedit.lvl !== null) { levelGrid.position.set(Math.round(me.x / World.TILE) * World.TILE, (wedit.lvl - 1) * World.STEP + 0.02, Math.round(me.z / World.TILE) * World.TILE); }
-  if (!a) { wghost.visible = false; return; }
+  if (!a || a.veh !== undefined) { wghost.visible = false; return; }
   const T = World.TILE, S = World.STEP, m = a.ok && !a.del && !a.rm ? wOk : wBad, add = (geo, x, y, z, yaw = 0, own = false) => { const o = new THREE.Mesh(geo, m); o.position.set(x, y, z); o.rotation.y = yaw; o.renderOrder = 5; o.userData.own = own; wghost.add(o); return o; };
   const YAW = [0, Math.PI / 2, Math.PI, -Math.PI / 2];
   if (a.put || a.del) {
@@ -3017,14 +3043,17 @@ function weditAim(px, py) {
     else if (t.k === "plot") add(new THREE.BoxGeometry(World.PLOT, 0.3, World.PLOT), x, t.y + 0.15, z, 0, true);
     else if (t.k === "heli") { add(new THREE.CylinderGeometry(0.6, 0.6, 14, 8).translate(0, 7, 0), x, t.y, z, 0, true); const ring = add(new THREE.TorusGeometry(t.r, 0.4, 6, 96).rotateX(Math.PI / 2), x, t.y + 0.3, z, 0, true); ring.renderOrder = 5; }
     else if (t.k === "mailbox") add(new THREE.BoxGeometry(0.8, 1.4, 0.8).translate(0, 0.7, 0), x, t.y, z, YAW[t.d], true);
-    else if (t.k === "tree") add(new THREE.CylinderGeometry(1.4, 1.4, 4, 10).translate(0, 2, 0), x, t.y, z, 0, true);
+    else if (t.k === "tree") add(new THREE.ConeGeometry(2.8, 10.5, 8).translate(0, 5.25, 0), x, t.y, z, 0, true);
     else if (t.k === "boost") add(new THREE.BoxGeometry(3.4, 0.2, 5), x, t.y + 0.1, z, YAW[t.d], true);
     else add(new THREE.BoxGeometry(2.4, 2.4, 5).translate(0, 1.2, 0), x, t.y, z, YAW[t.d], true);   // van
   }
   wghost.visible = true; inColor(wghost);
 }
 function weditTap(px, py) {
-  weditAim(px, py); const a = wedit.aim; if (!a || !a.ok) return true;
+  weditAim(px, py); const a = wedit.aim;
+  if (a && a.veh !== undefined) { if (wedit.tool === "erase") adminSend({ op: "world", edits: [{ op: "rm", id: a.id }] }); else { wedit.sel = a.id; renderWorldBar(); } return true; }
+  if (wedit.sel !== undefined) { wedit.sel = undefined; renderWorldBar(); return true; }   // a tap away lets go of it
+  if (!a || !a.ok) return true;
   adminSend({ op: "world", edits: [a.put ? { op: "put", c: a.put } : a.del ? { op: "del", c: a.del } : a.rm ? { op: "rm", id: a.rm.id } : { op: "add", t: a.add }] });
   return true;
 }
@@ -3210,6 +3239,7 @@ function step(dt) {
 }
 function draw(dt) {
   if (wedit && performance.now() - (wedit.t || 0) > 100) { wedit.t = performance.now(); weditAim(wedit.px, wedit.py); }   // the preview follows the camera
+  weditMark();
   const now = performance.now();
   mine.g.position.set(me.x, me.y, me.z); mine.g.rotation.set(0, me.yaw, 0); mine.g.visible = !me.foot;
   walker.g.visible = !!me.foot; if (me.foot) { walker.g.position.set(me.x, me.y, me.z); walker.g.rotation.y = me.yaw; animateWalker(walker, clock, me.moving); }
