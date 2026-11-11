@@ -9,10 +9,12 @@
 // - Housing plots (owner, 2026-11-08): each player in a room gets a plot their house (kept in their data) stands on, seen
 //   by everyone: VIPs the two on the VIP island, then the three near the middle (first come, first served), then one of
 //   five around town at random; past 10 players the extra island's plots.
+// - The block world (owner, 2026-11-10): staff (admin) build the town from blocks; their edits go to everyone at once,
+//   rebuild every room's animal control, and are saved (one copy, in the store).
 // Connections that go quiet are dropped; logging in again replaces the old connection. A new website build reloads
 // everyone onto it.
 import { WebSocketServer } from "ws";
-import { makeVehicles, stepVehicles, cleanData, petCap, penPets } from "./pets-world.js";
+import { makeVehicles, stepVehicles, cleanData, petCap, penPets, setWorld, worldData, applyEdits } from "./pets-world.js";
 import { makePackageEvent, packageEventView, packageReward, takePackage } from "./package-events.js";
 import { onWebsiteUpdate, websiteBuild, websiteBy } from "./build.js";
 import { hashSecret, verifySecret } from "./hash.js";
@@ -80,6 +82,9 @@ function finish(g, won) {
 }
 
 export function attachPets(server, { origins = [], allowLocal = false, store = memStore(), packageEveryMs = 0 } = {}) {   // (owner, 2026-11-09) Package Rush off for now (0); tests pass a period
+  // (owner, 2026-11-10) the saved block world (until it's loaded, or if there's none, the starting square)
+  let worldSave = null;
+  store.getWorld().then((d) => { if (!d) return; setWorld(d); for (const r of rooms) r.vs = makeVehicles(); const w = worldData(); for (const p of online.values()) send(p.ws, { t: "world", all: w }); }).catch((e) => console.error("[pets] world load", e.message));
   // Admins can override the clock-driven sky for everyone. It returns to the normal cycle when the server restarts.
   let environment = { weather: "auto", time: "auto" };
   // ---- saving: changed accounts are written every few seconds (and when their player leaves) ----
@@ -132,6 +137,14 @@ export function attachPets(server, { origins = [], allowLocal = false, store = m
       const list = [...online.values()].map((p) => staffView(p.acct, p));
       if (m.q && /^[A-Za-z0-9_]{1,16}$/.test(m.q)) for (const a of await store.search(m.q)) if (!online.has(a.id)) list.push(staffView(a, null));
       send(me.ws, { t: "admin_list", list, q: m.q || "", environment }); return;
+    }
+    if (m.op === "world") {   // (owner, 2026-11-10) building the town
+      if (my < 2) return reply("Not allowed");
+      const done = applyEdits(m.edits); if (!done.length) return;
+      for (const p of online.values()) send(p.ws, { t: "world", edits: done });
+      for (const r of rooms) r.vs = makeVehicles();
+      clearTimeout(worldSave); worldSave = setTimeout(() => store.saveWorld(worldData()).catch((e) => console.error("[pets] world save", e.message)), 800);
+      return;
     }
     if (m.op === "environment") {
       if (my < 2) return reply("Not allowed");
@@ -262,7 +275,7 @@ export function attachPets(server, { origins = [], allowLocal = false, store = m
         me.airMount = AIR_MOUNTS.has(me.sp);
         online.set(acct.id, me);
         assignPlot(room, me);
-        send(ws, { t: "welcome", web: websiteBuild(), by: websiteBy(), id: me.id, name: me.name, role: rankOf(acct) >= 2 ? "admin" : acct.role, token, data: acct.data, rev: acct.rev, players: [...room.players.values()].map(pub), contract: null, packageEvent: packageEventView(room.packageEvent), stars: me.stars, vip: !!acct.vip, plot: me.plot, plots: room.plots.map((p, i) => (p ? plotMsg(i, p) : null)).filter(Boolean), environment });
+        send(ws, { t: "welcome", world: worldData(), web: websiteBuild(), by: websiteBy(), id: me.id, name: me.name, role: rankOf(acct) >= 2 ? "admin" : acct.role, token, data: acct.data, rev: acct.rev, players: [...room.players.values()].map(pub), contract: null, packageEvent: packageEventView(room.packageEvent), stars: me.stars, vip: !!acct.vip, plot: me.plot, plots: room.plots.map((p, i) => (p ? plotMsg(i, p) : null)).filter(Boolean), environment });
         room.players.set(me.id, me);
         all(room, { t: "join", p: pub(me) }, me);
         if (me.plot >= 0) all(room, plotMsg(me.plot, me), me);

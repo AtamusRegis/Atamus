@@ -1,7 +1,6 @@
 // Pet Delivery Co.: the world, shared by the page (website/pets-world.js) and the server
 // (packages/server/src/pets-world.js). The two copies must stay identical (scripts/check.sh compares them).
-// (owner, 2026-11-08; rebuilt flat on a grid 2026-11-09) The town is a flat, square floating island: straight streets in a
-// grid, houses along them, the round town square in the middle, a deep lake on the west side; islands float round it.
+// (owner, 2026-11-10) The town is built from blocks by staff (see "the block world" below), round the town square.
 // Animal control vans patrol the roads and chase whoever they spot for a short while, and a player who keeps getting away gets a wanted level that makes them
 // easier to spot and chased harder; helicopters circle the sky sweeping searchlights that catch whoever they light.
 
@@ -24,14 +23,92 @@ function noise(x, z) {
 function fbm(x, z) { let s = 0, amp = 0.5, f = 1; for (let o = 0; o < 4; o++) { s += noise(x * f, z * f) * amp; amp *= 0.5; f *= 2; } return s / 0.9375; }
 export function rng(seed) { let s = seed; return () => ((s = (s * 16807) % 2147483647) / 2147483647); }
 
-// ---- the island (owner, 2026-11-09: flat, symmetric, on a grid): a flat square of land 448 m across ----
-export const R_TOWN = 224;
-export const edgeR = (a) => R_TOWN / Math.max(Math.abs(Math.cos(a)), Math.abs(Math.sin(a)));
-export const inside = (x, z, margin = 0) => Math.max(Math.abs(x), Math.abs(z)) < R_TOWN - margin;
-
-// ---- the town square (owner, 2026-11-09): a round paved square in the middle with the Contract Board at its center,
-// and the main buildings evenly round it (90° apart since the mount shop closed), each facing the middle with its ring
-// in front. yaw turns a building's front (+z) toward the middle ----
+// ---- the block world (owner, 2026-11-10): the town is built from blocks on a grid of 6 x 6 m tiles, stacked in steps
+// of 3 m. A block at level k fills y (k-1)*3 to k*3 (level 0 is the ground's top at 0). Kinds: land (grass), wedge (a
+// ramp up one step, rising toward its direction), road (a land block paved on top), ramp (a road wedge), water (a
+// block of water, its surface just under the top). Blocks can float with nothing under them (floating islands).
+// Things stand on tiles: trees, houses (on a tile corner, 2 x 2 tiles, facing a way, with a mailbox in front), lone
+// mailboxes, boost pads (on roads), animal control vans (on roads: they roam every road joined to theirs), helicopters
+// (anywhere, keeping within a chosen radius) and housing plots (3 x 3 tiles, by plot number). Only staff (admin) edit it,
+// live, for everyone; the server keeps it. It starts as just the town square: a round island of tiles with the square's
+// buildings, which stay where they are. ----
+export const TILE = 6, STEP = 3;
+export const KINDS = ["land", "wedge", "road", "ramp", "water"], THINGS = ["tree", "house", "mailbox", "boost", "van", "heli", "plot"];
+export const DIRS = [[0, 1], [1, 0], [0, -1], [-1, 0]];   // a direction 0-3: +z, +x, -z, -x
+const tkey = (i, j) => i + "," + j, ckey = (i, j, k) => i + "," + j + "," + k;
+export const tileOf = (v) => Math.floor(v / TILE), tileMid = (i) => i * TILE + TILE / 2;
+const cells = new Map();   // "i,j,k" -> { i, j, k, t, d }
+const cols = new Map();    // "i,j" -> its cells, lowest first
+let things = [], nextThing = 1;
+export const world = { rev: 0 };
+export function starterWorld() {
+  const c = [];
+  for (let i = -12; i < 12; i++) for (let j = -12; j < 12; j++) if (hyp(tileMid(i), tileMid(j)) < 64) c.push([i, j, 0, 0, 0]);
+  return { v: 1, cells: c, things: [] };
+}
+const okInt = (v, lo, hi) => Number.isInteger(v) && v >= lo && v <= hi;
+function cleanCell(a) { if (!Array.isArray(a)) return null; const [i, j, k, t, d] = a.map((v) => +v); return okInt(i, -200, 200) && okInt(j, -200, 200) && okInt(k, -10, 60) && okInt(t, 0, KINDS.length - 1) && okInt(d | 0, 0, 3) ? { i, j, k, t: KINDS[t], d: d | 0 } : null; }
+function cleanThing(o) {
+  if (!o || !THINGS.includes(o.k)) return null;
+  const i = +o.i, j = +o.j, y = +o.y; if (!okInt(i, -200, 200) || !okInt(j, -200, 200) || !Number.isFinite(y) || Math.abs(y) > 200) return null;
+  const t = { id: okInt(+o.id, 1, 1e9) ? +o.id : nextThing++, k: o.k, i, j, y: Math.round(y * 100) / 100, d: okInt(+o.d, 0, 3) ? +o.d : 0 };
+  if (t.k === "heli") t.r = okInt(+o.r, 10, 400) ? +o.r : 80;
+  if (t.k === "plot") { if (!okInt(+o.p, 0, PLOTS.length - 1)) return null; t.p = +o.p; }
+  nextThing = Math.max(nextThing, t.id + 1); return t;
+}
+// the whole world from saved data (bad entries dropped)
+export function setWorld(data) {
+  cells.clear(); things = [];
+  const src = data && Array.isArray(data.cells) ? data : starterWorld();
+  for (const a of src.cells) { const c = cleanCell(a); if (c) cells.set(ckey(c.i, c.j, c.k), c); }
+  for (const o of src.things || []) { const t = cleanThing(o); if (t && !things.some((q) => q.id === t.id)) things.push(t); }
+  derive(); world.rev++;
+}
+export const worldData = () => ({ v: 1, cells: [...cells.values()].map((c) => [c.i, c.j, c.k, KINDS.indexOf(c.t), c.d]), things: things.map((t) => ({ ...t })) });
+// edits (from the editor): { op: "put", c: [i, j, k, kind, dir] } | { op: "del", c: [i, j, k] } | { op: "add", t: thing }
+// | { op: "rm", id }. Returns the edits that applied (things get their ids), or [] for none.
+export function applyEdits(edits) {
+  const done = [];
+  for (const e of Array.isArray(edits) ? edits.slice(0, 200) : []) {
+    if (e && e.op === "put") { const c = cleanCell(e.c); if (c) { cells.set(ckey(c.i, c.j, c.k), c); done.push({ op: "put", c: [c.i, c.j, c.k, KINDS.indexOf(c.t), c.d] }); } }
+    else if (e && e.op === "del" && Array.isArray(e.c)) { const k = ckey(+e.c[0], +e.c[1], +e.c[2]); if (cells.delete(k)) done.push({ op: "del", c: [+e.c[0], +e.c[1], +e.c[2]] }); }
+    else if (e && e.op === "add") { const t = cleanThing({ ...e.t, id: e.t && e.t.id ? e.t.id : 0 }); if (t) { if (t.k === "plot") things = things.filter((q) => !(q.k === "plot" && q.p === t.p)); things = things.filter((q) => q.id !== t.id); things.push(t); done.push({ op: "add", t: { ...t } }); } }
+    else if (e && e.op === "rm") { const n = things.length; things = things.filter((q) => q.id !== +e.id); if (things.length < n) done.push({ op: "rm", id: +e.id }); }
+  }
+  if (done.length) { derive(); world.rev++; }
+  return done;
+}
+export const allThings = () => things;
+export const allCells = () => cells.values();
+// ---- heights ----
+// a cell's top at a point in its tile (a wedge rises across the tile toward its direction)
+export function cellTop(c, x, z) {
+  if (c.t !== "wedge" && c.t !== "ramp") return c.k * STEP - (c.t === "water" ? 0.4 : 0);
+  const [dx, dz] = DIRS[c.d], u = clamp(dx ? (x - c.i * TILE) / TILE : (z - c.j * TILE) / TILE, 0, 1), f = dx + dz > 0 ? u : 1 - u;
+  return (c.k - 1) * STEP + f * STEP;
+}
+export const colAt = (x, z) => cols.get(tkey(tileOf(x), tileOf(z))) || null;
+// the highest surface here at or a little above y (what you'd stand on); -Infinity over nothing
+export function surfaceAt(x, z, y) {
+  const col = colAt(x, z); if (!col) return -Infinity;
+  let best = -Infinity; for (const c of col) { const t = cellTop(c, x, z); if (t <= y + 1.2 && t > best) best = t; }
+  return best;
+}
+// the top of the highest block here (or -200 off the island)
+export function terrain(x, z) { const col = colAt(x, z); if (!col) return -200; let best = -Infinity; for (const c of col) best = Math.max(best, cellTop(c, x, z)); return best; }
+export const smoothTerrain = (x, z) => Math.max(0, terrain(x, z));
+export const inside = (x, z) => !!colAt(x, z);
+export function waterAt(x, z) { const col = colAt(x, z); if (!col) return -Infinity; const top = col[col.length - 1]; return top.t === "water" ? cellTop(top, x, z) : -Infinity; }
+export const roadDist = (x, z) => { const col = colAt(x, z); if (!col) return 99; const top = col[col.length - 1]; return top.t === "road" || top.t === "ramp" ? 0 : 99; };
+// does a block's side stand in the way of someone at y (who can step up 0.6 m)?
+function wallAt(x, z, y) {
+  const col = colAt(x, z); if (!col) return false;
+  for (const c of col) { if (c.t === "water") continue; const top = cellTop(c, x, z), bottom = (c.k - 1) * STEP; if (top > y + 0.6 && bottom < y + 1.8) return true; }
+  return false;
+}
+// ---- the town square (owner, 2026-11-09; the same size on blocks, 2026-11-10): a round paved square in the middle with
+// the Contract Board at its center and the main buildings evenly round it, each facing the middle with its ring in front.
+// yaw turns a building's front (+z) toward the middle ----
 export const PLAZA = 60;
 const around = (deg, r) => { const a = (deg * Math.PI) / 180, c = Math.cos(a), s = Math.sin(a); return { x: Math.round(c * r * 100) / 100, z: Math.round(s * r * 100) / 100, yaw: Math.atan2(-c, -s) }; };
 export const BOARD = { x: 0, z: 0, r: 3 }, SPAWN = { x: 0, z: -12 };
@@ -39,159 +116,61 @@ export const POST = around(-90, 44), PICKUP = { ...around(-90, 30), r: 4 };
 export const SHOP_B = around(0, 44), SHOP = { ...around(0, 31), r: 5 };
 export const TRAIN = { ...around(180, 40), r: 9 };
 export const POUND = around(90, 44), POUND_B = around(90, 47), RELEASE = around(90, 33);
-
-// ---- streets (owner, 2026-11-09): a grid of straight streets edge to edge, two each way on either side of the square,
-// making city blocks ----
-export const STREETS = [-140, -64, 64, 140];
-function sampleRoad(pts, loop) {
-  const n = pts.length, P = (i) => pts[loop ? (i + n) % n : clamp(i, 0, n - 1)], out = [];
-  const segs = loop ? n : n - 1;
-  for (let i = 0; i < segs; i++) {
-    const p0 = P(i - 1), p1 = P(i), p2 = P(i + 1), p3 = P(i + 2), steps = Math.max(2, Math.ceil(hyp(p2[0] - p1[0], p2[1] - p1[1]) / 2));
-    for (let j = 0; j < steps; j++) {
-      const t = j / steps, t2 = t * t, t3 = t2 * t;
-      const f = (a, b, c, d) => 0.5 * (2 * b + (-a + c) * t + (2 * a - 5 * b + 4 * c - d) * t2 + (-a + 3 * b - 3 * c + d) * t3);
-      out.push([f(p0[0], p1[0], p2[0], p3[0]), f(p0[1], p1[1], p2[1], p3[1])]);
-    }
-  }
-  if (!loop) out.push(pts[n - 1].slice());
-  const S = [0]; for (let i = 1; i < out.length; i++) S.push(S[i - 1] + hyp(out[i][0] - out[i - 1][0], out[i][1] - out[i - 1][1]));
-  const len = S[S.length - 1] + (loop ? hyp(out[0][0] - out[out.length - 1][0], out[0][1] - out[out.length - 1][1]) : 0);
-  return { pts: out, S, len, loop };
-}
-const STREET_END = R_TOWN - 2;
-export const ROADS = [...STREETS.map((c) => sampleRoad([[c, -STREET_END], [c, STREET_END]], false)), ...STREETS.map((c) => sampleRoad([[-STREET_END, c], [STREET_END, c]], false))];
-export const ROAD_HALF = 4;
-// where along a road (s metres from its start) and which way it runs there
-export function roadAt(R, s) {
-  const { pts, S, len, loop } = R; s = loop ? ((s % len) + len) % len : clamp(s, 0, len);
-  let lo = 0, hi = S.length - 1; while (lo < hi) { const m = (lo + hi + 1) >> 1; if (S[m] <= s) lo = m; else hi = m - 1; }
-  const a = pts[lo], b = lo + 1 < pts.length ? pts[lo + 1] : loop ? pts[0] : pts[lo], prev = lo > 0 ? pts[lo - 1] : a;
-  const segL = hyp(b[0] - a[0], b[1] - a[1]), t = segL > 0 ? (s - S[lo]) / segL : 0;
-  let fx = b[0] - a[0], fz = b[1] - a[1]; if (segL === 0) { fx = a[0] - prev[0]; fz = a[1] - prev[1]; }
-  const fl = hyp(fx, fz) || 1;
-  return { x: a[0] + (b[0] - a[0]) * t, z: a[1] + (b[1] - a[1]) * t, fx: fx / fl, fz: fz / fl };
-}
-
-// ---- the height grid (2 m): flat land at 0 everywhere, lower only under the water ----
-const G = 2, GN = 320, G0 = -320;
-const HGT = new Float32Array(GN * GN), DIST = new Float32Array(GN * GN).fill(99);
-for (const R of ROADS) for (let k = 0; k < R.pts.length; k++) {
-  const [x, z] = R.pts[k], ci = Math.round((x - G0) / G), cj = Math.round((z - G0) / G);
-  for (let j = cj - 7; j <= cj + 7; j++) for (let i = ci - 7; i <= ci + 7; i++) { if (i < 0 || j < 0 || i >= GN || j >= GN) continue; const d = hyp(G0 + i * G - x, G0 + j * G - z); if (d < DIST[j * GN + i]) DIST[j * GN + i] = d; }
-}
-function sample(A, x, z) {
-  const fx = clamp((x - G0) / G, 0, GN - 1.001), fz = clamp((z - G0) / G, 0, GN - 1.001), i = Math.floor(fx), j = Math.floor(fz), u = fx - i, v = fz - j, k = j * GN + i;
-  return A[k] * (1 - u) * (1 - v) + A[k + 1] * u * (1 - v) + A[k + GN] * (1 - u) * v + A[k + GN + 1] * u * v;
-}
-export const terrain = (x, z) => sample(HGT, x, z);
-export const smoothTerrain = (x, z) => Math.max(0, sample(HGT, x, z));
-export const roadDist = (x, z) => sample(DIST, x, z);
-
-export const houses = [], solids = [], trees = [];
+export const ROAD_HALF = TILE / 2;
+export const houses = [], solids = [], trees = [], boosts = [];
 // solids: { x, z, c, s (cos / sin of its turn), hw, hd (half sizes), y0, y1 }
 const solid = (x, z, yaw, hw, hd, y0, y1) => solids.push({ x, z, c: Math.cos(yaw), s: Math.sin(yaw), hw, hd, y0, y1 });
-const rand = rng(20261108);
-// ---- housing plots (owner, 2026-11-08; placed on the grid 2026-11-09): 20 x 20 m (5 x 5 squares of 4 m) where
-// players build their own houses, seen by everyone, each in the middle of a city block: 3 in blocks diagonal to the
-// square (first come, first served), 5 around town (given out at random: the fourth diagonal block and the four corner
-// blocks), 2 on an island above the square (VIP), and 6 on an island off the edge that appears when a room has more
-// than 10 players ----
+// ---- housing plots (owner, 2026-11-08; placed by staff, 2026-11-10): 20 x 20 m (5 x 5 squares of 4 m) where players
+// build their own houses, seen by everyone. 16 by number: 3 first come, first served, 2 VIP, 5 given out at random, 6 for
+// rooms of more than 10 players. A plot not yet placed is nowhere. ----
 export const PLOT = 20, CELL = 4, GRID = 5, LEVELS = 3, LEVEL_H = 5.5;   // (owner, 2026-11-09) taller walls, so the camera fits
 export const PLOTS = [];
-{
-  const D = 102, C = 182;   // the middles of the diagonal blocks and the corner blocks
-  for (const [x, z] of [[D, -D], [-D, -D], [D, D]]) PLOTS.push({ x, z, y: 0, kind: "center" });
-  PLOTS.push({ x: -12, z: 0, y: 62, kind: "vip" }, { x: 12, z: 0, y: 62, kind: "vip" });
-  for (const [x, z] of [[-D, D], [C, -C], [-C, -C], [C, C], [-C, C]]) PLOTS.push({ x, z, y: 0, kind: "random" });
-  for (let k = 0; k < 6; k++) PLOTS.push({ x: 400 + ((k % 3) - 1) * 24, z: (Math.floor(k / 3) - 0.5) * 24, y: 8, kind: "extra" });
-  PLOTS.forEach((p, i) => (p.id = i));
-}
-export const VIP_ISLAND = { x: 0, z: 0, y: 62, r: 30 }, EXTRA_ISLAND = { x: 400, z: 0, y: 8, r: 48 };
-export const plotAt = (x, z) => PLOTS.find((p) => Math.abs(x - p.x) < PLOT / 2 && Math.abs(z - p.z) < PLOT / 2) || null;
-const nearPlot = (x, z, m) => PLOTS.some((p) => Math.abs(p.x - x) < PLOT / 2 + m && Math.abs(p.z - z) < PLOT / 2 + m);
-// ---- water (owner, 2026-11-09: one big lake on one side): a deep, square-edged lake in the middle block of the west
-// side, and a river from it running straight off the island's edge in a waterfall. WAT holds the water's surface on
-// the height grid (also a little past the shore, so it reads smoothly); water is wherever the land is under it.
-// Swimmers swim (and dive) in it; everyone else can't wade in from the shore ----
-const WAT = new Float32Array(GN * GN).fill(-1e9), WETN = new Uint8Array(GN * GN);   // WETN: in the water itself
-export const LAKE = { x: -172, z: 0, hw: 24, hd: 52, r: 24, y: -0.4, deep: 8 };
-// each: the path (downstream), its half width and depth; outflows end past the edge
-export const RIVERS = [{ pts: [[-190, 0], [-205, 0], [-220, 0], [-236, 0]], hw: 5, deep: 3, fall: true }].map((R) => Object.assign(R, sampleRoad(R.pts, false), { y: null }));
-for (const R of RIVERS) R.y = R.pts.map(() => LAKE.y);
-const sdRect = (x, z, cx, cz, hw, hd) => { const dx = Math.abs(x - cx) - hw, dz = Math.abs(z - cz) - hd; return dx < 0 && dz < 0 ? Math.max(dx, dz) : hyp(Math.max(dx, 0), Math.max(dz, 0)); };
-for (let j = 0; j < GN; j++) for (let i = 0; i < GN; i++) {
-  const x = G0 + i * G, z = G0 + j * G, k = j * GN + i;
-  const dl = sdRect(x, z, LAKE.x, LAKE.z, LAKE.hw, LAKE.hd), R = RIVERS[0], dr = sdRect(x, z, (R.pts[0][0] + R.pts[R.pts.length - 1][0]) / 2, 0, Math.abs(R.pts[R.pts.length - 1][0] - R.pts[0][0]) / 2, R.hw);
-  if (dl < 0) { HGT[k] = LAKE.y - LAKE.deep; WETN[k] = 1; }
-  else if (dr < 0) { HGT[k] = Math.min(HGT[k], LAKE.y - R.deep); WETN[k] = 1; }
-  if (Math.min(dl, dr) < 3) WAT[k] = LAKE.y;
-}
-// the water's surface here, or -Infinity on dry land
-export function waterAt(x, z) {
-  const fx = (x - G0) / G, fz = (z - G0) / G; if (fx < 0 || fz < 0 || fx >= GN - 1 || fz >= GN - 1) return -Infinity;
-  const i = Math.floor(fx), j = Math.floor(fz), k = j * GN + i;
-  if (WAT[k] < -1e8 || WAT[k + 1] < -1e8 || WAT[k + GN] < -1e8 || WAT[k + GN + 1] < -1e8) return -Infinity;
-  if (!(WETN[k] | WETN[k + 1] | WETN[k + GN] | WETN[k + GN + 1])) return -Infinity;
-  const y = sample(WAT, x, z); return terrain(x, z) < y - 0.05 ? y : -Infinity;
-}
-// the water grid, for drawing it: [x0, step, n, surface heights (-1e9 where there's none)]
-export const waterGrid = () => ({ x0: G0, step: G, n: GN, w: WAT, wet: WETN });
-const nearWater = (x, z, m) => { for (const [a, b] of [[0, 0], [-m, 0], [m, 0], [0, -m], [0, m], [-m, -m], [m, m], [-m, m], [m, -m]]) if (waterAt(x + a, z + b) > -Infinity) return true; return false; };
-// ---- houses (owner, 2026-11-09: on the grid): along both sides of every street, facing it, evenly spaced in each
-// stretch between cross streets (clear of the corners), each with a mailbox at the roadside; none in the square or by
-// the water ----
-{
-  const cuts = [-R_TOWN, ...STREETS, R_TOWN];
-  for (const [ri, R] of ROADS.entries()) {
-    const c = STREETS[ri % 4], alongZ = ri < 4;
-    for (let q = 0; q < cuts.length - 1; q++) {
-      const a = cuts[q], b = cuts[q + 1], lo = a + (q === 0 ? 14 : 19.5), hi = b - (q === cuts.length - 2 ? 14 : 19.5), n = Math.floor((hi - lo) / 13) + 1, mid = (lo + hi) / 2;
-      for (let m = 0; m < n; m++) {
-        const u = mid + (m - (n - 1) / 2) * 13;
-        for (const side of [-1, 1]) {
-          const x = alongZ ? c + side * 13.5 : u, z = alongZ ? u : c + side * 13.5, rx = alongZ ? side : 0, rz = alongZ ? 0 : side;
-          if (!inside(x, z, 9) || (Math.abs(x) < PLAZA + 4 && Math.abs(z) < PLAZA + 4) || nearPlot(x, z, 3)) continue;
-          const mx = x - rx * 7.5, mz = z - rz * 7.5;
-          if (nearWater(x, z, 9) || nearWater(mx, mz, 3)) continue;
-          houses.push({ x, z, yaw: Math.atan2(-rx, -rz), base: 0, mx, mz, my: 0, sky: false, r: rand() });
-        }
-      }
-    }
+{ const kinds = ["center", "center", "center", "vip", "vip", "random", "random", "random", "random", "random", "extra", "extra", "extra", "extra", "extra", "extra"]; kinds.forEach((kind, id) => PLOTS.push({ id, kind, x: 0, z: 0, y: -1000, placed: false })); }
+export const plotAt = (x, z) => PLOTS.find((p) => p.placed && Math.abs(x - p.x) < PLOT / 2 && Math.abs(z - p.z) < PLOT / 2) || null;
+export const islandAt = () => null;
+// ---- what the blocks and things make: columns, houses (with mailboxes), trees, boosts, plots, the road network ----
+const roadTiles = new Map();   // "i,j" -> the road cell on top
+function derive() {
+  cols.clear(); for (const c of cells.values()) { const k = tkey(c.i, c.j); if (!cols.has(k)) cols.set(k, []); cols.get(k).push(c); }
+  for (const col of cols.values()) col.sort((a, b) => a.k - b.k);
+  roadTiles.clear(); for (const [k, col] of cols) { const top = col[col.length - 1]; if (top.t === "road" || top.t === "ramp") roadTiles.set(k, top); }
+  houses.length = 0; solids.length = 0; trees.length = 0; boosts.length = 0;
+  for (const p of PLOTS) { p.placed = false; p.y = -1000; }
+  const rnd = rng(7);
+  for (const t of things) {
+    if (t.k === "house") {   // on the tile corner at (i, j): 2 x 2 tiles; the mailbox 7.5 m in front
+      const x = t.i * TILE, z = t.j * TILE, [fx, fz] = DIRS[t.d], yaw = Math.atan2(fx, fz);
+      houses.push({ x, z, yaw, base: t.y, mx: x + fx * 7.5, mz: z + fz * 7.5, my: t.y, sky: false, r: rnd(), id: t.id });
+      solid(x, z, yaw, 4.5, 4.5, t.y - 4, t.y + 4.4);
+    } else if (t.k === "mailbox") { const x = tileMid(t.i), z = tileMid(t.j); houses.push({ x, z, yaw: [0, Math.PI / 2, Math.PI, -Math.PI / 2][t.d], base: t.y, mx: x, mz: z, my: t.y, sky: false, r: rnd(), box: true, id: t.id }); }
+    else if (t.k === "tree") trees.push({ x: tileMid(t.i), z: tileMid(t.j), y: t.y, s: 0.85 + rnd() * 0.5, id: t.id });
+    else if (t.k === "boost") boosts.push({ x: tileMid(t.i), z: tileMid(t.j), y: t.y, yaw: [0, Math.PI / 2, Math.PI, -Math.PI / 2][t.d], id: t.id });
+    else if (t.k === "plot") { const p = PLOTS[t.p]; p.x = tileMid(t.i); p.z = tileMid(t.j); p.y = t.y; p.placed = true; }
   }
+  for (const h of houses) { h.d = hyp(h.mx - POST.x, h.mz - POST.z); h.sky = h.base > 30; }
+  solid(POST.x, POST.z, POST.yaw, 9, 5, -1, 8); solid(SHOP_B.x, SHOP_B.z, SHOP_B.yaw, 6, 4, -1, 9); solid(POUND_B.x, POUND_B.z, POUND_B.yaw, 8, 4, -1, 7);
 }
-for (const h of houses) { h.d = hyp(h.mx - POST.x, h.mz - POST.z); solid(h.x, h.z, h.yaw, 4.5, 4.5, h.base - 4, h.base + 4.4); }   // up to the eaves: the roof above is walked on (owner, 2026-11-09)
-// the floating islands (owner, 2026-11-09: a symmetric ring): eight off the edge (one off each side, one off each
-// corner), low enough to glide down to, eight in a ring high above the town and one over the middle that only
-// flapping fliers reach
-const OFF = [[0, 290, 6, 16], [90, 290, 6, 16], [180, 290, 6, 16], [270, 290, 6, 16], [45, 400, 14, 14], [135, 400, 14, 14], [225, 400, 14, 14], [315, 400, 14, 14]];
-export const ISLANDS = [
-  ...OFF.map(([d, r, y, rr]) => ({ x: Math.round(Math.cos((d * Math.PI) / 180) * r), z: Math.round(Math.sin((d * Math.PI) / 180) * r), y, r: rr })),
-  ...[0, 1, 2, 3, 4, 5, 6, 7].map((k) => { const a = ((22.5 + 45 * k) * Math.PI) / 180; return { x: Math.round(Math.cos(a) * 125), z: Math.round(Math.sin(a) * 125), y: 90 + (k % 2) * 16, r: 13, high: true }; }),
-  { x: 0, z: 0, y: 124, r: 11, high: true },
-];
-export const islandAt = (x, z) => ISLANDS.find((i) => hyp(x - i.x, z - i.z) < i.r - 0.6) || [VIP_ISLAND, EXTRA_ISLAND].find((i) => hyp(x - i.x, z - i.z) < i.r - 0.6) || null;
-for (const isl of ISLANDS) {
-  const out = isl.x || isl.z ? Math.atan2(isl.z, isl.x) : 0;
-  for (let k = 0; k < 3; k++) {
-    const a = (k * TAU) / 3 + out, hr = isl.r * 0.36, x = isl.x + Math.cos(a) * hr, z = isl.z + Math.sin(a) * hr;
-    const mr = Math.min(isl.r - 1.5, hr + 6.5), mx = isl.x + Math.cos(a) * mr, mz = isl.z + Math.sin(a) * mr, yaw = Math.atan2(Math.cos(a), Math.sin(a));
-    houses.push({ x, z, yaw, base: isl.y, mx, mz, my: isl.y, sky: true, r: rand(), d: hyp(mx - POST.x, mz - POST.z) });
-    solid(x, z, yaw, 4.5, 4.5, isl.y - 1, isl.y + 4.4);
+// a road tile's height at the middle of one of its edges (side 0-3 as DIRS), or null where it doesn't join (a ramp's sides)
+function edgeY(c, side) {
+  if (c.t === "road") return c.k * STEP;
+  if (side === c.d) return c.k * STEP; if (side === (c.d + 2) % 4) return (c.k - 1) * STEP; return null;
+}
+// the road tiles joined to this one (sharing an edge at the same height)
+export function roadNext(i, j) {
+  const a = roadTiles.get(tkey(i, j)); if (!a) return [];
+  const out = [];
+  for (let s = 0; s < 4; s++) {
+    const ni = i + DIRS[s][0], nj = j + DIRS[s][1], b = roadTiles.get(tkey(ni, nj)); if (!b) continue;
+    const ya = edgeY(a, s), yb = edgeY(b, (s + 2) % 4); if (ya !== null && yb !== null && Math.abs(ya - yb) < 0.5) out.push([ni, nj, s]);
   }
-  for (let k = 0; k < 3; k++) { const a = (k * TAU) / 3 + out + Math.PI / 3, x = isl.x + Math.cos(a) * isl.r * 0.75, z = isl.z + Math.sin(a) * isl.r * 0.75; trees.push({ x, z, y: isl.y, s: 0.7 + rand() * 0.4 }); }
+  return out;
 }
-// the square's buildings
-solid(POST.x, POST.z, POST.yaw, 9, 5, -1, 8); solid(SHOP_B.x, SHOP_B.z, SHOP_B.yaw, 6, 4, -1, 9); solid(POUND_B.x, POUND_B.z, POUND_B.yaw, 8, 4, -1, 7);
-// trees on open ground, on an 8 m grid, the same on both sides of the town (mirrored)
-for (let i = 0; i < 56; i++) for (let j = 0; j < 56; j++) {
-  const x = -220 + i * 8, z = -220 + j * 8;
-  if (hash(Math.abs(x) + 7, Math.abs(z) + 13) > 0.3 || !inside(x, z, 5) || hyp(x, z) < PLAZA + 3 || roadDist(x, z) < 7.5 || nearWater(x, z, 3)) continue;
-  if (houses.some((h) => !h.sky && Math.abs(h.x - x) < 8.5 && Math.abs(h.z - z) < 8.5) || nearPlot(x, z, 3)) continue;
-  trees.push({ x, z, y: 0, s: 0.8 + hash(Math.abs(z), Math.abs(x)) * 0.6 });
-}
+export const isRoad = (i, j) => roadTiles.has(tkey(i, j));
+setWorld(starterWorld());
+
 const RIDER_R = 0.7;
 export function blocked(x, z, y) {
+  if (wallAt(x, z, y) || wallAt(x + RIDER_R, z, y) || wallAt(x - RIDER_R, z, y) || wallAt(x, z + RIDER_R, y) || wallAt(x, z - RIDER_R, y)) return true;
   for (const b of solids) {
     const dx = x - b.x, dz = z - b.z; if (dx * dx + dz * dz > 120) continue;
     if (y > b.y1 - 0.3 || y < b.y0 - 2) continue;
@@ -214,26 +193,36 @@ const HELI = { patrol: 11.5, alt: 26 };
 // the searchlight: cone half-angle (rad), turning speed (rad/s, a random 60-140% of it, flipping every 3-8 s), how far
 // out the spot goes (m, sideways from under the helicopter), seconds in the light before you're caught
 export const BEAM = { half: 0.14, flyHalf: 0.2, turn: 0.45, near: 6, far: 24, hold: 0.5 };
+// (owner, 2026-11-10) the vans and helicopters staff placed: a van on a road tile roams the roads joined to it (driving
+// on the right, picking a way at each tile, turning round at a dead end); a helicopter circles its spot, keeping within
+// its radius
 export function makeVehicles() {
   const vs = [];
-  const van = (road, s, dir, style) => vs.push({ kind: 0, road, s, dir, style, speed: VAN_SPEEDS[style], x: 0, y: 0, z: 0, yaw: 0, mode: 0, target: 0, t: 0, cool: 0 });
-  van(0, 0, 1, 1); van(0, ROADS[0].len / 2, -1, 0); van(1, 0, 1, 2); van(1, ROADS[1].len / 3, -1, 1); van(1, (ROADS[1].len * 2) / 3, 1, 0);
-  van(2, 20, 1, 2); van(4, 60, 1, 1); van(6, 40, -1, 2);
-  for (const ph of [0, Math.PI]) vs.push({ kind: 1, ph, x: 0, y: 40, z: 0, yaw: 0, mode: 0, target: 0, t: 0, cool: 0, ba: ph, bd: 15, bw: 0, bt: 0, bn: 0, bp: ph });
+  for (const t of things) {
+    if (t.k === "van") vs.push({ kind: 0, style: t.id % 3, speed: VAN_SPEEDS[t.id % 3], i: t.i, j: t.j, pi: t.i, pj: t.j, ni: t.i, nj: t.j, x: tileMid(t.i), y: t.y, z: tileMid(t.j), yaw: [0, Math.PI / 2, Math.PI, -Math.PI / 2][t.d], mode: 0, target: 0, t: 0, cool: 0 });
+    else if (t.k === "heli") { const ph = (t.id * 2.4) % TAU; vs.push({ kind: 1, cx: tileMid(t.i), cz: tileMid(t.j), r: t.r, ph, x: tileMid(t.i), y: t.y + HELI.alt, z: tileMid(t.j), yaw: 0, mode: 0, target: 0, t: 0, cool: 0, ba: ph, bd: 15, bw: 0, bt: 0, bn: 0, bp: ph }); }
+  }
   for (const v of vs) placePatrol(v, 0, true);
   return vs;
 }
+// a van's spot on the right-hand side of its way into tile (ni, nj) from (i, j)
+function lane(v) { const fx = Math.sign(v.ni - v.i), fz = Math.sign(v.nj - v.j); return [tileMid(v.ni) - fz * 1.5, tileMid(v.nj) + fx * 1.5]; }
 function placePatrol(v, dt, snap) {
-  let tx, tz, ty, yaw;
   if (v.kind === 0) {
-    const R = ROADS[v.road]; v.s += v.dir * VAN.patrol * v.speed * dt;
-    if (R.loop) v.s = ((v.s % R.len) + R.len) % R.len; else if (v.s > R.len) { v.s = R.len; v.dir = -1; } else if (v.s < 0) { v.s = 0; v.dir = 1; }
-    const p = roadAt(R, v.s), fx = p.fx * v.dir, fz = p.fz * v.dir;
-    tx = p.x - fz * 2; tz = p.z + fx * 2; yaw = Math.atan2(fx, fz); ty = terrain(tx, tz);
-  } else {
-    v.ph += (HELI.patrol / 140) * dt; const r = 140 + 30 * Math.sin(v.ph * 2);
-    tx = Math.cos(v.ph) * r; tz = Math.sin(v.ph) * r; yaw = Math.atan2(-Math.sin(v.ph), Math.cos(v.ph)); ty = Math.max(smoothTerrain(tx, tz), 0) + HELI.alt;
+    if (!isRoad(v.ni, v.nj)) { if (isRoad(v.i, v.j)) { v.ni = v.i; v.nj = v.j; } else return; }
+    let [tx, tz] = lane(v), dx = tx - v.x, dz = tz - v.z, d = hyp(dx, dz);
+    if (d < 0.6 || snap) {   // here: pick the next tile (not straight back unless it's a dead end)
+      const opts = roadNext(v.ni, v.nj), fwd = opts.filter(([a, b]) => a !== v.i || b !== v.j), pick = (fwd.length ? fwd : opts)[Math.floor(Math.random() * (fwd.length || opts.length || 1))];
+      v.pi = v.i; v.pj = v.j; v.i = v.ni; v.j = v.nj; if (pick) { v.ni = pick[0]; v.nj = pick[1]; }
+      if (snap) { v.x = tileMid(v.i); v.z = tileMid(v.j); }
+      [tx, tz] = lane(v); dx = tx - v.x; dz = tz - v.z; d = hyp(dx, dz);
+    }
+    const m = Math.min(d, VAN.patrol * v.speed * dt); if (d > 0.01) { v.x += (dx / d) * m; v.z += (dz / d) * m; v.yaw = turn(v.yaw, Math.atan2(dx, dz), snap ? 1 : Math.min(1, dt * 6)); }
+    const gy = surfaceAt(v.x, v.z, v.y + 2); if (gy > -Infinity) v.y += (gy - v.y) * (snap ? 1 : Math.min(1, dt * 10));
+    return;
   }
+  v.ph += (HELI.patrol / Math.max(30, v.r)) * dt; const r = v.r * (0.7 + 0.3 * Math.sin(v.ph * 2));
+  const tx = v.cx + Math.cos(v.ph) * r, tz = v.cz + Math.sin(v.ph) * r, yaw = Math.atan2(-Math.sin(v.ph), Math.cos(v.ph)), ty = Math.max(smoothTerrain(tx, tz), 0) + HELI.alt;
   const k = snap ? 1 : Math.min(1, dt * 6);
   v.x += (tx - v.x) * k; v.z += (tz - v.z) * k; v.y += (ty - v.y) * (snap ? 1 : Math.min(1, dt * 2)); v.yaw = turn(v.yaw, yaw, snap ? 1 : Math.min(1, dt * 8));
 }
@@ -297,28 +286,27 @@ export function stepVehicles(vs, players, dt, now, daylightOverride) {
         v.t -= dt; p.lastChased = now;
         const dx = p.x - v.x, dz = p.z - v.z, d = hyp(dx, dz), sp = (C.chase + C.perStar * p.stars) * v.speed;
         if (d > 0.01) { const m = Math.min(d, sp * dt); v.x += (dx / d) * m; v.z += (dz / d) * m; v.yaw = turn(v.yaw, Math.atan2(dx, dz), Math.min(1, dt * 10)); }
-        v.y = terrain(v.x, v.z);
-        if (d < C.catch && p.y - terrain(p.x, p.z) < 3) catchPlayer(p, vs, now, ev);
+        { const gy = surfaceAt(v.x, v.z, v.y + 2); if (gy > -Infinity) v.y = gy; }
+        if (d < C.catch && Math.abs(p.y - v.y) < 3) catchPlayer(p, vs, now, ev);
         else if (v.t <= 0) {
           v.mode = 2; v.cool = now + 6;
           if (now - p.lastStar > 4 && p.stars < WANTED_MAX) { p.stars++; p.lastStar = now; ev.push({ k: "escaped", id: p.id, stars: p.stars }); }
         }
       }
-      if (v.mode === 2) v.rs = nearestS(ROADS[v.road], v.x, v.z);
       continue;
     }
-    if (v.mode === 2) {   // back to its road
-      const p = roadAt(ROADS[v.road], v.rs), fx = p.fx * v.dir, fz = p.fz * v.dir, tx = p.x - fz * 2, tz = p.z + fx * 2;
+    if (v.mode === 2) {   // back to the road tile it left
+      const tx = tileMid(v.i), tz = tileMid(v.j);
       const dx = tx - v.x, dz = tz - v.z, d = hyp(dx, dz), m = Math.min(d, C.patrol * v.speed * 1.4 * dt);
       if (d > 0.01) { v.x += (dx / d) * m; v.z += (dz / d) * m; v.yaw = turn(v.yaw, Math.atan2(dx, dz), Math.min(1, dt * 8)); }
-      v.y = terrain(v.x, v.z);
-      if (d < 1) { v.mode = 0; v.s = v.rs; }
+      const gy = surfaceAt(v.x, v.z, v.y + 2); if (gy > -Infinity) v.y = gy;
+      if (d < 1) { v.mode = 0; v.ni = v.i; v.nj = v.j; }
     } else placePatrol(v, dt, false);
     if (v.mode === 0 && now > v.cool) {   // look around
       let best = null, bd = 1e9;
       for (const p of players) {
         if (p.immuneUntil > now || !insideWorld(p) || !p.bag) continue;
-        if (p.y - terrain(p.x, p.z) > 6) continue;
+        if (Math.abs(p.y - v.y) > 6) continue;
         const dx = p.x - v.x, dz = p.z - v.z, d = hyp(dx, dz);
         if (d < 0.01) { best = p; bd = 0; continue; }
         const forward = (dx * Math.sin(v.yaw) + dz * Math.cos(v.yaw)) / d;
@@ -331,11 +319,10 @@ export function stepVehicles(vs, players, dt, now, daylightOverride) {
   }
   return ev;
 }
-const insideWorld = (p) => hyp(p.x, p.z) < 360;
+const insideWorld = (p) => !p.inst && p.y > -150;
 // how far a van sees a courier: farther ahead, a little to the sides, less behind, and 7 m more per wanted star
 // (forward / sideways: the unit direction to them along and across the van's heading)
 export const vanSight = (forward, sideways, stars) => VAN.spot + Math.max(0, forward) * VAN.front + sideways * VAN.side - Math.max(0, -forward) * VAN.rear + 7 * (stars || 0);
-function nearestS(R, x, z) { let best = 0, bd = 1e9; for (let i = 0; i < R.pts.length; i++) { const d = hyp(R.pts[i][0] - x, R.pts[i][1] - z); if (d < bd) { bd = d; best = R.S[i]; } } return best; }
 
 // ---- a player's data (owner, 2026-11-08: saved on the server) and house rules, the same on both sides ----
 // data: { coins, pets: [{ id, sp, lv }], ride, items: { snack, ribbon, ticket }, treats: { sp: n }, delivered, nextId,

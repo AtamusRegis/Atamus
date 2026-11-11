@@ -10,45 +10,53 @@ Asked (owner): a web game on atamus.io (not Roblox), on its own page; the cargo 
 
 ## The town
 
-- **A flat, square floating island (owner, 2026-11-09: flat, symmetric and grid-based)**, 448 m across with straight
-  edges and rock tapering away beneath it; clouds above and below. Built from `website/pets-world.js`, which the server
-  uses too (the two copies must match; `scripts/check.sh` compares them).
-- **Terrain:** flat everywhere (no hills or cliffs), lower only under the water. Ground pets can't go past the edge.
-- **Water (owner, 2026-11-09):** one big, deep (8 m), square-edged lake filling the middle block of the west side, and
-  a river from it running straight west off the island's edge in a waterfall. The water stops at the edge; the fall
-  pours **down** from the lip, out and clear of the rock, with spray at the lip. Ripples drift slowly on the lake and
-  **run downstream** on the river. Deeper water is darker; the bed is sand. Houses and trees keep clear of it.
-  - (owner, 2026-11-09: water pets scrapped) nobody swims now; the lake is scenery. The swimming rules below are kept
-    in the code for any future swimmer.
+- **The world is built from blocks (owner, 2026-11-10)** by admins, live, in the town editor (below). Tiles are 6 x 6 m on
+  a grid; blocks stack in 3 m steps (level k fills 3(k-1) to 3k m; the ground's top is 0). Kinds: **land** (grass on
+  top, earth down the sides), **wedge** (climbs one step across the tile, rising toward the way it faces), **road** (a
+  land block paved on top; a road is one tile wide), **road ramp** (a paved wedge) and **water** (a see-through block,
+  its surface 0.4 m under its top). Blocks can float with nothing under them: that's how floating islands are made.
+  Everything snaps to the grid. Built from `website/pets-world.js`, which the server uses too (the two copies must
+  match; `scripts/check.sh` compares them); the server keeps the world in the database (`pet_world`) and sends it with
+  the welcome, and every change to everyone.
+- **It starts as just the square (owner, 2026-11-10):** a round island of ground tiles the size of the old square
+  (tiles whose middle is within 64 m of the center), with the square's buildings, which stay where they are.
+- **Standing on blocks:** pets stand on the highest block top at or a little above them (so they go under floating
+  blocks and onto the ones they jump or fly up to), walk up wedges and ramps, step up at most 0.6 m (a block's side is a
+  wall), and fall off where there are no blocks. The camera never goes inside a block.
+- **Things placed on tiles:** trees; **houses** (on a tile corner, 2 x 2 tiles, facing one of four ways, a red mailbox
+  7.5 m in front); **mailboxes** on their own; **boost pads** (on road tiles); **animal control vans** (only on road
+  tiles); **helicopters** (anywhere, with a radius: 40, 80, 150 or 250 m); and **housing plots** (by number). Every
+  mailbox, a house's or a lone one, is a delivery address. With no mailboxes there are no parcels.
+- **Water:** nobody swims now (owner, 2026-11-09: water pets scrapped). The swimming rules below are kept in the code
+  for any future swimmer.
   - **Swimmers** walk straight in and **swim underwater** (owner, 2026-11-09): Space (or Swim ▲) rises, Shift (or Swim
     ▼) dives, down to the bottom; with neither they drift up to the surface; Space at the surface leaps out. 1.35×
-    their speed in the water. Bubbles trail behind them under water; with the camera under water everything goes a
-    hazy blue.
+    their speed in the water. With the camera under water everything goes a hazy blue.
   - **Land and air pets never go in or on the water** (owner, 2026-11-09): they can't walk into it, and anyone who ends
-    up on it (a jump, a glide, a teleport) is put on the nearest shore. Fliers fly over it (low over it they hover and
-    don't land); nobody goes over a waterfall.
+    up on it (a jump, a glide, a teleport) is put on the nearest shore. Fliers fly over it.
 - **Speed boosts (owner, 2026-11-09):** see-through orange chevrons laid on the roads (drawn without an edge: each fades in where the pad
-  starts and fades away as it runs on, owner 2026-11-10) (following the road's surface;
-  at the same spots along every street, not by the square) for any pet; they always point, and run, away from you and
+  starts and fades away as it runs on, owner 2026-11-10) (following the road's surface; where admins place them on road
+  tiles, along the way they face, owner 2026-11-10) for any pet; they always point, and run, away from you and
   the camera along the road (judged from the point between them; owner, 2026-11-10); 22 cyan rings in the air over town (16 to 76 m
   up), there only for fliers. Rings fade out with distance (gone past 120 m). Going through one: 1.6× for
   5 s (on top of Speed Candy), with a trail in the boost's color; not on foot or at home.
-- **Streets (owner, 2026-11-09: a grid):** straight streets edge to edge, two running north-south and two east-west on
-  each side of the square (64 m and 140 m out), 8 m wide with dashed center lines, making square city blocks.
 - **The town square** (owner, 2026-11-09: round, the buildings evenly round it, mirrored left and right): flat and
   paved, 60 m across the middle, with the **contract board** (red ring) at its center and the four main buildings
   evenly round it (owner, 2026-11-09: the mount shop closed), each facing the middle with its ring in front: the **post
   office** (north; blue roof, its **pickup ring**, gold, in front), the **egg shop** (east; pink, a giant egg on top,
   pink ring), the **pound** (south; animal control, striped front, a fenced yard in front) and the **training yard**
-  (west; a running track with hurdles, green ring). The lift stands south of the center, under the VIP island.
-- **Houses** (about 290) line every street on both sides, facing it, evenly spaced between the cross streets, each with
-  a red mailbox at the roadside; trees stand on an 8 m grid on open ground, mirrored across the town.
-- **Floating islands (owner, 2026-11-09: a symmetric ring):** 8 off the town's edge, one off each side (6 m up) and one
-  off each corner (14 m up), low enough to glide to; 8 in a ring high above the town (90 and 106 m, alternating) and
-  one over the middle (124 m) that only fliers reach; each has 3 houses and trees. Falling off into the clouds brings
-  you back to the square.
-- **Looks (owner, 2026-11-08):** the ground's colors blend smoothly (grass in broad patches, rock down the lake's
-  sides) with a fine speckled texture.
+  (west; a running track with hurdles, green ring). The lift to your plot stands south of the center.
+- **The town editor (owner, 2026-11-10; admins only):** Build Town in the gear menu opens a bar of pieces: Land,
+  Wedge, Road, Road Ramp, Water, Tree, House, Mailbox, Boost, Van, Helicopter, Plot and Erase, with ⟳ (turn; R on a
+  keyboard), the level (− Auto +) and, for a helicopter its radius, for a plot its number. A see-through preview shows
+  where the piece goes (red where it can't, or what Erase takes away); a tap (or click) places it. Blocks go against
+  the face pointed at (on top, or beside it), or, with a level chosen, on that level (a grid shows it) to build in the
+  air; a block where one already is replaces it. Things stand on the tile pointed at (a house on the nearest tile
+  corner); vans and boosts only on roads. Erase takes away a thing on the tile pointed at first, else the block. A
+  plot placed again moves. The camera zooms out further while editing. ✕ or Escape closes it. Everyone sees each
+  change at once; parcels for houses that changed are dropped.
+- **Looks (owner, 2026-11-10):** block tops grass in three shades (roads paved gray), sides earth, all with a fine
+  speckled texture; sides against a neighboring block aren't drawn.
 - **Sky (owner, 2026-11-08), the same for everyone:** normally a day lasts 20 minutes (a little more day than night):
   the sun moves, and the sky and fog go through dusk to night (stars, house windows light up, lights dim). Every 4
   minutes the automatic weather decides whether it rains (streaks around you, a gray sky, shorter fog, easing in and
@@ -77,10 +85,11 @@ Asked (owner): a web game on atamus.io (not Roblox), on its own page; the cargo 
 - **Minimap (owner, 2026-11-09):** a square map in the top right corner (the bag, wanted, players and contract pills
   sit under it), turned with the camera so up on it is always the way the camera looks; N marks north (−z) on its edge.
   **Drawn like the world (owner, 2026-11-09): white paper and black ink**, the water hatched; only the markers (you,
-  others, bag houses, the guide, vans, home) keep their colors. It shows the land, the lake and river, roads, the square
-  (post office, egg shop, training track, pound, board and the rings), houses (roof, door, mailbox), trees, the town plots and the islands; the islands
-  above the town (and the VIP island) are faint until you climb (fully shown from about 50 m), the extra island only
-  while it's in use. Live on it: everyone's built houses (each square's top piece, roofs white, floors gray; your plot outlined gold),
+  others, bag houses, the guide, vans, home) keep their colors. It shows the blocks from above (owner, 2026-11-10: land
+  white, roads gray, water hatched, wedges and ramps with an arrow up, an ink edge where the next tile is missing or a
+  different height), the square (post office, egg shop, training track, pound, board and the rings), houses (roof,
+  door, mailbox), lone mailboxes, trees and placed plots; blocks and houses above 50 m are faint until you climb. It's
+  redrawn whenever the world changes. Live on it: everyone's built houses (each square's top piece, roofs white, floors gray; your plot outlined gold),
   the houses in your bag (gold, pink for an island) and where the guide points (a glowing dot, or a chevron on the edge
   pointing the way when it's off the map), vans (lights flashing while they chase), helicopters (rotors turning) and
   their searchlight beams and spots, the other players in your world (a dot in their shirt colour with a notch the way
@@ -114,7 +123,7 @@ Asked (owner): a web game on atamus.io (not Roblox), on its own page; the cargo 
 - Houses and buildings are solid (you slide along their walls). **Roofs (owner, 2026-11-09):** a pet that jumps or flies up onto a town house stands and walks on its roof (a pyramid over the walls; that house doesn't fade while you're on it). **A house between the camera and you fades (owner,
   2026-11-08):** the more of you it hides (5 points on you), the more see-through it gets (down to 18%), easing in and
   out.
-- Roads are laid on the land vertex by vertex (5 across, every ~2 m) just above it, and pets stand on the road surface.
+- Roads are the paved tops of road blocks; pets stand on them like any block.
 - **Gray look (owner, 2026-11-09: no outlines, no hatching):** the world is drawn in plain shades of gray: a screen pass
   turns each pixel into its brightness, keeping textures and shading; nights are brightened so it stays readable.
   Name tags, place labels and speech
@@ -173,8 +182,10 @@ Asked (owner): a web game on atamus.io (not Roblox), on its own page; the cargo 
   behind, more per wanted star of yours: `vanSight` in pets-world.js). Under each helicopter's searchlight: the circle
   it catches you in. Helicopters are red with a white stripe, and the searchlight is red. Animal control's red stays bright day and night
   (it glows a little; owner, 2026-11-09). The place rings are thin outlines (0.18 m).
-- 8 animal control cars (red, owner 2026-11-09) with light bars patrol the roads (driving on the right, turning round at a road's end) and 2
-  helicopters circle over town. Online the server runs them for the whole room; offline the page does.
+- Animal control cars (red, owner 2026-11-09) with light bars patrol the roads and helicopters circle over town, as
+  many as admins place (owner, 2026-11-10). A van roams every road tile joined to the one it was placed on (tiles
+  sharing an edge at the same height, up and down ramps), picking a way at each tile and turning round only at a dead
+  end, so a road built onto its network becomes part of its beat at once. A helicopter keeps within its radius. Online the server runs them for the whole room; offline the page does.
 - They only go after players carrying parcels (owner, 2026-11-08); a chase ends if the bag empties (no star).
 - **Animal control cars** come in three silhouettes (compact, van and SUV) and matching speed tiers: slow, standard and
   fast (0.85× / 1× / 1.15× their patrol and chase speeds). They spot parcel carriers farther ahead (21 m) and to
@@ -203,7 +214,8 @@ Asked (owner): a web game on atamus.io (not Roblox), on its own page; the cargo 
 - **How far parcels go (owner, 2026-11-08):** by your best pet of the kind you're riding (land pets, or fliers and
   gliders): houses up to 75 m + 32 m per m/s your best land pet goes over 7 (riding a land pet), or 90 m + 40 m per m/s
   your best flier or glider goes over 9 (riding one), from the post office; a new courier's stay close (at least the
-  nearest few houses always count). Riding a flier or glider, islands in that reach get parcels too.
+  nearest few houses always count). Riding a flier or glider, islands in that reach get parcels too (an island house:
+  one standing more than 30 m up).
 - Riding into the pickup ring fills your bag with parcels (as many as your pet's bag holds), each for a house in reach;
   on a flapping flier about 3 in 10 are for island houses in reach (any island), on a glider the low ones only. Switching to a pet that can't fly hands island parcels back.
 - **The guide (owner, 2026-11-08):** a long glowing arrow lying flat around your pet points toward the nearest house
@@ -362,14 +374,13 @@ Asked (owner): a web game on atamus.io (not Roblox), on its own page; the cargo 
 
 ## Houses on plots (owner, 2026-11-08)
 
-- **Plots** (20 x 20 m, `PLOTS` in pets-world.js): each in the middle of a city block (owner, 2026-11-09): 3 in the blocks
-  diagonal to the square, 2 on the **VIP island** floating over the square (62 m up), 5 around town (the fourth diagonal
-  block and the four corner blocks), and 6 on an **extra island** off the town's edge (400 m out) that appears when a
-  room has more than 10 players. Town plots are flattened and kept clear of houses and trees; each shows a pale outline
-  and, when someone has it, a sign with their name.
-- Each player in a room gets a plot when they join (the server decides): VIPs one of the VIP island's two; then the
-  three near the middle, first come first served; then one of the five around town at random; then the extra island.
-  It's freed when they leave. **VIP** is given or taken by admins in the Admin panel (from their next login).
+- **Plots** (20 x 20 m, `PLOTS` in pets-world.js; 16 by number): **placed by admins in the town editor (owner,
+  2026-11-10)**, each centered on the tile chosen; a plot not placed yet is nowhere (no outline, no house, no lift
+  ride). Numbers 1-3 are first come first served, 4-5 VIP, 6-10 given out at random and 11-16 for rooms of more than 10
+  players. Each placed plot shows a pale outline and, when someone has it, a sign with their name.
+- Each player in a room gets a plot when they join (the server decides): VIPs one of the two VIP plots; then the
+  three first-come plots; then one of the five at random; then the extra ones.
+  It's freed when they leave (the same order, by number, owner 2026-11-10). **VIP** is given or taken by admins in the Admin panel (from their next login).
 - **Outside (owner, 2026-11-09):** every lot with an owner has one of **5 ready-made houses**: Cottage, Cabin, Modern,
   Barn or Tower, chosen by its owner (Build, outside on your lot: the 5 names; free to change). **Everyone sees it** (the
   server sends each house, and changes). They're solid, and their roofs can be walked on. Its front door faces the
@@ -379,8 +390,7 @@ Asked (owner): a web game on atamus.io (not Roblox), on its own page; the cargo 
   round them; whoever is in the same house sees each other there (the server passes on whose house you're in), and
   nobody outside sees them. **E (Leave)** at the front door inside takes you back out in front of it. Pushing against
   walls for 3 s without getting anywhere puts you back by the front door.
-- **Lifts:** a lift at the plaza (teal ring and beam; E or Home ▲) takes you to the front of your plot; lifts on the
-  VIP and extra islands (E or ▼) bring you back to the plaza.
+- **Lift:** a lift at the plaza (teal ring and beam; E or Home ▲) takes you to the front of your plot, once it's placed.
 - **Building (owner, 2026-11-09)** (Build, inside your own house; Done or ✕ stops): a bar of pieces with prices: Floor
   20, Wall 30, Window 50, Door 60, Roof 25, Slope roof 35, Stairs 80, Pet bed 400, Pet pen 800, Chair 60, Table 100,
   Shelf 90, Cabinet 120, Plant 40, Rug 50, Poster 30; 12 colors behind **one color circle** (a tap opens them, picking one closes them). Putting a piece where the same piece already is (same kind and floor, within half a meter, turned the same way) **doesn't add a second one**: it takes the new color (a window, the view) for free, or nothing happens. The chosen piece follows the pointer **on the floor
@@ -457,6 +467,9 @@ Asked (owner): a web game on atamus.io (not Roblox), on its own page; the cargo 
   Serpent; deleted from saves); whirlpool boosts; Package Rush (off, the code kept).
 - The hilly town (owner, 2026-11-09): plateaus and cliffs, four big hills, winding ring roads and spokes, the small lake
   with two rivers and a terraced stream, standing rocks, and the scattered islands: replaced by the flat grid town.
+- The flat grid town (owner, 2026-11-10): the square island 448 m across, its street grid, about 290 houses, the lake
+  and river with its waterfall, the 16 floating islands, the VIP and extra islands with their lifts, and the fixed van
+  routes and boost pads: replaced by the block world admins build, starting from just the square.
 - Gliders (owner, 2026-11-09): Parrot, Pegasus, Phoenix and Pterodactyl fly like the other fliers; the Flier / Glider / Swimmer badges became the Ground / Air / Water types.
 - Building on the lot itself on a 5 x 5 grid with a level picker (owner, 2026-11-09): replaced by the 5 houses outside and freeform building inside.
 - Training for coins (owner, 2026-11-09): replaced by the training arena's obstacle course.

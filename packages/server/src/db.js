@@ -25,6 +25,9 @@ export async function migrate() {
       id BIGSERIAL PRIMARY KEY, at TIMESTAMPTZ NOT NULL DEFAULT now(), by_name TEXT NOT NULL, target_name TEXT NOT NULL,
       action TEXT NOT NULL, detail TEXT
     );
+    CREATE TABLE IF NOT EXISTS pet_world (
+      id INT PRIMARY KEY, data JSONB NOT NULL, updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+    );
     CREATE TABLE IF NOT EXISTS pet_tokens (
       token TEXT PRIMARY KEY, account_id BIGINT NOT NULL REFERENCES pet_accounts(id) ON DELETE CASCADE,
       created_at TIMESTAMPTZ NOT NULL DEFAULT now(), last_used TIMESTAMPTZ NOT NULL DEFAULT now()

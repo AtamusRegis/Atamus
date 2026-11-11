@@ -21,6 +21,7 @@ if (!chrome) {
 }
 
 const { attachPets } = await import("./src/pets.js");
+{ const W = await import("./src/pets-world.js"), { testWorld } = await import("./test-world.mjs"); W.setWorld(testWorld(W)); }   // (owner, 2026-11-10) a small town built on the square
 const app = express(); app.use(express.static(fileURLToPath(new URL("../../website/", import.meta.url))));
 const server = http.createServer(app);
 attachPets(server, { allowLocal: true, packageEveryMs: 50 });
