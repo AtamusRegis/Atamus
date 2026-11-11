@@ -24,7 +24,8 @@ Asked (owner): a web game on atamus.io (not Roblox), on its own page; the cargo 
   (tiles whose middle is within 64 m of the center), with the square's buildings, which stay where they are.
 - **Standing on blocks:** pets stand on the highest block top at or a little above them (so they go under floating
   blocks and onto the ones they jump or fly up to), walk up wedges and ramps, step up at most 0.6 m (a block's side is a
-  wall), and fall off where there are no blocks. The camera never goes inside a block.
+  wall; owner 2026-11-10: pushing into a side up to one block high for a moment climbs up onto it, so no pet is stuck
+  in a hole), and fall off where there are no blocks. The camera never goes inside a block.
 - **Things placed on tiles:** tall pine trees (owner, 2026-11-10: 9 to 12 m, three to four blocks high, a trunk and
   three tiers); **houses** (on a tile corner, 2 x 2 tiles, facing one of four ways, a blue mailbox (owner, 2026-11-10: in color, as you deliver to it, the blue of animal control's light)
   7.5 m in front); **mailboxes** on their own; **boost pads** (on road tiles); **animal control vans** (only on road
