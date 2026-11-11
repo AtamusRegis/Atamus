@@ -4,7 +4,7 @@
 //   based on the latest copy (rev), otherwise the page is sent the latest copy.
 // - Rooms of up to 16: where everyone is (10 times a second, stamped with the server's clock so pages play it back
 //   smoothly), which pet they ride, animal control (pets-world.js, the same file the page uses) and wanted levels,
-//   contracts (every delivery in the room counts, the reward split by deliveries) and chat.
+//   contracts (personal, or shared with your party: every delivery in it counts, the reward split by deliveries) and chat.
 // - Parties and trades between players, checked and carried out here.
 // - Housing plots (owner, 2026-11-08): each player in a room gets a plot their house (kept in their data) stands on, seen
 //   by everyone: VIPs the two on the VIP island, then the three near the middle (first come, first served), then one of
@@ -21,7 +21,8 @@ import { memStore } from "./petstore.js";
 const ROOM_MAX = 16, SNAP_MS = 50, DEL_GAP_MS = 900, CHAT_GAP_MS = 1200, BEAT_MS = 10000, SAVE_MS = 3000, INVITE_MS = 30000, PARTY_MAX = 6;
 const SPECIES = new Set(["pup", "raptor", "trex", "parrot", "owl", "dragon"]);   // (owner, 2026-11-09) six pets: ground and air (water scrapped; their pets dropped)
 const AIR_MOUNTS = new Set(["parrot", "owl", "dragon"]);
-// (owner, 2026-11-08) three kinds of contract: the goal grows with the room; the reward is per parcel of the goal
+// (owner, 2026-11-08) three kinds of contract: the goal grows with the party (owner, 2026-11-10: contracts are yours
+// alone, or your party's when you're in one, not the room's); the reward is per parcel of the goal
 const CONTRACTS = { rush: { time: 150, base: 3, per: 3, pay: 22 }, quick: { time: 240, base: 5, per: 4, pay: 26 }, big: { time: 420, base: 10, per: 8, pay: 30 } };   // (owner, 2026-11-08: more time)
 const rooms = [], online = new Map();   // account id -> player
 let nextId = 1;
@@ -39,7 +40,7 @@ const GIVE_ITEMS = new Set(["snack", "ribbon", "ticket"]);
 
 function roomFor(packageEveryMs) {
   let r = rooms.find((q) => q.players.size < ROOM_MAX);
-  if (!r) { const now = Date.now(); r = { players: new Map(), contract: null, packageEvent: null, nextPackageEvent: now + packageEveryMs, packageEveryMs, vs: makeVehicles(), last: now, plots: new Array(16).fill(null) }; rooms.push(r); }
+  if (!r) { const now = Date.now(); r = { players: new Map(), packageEvent: null, nextPackageEvent: now + packageEveryMs, packageEveryMs, vs: makeVehicles(), last: now, plots: new Array(16).fill(null) }; rooms.push(r); }
   return r;
 }
 const send = (ws, o) => { if (ws && ws.readyState === 1) ws.send(JSON.stringify(o)); };
@@ -61,19 +62,21 @@ function assignPlot(r, p) {
   if (pick === undefined) return;
   r.plots[pick] = p; p.plot = pick;
 }
-function contractFor(r, p) {
-  const c = r.contract; if (!c) return null;
+// a contract belongs to your party when you're in one, or to you
+const groupOf = (p) => p.party || p, membersOf = (g) => (g.members ? [...g.members] : [g]);
+function contractFor(p) {
+  const c = groupOf(p).contract; if (!c) return null;
   return { kind: c.kind, goal: c.goal, done: c.done, mine: c.by.get(p.id) || 0, left: Math.max(0, (c.ends - Date.now()) / 1000), pool: c.pool };
 }
-function sendContract(r) { for (const p of r.players.values()) send(p.ws, { t: "contract", c: contractFor(r, p) }); }
-function finish(r, won) {
-  const c = r.contract; r.contract = null;
-  for (const p of r.players.values()) {
-    // (owner, 2026-11-08) won: a share by deliveries; lost: whoever delivered gets a consolation by how close the room came
+function sendContract(g) { for (const p of membersOf(g)) send(p.ws, { t: "contract", c: contractFor(p) }); }
+function finish(g, won) {
+  const c = g.contract; g.contract = null;
+  for (const p of membersOf(g)) {
+    // (owner, 2026-11-08) won: a share by deliveries; lost: whoever delivered gets a consolation by how close the party came
     const n = c.by.get(p.id) || 0, pay = won && n > 0 ? Math.round((c.pool * n) / c.done) : 0;
     send(p.ws, { t: "done", won, pay, progress: c.done / c.goal, helped: n > 0 });
   }
-  sendContract(r);
+  sendContract(g);
 }
 
 export function attachPets(server, { origins = [], allowLocal = false, store = memStore(), packageEveryMs = 0 } = {}) {   // (owner, 2026-11-09) Package Rush off for now (0); tests pass a period
@@ -88,10 +91,10 @@ export function attachPets(server, { origins = [], allowLocal = false, store = m
 
   // ---- parties ----
   const invites = new Map();   // "to:from:kind" -> expiry
-  function sendParty(party) { const ms = [...party.members].map((q) => ({ id: q.id, name: q.name })); for (const q of party.members) send(q.ws, { t: "party", members: ms }); }
+  function sendParty(party) { const ms = [...party.members].map((q) => ({ id: q.id, name: q.name })); for (const q of party.members) { send(q.ws, { t: "party", members: ms }); send(q.ws, { t: "contract", c: contractFor(q) }); } }
   function leaveParty(p) {
-    const party = p.party; if (!party) return; party.members.delete(p); p.party = null; send(p.ws, { t: "party", members: [] });
-    if (party.members.size < 2) { for (const q of party.members) { q.party = null; send(q.ws, { t: "party", members: [] }); } } else sendParty(party);
+    const party = p.party; if (!party) return; party.members.delete(p); p.party = null; send(p.ws, { t: "party", members: [] }); send(p.ws, { t: "contract", c: contractFor(p) });
+    if (party.members.size < 2) { for (const q of party.members) { q.party = null; send(q.ws, { t: "party", members: [] }); send(q.ws, { t: "contract", c: contractFor(q) }); } } else sendParty(party);
   }
   // ---- trades ----
   function endTrade(T, why, done) { for (const s of [T.a, T.b]) { s.p.trade = null; send(s.p.ws, { t: "trade_end", why, done: !!done }); } }
@@ -263,7 +266,7 @@ export function attachPets(server, { origins = [], allowLocal = false, store = m
         room.players.set(me.id, me);
         all(room, { t: "join", p: pub(me) }, me);
         if (me.plot >= 0) all(room, plotMsg(me.plot, me), me);
-        send(ws, { t: "contract", c: contractFor(room, me) });
+        send(ws, { t: "contract", c: contractFor(me) });
       } catch (e) { console.error("[pets] auth", e.message); authErr("server"); }
       finally { busy = false; }
     }
@@ -274,7 +277,7 @@ export function attachPets(server, { origins = [], allowLocal = false, store = m
       const r = p.room; if (r && r.players.get(p.id) === p) {
         if (p.plot >= 0 && r.plots[p.plot] === p) { r.plots[p.plot] = null; all(r, plotMsg(p.plot, null)); }
         r.players.delete(p.id); all(r, { t: "leave", id: p.id });
-        if (!r.players.size) { r.contract = null; rooms.splice(rooms.indexOf(r), 1); }
+        if (!r.players.size) rooms.splice(rooms.indexOf(r), 1);
       }
       if (online.get(p.acct.id) === p) { online.delete(p.acct.id); flush(p.acct); }
     }
@@ -300,17 +303,17 @@ export function attachPets(server, { origins = [], allowLocal = false, store = m
           if (me.acct.muteUntil > now) { send(ws, { t: "muted", until: me.acct.muteUntil === Infinity ? -1 : me.acct.muteUntil }); break; }
           me.lastChat = now; all(room, { t: "chat", id: me.id, name: me.name, text }, me); break;
         }
-        case "start": if (!room.contract) {
-          const kind = CONTRACTS[m.kind] ? m.kind : "big", k = CONTRACTS[kind], goal = k.base + k.per * room.players.size;
-          room.contract = { kind, goal, done: 0, by: new Map(), ends: Date.now() + k.time * 1000, pool: goal * k.pay };
-          sendContract(room);
-        } break;
+        case "start": { const g = groupOf(me); if (!g.contract) {
+          const kind = CONTRACTS[m.kind] ? m.kind : "big", k = CONTRACTS[kind], goal = k.base + k.per * membersOf(g).length;
+          g.contract = { kind, goal, done: 0, by: new Map(), ends: Date.now() + k.time * 1000, pool: goal * k.pay };
+          sendContract(g);
+        } } break;
         case "del": {
           const now = Date.now(); if (now - me.lastDel < DEL_GAP_MS) break;   // no faster than a pet can deliver
           me.lastDel = now; all(room, { t: "fx", id: me.id, k: "del" }, me);   // (owner, 2026-11-08) the others see its confetti
-          const c = room.contract; if (!c) break;
+          const g = groupOf(me), c = g.contract; if (!c) break;
           c.done++; c.by.set(me.id, (c.by.get(me.id) || 0) + 1);
-          if (c.done >= c.goal) finish(room, true); else sendContract(room);
+          if (c.done >= c.goal) finish(g, true); else sendContract(g);
           break;
         }
         case "package": {
@@ -376,7 +379,7 @@ export function attachPets(server, { origins = [], allowLocal = false, store = m
       for (const e of stepVehicles(r.vs, players.filter((p) => !p.inst), dt, now / 1000, daylight)) { const p = r.players.get(e.id); if (p) send(p.ws, { t: e.k, stars: e.stars || 0 }); }
       if (r.tick = !r.tick) all(r, { t: "veh", ts: now, v: r.vs.map((v) => v.kind ? [r2(v.x), r2(v.y), r2(v.z), r2(v.yaw), v.mode, v.target, r2(v.ba), r2(v.bd)] : [r2(v.x), r2(v.y), r2(v.z), r2(v.yaw), v.mode, v.target]) });   // vehicles 10 times a second (a helicopter adds its searchlight)
       if (players.length > 1) { const ps = players.filter((p) => p.fresh || r.tick).map((p) => { p.fresh = false; return [p.id, p.x, p.z, p.yaw, p.mv, p.y, p.stars, p.inst, p.ct || 0, p.ft]; }); if (ps.length) all(r, { t: "snap", ts: now, ps }); }
-      if (r.contract && now > r.contract.ends) finish(r, false);
+      for (const g of new Set(players.map(groupOf))) if (g.contract && now > g.contract.ends) finish(g, false);
       if (r.packageEvent && (now > r.packageEvent.ends || !r.packageEvent.boxes.size)) { r.packageEvent = null; all(r, { t: "package_event", event: null }); }
       if (!r.packageEvent && r.packageEveryMs > 0 && now >= r.nextPackageEvent) {
         r.packageEvent = makePackageEvent(now, players.length); r.nextPackageEvent = now + r.packageEveryMs;

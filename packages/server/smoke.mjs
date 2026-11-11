@@ -108,6 +108,11 @@ try {
   a.send({ t: "save", rev: arev, data: d }); await a.wait((m) => m.t === "data", "stale save answered with the latest copy");
   // chat
   a.send({ t: "chat", text: "hello" }); await b.wait((m) => m.t === "chat" && m.text === "hello", "chat");
+  // (owner, 2026-11-10) contracts are personal (or a party's), not the room's: A's contract is A's alone
+  a.send({ t: "start", kind: "rush" }); const ca = await a.wait((m) => m.t === "contract" && m.c, "A's contract");
+  ok(ca.c.kind === "rush" && ca.c.goal === 6, "a solo contract's goal is for one courier");
+  await new Promise((r) => setTimeout(r, 150)); ok(!b.inbox.some((m) => m.t === "contract" && m.c), "another player in the room doesn't get A's contract");
+  a.send({ t: "del" }); const cd = await a.wait((m) => m.t === "contract" && m.c && m.c.done === 1, "A's delivery counts"); ok(cd.c.mine === 1, "A's delivery is A's");
   // (owner, 2026-11-09) admins' quick commands: by name on another player and on yourself; a player's are ignored
   const n = client("N"); await n.open; n.send({ t: "register", user: "Nyssary", pass: "pass1234", sp: "pup", lv: 1, x: 0, y: 0, z: 14 });
   const wn = await n.wait((m) => m.t === "welcome", "owner welcome");

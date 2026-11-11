@@ -27,9 +27,10 @@ Asked (owner): a web game on atamus.io (not Roblox), on its own page; the cargo 
   - **Land and air pets never go in or on the water** (owner, 2026-11-09): they can't walk into it, and anyone who ends
     up on it (a jump, a glide, a teleport) is put on the nearest shore. Fliers fly over it (low over it they hover and
     don't land); nobody goes over a waterfall.
-- **Speed boosts (owner, 2026-11-09):** see-through orange chevrons laid on the roads (following the road's surface;
-  at the same spots along every street, not by the square) for any pet; they always point, and run, away from you along
-  the road (owner, 2026-11-09); 22 cyan rings in the air over town (16 to 76 m
+- **Speed boosts (owner, 2026-11-09):** see-through orange chevrons laid on the roads (drawn without an edge: each fades in where the pad
+  starts and fades away as it runs on, owner 2026-11-10) (following the road's surface;
+  at the same spots along every street, not by the square) for any pet; they always point, and run, away from you and
+  the camera along the road (judged from the point between them; owner, 2026-11-10); 22 cyan rings in the air over town (16 to 76 m
   up), there only for fliers. Rings fade out with distance (gone past 120 m). Going through one: 1.6× for
   5 s (on top of Speed Candy), with a trail in the boost's color; not on foot or at home.
 - **Streets (owner, 2026-11-09: a grid):** straight streets edge to edge, two running north-south and two east-west on
@@ -58,7 +59,7 @@ Asked (owner): a web game on atamus.io (not Roblox), on its own page; the cargo 
   from the sun (strongest with it low, none at night or in rain); 56 clouds
   in three layers (below the island, around it and high above).
 - **Place labels (owner, 2026-11-09):** a speech bubble floats over each place saying what it is (Post Office: Pick up
-  parcels here; Contract Board: Start a contract with your room; Egg Shop: Buy eggs to hatch new pets; Training Yard:
+  parcels here; Contract Board: Start a contract; Egg Shop: Buy eggs to hatch new pets; Training Yard:
   Train the pet you ride; Animal Control: Where caught couriers end up; Sky Lift: Up to your plot / Down to the plaza;
   the Egg Shop's over its circle, Animal Control's in front of its door, owner 2026-11-09),
   clear within 10 m and fainter the further you are (owner, 2026-11-09), gone past 45 m, so you mostly see them in the
@@ -325,13 +326,16 @@ Asked (owner): a web game on atamus.io (not Roblox), on its own page; the cargo 
 - **Candy (owner, 2026-11-09):** its button stays put (only its count changes), so it can be tapped while moving on a
   phone.
 - **Contracts** (the contract board, owner 2026-11-08: shorter ones too): anyone starts one when none is running:
+  - **Yours, or your party's (owner, 2026-11-10):** a contract is your own, or your party's while you're in one (the
+    whole party shares it; leaving the party, you're back to your own); never the room's. "Per player" below counts the
+    party (1 alone).
   - **Rush Order:** 3 + 3 per player parcels in 2:30, 22 coins per parcel of the goal.
   - **Quick Contract:** 5 + 4 per player in 4 minutes, 26 per parcel.
-  - **Big Contract:** 10 + 8 per player in 7 minutes, 30 per parcel. (Times lengthened, owner 2026-11-08.) Every delivery by anyone in the room counts (the server
+  - **Big Contract:** 10 + 8 per player in 7 minutes, 30 per parcel. (Times lengthened, owner 2026-11-08.) Every delivery by anyone in the party counts (the server
   takes at most one per player every 0.9 s). Met in time, each player who delivered gets a share of the reward by how
   many they delivered; out of time, nobody gets the reward, but each player who delivered gets a
-  consolation by how close the room came (owner, 2026-11-08): **a Training Ribbon at 75%+ of the goal, 3 Speed Candies
-  at 40%+**. Shown top right while it runs: time left, the room's progress, your
+  consolation by how close the party came (owner, 2026-11-08): **a Training Ribbon at 75%+ of the goal, 3 Speed Candies
+  at 40%+**. Shown top right while it runs: time left, the party's progress, your
   count. Offline you can run one alone (goal as for 1 player).
 
 ## Accounts (owner, 2026-11-08)
