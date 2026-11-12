@@ -6,6 +6,10 @@ and any rule decided. Use `git log` for the code detail (and for the older Atamu
 
 ## 2026-11-11
 
+- **Stage 2: the danger rework, zone melodies (owner).** Each area has its own chasers (dogs, cats, gators, bears,
+  wolves), and every animal a rarity from Common to Legendary. Two attack slots per courier and a shared 3 s calm
+  after any attack. Stolen and dropped parcels show their countdowns; a dropped parcel's 15 s carries over. Kicks hit
+  every animal nearby. Closed areas are walled off until your mounts open them. The tune changes a little in each area.
 - **Stage 1: fixes, cuts and feel (owner).** Others' mounts no longer ride sideways, and animals face the way they
   go. Geese are stopped by houses, hedges and trees like couriers, and a grown mount is as wide as it looks. Bigger
   pipe and balloon catch areas; goats charge faster. Mounts get faster as they level, and twice as fast empty. The
