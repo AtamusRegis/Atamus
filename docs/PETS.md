@@ -19,7 +19,7 @@ Every rule below is in `website/pets-world.js` (shared with the server, an ident
    game's), and the parcel card shows how far.
 3. **Deliver.** Ride into the glowing ring in front of that mailbox (within 3 m; no button). The server checks it. A
    wrong mailbox just shakes.
-4. **Open it.** Coins and the parcel's Training XP pay out, and the delivered parcel (a **gift**, kept on the server
+4. **Open it.** Coins pay out, and the delivered parcel (a **gift**, kept on the server
    and saved, so unopened ones are there next time) lands on the left of the screen with a small sparkle beside it in
    its rarity's color, the rarity popping up over the mailbox. The rarity is rolled on delivery; what's inside is
    rolled when you open it. **Four of one rarity merge** into one of the next (owner, 2026-11-11), its parcel tier the
@@ -27,7 +27,7 @@ Every rule below is in `website/pets-world.js` (shared with the server, an ident
    Legendary. (owner, 2026-11-11: the loop) **They open by themselves once you have no parcels left** (all delivered
    or lost): your only parcel opens straight after its delivery; with several, they wait on the left until the last is
    delivered or lost, then open **full screen, one after another**. Each builds up (three shakes, rays and glow growing,
-   longer the rarer), bursts and shows what was inside (coins, XP, Level Coupons, a mount, which then gets its own
+   longer the rarer), bursts and shows what was inside (coins, and maybe a mount, which then gets its own
    unboxing); a tap hurries the build-up, then moves on (it moves on by itself after a moment too). Up to 60 can wait;
    past that the oldest open by themselves.
 
@@ -64,8 +64,8 @@ A parcel that breaks or is lost is gone; the conveyor always has the next one. *
   Uncommon Bear the Floating Islands (`openFor`; in order: a Cat alone opens nothing). Tiers for districts you haven't
   opened never appear. The
   more districts are open, the bigger the higher tiers' share (tier n's weight x (1 + n x (open - 1) / 5)), and so does
-  the ridden mount's level (owner, 2026-11-11: the higher level, the pricier the parcels and the
-  longer the trips): tier n's weight x (1 + n x (level - 1) / 8).
+  the ridden mount's rarity (owner, 2026-11-11: the rarer the mount, the pricier the parcels and the longer the
+  trips): tier n's weight x (1 + n x rarity / 2).
 - Every hit (a kick, a bite, a rock, a fall, the pipe's goose) lands on one of your parcels at random.
 - Every parcel has 3 durability (Sturdy Boxes: 4 at level 5, 5 at level 10). Each hit takes 1 and 20% of the delivery
   coins; at 0 it breaks.
@@ -78,11 +78,11 @@ A parcel that breaks or is lost is gone; the conveyor always has the next one. *
 
 | Roll | Chance | Coins (x square root of the tier's multiplier) | Also |
 | --- | --- | --- | --- |
-| Common | 60% | 4-10 | 6 XP |
-| Uncommon | 25% | 15-30 | 14 XP |
-| Rare | 10% | 50-100 | 30% a Level Coupon |
-| Epic | 4% | 220-420 | a Level Coupon |
-| Legendary | 1% | 1,500-2,600 | 2 Level Coupons |
+| Common | 60% | 4-10 | |
+| Uncommon | 25% | 15-30 | |
+| Rare | 10% | 50-100 | |
+| Epic | 4% | 220-420 | |
+| Legendary | 1% | 1,500-2,600 | |
 
 - (owner, 2026-11-11) **Mounts drop from parcels:** a parcel can bring its area's animal, at the parcel's rarity or
   lower, any of them equally (a Legendary parcel from Main Street: a Common, Uncommon, Rare, Epic or Legendary Dog). The
@@ -90,7 +90,6 @@ A parcel that breaks or is lost is gone; the conveyor always has the next one. *
   Golden). Delivering in the same area again is how you chase a rarer one. Each new mount gets the unboxing in the
   opening sequence; an Epic, Legendary, Shiny or Golden one is announced to the server.
 
-- Every delivery also gives the mount 5 + 3 per tier Training XP.
 - **Luck** (the tier's, plus Lucky Stamps) weights each roll by (1 + luck) to the power of its rank, then the odds are
   scaled back to 100%. Lucky Stamps at level 10 takes Legendary from 1% to 3% on a Bronze parcel.
 - A roll that just missed Legendary hangs on it for a moment before landing (near miss).
@@ -104,23 +103,22 @@ A parcel that breaks or is lost is gone; the conveyor always has the next one. *
 
 - (owner, 2026-11-11) **A gift on the second delivery:** a mount, that parcel's area's animal at the gift's rarity when
   it's opened, shown in a pink box after you close the roll's card.
-- One equipped mount, seen by everyone; the rest wait in the Stable menu. Levels 1 to 20; a mount's size is 1 + 0.079 x
-  (level - 1), so 2.5x at level 20. The rider stays the same size.
+- One equipped mount, seen by everyone; the rest wait in the Stable menu. (owner, 2026-11-11) **No mount levels: the
+  rarity decides.** A mount's size is 1 + 0.25 x rarity (Common 1x, Legendary 2x); the rider stays the same size.
 - (owner, 2026-11-11) **The mounts are the areas' animals:** Dog (Main Street, Bark), Cat (Maple Suburbs, Double
   Jump), Gator (Goose Marsh, Dash), Bear (Cliffside, Bark), Wolf (Floating Islands, Dash), each **Common to Legendary**
   (the rarity is the mount's own: its coat, its stats and its name, e.g. "Rare Gator"; the town's animals of that kind
   and rarity wear the same coat). A new courier starts with a Common Dog. (owner, 2026-11-11) Every mount from before (and every
-  leftover egg) became a **Dog** of the same rarity, level and skin, once (saved data version 2), so nobody has an animal
+  leftover egg) became a **Dog** of the same rarity and skin, once (saved data version 2), so nobody has an animal
   from an area they haven't reached.
-- **Stats** (rarity 0-4, area a 0-4 for Dog to Wolf, n = level - 1): (owner, 2026-11-11) Speed 10 + 1.5 x a + 1 x
-  rarity + 0.3 x n m/s: each area's animal is faster than the last, and rarity speeds any of them up, so a Common Cat
-  beats a Common Dog, a Legendary Dog beats a Rare Cat and matches a Common Bear; Jump 8 + 0.25 x rarity
-  + (0.08 + 0.01 x rarity) x n; Grip (shortens stuns) 5% x rarity + 2% x n, up to 60%.
-- **Ability** from level 5, stronger at 10 and 20: Dash (a burst of speed; every 8 / 6 / 4 s), Double Jump (a second jump, higher at 10, a third at 20), Bark (dogs within 10.5 / 14 / 17.5 m
-  run home; every 12 / 9 / 6 s).
-- **Leveling:** Train (XP from deliveries: 30 x 1.42^(level - 1) per level), Pay (100 x 1.6^(level - 1) coins: 100 for
-  level 2, 655 for 6, about 472,000 for 20; about 1.26 million in all), or a Level Coupon (one whole level).
-- Level 20: a glowing name tag and sparkling footsteps.
+- **Stats** (rarity 0-4, area a 0-4 for Dog to Wolf): (owner, 2026-11-11) Speed 10 + 1.5 x a + 1 x rarity m/s: each
+  area's animal is faster than the last, and rarity speeds any of them up, so a Common Cat beats a Common Dog, a
+  Legendary Dog beats a Rare Cat and matches a Common Bear; Jump 8 + 0.5 x rarity + 0.25 x a; Grip (shortens stuns) 10%
+  x rarity + 3% x a.
+- **Ability** by rarity: none when Common; Uncommon and Rare tier 1, Epic tier 2, Legendary tier 3: Dash (a burst of
+  speed; every 8 / 6 / 4 s), Double Jump (a second jump, higher at tier 2, a third at tier 3), Bark (chasers within
+  10.5 / 14 / 17.5 m run home; every 12 / 9 / 6 s).
+- Legendary: a glowing name tag and sparkling footsteps.
 - **Whistle** calls your mount. A stun knocks you off; you get up on foot (5.5 m/s) and the mount comes back when you
   whistle (owner, 2026-11-11: instantly, even while still stunned), when you reach it, or by itself after about 2 s.
 - Every mount fits every shortcut. Kinds differ only by ability; rarity sets the stats.
@@ -128,7 +126,7 @@ A parcel that breaks or is lost is gone; the conveyor always has the next one. *
 ## Merging and skins
 
 - (owner, 2026-11-11) **Merging mounts:** two of the same mount (kind and rarity) with the same skin merge (the Stable's Merge button,
-  on either) into the better of the two (the higher level), which gets the next skin: normal, Shiny, Golden,
+  on either) into the one you chose, which gets the next skin: normal, Shiny, Golden,
   **Rainbow** (violet with a sea-green trim and a rainbow trail; only by merging). The other goes. A Golden or
   Rainbow merge is announced to the server.
 - 1 in 100 is **Shiny** (a lighter coat and a sparkle trail), 1 in 1,000 **Golden** (a gold coat and trail); the whole
@@ -158,8 +156,8 @@ Each has more (and quicker) dangers than the last. (owner, 2026-11-11) Each area
 trickier: dogs notice a parcel within 8 / 10 / 11 / 12 / 12 m, bark for 0.7 / 0.55 / 0.45 / 0.35 / 0.3 s, run 10.5 /
 11.5 / 12.5 / 13.5 / 14.5 m/s and chase for 4 / 5 / 6 / 7 / 7 s; geese see you from 6 / 7 / 8 / 9 / 9 m, honk for
 1.2 / 1 / 0.8 / 0.65 / 0.6 s and lunge at 11.5 / 13 / 14.5 / 15.5 / 16 m/s. **A mount outgrows the easier areas'
-animals:** its chance to shake off a bite or a goose's grab (no stun, no hit, "SHAKEN OFF!") is 8% a level past
-1 + 4 x the area's number (0 for Main Street, 4 for the islands), up to 85%.
+animals:** its chance to shake off a bite or a goose's grab (no stun, no hit, "SHAKEN OFF!") is 8% for every point its
+power (4 x (rarity + half its area's number)) is past 4 x the animal's area number + 2 x the animal's rarity, up to 85%.
 
 - **Post office** at the west end, on its square: the counter under an open frame. Within 20 m is the **safe zone**.
   You start just south of it, facing east down the road.
@@ -217,7 +215,7 @@ of about 2 m).
   goose that would start inside something stands at a clear spot round its pond instead. Dogs, geese and goats face the
   way they actually move.
 - (owner, 2026-11-11) A mount is as wide as it looks: the bigger it has grown, the farther from a wall, hedge or tree it
-  stops (0.55 m on foot and at level 1, up to about 1 m).
+  stops (0.55 m on foot and when Common, up to about 1 m).
 - **Sprinklers** (Suburbs): on 3 s in every 6, they shove you sideways.
 - **Falling rocks** (Cliffside): every 3 to 6 s near a courier on the mountain; a shadow for 1 s, then a 1.5 s stun and
   1 hit within 2.3 m.
@@ -247,11 +245,10 @@ Ten levels each; a level costs base x 1.8^(level it's bought at).
 | --- | --- | --- |
 | Payout | 300 | +10% delivery coins per level |
 | Lucky Stamps | 500 | luck on every roll (Legendary 1% to 3%) |
-| Coupon Press | 400 | +1% per level of a bonus Level Coupon on a roll |
 | Sturdy Boxes | 350 | +1 durability at level 5 and at level 10 |
 
-The total of all levels (of 40) is the **postmaster rank**, a badge on the name tag: Bronze from 1, Silver 10, Gold 20,
-Platinum 30. (owner, 2026-11-11) Route Permits went (districts open with mount levels); a courier who had bought any
+The total of all levels (of 30) is the **postmaster rank**, a badge on the name tag: Bronze from 1, Silver 8, Gold 15,
+Platinum 23. (owner, 2026-11-11) The Coupon Press went with mount levels; its coins came back once. (owner, 2026-11-11) Route Permits went (districts open with mount levels); a courier who had bought any
 gets those coins back the next time their data loads.
 
 ## The screen
@@ -259,7 +256,7 @@ gets those coins back the next time their data loads.
 - Coins top left (they count up; coins fly to it). Chat button under it. Delivered parcels down the left.
 - The parcel card top center: a row per parcel (tier, modifier, durability pips, address, distance, the Express
   countdown), stolen or dropped ones faded, and how many you carry of how many.
-- Bottom right: Kick (with its cooldown), Whistle above it, the Ability beside it (gray until level 5), Jump.
+- Bottom right: Kick (with its cooldown), Whistle above it, the Ability beside it (gray on a Common mount), Jump.
 - Right edge: Stable, Upgrades, Odds, Settings (Friendly, music and SFX volume, shirt color, Admin for staff, Log out).
 - Controls: WASD or arrows, Space to jump, F kick, Q whistle, E ability, Enter chat; drag to look, wheel to zoom. Touch:
   a thumb joystick on the left, drag to look, pinch to zoom, the buttons.
@@ -277,8 +274,6 @@ Cannon's boom. (owner, 2026-11-11: more umph, and moments for the big things)
   over the mailbox; Epic and Legendary say "EPIC PARCEL!" / "LEGENDARY PARCEL!".
 - **A new mount** (hatched, merged or a gift), after the egg or box opens: it drops in spinning over rays with
   confetti (a fanfare for Epic, Legendary and the special skins); the first of its kind says NEW!.
-- **A level up** also pops a card in the middle of the screen: the mount over golden rays, hopping, a shine across it,
-  "LEVEL n"; the mount in the world hops and spins with golden sparkles.
 - **A newly opened area** gets a short showing (about 9 s, letterbox bars, the HUD hidden, a tap or a key skips): the
   camera flies to its gate as it bursts open (its name and "OPEN!"), round its rarest chaser (the kind and its
   rarity), then to its other dangers: Suburbs geese and sprinklers; Marsh geese and mud; Cliffside goats and falling
@@ -299,7 +294,7 @@ or two; Cliffside brassier over a deeper bass; the Floating Islands an octave up
 
 ## The server decides
 
-The page may ask: grab, kick, the Bark ability, equip, buy a level, use a coupon, hatch an egg, buy an upgrade, change
+The page may ask: grab, kick, the Bark ability, equip, merge, a trail, open parcels, buy an upgrade, change
 a setting, the sewer pipe, the balloon. Everything else (parcels, addresses, deliveries, rolls, damage, stuns, coins)
 is the server's. Checks: a grab only near the conveyor; a delivery only in the right mailbox's ring with an unbroken
 parcel; kick range and cooldown; coins for every purchase; a speed cap (anything over 110 m/s is flagged and blocks
@@ -311,7 +306,7 @@ deliveries for 2 s).
 - (owner, 2026-11-11) **Fresh start, logins kept:** accounts and passwords carried over; every courier starts with a
   Pup and 0 coins. A courier's data is its own column (`courier`) on `pet_accounts`; the old game's `data` column and
   the `pet_world` table are left in the database untouched, unused.
-- Saved: coins, mounts (id, kind, variant, level, Training XP), the equipped mount, eggs, Level Coupons, upgrades,
+- Saved: coins, mounts (id, kind, rarity, variant, trail), the equipped mount, upgrades, unopened parcels,
   stats (deliveries, Golden parcels, geese busted, kicks landed), settings, failed runs in a row. Not
   saved: the parcels you carry and the conveyor's parcels.
 - Purchases and hatches save at once; everything else every 60 s and when you leave.
@@ -320,10 +315,10 @@ deliveries for 2 s).
 
 Nyssary is always admin and the only one who makes or removes admins; admins make moderators; moderators (and up)
 mute, kick and ban those below them. The Admin panel (Settings): find a courier, mute / kick / ban, role, give (coins,
-Level Coupons, a mount of a kind and rarity at a level and variant), quick commands (coins, all mounts, max levels,
-coupons, upgrades, everything, **Reset to new player**: owner, 2026-11-11, a brand new courier in every way: coins,
-mounts, levels, upgrades, unopened parcels, the parcels being carried and on the conveyor, stats, settings and the
-tutorial; their page reloads as a new courier), and edit coins and coupons. Everything is logged (`pet_admin_log`).
+a mount of a kind, rarity and variant), quick commands (coins, all mounts (every kind at every rarity), upgrades,
+everything, **Reset to new player**: owner, 2026-11-11, a brand new courier in every way: coins,
+mounts, upgrades, unopened parcels, the parcels being carried and on the conveyor, stats, settings and the
+tutorial; their page reloads as a new courier), and edit coins. Everything is logged (`pet_admin_log`).
 
 ## Pet Delivery Co. at /pokemon
 
@@ -332,6 +327,9 @@ its own fresh saves, with the same logins. It is described in `docs/POKEMON.md`;
 Courier's rules.
 
 ## Rejected / removed
+
+- (owner, 2026-11-11) **Mount levels** (levels 1-20, Training XP, buying levels with coins, Level Coupons, the Coupon
+  Press, the level-up card): a mount's rarity (and its area) decides its speed, size, ability and carrying.
 
 - (owner, 2026-11-11) Areas opening with mount levels (3 / 6 / 9 / 12); parcels carried by level (now by rarity);
   turning old mounts into the area animal of their rarity (they all became Dogs); tapping a parcel to open it and Open
