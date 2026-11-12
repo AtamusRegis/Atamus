@@ -20,7 +20,7 @@ import { memStore } from "./petstore.js";
 
 const { cleanData, MOUNTS, UPGRADES, TIERS, KICK, DOG, GOOSE, GOAT, ROCK, SKYGOOSE, PIPE, ISLES, CANNON, hyp, clamp } = W;
 const ROOM_MAX = 100, TICK_MS = 50, CHAT_GAP_MS = 1200, BEAT_MS = 10000, SAVE_MS = 60000, INVITE_MS = 30000, PARTY_MAX = 6, SPEED_CAP = 110;
-const EXPRESS_EXTRA = [0, 0, 8, 40, 45];   // seconds on top for the districts whose roads wind
+const EXPRESS_EXTRA = [0, 0, 8, 40, 45, 70, 75, 80, 85, 90];   // seconds on top for the districts whose roads wind (the far zones: the cannon, the islands and the zipline first)
 const rooms = [], online = new Map();   // account id -> player
 let nextId = 1;
 
@@ -527,6 +527,7 @@ export function attachPets(server, { origins = [], allowLocal = false, store = m
   function stepSky(r, players, now) {   // falling rocks on Cliffside; diving sky geese and the long drop on the islands
     for (const p of players) {
       const dist = W.districtAt(p.x, p.z, p.y);
+      if (dist === 8 && W.lavaAt(p.x, p.z, p.y) && now >= (p.lavaAt || 0) && now >= p.stunUntil && now - p.tpAt > 600) { p.lavaAt = now + W.LAVA.every * 1000; stun(p, W.LAVA.stun, "lava"); hit(p, "lava"); }   // (owner, 2026-11-12) a lava pool burns
       if (dist === 3 && p.y > 1 && p.y < W.SKY_Y) {
         if (!p.nextRock) p.nextRock = now + between(ROCK.every) * 1000;
         else if (now > p.nextRock) { p.nextRock = now + between(ROCK.every) * 1000; const k = { x: r1(p.x + p.vx * 0.8 + (Math.random() - 0.5) * 3), z: r1(p.z + p.vz * 0.8 + (Math.random() - 0.5) * 3), y: r1(p.y), at: now + ROCK.delay * 1000 }; r.rocks.push(k); all(r, { t: "rock", x: k.x, z: k.z, y: k.y, s: ROCK.delay }); }
@@ -535,7 +536,8 @@ export function attachPets(server, { origins = [], allowLocal = false, store = m
         if (!p.nextDive) p.nextDive = now + between(SKYGOOSE.every) * 1000;
         else if (now > p.nextDive && !calmNow(p, now)) { p.nextDive = now + between(SKYGOOSE.every) * 1000; const k = { p, x: r1(p.x + p.vx * 0.7), z: r1(p.z + p.vz * 0.7), y: r1(p.y), at: now + SKYGOOSE.delay * 1000 }; r.dives.push(k); all(r, { t: "dive", x: k.x, z: k.z, y: k.y, s: SKYGOOSE.delay }); }
       } else p.nextDive = 0;
-      if (p.x > W.ISLE_X && p.y < W.FALL_Y && now - p.tpAt > 600) {   // off an island: one hit, and back on the last one stood on
+      if (p.x > W.ISLE_X && p.x < W.FAR.x0 - 15 && p.y < W.FALL_Y && now - p.tpAt > 600) {   // (not the far zones below, nor the zipline down to them)
+         // off an island: one hit, and back on the last one stood on
         const s = p.lastIsle >= 0 ? ISLES[p.lastIsle] : null; hit(p, "fall");
         if (s) teleport(p, s.x, s.z, s.y, "fall"); else teleport(p, CANNON.x - 8, CANNON.z, CANNON.y, "fall");
       }

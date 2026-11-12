@@ -17,8 +17,14 @@ export const TIERS = [
   { k: "gold", name: "Gold", c: "#f2b01e", mult: 4, luck: 0.25, w: 18 },
   { k: "diamond", name: "Diamond", c: "#6fd6ee", mult: 8, luck: 0.5, w: 10 },
   { k: "sky", name: "Sky", c: "#9aa8ff", mult: 15, luck: 1, w: 4 },
+  // (owner, 2026-11-12) the five zones past the Floating Islands
+  { k: "frost", name: "Frost", c: "#9fe0ff", mult: 22, luck: 1.2, w: 3 },
+  { k: "dune", name: "Dune", c: "#e8b96a", mult: 32, luck: 1.4, w: 2.5 },
+  { k: "jungle", name: "Jungle", c: "#4fae5a", mult: 45, luck: 1.6, w: 2 },
+  { k: "magma", name: "Magma", c: "#ff6a1f", mult: 62, luck: 1.8, w: 1.5 },
+  { k: "star", name: "Star", c: "#c9a6ff", mult: 85, luck: 2, w: 1 },
 ];
-export const DISTRICTS = ["Main Street", "Maple Suburbs", "Goose Marsh", "Cliffside", "Floating Islands"];
+export const DISTRICTS = ["Main Street", "Maple Suburbs", "Goose Marsh", "Cliffside", "Floating Islands", "Frostbite Fields", "Sunscorch Dunes", "Jungle Ruins", "Lava Flats", "Moon Garden"];
 // modifiers: one parcel in five is timed (Express). (owner, 2026-11-11) only the rarer tiers and timed parcels stay:
 // Fragile, Heavy and Golden went
 export const MODS = { express: { name: "Express", bonus: 1.5 } };
@@ -51,7 +57,7 @@ export const UP_MAX = 10, upgradeCost = (k, lv) => Math.round(UPGRADES[k].base *
 // (owner, 2026-11-11) the next area opens once you have an Uncommon (or better) animal from the one before: an
 // Uncommon Dog opens Maple Suburbs, an Uncommon Cat Goose Marsh, and so on
 export const OPEN_R = 1;
-export function openFor(d) { const ms = (d && d.mounts) || []; let open = 1; while (open < 5 && ms.some((m) => m.sp === ZONE_KIND[open - 1] && m.r >= OPEN_R)) open++; return open; }
+export function openFor(d) { const ms = (d && d.mounts) || []; let open = 1; while (open < ZONE_KIND.length && ms.some((m) => m.sp === ZONE_KIND[open - 1] && m.r >= OPEN_R)) open++; return open; }
 // which tiers a courier's conveyor gives: only open districts; the more are open, the more of the higher tiers, and the
 // ridden mount's level lifts them too (owner, 2026-11-11: the higher level, the pricier the parcels and the farther the trips)
 export function spawnWeights(open, r = 0) {   // r: the ridden mount's rarity
@@ -77,8 +83,15 @@ export const MOUNTS = {
   gator: { name: "Gator", ab: "dash", look: "gator", size: 1, coats: [["Green", "#4f7a3a", "#c9d48a"], ["Albino", "#efe6d8", "#ff9aa8"], ["Sapphire", "#2a5fb8", "#9fe0ff"], ["Black", "#1f2329", "#4fe08a"], ["Magma", "#2a1a14", "#ff6a1f"]] },
   bear: { name: "Bear", ab: "bark", look: "bear", size: 1.05, coats: [["Brown", "#7a5236", "#c9a27e"], ["Black", "#2b2523", "#8a6a4e"], ["Polar", "#f4f8fb", "#bfe0f0"], ["Honey", "#d99a2b", "#fff0c2"], ["Aurora", "#2c4a7a", "#7ef0c8"]] },
   wolf: { name: "Wolf", ab: "dash", look: "wolf", size: 1, coats: [["Gray", "#8a96a2", "#e9eef2"], ["Timber", "#7a5a3a", "#d9c3a2"], ["Arctic", "#eef3f8", "#a9c9e8"], ["Shadow", "#1b1d24", "#e33a4a"], ["Spirit", "#6fc8ff", "#ffffff"]] },
+  // (owner, 2026-11-12) zones 6 to 10: Frostbite Fields foxes, Sunscorch Dunes raptors, Jungle Ruins trikes, Lava Flats
+  // T-Rexes, Moon Garden unicorns
+  fox: { name: "Fox", ab: "jump2", look: "fox", size: 1, coats: [["Snow", "#f4f6f8", "#c9d6e2"], ["Silver", "#9aa6b4", "#f4f6f8"], ["Red", "#d9541f", "#fff1dc"], ["Frost", "#7fd0ff", "#ffffff"], ["Aurora", "#1d2a4a", "#7ef0c8"]] },
+  raptor: { name: "Raptor", ab: "dash", look: "raptor", size: 1, coats: [["Sand", "#d9b47a", "#8a6a3e"], ["Rust", "#a8582a", "#f0c48a"], ["Scarab", "#2f7a6a", "#e8c84a"], ["Sunset", "#e8662e", "#7a2a6a"], ["Pharaoh", "#1d1d2a", "#f2c94c"]] },
+  trike: { name: "Trike", ab: "bark", look: "trike", size: 1, coats: [["Moss", "#6a8a4a", "#d9c99a"], ["Clay", "#b9744a", "#f0d9b8"], ["Jade", "#2a9a7a", "#d9fff0"], ["Orchid", "#b05ad9", "#ffd1f3"], ["Temple Gold", "#d9a52a", "#2a5a3a"]] },
+  trex: { name: "T-Rex", ab: "bark", look: "trex", size: 0.9, coats: [["Ash", "#6a6a6a", "#b9b9b9"], ["Obsidian", "#1d1d22", "#8a8a9a"], ["Ember", "#c8401e", "#ffb347"], ["Molten", "#2a1a14", "#ff6a1f"], ["Inferno", "#ffd84a", "#ff3a1f"]] },
+  unicorn: { name: "Unicorn", ab: "jump2", look: "unicorn", size: 1, coats: [["Moonbeam", "#e9e6f4", "#b9b2d9"], ["Lavender", "#b9a2e8", "#ffffff"], ["Nebula", "#4a2a8a", "#ff8fd9"], ["Comet", "#2a4a8a", "#9fe0ff"], ["Celestial", "#1a1030", "#ffd84a"]] },
 };
-export const ZONE_KIND = ["dog", "cat", "gator", "bear", "wolf"];   // each area's animal, in order (the same as CHASERS)
+export const ZONE_KIND = ["dog", "cat", "gator", "bear", "wolf", "fox", "raptor", "trike", "trex", "unicorn"];   // each area's animal, in order (the same as CHASERS)
 export const coat = (sp, r) => (MOUNTS[sp] || MOUNTS.dog).coats[clamp(r | 0, 0, 4)].slice(1);   // [body, trim]
 export const coatName = (sp, r) => (MOUNTS[sp] || MOUNTS.dog).coats[clamp(r | 0, 0, 4)][0];
 // the mounts from before (and their rarity): (owner, 2026-11-11) each became a Dog of that rarity, keeping level and skin
@@ -137,7 +150,7 @@ export const ABILITY_BASE_CD = { bark: 12, dash: 8 };
 // (owner, 2026-11-11) trails: one more to unlock every five areas opened (with five areas, the first at the Floating
 // Islands); any mount can wear any trail you've unlocked
 // (owner, 2026-11-12) and trails bought with Aura (d.trails)
-export const TRAILS = [{ k: "cloud", name: "Cloud Trail", zones: 5 }, { k: "spark", name: "Spark Trail", cost: 2500 }, { k: "bubble", name: "Bubble Trail", cost: 6000 }, { k: "heart", name: "Heart Trail", cost: 15000 }, { k: "flame", name: "Flame Trail", cost: 40000 }];
+export const TRAILS = [{ k: "cloud", name: "Cloud Trail", zones: 5 }, { k: "comet", name: "Comet Trail", zones: 10 }, { k: "spark", name: "Spark Trail", cost: 2500 }, { k: "bubble", name: "Bubble Trail", cost: 6000 }, { k: "heart", name: "Heart Trail", cost: 15000 }, { k: "flame", name: "Flame Trail", cost: 40000 }];
 export const trailsFor = (d) => TRAILS.filter((t) => (t.zones ? openFor(d) >= t.zones : (d.trails || []).includes(t.k))).map((t) => t.k);
 // (owner, 2026-11-12) podiums: the three best mounts of the couriers in a server stand on the three podiums by the post
 // office (each courier's best three can stand); a rarer one takes a podium from a lesser one. Each pays its courier Aura
@@ -178,7 +191,7 @@ export function cleanData(d) {
   const permits = int(d.up && d.up.routes, 0, UP_MAX, 0); for (let l = 0; l < permits; l++) out.coins += Math.round(250 * Math.pow(1.8, l));
   const press = int(d.up && d.up.press, 0, UP_MAX, 0); for (let l = 0; l < press; l++) out.coins += Math.round(400 * Math.pow(1.8, l));   // (owner, 2026-11-11) the Coupon Press went with the levels: its coins back, once   // (owner, 2026-11-11) Route Permits went: their coins back, once (they're not saved again)
   out.trails = (Array.isArray(d.trails) ? d.trails : []).filter((k, n, a) => TRAILS.some((t) => t.k === k && t.cost) && a.indexOf(k) === n);
-  out.gifts = (Array.isArray(d.gifts) ? d.gifts : []).slice(0, GIFT_CAP).filter((g) => g && Number.isFinite(+g.gid)).map((g) => ({ gid: int(g.gid, 1, 1e9, 1), r: int(g.r, 0, 4, 0), pt: int(g.pt, 0, 4, 0), ...(Number.isFinite(+g.m) ? { m: int(g.m, 1, 1e9, 1) } : {}) }));
+  out.gifts = (Array.isArray(d.gifts) ? d.gifts : []).slice(0, GIFT_CAP).filter((g) => g && Number.isFinite(+g.gid)).map((g) => ({ gid: int(g.gid, 1, 1e9, 1), r: int(g.r, 0, 4, 0), pt: int(g.pt, 0, TIERS.length - 1, 0), ...(Number.isFinite(+g.m) ? { m: int(g.m, 1, 1e9, 1) } : {}) }));
   out.nextGid = Math.max(int(d.nextGid, 1, 1e9, 1), ...out.gifts.map((g) => g.gid + 1));
   for (const k of ["del", "golden", "geese", "kicks"]) out.stats[k] = int(d.stats && d.stats[k], 0, 1e9, 0);
   out.set = { friendly: !!(d.set && d.set.friendly), music: int(d.set && d.set.music, 0, 10, 5), sfx: int(d.set && d.set.sfx, 0, 10, 7), shirt: /^#[0-9a-f]{6}$/i.test(d.set && d.set.shirt) ? d.set.shirt : "#f2a33a", tut: !!(d.set && d.set.tut) };   // tut: the new-courier tutorial is done
@@ -250,14 +263,21 @@ export function windAt(t) { const n = Math.floor(t / WIND.every), on = t - n * W
 export const ROCK = { delay: 1, r: 2.3, stun: 1.5, every: [3, 6] }, GOAT = { see: 9, telegraph: 0.8, speed: 20, run: 0.95, touch: 1.6, knock: 15, cool: 6, roam: 2.4 }, SKYGOOSE = { delay: 1.4, r: 2.2, every: [8, 14] };
 export const CANNON = { x: 408, z: 0, y: 18, r: 2.6, to: 0 }, SKY_Y = 24;
 const ISLE_LINKS = [[0, 1], [1, 2]];
-export function districtAt(x, z, y = 0) { return x > ISLE_X && y > SKY_Y ? 4 : x >= CLIFF.x0 ? 3 : x >= MARSH.x0 ? 2 : x >= SUBURBS_X ? 1 : 0; }
+// (owner, 2026-11-12) past the Floating Islands, down on the ground: five zones of FAR.len m each (Frostbite Fields first),
+// reached by the zipline from the last island
+export const FAR = { x0: 600, len: 100, n: 5, z0: -30, z1: 30 }, farX = (d) => FAR.x0 + (d - 5) * FAR.len;
+export function districtAt(x, z, y = 0) { return x >= FAR.x0 && y < SKY_Y ? 5 + clamp(Math.floor((x - FAR.x0) / FAR.len), 0, FAR.n - 1) : x > ISLE_X && y > SKY_Y ? 4 : x >= CLIFF.x0 ? 3 : x >= MARSH.x0 ? 2 : x >= SUBURBS_X ? 1 : 0; }
 
 function rect(x0, x1, z0, z1, y, kind, b = y - 40) { slabs.push({ k: 0, x0, x1, z0, z1, y, b, kind }); }
 function disc(x, z, r, y, kind, b = y - 6) { slabs.push({ k: 1, x, z, r, x0: x - r, x1: x + r, z0: z - r, z1: z + r, y, b, kind }); }
 function ramp(x0, x1, z0, z1, y0, y1, kind) { slabs.push({ k: 2, x0, x1, z0, z1, y: Math.max(y0, y1), ya: y0, yb: y1, b: Math.min(y0, y1) - 40, kind }); }   // rises along z from ya (at z0) to yb (at z1)
 function rampX(x0, x1, z0, z1, y0, y1, kind) { slabs.push({ k: 3, x0, x1, z0, z1, y: Math.max(y0, y1), ya: y0, yb: y1, b: Math.min(y0, y1) - 40, kind }); }   // rises along x from ya (at x0) to yb (at x1)
 function solid(x, z, hw, hd, y0, y1, yaw = 0) { solids.push({ x, z, hw, hd, c: Math.cos(yaw), s: Math.sin(yaw), y0, y1, rad: hyp(hw, hd) }); }
-const STREET = ["Main Street", "Maple Lane", "Goose Way", "Cliff Road", "Cloud Isle"];
+const STREET = ["Main Street", "Maple Lane", "Goose Way", "Cliff Road", "Cloud Isle", "Frost Lane", "Dune Road", "Vine Street", "Ember Way", "Star Lane"];
+// (owner, 2026-11-12) each far zone's tough going: ice (slippery), sand (slow, and sandstorms), rivers across the jungle
+// (slow, and thick trees), lava pools (a burn and a bounce), and the moon's low gravity
+export const lavas = [], ICE_GRIP = 0.12, SAND_SLOW = 0.8, WATER_SLOW = 0.5, MOON_GRAV = 0.45, LAVA = { stun: 0.6, every: 2 };
+export const lavaAt = (x, z, y) => y < 1.2 && lavas.some((l) => hyp(x - l.x, z - l.z) < l.r);
 function house(x, z, y, yaw, d, size = 8) {   // it faces yaw (its door and mailbox that way); the mailbox stands 7 m in front
   const fx = Math.sin(yaw), fz = Math.cos(yaw), n = houses.filter((h) => h.d === d).length + 1;
   houses.push({ id: houses.length, x, z, y, yaw, d, size, mx: x + fx * (size / 2 + 3), mz: z + fz * (size / 2 + 3), my: y, name: n + " " + STREET[d] });
@@ -331,12 +351,27 @@ function buildTown() {
   // ---- goats: one on each step, and one more on the top ----
   for (let n = 1; n <= 3; n++) { const t = TERRACE(n); goats.push({ id: goats.length, hx: t.x0 + 6, hz: n % 2 ? 22 : -22, y: t.y }); }
   goats.push({ id: goats.length, hx: TERRACE(3).x0 + 26, hz: -10, y: TERRACE(3).y });
+  // ---- (owner, 2026-11-12) zones 6 to 10, on the ground past the islands: the road down the middle, three houses each side ----
+  const FK = ["ice", "sand", "jungle", "basalt", "moon"];
+  for (let k = 0; k < FAR.n; k++) { const x0 = farX(5 + k); rect(x0, x0 + FAR.len, FAR.z0, FAR.z1, 0, FK[k]); row(x0 + 18, 5 + k, 17, 0, 8, false); }
+  const F1 = FAR.x0 + FAR.n * FAR.len; road(FAR.x0, 0, F1, 0, 8);
+  wall(FAR.x0, F1, FAR.z0, FAR.z0, 8); wall(FAR.x0, F1, FAR.z1, FAR.z1, 8); wall(FAR.x0, FAR.x0, FAR.z0, FAR.z1, 8); wall(F1, F1, FAR.z0, FAR.z1, 8);
+  zips.push({ x: ISLES[2].x + 13, z: ISLES[2].z - 6, y: ISLES[2].y, tx: FAR.x0 + 8, tz: -6, ty: 0, far: 1 });   // from the last island down to Frostbite Fields
+  balloons.push({ x: FAR.x0 + 7, z: 14, y: 0 });   // and a balloon home at its start
+  { const x0 = farX(7); for (const dx of [22, 50, 78]) rect(x0 + dx - 3, x0 + dx + 3, FAR.z0, FAR.z1, 0.02, "water", -0.5); }   // the jungle's rivers
+  { const x0 = farX(8); for (const [dx, z, r] of [[14, 12, 4], [30, -3, 3], [46, -16, 5], [62, 4, 3.5], [80, -12, 4], [88, 20, 3.5]]) { lavas.push({ x: x0 + dx, z, r }); disc(x0 + dx, z, r, 0.03, "lava", -0.5); } }
   // ---- trees where there's room ----
   for (let n = 0, tries = 0; n < 24 && tries < 4000; tries++) {
     const x = TOWN.x0 + 6 + rnd() * (TOWN.x1 - TOWN.x0 - 12), z = TOWN.z0 + 6 + rnd() * (TOWN.z1 - TOWN.z0 - 12);
     if (hyp(x, z) < 26 || Math.abs(z) < 23 || (x > 172 && z > 16) || hyp(x - PIPE.a.x, z - PIPE.a.z) < 6 || sprinklers.some((q) => hyp(q.x - x, q.z - z) < 4)) continue;
     if (houses.some((h) => hyp(h.x - x, h.z - z) < 12 || hyp(h.mx - x, h.mz - z) < 5) || fences.some((f) => hyp((f.x0 + f.x1) / 2 - x, (f.z0 + f.z1) / 2 - z) < 6) || ponds.some((p) => hyp(p.x - x, p.z - z) < p.r + 4) || trees.some((t) => hyp(t.x - x, t.z - z) < 5)) continue;
     trees.push({ x, z, y: 0, s: 0.8 + rnd() * 0.6 }); solid(x, z, 0.45, 0.45, -1, 8); n++;
+  }
+  // the jungle's thick trees (owner, 2026-11-12)
+  for (let n = 0, tries = 0; n < 26 && tries < 4000; tries++) {
+    const x0 = farX(7), x = x0 + 4 + rnd() * (FAR.len - 8), z = FAR.z0 + 4 + rnd() * (FAR.z1 - FAR.z0 - 8);
+    if (Math.abs(z) < 5 || houses.some((h) => hyp(h.x - x, h.z - z) < 9 || hyp(h.mx - x, h.mz - z) < 5) || trees.some((t) => hyp(t.x - x, t.z - z) < 4.5) || [22, 50, 78].some((dx) => Math.abs(x - x0 - dx) < 4.5)) continue;
+    trees.push({ x, z, y: 0, s: 1 + rnd() * 0.5, jungle: 1 }); solid(x, z, 0.5, 0.5, -1, 9); n++;
   }
 }
 buildTown();
@@ -366,7 +401,8 @@ export function isleAt(x, z) { for (let n = 0; n < ISLES.length; n++) if (hyp(x 
 
 // dogs roam their district (owner, 2026-11-11: not waiting in yards you can ride round): where each starts
 // each district's dogs are quicker to notice you and faster than the last (owner, 2026-11-11: harder the farther out)
-export const DOG_D = [{ trigger: 8, speed: 10.5, telegraph: 0.7, chase: 4 }, { trigger: 10, speed: 11.5, telegraph: 0.55, chase: 5 }, { trigger: 11, speed: 12.5, telegraph: 0.45, chase: 6 }, { trigger: 12, speed: 13.5, telegraph: 0.35, chase: 7 }, { trigger: 12, speed: 14.5, telegraph: 0.3, chase: 7 }];
+export const DOG_D = [{ trigger: 8, speed: 10.5, telegraph: 0.7, chase: 4 }, { trigger: 10, speed: 11.5, telegraph: 0.55, chase: 5 }, { trigger: 11, speed: 12.5, telegraph: 0.45, chase: 6 }, { trigger: 12, speed: 13.5, telegraph: 0.35, chase: 7 }, { trigger: 12, speed: 14.5, telegraph: 0.3, chase: 7 },
+  { trigger: 12, speed: 15, telegraph: 0.3, chase: 7 }, { trigger: 13, speed: 15.5, telegraph: 0.28, chase: 7.5 }, { trigger: 13, speed: 16, telegraph: 0.26, chase: 7.5 }, { trigger: 14, speed: 16.5, telegraph: 0.24, chase: 8 }, { trigger: 14, speed: 17, telegraph: 0.22, chase: 8 }];
 // geese farther out see you sooner, honk for less time and lunge faster
 export const GOOSE_D = [{ see: 6, telegraph: 1.2, lunge: 11.5 }, { see: 7, telegraph: 1, lunge: 13 }, { see: 8, telegraph: 0.8, lunge: 14.5 }, { see: 9, telegraph: 0.65, lunge: 15.5 }, { see: 9, telegraph: 0.6, lunge: 16 }];
 // (owner, 2026-11-11) a mount outgrows the easier areas' animals: its chance to shake off a bite or a goose's grab
@@ -375,7 +411,7 @@ export const GOOSE_D = [{ see: 6, telegraph: 1.2, lunge: 11.5 }, { see: 7, teleg
 export const shakeOff = (m, d, r = 0) => clamp((4 * ((m.r | 0) + 0.5 * Math.max(0, ZONE_KIND.indexOf(m.sp))) - 4 * d - 2 * r) * 0.08, 0, 0.85);
 // (owner, 2026-11-11) each area has its own chasers, each one Common to Legendary: Main Street dogs, Maple Suburbs cats,
 // Goose Marsh gators, Cliffside bears, the Floating Islands wolves. (They're all in `dogs`; geese and goats get rarities too.)
-export const CHASERS = ["dog", "cat", "gator", "bear", "wolf"], CHASER_NAME = { dog: "Dog", cat: "Cat", gator: "Gator", bear: "Bear", wolf: "Wolf" };
+export const CHASERS = ZONE_KIND, CHASER_NAME = Object.fromEntries(ZONE_KIND.map((k) => [k, MOUNTS[k].name]));
 export const ANIMAL_RW = [50, 25, 14, 8, 3];   // how often each rarity turns up
 // a rarer animal is quicker, notices you sooner, wastes less time and keeps after you longer
 export function chaserStats(q) { const D = DOG_D[q.d], r = q.r || 0; return { trigger: D.trigger + 0.8 * r, speed: D.speed * (1 + 0.06 * r), telegraph: D.telegraph * (1 - 0.1 * r), chase: D.chase + 0.5 * r }; }
@@ -383,8 +419,9 @@ export function gooseStats(g) { const D = GOOSE_D[g.d], r = g.r || 0; return { s
 export const goatSpeed = (g) => GOAT.speed * (1 + 0.05 * (g.r || 0));
 // (owner, 2026-11-11) areas you haven't opened are there to see but closed off: the road's gate at each one's start (the
 // Floating Islands: the Sky Cannon). A courier can always head back west.
-export const GATES = [SUBURBS_X, MARSH.x0, CLIFF.x0];
-export const gateX = (open) => (open - 1 < GATES.length ? GATES[open - 1] : Infinity);   // the first closed gate's x
+// (owner, 2026-11-12) Frostbite Fields: the zipline down from the last island; past it, a gate at each zone's start
+export const GATES = [{ x: SUBURBS_X, d: 1, top: 9 }, { x: MARSH.x0, d: 2, top: 9 }, { x: CLIFF.x0, d: 3, top: 14 }, ...[6, 7, 8, 9].map((d) => ({ x: farX(d), d, top: 9 }))];
+export const gateX = (open) => { const g = GATES.find((q) => q.d === open); return g ? g.x : Infinity; };   // the first closed gate's x (the cannon and the zipline close themselves)
 export const zoneOpen = (open, d) => d < open;
 export function roamOk(x, z, y, d) { return Math.abs(surfaceAt(x, z, y + 0.5) - y) < 0.55 && !blocked(x, z, y, 0.6) && !inSafeZone(x, z, y) && hyp(x - PO.x, z - PO.z) > SAFE_R + 4 && districtAt(x, z, y) === d && !inPond(x, z, y); }
 // (owner, 2026-11-11: geese are stopped by houses and trees too) a goose that would start inside something moves round its pond to a clear spot
@@ -397,6 +434,7 @@ for (const g of geese) if (blocked(g.x, g.z, g.y, 0.6)) { const P = ponds[g.pond
   put(5, 2, () => rnd() < 0.6 ? [MARSH.x0 + 4 + rnd() * 92, (rnd() - 0.5) * 5, 0.12] : [MARSH_X[1] + (rnd() - 0.5) * 3.5, (rnd() - 0.5) * 50, 0.12]);
   put(6, 3, () => { const t = TERRACE(1 + Math.floor(rnd() * 3)); return [t.x0 + 2 + rnd() * (t.x1 - t.x0 - 4), t.z0 + 2 + rnd() * (t.z1 - t.z0 - 4), t.y]; });
   put(3, 4, () => { const I = ISLES[1 + Math.floor(rnd() * 2)], a = rnd() * TAU, r = rnd() * I.r * 0.7; return [I.x + Math.cos(a) * r, I.z + Math.sin(a) * r, I.y]; });
+  for (let d = 5; d < 5 + FAR.n; d++) put(5, d, () => [farX(d) + 4 + rnd() * (FAR.len - 8), (rnd() - 0.5) * 50, 0]);   // (owner, 2026-11-12) the far zones' animals
   // every animal's rarity: fixed for the town (the same for everyone), rarer ones farther out a little more often
   const roll = (d) => { const w = ANIMAL_RW.map((v, n) => v * Math.pow(1 + 0.12 * d, n)), s = w.reduce((a, b) => a + b, 0); let x = rnd() * s; for (let n = 0; n < w.length; n++) { if (x < w[n]) return n; x -= w[n]; } return 0; };
   for (const q of dogs) q.r = roll(q.d);

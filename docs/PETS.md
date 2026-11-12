@@ -62,6 +62,11 @@ A parcel that breaks or is lost is gone; the conveyor always has the next one. *
 | Gold | Goose Marsh | x4 | +25% | 18% |
 | Diamond | Cliffside | x8 | +50% | 10% |
 | Sky | Floating Islands | x15 | +100% | 4% |
+| Frost | Frostbite Fields | x22 | +120% | 3% |
+| Dune | Sunscorch Dunes | x32 | +140% | 2.5% |
+| Jungle | Jungle Ruins | x45 | +160% | 2% |
+| Magma | Lava Flats | x62 | +180% | 1.5% |
+| Star | Moon Garden | x85 | +200% | 1% |
 
 - (owner, 2026-11-11) **At least 30% go to the farthest area you've opened**; the rest spread over the ones in between.
 - (owner, 2026-11-11) **The next area opens once you have an Uncommon or better of the area before's animal** (Route
@@ -104,7 +109,8 @@ A parcel that breaks or is lost is gone; the conveyor always has the next one. *
 ## Mounts
 
 - (owner, 2026-11-11) **Trails:** one more to unlock every five areas opened; with five areas, the **Cloud Trail** (soft
-  white puffs behind) once the Floating Islands are open. (owner, 2026-11-12) More are bought with Aura (the Stable):
+  white puffs behind) once the Floating Islands are open; (owner, 2026-11-12) the **Comet Trail** (twinkling stars) once
+  the Moon Garden is. (owner, 2026-11-12) More are bought with Aura (the Stable):
   Spark 2,500, Bubble 6,000, Heart 15,000, Flame 40,000 (kept in the courier's `trails`). Any mount can wear any unlocked trail (its button in the
   Stable, on or off); everyone sees it.
 
@@ -113,11 +119,14 @@ A parcel that breaks or is lost is gone; the conveyor always has the next one. *
 - One equipped mount, seen by everyone; the rest wait in the Stable menu. (owner, 2026-11-11) **No mount levels: the
   rarity decides.** A mount's size is 1 + 0.25 x rarity (Common 1x, Legendary 2x); the rider stays the same size.
 - (owner, 2026-11-11) **The mounts are the areas' animals:** Dog (Main Street, Bark), Cat (Maple Suburbs, Double
-  Jump), Gator (Goose Marsh, Dash), Bear (Cliffside, Bark), Wolf (Floating Islands, Dash), each **Common to Legendary**
+  Jump), Gator (Goose Marsh, Dash), Bear (Cliffside, Bark), Wolf (Floating Islands, Dash), (owner, 2026-11-12) Fox (Frostbite Fields, Double Jump), Raptor (Sunscorch Dunes,
+  Dash), Trike (Jungle Ruins, Bark), T-Rex (Lava Flats, Bark), Unicorn (Moon Garden, Double Jump), each **Common to Legendary**
   (the rarity is the mount's own: its coat, its stats and its name; the town's animals of that kind and rarity wear the
   same coat). (owner, 2026-11-11) **Each animal has its own five coats**, one per rarity, chosen to suit it (`MOUNTS[..].coats`),
   Common to Legendary: Dog Tan, Chocolate, Blue Merle, Ember, Starlight; Cat Tabby, Ginger, Siamese, Lilac, Cosmic; Gator
-  Green, Albino, Sapphire, Black, Magma; Bear Brown, Black, Polar, Honey, Aurora; Wolf Gray, Timber, Arctic, Shadow, Spirit.
+  Green, Albino, Sapphire, Black, Magma; Bear Brown, Black, Polar, Honey, Aurora; Wolf Gray, Timber, Arctic, Shadow, Spirit; Fox Snow, Silver, Red,
+  Frost, Aurora; Raptor Sand, Rust, Scarab, Sunset, Pharaoh; Trike Moss, Clay, Jade, Orchid, Temple Gold; T-Rex Ash,
+  Obsidian, Ember, Molten, Inferno; Unicorn Moonbeam, Lavender, Nebula, Comet, Celestial.
   A mount is named by its coat, e.g. "Black Gator", "Shiny Spirit Wolf". A new courier starts with a Common Dog. (owner, 2026-11-11) Every mount from before (and every
   leftover egg) became a **Dog** of the same rarity and skin, once (saved data version 2), so nobody has an animal
   from an area they haven't reached.
@@ -206,6 +215,17 @@ power (4 x (rarity + half its area's number)) is past 4 x the animal's area numb
   landing spots, balloon and middle; anyone who somehow ends up inside something solid is moved out to the nearest
   clear spot. Falling off costs a parcel 1 hit and puts you back on the last island you stood on. A **balloon** on the
   last island takes you back to the post office.
+- (owner, 2026-11-12) **Zones 6 to 10**, on the ground past the islands (`FAR`: x 600 to 1100, 100 m each), reached
+  by the **zipline** from the last island (closed in a bubble until Frostbite Fields opens; a balloon home stands at
+  its foot). One road down the middle, three houses each side, five of each zone's animal, walls round it. Express
+  parcels get 70 / 75 / 80 / 85 / 90 s on top. Each has its own going:
+  - **Frostbite Fields** (Fox): ice everywhere: slow to start, turn and stop (12% grip).
+  - **Sunscorch Dunes** (Raptor): sand (80% speed) and sandstorms: gusts like the islands' wind, 1.4x as strong.
+  - **Jungle Ruins** (Trike): three rivers across it (50% speed) and thick trees.
+  - **Lava Flats** (T-Rex): six lava pools: stepping in bounces you up, and the server burns a parcel (1 hit, a 0.6 s
+    stun; once every 2 s).
+  - **Moon Garden** (Unicorn): low gravity (45%).
+  Falling off the islands only counts over the islands, not the zones below or the zipline down.
 
 **Shortcuts:** the sewer pipe (Main Street to the foot of Cliffside in 4 s; a goose sits in it 8 s in every 24, eyes showing at both
 ends, and costs 1 hit), ziplines (the tower at the suburbs' east end down into the marsh; the top of Cliffside back to

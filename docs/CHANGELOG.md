@@ -6,6 +6,10 @@ and any rule decided. Use `git log` for the code detail (and for the older Atamu
 
 ## 2026-11-12
 
+- **Zones 6 to 10 (owner).** Past the Floating Islands, down a zipline: Frostbite Fields (foxes, ice), Sunscorch Dunes
+  (raptors, sand and sandstorms), Jungle Ruins (trikes, rivers and thick trees), Lava Flats (T-Rexes, lava pools) and
+  the Moon Garden (unicorns, low gravity), each with its own parcel tier, houses, animals and tune, and the Comet Trail
+  at ten zones.
 - **New mount chances and merges (owner).** A parcel's mount: Common 40%, Uncommon 20%, Rare 10%, Epic 5%, Legendary 1%.
   Merging takes 2 Commons for an Uncommon, 4 Uncommons for a Rare, 8 Rares for an Epic, 16 Epics for a Legendary.
   The Stable gets Merge all, and mounts can be sold for Aura by rarity.

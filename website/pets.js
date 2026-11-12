@@ -4,7 +4,7 @@
 // deliveries, rolls, damage, coins, mounts; this page shows the town (pets-world.js, shared with the server), moves you
 // and asks. Phone first: a thumb joystick, drag to look, pinch to zoom, big buttons.
 import * as THREE from "./vendor/three.module.min.js";
-import * as World from "./pets-world.js?v=1794469665";
+import * as World from "./pets-world.js?v=1794470527";
 
 const $ = (id) => document.getElementById(id);
 const { TAU, clamp, hyp, MOUNTS, TIERS, RARITY, RARITY_C, MODS, UPGRADES } = World;
@@ -45,8 +45,8 @@ function textSprite(text, { size = 40, color = "#23303b", bg = "rgba(255,255,255
 // ---- the town, drawn from the shared world ----
 // (owner, 2026-11-11) the town's colors are kept calm so the delivery marker (POI: the one hot pink thing in town) stands out
 const POI = "#ff1f8f";
-const KIND_C = { grass: "#78b765", mud: "#75583e", rock: "#9a948b", plank: "#b9905f", isle: "#80bd6c", road: "#84878f", stone: "#a9adb5", roof: "#b9573f", pod0: "#e8b923", pod1: "#c9d1d9", pod2: "#c98a4b" };
-const HOUSE_C = [["#efe3cc", "#c8604c"], ["#ecd5b8", "#5c86bd"], ["#cfdcc0", "#7a5a3c"], ["#dcd3c6", "#8368b0"], ["#f1f1ec", "#3fa9a4"]];   // walls and roofs, by district
+const KIND_C = { grass: "#78b765", mud: "#75583e", rock: "#9a948b", plank: "#b9905f", isle: "#80bd6c", road: "#84878f", stone: "#a9adb5", roof: "#b9573f", pod0: "#e8b923", pod1: "#c9d1d9", pod2: "#c98a4b", ice: "#d6f0ff", sand: "#e8cf8f", jungle: "#3f8f4a", basalt: "#4a4446", lava: "#ff5a1f", moon: "#c9c6d9", water: "#3f8fd0" };
+const HOUSE_C = [["#efe3cc", "#c8604c"], ["#ecd5b8", "#5c86bd"], ["#cfdcc0", "#7a5a3c"], ["#dcd3c6", "#8368b0"], ["#f1f1ec", "#3fa9a4"], ["#eef6fb", "#5aa0d9"], ["#f0d9a8", "#c8662e"], ["#b9a27a", "#3f7a3f"], ["#5a5050", "#c8401e"], ["#e4e0f0", "#6a4ab0"]];   // walls and roofs, by district
 const houseMesh = [], dogMesh = [], gooseMesh = [], goatMesh = [], sprinklerMesh = [], pipeEyes = [];
 function rampGeo(s) {   // a wedge: flat at the bottom, rising along z (k 2) or x (k 3)
   const y0 = Math.min(s.ya, s.yb), g = new THREE.BufferGeometry(), A = [s.x0, y0, s.z0], B = [s.x1, y0, s.z0], C = [s.x1, y0, s.z1], D = [s.x0, y0, s.z1], X = s.k === 3, E = [s.x0, s.ya, s.z0], F = [s.x1, X ? s.yb : s.ya, s.z0], G = [s.x1, s.yb, s.z1], H = [s.x0, X ? s.ya : s.yb, s.z1];
@@ -430,6 +430,7 @@ const KIND = {
   gator: { look: "gator", size: 0.9 },
   bear: { look: "bear", size: 1.05 },
   wolf: { look: "wolf", size: 0.9 },
+  fox: { look: "fox", size: 0.85 }, raptor: { look: "raptor", size: 0.85 }, trike: { look: "trike", size: 0.85 }, trex: { look: "trex", size: 0.75 }, unicorn: { look: "unicorn", size: 0.85 },   // (owner, 2026-11-12) zones 6 to 10
 };
 function rarityRing(g, r, rad) { if (!r) return; const m = new THREE.Mesh(new THREE.RingGeometry(rad * 0.8, rad, 32).rotateX(-Math.PI / 2), basic(RARITY_C[r], 0.75)); m.position.y = 0.06; g.add(m); g.userData.rar = r; }
 function buildAnimals() {
@@ -511,6 +512,11 @@ const MUSIC_V = [
   { w: "square", k: 1, step: 0.23, vol: 0.2, swap: { 659: 622, 880: 831 } },
   { w: "sawtooth", k: 1, step: 0.2, vol: 0.22, bassK: 0.5 },
   { w: "sine", k: 2, step: 0.22, vol: 0.42, echo: true },
+  { w: "sine", k: 2, step: 0.24, vol: 0.4, chime: true },   // (owner, 2026-11-12) zones 6 to 10: the same tune, each its own sound
+  { w: "triangle", k: 1, step: 0.2, vol: 0.45, swap: { 659: 622 } },
+  { w: "square", k: 0.5, step: 0.19, vol: 0.18, bassK: 0.5 },
+  { w: "sawtooth", k: 0.5, step: 0.18, vol: 0.2, swap: { 784: 740 } },
+  { w: "sine", k: 2, step: 0.26, vol: 0.4, echo: true, chime: true },
 ];
 let musicZone = 0;
 function startMusic() {   // a bouncy two-bar loop
@@ -601,22 +607,24 @@ function stepMe(dt) {
   if (!cine) { ix += joy.x; iz -= joy.y; } const il = hyp(ix, iz); if (il > 1) { ix /= il; iz /= il; }
   let mx = -Math.sin(cam.yaw) * iz + Math.cos(cam.yaw) * ix, mz = -Math.cos(cam.yaw) * iz - Math.sin(cam.yaw) * ix;
   if (me.stun > 0) mx = mz = 0;
-  const kind = me.ground ? World.groundKind(me.x, me.z, me.y) : "", mud = kind === "mud" && !World.inPond(me.x, me.z, me.y) ? World.MUD_SLOW : kind === "mud" ? 0.6 : 1;
+  const kind = me.ground ? World.groundKind(me.x, me.z, me.y) : "", mud = kind === "mud" && !World.inPond(me.x, me.z, me.y) ? World.MUD_SLOW : kind === "mud" ? 0.6 : kind === "sand" ? World.SAND_SLOW : kind === "water" ? World.WATER_SLOW : 1;   // (owner, 2026-11-12) sand and the jungle's rivers slow you too
+  const zoneNow = World.districtAt(me.x, me.z, me.y);
   if (me.boost > 0) me.boost -= dt; if (me.dash > 0) me.dash -= dt;
   let speed = me.foot ? 5.5 : st.speed * (bag.length ? 1 : World.EMPTY_FAST) * mud   // (owner, 2026-11-11) a parcel weighs you down: empty-handed you ride back much faster
     * (me.dash > 0 ? 2.4 : me.boost > 0 ? 1.6 : 1);
   if (me.dash > 0 && hyp(mx, mz) < 0.1) { mx = Math.sin(me.yaw); mz = Math.cos(me.yaw); }
-  const acc = (me.ground ? 70 : 26) * dt, tvx = mx * speed, tvz = mz * speed;
+  const acc = (me.ground ? (kind === "ice" ? 70 * World.ICE_GRIP : 70) : 26) * dt,   /* (owner, 2026-11-12) ice: hard to start, turn and stop */ tvx = mx * speed, tvz = mz * speed;
   me.vx += clamp(tvx - me.vx, -acc, acc); me.vz += clamp(tvz - me.vz, -acc, acc);
   me.moving = hyp(me.vx, me.vz) > 0.6;
   if (hyp(mx, mz) > 0.08) me.yaw = angDiff(me.yaw + angDiff(Math.atan2(mx, mz), me.yaw) * Math.min(1, 12 * dt), 0);   // kept within a turn (owner, 2026-11-11: others saw you sideways)
   // jumping, gliding, falling
   if (jumpTap) { jumpTap = false; tryJump(); }
-  me.vy -= GRAV * dt;
+  me.vy -= GRAV * (zoneNow === 9 ? World.MOON_GRAV : 1) * dt;   // (owner, 2026-11-12) the Moon Garden's low gravity
+  if (kind === "lava" && me.vy <= 0 && !me.foot) { me.vy = 11; me.ground = false; sfx("pop"); emit(me.x, me.y + 0.2, me.z, 18, { colors: ["#ff6a1f", "#ffd84a", "#c8401e"], speed: 4, up: 5, life: 0.6, grav: 8, size: 0.2 }); }   // lava bounces you off (the server burns a parcel)
   // sprinklers shove you sideways; wind pushes across the islands
   const sn = srvNow();
   for (const s of World.sprinklers) { const d = hyp(me.x - s.x, me.z - s.z); if (d < World.SPRINKLER.r && Math.abs(me.y - s.y) < 2 && World.sprinklerOn(s, sn)) { const k = World.SPRINKLER.push * dt * 3 / Math.max(d, 0.6); me.px += (me.x - s.x) * k; me.pz += (me.z - s.z) * k; } }
-  if (me.x > World.ISLE_X && me.y > World.SKY_Y) { const w = World.windAt(sn); if (w.on) { me.px += w.x * World.WIND.push * dt * 3; me.pz += w.z * World.WIND.push * dt * 3; } }
+  if ((me.x > World.ISLE_X && me.y > World.SKY_Y) || zoneNow === 6) { const w = World.windAt(sn + (zoneNow === 6 ? 5 : 0)), k = zoneNow === 6 ? 1.4 : 1; if (w.on) { me.px += w.x * World.WIND.push * k * dt * 3; me.pz += w.z * World.WIND.push * k * dt * 3; } }   // (owner, 2026-11-12) and sandstorms across the dunes
   const pl = hyp(me.px, me.pz); if (pl > 16) { me.px *= 16 / pl; me.pz *= 16 / pl; } const dec = Math.exp(-3.2 * dt); me.px *= dec; me.pz *= dec;
   // sideways, stopping at walls
   // (in small steps, riding up slopes as it goes, so a slow frame can't jam you against a ramp)
@@ -652,6 +660,7 @@ function trail(x, y, z, q, kind) {
   else if (q.tr === "bubble") emit(x + (Math.random() - 0.5) * 0.8, y + 0.5, z + (Math.random() - 0.5) * 0.8, 1, { colors: ["#bfe6ff", "#e8f6ff", "#9fd8ff"], speed: 0.2, up: 0.9, life: 1.4, grav: -0.4, size: 0.3 });
   else if (q.tr === "heart") emit(x, y + 0.7, z, 1, { colors: ["#ff5c8a", "#ff9ab8", "#ffd1e0"], speed: 0.3, up: 1.1, life: 1.1, grav: -0.6, size: 0.24, tw: 1 });
   else if (q.tr === "flame") for (let k = 0; k < 2; k++) emit(x + (Math.random() - 0.5) * 0.6, y + 0.3, z + (Math.random() - 0.5) * 0.6, 1, { colors: ["#ff6a1f", "#ffb347", "#ffd84a", "#c8401e"], speed: 0.3, up: 2.2, life: 0.55, grav: -1.5, size: 0.26 });
+  if (q.tr === "comet") emit(x, y + 0.9, z, 2, { colors: ["#ffffff", "#9fe0ff", "#c9a6ff", "#ffd84a"], speed: 0.5, up: 0.3, life: 0.9, grav: 0, size: 0.22, tw: 1 });   // (owner, 2026-11-12) the Comet Trail, at ten zones
   if (q.tr === "cloud") for (let k = 0; k < 2; k++) emit(x + (Math.random() - 0.5) * 0.8, y + 0.35 + Math.random() * 0.4, z + (Math.random() - 0.5) * 0.8, 1, { colors: ["#ffffff", "#e8f2ff", "#d6e6fb"], speed: 0.3, up: 0.6, life: 1.3, grav: -0.3, size: 0.42 });   // (owner, 2026-11-11) the Cloud Trail: soft puffs behind
   if (q.r >= 4) emit(x, y + 0.1, z, 2, { colors: ["#ffd84a", "#ffffff"], speed: 1.2, up: 1.5, life: 0.6, grav: 2, size: 0.12 });
   else if (kind === "mud") emit(x, y + 0.1, z, 2, { colors: ["#6b4d33"], speed: 1.5, up: 2, life: 0.4, grav: 9, size: 0.14 });
@@ -1300,14 +1309,17 @@ function stepNpcs(dt, t) {
 const gates = [];
 function buildGates() {
   const lock = (g, y) => { const L = new THREE.Group(); L.position.y = y; g.add(L); box(1.6, 1.3, 0.5, "#f2b01e", 0, 0, 0, L); const sh = new THREE.Mesh(new THREE.TorusGeometry(0.5, 0.14, 8, 18, Math.PI), mat("#c9ced6")); sh.position.y = 0.65; L.add(sh); box(0.22, 0.42, 0.55, "#23303b", 0, -0.05, 0, L); return L; };
-  World.GATES.forEach((x, n) => { const g = new THREE.Group(); g.position.set(x, 0, 0); scene.add(g); const top = n === 2 ? 14 : 9;
+  World.GATES.forEach(({ x, d, top }) => { const g = new THREE.Group(); g.position.set(x, 0, 0); scene.add(g);
     const w = new THREE.Mesh(new THREE.PlaneGeometry(60, top).rotateY(Math.PI / 2), new THREE.MeshBasicMaterial({ color: "#7c8cff", transparent: true, opacity: 0.4, side: THREE.DoubleSide, depthWrite: false })); w.position.y = top / 2 - 1; g.add(w);
     for (let k = 0; k < 6; k++) { const b = new THREE.Mesh(new THREE.PlaneGeometry(60, 0.18).rotateY(Math.PI / 2), basic("#ffffff", 0.5)); b.position.y = k * (top / 6) + 0.6; g.add(b); }
     for (const z of [-30, 30]) box(0.8, top, 0.8, "#6f7d8a", 0, top / 2 - 1, z, g); box(0.6, 0.6, 60, "#6f7d8a", 0, top - 1, 0, g);
-    const L = lock(g, 4.2); L.scale.setScalar(1.8); gates.push({ g, w, L, d: n + 1 }); });
+    const L = lock(g, 4.2); L.scale.setScalar(1.8); gates.push({ g, w, L, d }); });
   const C = World.CANNON, g = new THREE.Group(); g.position.set(C.x, C.y, C.z); scene.add(g);
   const w = new THREE.Mesh(new THREE.SphereGeometry(C.r + 1.6, 24, 14, 0, TAU, 0, Math.PI / 2), new THREE.MeshBasicMaterial({ color: "#9aa8ff", transparent: true, opacity: 0.28, side: THREE.DoubleSide, depthWrite: false })); g.add(w);
   gates.push({ g, w, L: lock(g, C.r + 2.6), d: 4 });
+  { const Z = World.zips.find((q) => q.far), g = new THREE.Group(); g.position.set(Z.x, Z.y, Z.z); scene.add(g);   // (owner, 2026-11-12) the zipline down to Frostbite Fields, closed in a bubble until it opens
+    const w = new THREE.Mesh(new THREE.SphereGeometry(3.4, 24, 14, 0, TAU, 0, Math.PI / 2), new THREE.MeshBasicMaterial({ color: "#9fe0ff", transparent: true, opacity: 0.28, side: THREE.DoubleSide, depthWrite: false })); g.add(w);
+    gates.push({ g, w, L: lock(g, 4.2), d: 5 }); }
 }
 function stepGates(t) { const open = World.openFor(save); for (const q of gates) { q.g.visible = q.d >= open || q.d === gateHold; if (q.g.visible) { q.w.material.opacity = 0.34 + Math.sin(t * 2 + q.d) * 0.08; q.L.rotation.y = Math.sin(t * 0.8 + q.d) * 0.4; } } }
 // (owner, 2026-11-11) a newly opened area gets a short showing: letterbox bars, the camera flies to its gate as it
@@ -1319,9 +1331,14 @@ const CINE_HAZ = [
   [{ at: () => ({ x: 226, y: -0.4, z: 23 }), t: "GEESE" }, { at: () => ({ x: 224, y: 0, z: 0 }), t: "MUD" }],
   [{ at: () => goatMesh[0], t: "GOATS" }, { at: () => ({ x: World.TERRACE(2).x0 + 14, y: World.TERRACE(2).y, z: 6 }), t: "FALLING ROCKS", fx: (p) => onNet({ t: "rock", x: p.x, y: p.y, z: p.z, s: 1 }) }],
   [{ at: () => ({ x: World.ISLES[1].x, y: World.ISLES[1].y, z: World.ISLES[1].z }), t: "WIND" }, { at: () => ({ x: World.ISLES[0].x + 4, y: World.ISLES[0].y, z: World.ISLES[0].z }), t: "SKY GEESE", fx: (p) => onNet({ t: "dive", x: p.x, y: p.y, z: p.z, s: 1.4 }) }],
+  [{ at: () => ({ x: World.farX(5) + 40, y: 0, z: 10 }), t: "ICE" }],   // (owner, 2026-11-12) zones 6 to 10
+  [{ at: () => ({ x: World.farX(6) + 50, y: 0, z: -8 }), t: "SANDSTORMS" }],
+  [{ at: () => ({ x: World.farX(7) + 22, y: 0, z: 10 }), t: "RIVERS" }],
+  [{ at: () => World.lavas[2], t: "LAVA" }],
+  [{ at: () => ({ x: World.farX(9) + 40, y: 0, z: 6 }), t: "LOW GRAVITY" }],
 ];
 function zoneShow(d) {
-  const gx = d < 4 ? World.GATES[d - 1] : World.CANNON.x, gy = d < 4 ? 0 : World.CANNON.y, shots = [];
+  const G = World.GATES.find((q) => q.d === d), Z = World.zips.find((q) => q.far), gx = G ? G.x : d === 4 ? World.CANNON.x : Z.x, gy = G ? 0 : d === 4 ? World.CANNON.y : Z.y, shots = [];
   shots.push({ dur: 2.4, cam: (u) => ({ x: gx - 20 + 8 * u, y: gy + 10 - 3 * u, z: 15 - 5 * u }), look: () => ({ x: gx + 6, y: gy + 2, z: 0 }), title: World.DISTRICTS[d].toUpperCase(), sub: "OPEN!", at: 1.0,
     fx: () => { gateHold = -1; sfx("unlock"); flash("#ffffff"); cam.shake = 0.5; for (let k = 0; k < 60; k++) emit(gx, gy + 1 + Math.random() * 8, (Math.random() - 0.5) * 50, 1, { colors: ["#9aa8ff", "#ffffff", "#ffd84a"], speed: 6, up: 4, life: 1.2, size: 0.3 }); } });
   const ch = dogMesh.filter((a, n) => World.dogs[n].d === d).map((a) => ({ a, r: World.dogs[dogMesh.indexOf(a)].r })).sort((p, q) => q.r - p.r)[0];
