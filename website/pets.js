@@ -4,7 +4,7 @@
 // deliveries, rolls, damage, coins, mounts; this page shows the town (pets-world.js, shared with the server), moves you
 // and asks. Phone first: a thumb joystick, drag to look, pinch to zoom, big buttons.
 import * as THREE from "./vendor/three.module.min.js";
-import * as World from "./pets-world.js?v=1794456374";
+import * as World from "./pets-world.js?v=1794458221";
 
 const $ = (id) => document.getElementById(id);
 const { TAU, clamp, hyp, MOUNTS, TIERS, RARITY, RARITY_C, MODS, EGGS, UPGRADES } = World;
@@ -85,13 +85,25 @@ function buildTown() {
     World.trees.forEach((t, n) => { d.position.set(t.x, t.y + 1.1 * t.s, t.z); d.scale.setScalar(t.s); d.updateMatrix(); trunk.setMatrixAt(n, d.matrix); d.position.y = t.y + 4.2 * t.s; d.updateMatrix(); leaf.setMatrixAt(n, d.matrix); });
     trunk.castShadow = leaf.castShadow = true; scene.add(trunk, leaf); }
   for (const p of World.ponds) { const m = new THREE.Mesh(new THREE.CircleGeometry(p.r, 36).rotateX(-Math.PI / 2), new THREE.MeshLambertMaterial({ color: "#4fb4ee", transparent: true, opacity: 0.88 })); m.position.set(p.x, p.y + 0.07, p.z); scene.add(m); }
-  // the post office: the counter with the conveyor round it, under a roof
-  { const P = World.PO, c = P.counter * 2;
-    box(c, 1.0, c, "#c08a55", P.x, 0.5, P.z); box(c, 0.16, c, "#3d4650", P.x, 1.08, P.z, null, false); box(c - 2.6, 0.5, c - 2.6, "#ead9bd", P.x, 1.4, P.z);
-    for (const [x, z, k] of [[-1.6, -1.2, 0], [1.2, 1.5, 1], [0.6, -1.6, 2], [-1.2, 1.4, 3], [0, 0, 4]]) box(1.1, 0.9, 1.1, TIERS[k].c, P.x + x, 2.1, P.z + z);
-    for (const [sx, sz] of [[-1, -1], [1, -1], [-1, 1], [1, 1]]) box(1, 7, 1, "#fbf7ee", P.x + sx * P.roof, 3.5, P.z + sz * P.roof);
-    for (const [x, z] of [[0, 1], [0, -1], [1, 0], [-1, 0]]) box(x ? 1.6 : P.roof * 2 + 2.6, 1.2, z ? 1.6 : P.roof * 2 + 2.6, "#e0604a", P.x + x * P.roof, 7.6, P.z + z * P.roof);   // an open frame, so the counter's seen from above
-    for (const [x, z] of [[0, 1], [0, -1], [1, 0], [-1, 0]]) { const s = textSprite("POST OFFICE", { size: 56, color: "#ffffff", bg: "#e0604a" }); s.scale.multiplyScalar(1.7); s.position.set(P.x + x * P.roof, 9.3, P.z + z * P.roof); s.material.depthTest = true; scene.add(s); }
+  // (owner, 2026-11-11) the post office: a building, its conveyor belt coming out of the door to where your parcel waits
+  { const P = World.PO, B = P.b, BT = P.belt, W2 = B.hw * 2, D2 = B.hd * 2, front = B.z + B.hd, door = 3.4;
+    box(W2, 0.3, D2, "#c9bda8", B.x, 0.15, B.z);   // the floor
+    box(W2, B.h, 0.5, "#f3e6cf", B.x, B.h / 2, B.z - B.hd + 0.25); box(0.5, B.h, D2, "#f3e6cf", B.x - B.hw + 0.25, B.h / 2, B.z); box(0.5, B.h, D2, "#f3e6cf", B.x + B.hw - 0.25, B.h / 2, B.z);   // back and sides
+    for (const sx of [-1, 1]) box(B.hw - door / 2, B.h, 0.5, "#f3e6cf", B.x + sx * (door / 2 + (B.hw - door / 2) / 2), B.h / 2, front - 0.25);   // the front, either side of the door
+    box(door, B.h - 3.2, 0.5, "#f3e6cf", B.x, 3.2 + (B.h - 3.2) / 2, front - 0.25); box(door + 0.6, 0.3, 0.7, "#e0604a", B.x, 3.25, front - 0.2);   // over the door
+    box(door, 3.2, 0.2, "#2a3440", B.x, 1.6, front - 0.55, null, false);   // the dark doorway
+    for (const sx of [-1, 1]) for (const wx of [3.2, 6]) { box(1.5, 1.4, 0.2, "#bfe6ff", B.x + sx * wx, 3.4, front + 0.02, null, false); box(1.7, 0.18, 0.3, "#e0604a", B.x + sx * wx, 2.62, front + 0.05, null, false); }
+    box(W2 + 0.6, 0.5, D2 + 0.6, "#e0604a", B.x, B.h + 0.25, B.z);   // the eaves
+    for (const sz of [-1, 1]) { const r = box(W2 + 0.8, 0.4, B.hd * 1.2, "#c84a37", B.x, B.h + 1.55, B.z + sz * B.hd * 0.5); r.rotation.x = sz * 0.5; }   // the roof
+    box(1.0, 2.2, 1.0, "#9a6b4a", B.x + 4.5, B.h + 2.2, B.z - 1.5);   // the chimney
+    { const s2 = textSprite("POST OFFICE", { size: 56, color: "#ffffff", bg: "#e0604a" }); s2.scale.multiplyScalar(1.5); s2.position.set(B.x, B.h + 0.9, front + 0.6); s2.material.depthTest = true; scene.add(s2); }
+    // the conveyor: legs, side rails, the belt (its stripes move), rollers, a stop at the end
+    const L = BT.z1 - BT.z0, mz = (BT.z0 + BT.z1) / 2;
+    box(BT.hw * 2, 0.7, L, "#6f7d8a", P.x, 0.35, mz); for (const sx of [-1, 1]) box(0.18, 0.35, L, "#c9ced6", P.x + sx * (BT.hw - 0.09), BT.top + 0.1, mz);
+    box(BT.hw * 2 - 0.36, 0.12, L, "#2b333b", P.x, BT.top - 0.05, mz, null, false);
+    box(BT.hw * 2, 0.7, 0.3, "#f2b01e", P.x, BT.top + 0.3, BT.z1 - 0.15);   // the stop
+    beltStripes.length = 0; for (let k = 0; k < 10; k++) beltStripes.push(box(BT.hw * 2 - 0.4, 0.04, 0.22, "#4a5560", P.x, BT.top + 0.02, BT.z0 + (k / 10) * L, null, false));
+    pusher = box(BT.hw * 2 - 0.4, 0.8, 0.3, "#e0604a", P.x, BT.top + 0.4, BT.z0 - 0.4);   // it pushes your parcel out to the end
   }
   // shortcuts: ziplines, the sewer pipe, the Sky Cannon, jump pads, boost pads, balloons
   for (const z of World.zips) {
@@ -461,7 +473,6 @@ const SFX = {
   whistle: () => { tone(1500, 2300, 0.16, { vol: 0.3 }); tone(2300, 1700, 0.2, { at: 0.16, vol: 0.3 }); }, boost: () => { noise(0.5, { freq: 500, to: 3200, vol: 0.35 }); tone(220, 880, 0.4, { type: "sawtooth", vol: 0.18 }); },
   bark: () => { for (const a of [0, 0.16]) { tone(420, 180, 0.11, { type: "sawtooth", vol: 0.4, at: a }); noise(0.09, { freq: 900, vol: 0.25, at: a }); } },
   meow: () => { tone(700, 1100, 0.12, { type: "triangle", vol: 0.35 }); tone(1100, 600, 0.22, { type: "triangle", vol: 0.35, at: 0.12 }); },   // (owner, 2026-11-11) each area's chasers have their own call
-  growl: () => { tone(120, 80, 0.5, { type: "sawtooth", vol: 0.4 }); noise(0.4, { freq: 300, vol: 0.2 }); },
   howl: () => { tone(400, 760, 0.35, { type: "sine", vol: 0.35 }); tone(760, 640, 0.4, { type: "sine", vol: 0.3, at: 0.35 }); }, growl: () => tone(140, 90, 0.4, { type: "sawtooth", vol: 0.3 }),
   crack: () => { noise(0.12, { freq: 2600, vol: 0.6 }); tone(300, 90, 0.15, { type: "square", vol: 0.3 }); }, smash: () => { noise(0.45, { freq: 1800, to: 300, vol: 0.7 }); tone(200, 50, 0.4, { type: "sawtooth", vol: 0.4 }); },
   stun: () => { for (let k = 0; k < 4; k++) tone(900 - k * 90, 1300 - k * 90, 0.12, { at: k * 0.1, vol: 0.2, type: "triangle" }); }, swish: () => noise(0.16, { freq: 700, to: 2600, vol: 0.4 }),
@@ -469,6 +480,9 @@ const SFX = {
   busted: () => { for (const [k, f] of [523, 659, 784, 1047].entries()) tone(f, f, 0.14, { at: k * 0.08, type: "square", vol: 0.25 }); }, deliver: () => { for (const [k, f] of [523, 659, 784, 1047, 1319].entries()) tone(f, f, 0.16, { at: k * 0.06, type: "triangle", vol: 0.4 }); },
   coin: () => { tone(1320, 1320, 0.06, { type: "square", vol: 0.15 }); tone(1760, 1760, 0.12, { at: 0.06, type: "square", vol: 0.15 }); }, tick: () => tone(880, 880, 0.03, { type: "square", vol: 0.12 }),
   win: (n) => { const base = [392, 440, 523, 659, 784][n]; for (let k = 0; k < 2 + n; k++) tone(base * [1, 1.25, 1.5, 2, 2.5, 3][k], base * [1, 1.25, 1.5, 2, 2.5, 3][k], 0.22, { at: k * 0.09, type: n >= 3 ? "sawtooth" : "triangle", vol: 0.3 }); },
+  beat: () => { tone(90, 60, 0.12, { type: "sine", vol: 0.7 }); tone(80, 55, 0.12, { type: "sine", vol: 0.5, at: 0.14 }); },   // (owner, 2026-11-11) a rare parcel's build-up
+  fanfare: (n) => { const ch = [[523, 659, 784], [587, 740, 880], [659, 831, 988], [784, 988, 1175]]; ch.forEach((c, k) => c.forEach((f) => tone(f * (n >= 4 ? 1.5 : 1), f * (n >= 4 ? 1.5 : 1), k === 3 ? 0.7 : 0.16, { at: 0.25 + k * 0.13, type: "square", vol: 0.12 }))); noise(0.6, { freq: 6000, vol: 0.12, at: 0.25 }); },
+  unlock: () => { tone(220, 880, 0.6, { type: "sawtooth", vol: 0.18 }); for (const [k, f] of [523, 784, 1047, 1568].entries()) tone(f, f, 0.3, { at: 0.5 + k * 0.1, type: "triangle", vol: 0.3 }); noise(1.0, { freq: 800, to: 4000, vol: 0.15 }); },
   near: () => { tone(880, 440, 0.5, { type: "triangle", vol: 0.3 }); }, egg: () => { tone(660, 1320, 0.2, { type: "sine", vol: 0.4 }); tone(1320, 1760, 0.25, { at: 0.18, vol: 0.3 }); },
   wobble: () => tone(300, 380, 0.12, { type: "triangle", vol: 0.35 }), hatch: () => { noise(0.2, { freq: 3000, vol: 0.5 }); for (const [k, f] of [659, 784, 988, 1319].entries()) tone(f, f, 0.2, { at: 0.1 + k * 0.09, type: "triangle", vol: 0.35 }); },
   level: () => { for (const [k, f] of [440, 554, 659, 880, 1109].entries()) tone(f, f * 1.01, 0.18, { at: k * 0.07, type: "square", vol: 0.22 }); }, buy: () => { tone(988, 988, 0.08, { type: "square", vol: 0.2 }); tone(1319, 1319, 0.2, { at: 0.08, type: "square", vol: 0.2 }); },
@@ -564,8 +578,8 @@ function stepMe(dt) {
   if (World.blocked(me.x, me.z, me.y)) out: for (let r = 1; r < 16; r++) for (let k = 0; k < 12; k++) { const x = me.x + Math.cos((k / 12) * TAU) * r, z = me.z + Math.sin((k / 12) * TAU) * r; if (!World.blocked(x, z, me.y) && World.surfaceAt(x, z, me.y + 0.5) > -1e9) { me.x = x; me.z = z; break out; } }   // inside something solid (it shouldn't happen): out to the nearest clear spot
   // what the player's asking for, relative to the camera
   let ix = 0, iz = 0;
-  if (!chatting && !panelOpen()) { if (keys.has("KeyW") || keys.has("ArrowUp")) iz += 1; if (keys.has("KeyS") || keys.has("ArrowDown")) iz -= 1; if (keys.has("KeyD") || keys.has("ArrowRight")) ix += 1; if (keys.has("KeyA") || keys.has("ArrowLeft")) ix -= 1; }
-  ix += joy.x; iz -= joy.y; const il = hyp(ix, iz); if (il > 1) { ix /= il; iz /= il; }
+  if (!chatting && !panelOpen() && !cine) { if (keys.has("KeyW") || keys.has("ArrowUp")) iz += 1; if (keys.has("KeyS") || keys.has("ArrowDown")) iz -= 1; if (keys.has("KeyD") || keys.has("ArrowRight")) ix += 1; if (keys.has("KeyA") || keys.has("ArrowLeft")) ix -= 1; }
+  if (!cine) { ix += joy.x; iz -= joy.y; } const il = hyp(ix, iz); if (il > 1) { ix /= il; iz /= il; }
   let mx = -Math.sin(cam.yaw) * iz + Math.cos(cam.yaw) * ix, mz = -Math.cos(cam.yaw) * iz - Math.sin(cam.yaw) * ix;
   if (me.stun > 0) mx = mz = 0;
   const kind = me.ground ? World.groundKind(me.x, me.z, me.y) : "", mud = kind === "mud" && !World.inPond(me.x, me.z, me.y) ? World.MUD_SLOW : kind === "mud" ? 0.6 : 1;
@@ -614,6 +628,7 @@ function stepMe(dt) {
   if (me.ground && me.moving) { me.stepT -= dt; if (me.stepT <= 0) { me.stepT = 0.16; trail(me.x, me.y, me.z, q, kind); } }
 }
 function trail(x, y, z, q, kind) {
+  if (q.tr === "cloud") for (let k = 0; k < 2; k++) emit(x + (Math.random() - 0.5) * 0.8, y + 0.35 + Math.random() * 0.4, z + (Math.random() - 0.5) * 0.8, 1, { colors: ["#ffffff", "#e8f2ff", "#d6e6fb"], speed: 0.3, up: 0.6, life: 1.3, grav: -0.3, size: 0.42 });   // (owner, 2026-11-11) the Cloud Trail: soft puffs behind
   if (q.va === 3) emit(x, y + 0.5, z, 3, { colors: RAINBOW, speed: 0.9, up: 1.3, life: 0.9, grav: -1, size: 0.15 });
   else if (q.va === 2) emit(x, y + 0.5, z, 2, { colors: ["#ffd84a", "#fff3b8"], speed: 0.8, up: 1.2, life: 0.8, grav: -1, size: 0.14 });
   else if (q.va === 1) emit(x, y + 0.5, z, 2, { colors: ["#bfe6ff", "#ffffff", "#ffc7f0"], speed: 0.8, up: 1.2, life: 0.8, grav: -1, size: 0.12 });
@@ -622,9 +637,10 @@ function trail(x, y, z, q, kind) {
   else if (Math.random() < 0.4) emit(x, y + 0.1, z, 1, { colors: ["#e9e2d2"], speed: 0.6, up: 0.8, life: 0.35, grav: 1, size: 0.12 });
 }
 // the conveyor runs round all four sides of the counter: your Ready parcel rides it, your Next one just behind
-const BELT_H = World.PO.counter - 0.65, BELT_L = 8 * BELT_H, BELT_GAP = 2.6; let beltLag = 0;
-function beltPos(s) { s = ((s % BELT_L) + BELT_L) % BELT_L; const k = Math.floor(s / (2 * BELT_H)), u = s - k * 2 * BELT_H - BELT_H, P = World.PO; return k === 0 ? { x: P.x + u, z: P.z + BELT_H } : k === 1 ? { x: P.x + BELT_H, z: P.z - u } : k === 2 ? { x: P.x - u, z: P.z - BELT_H } : { x: P.x - BELT_H, z: P.z + u }; }
-const beltS = () => now() * 1.1 + BELT_H, readyAt = () => beltPos(beltS() - beltLag);
+// (owner, 2026-11-11) the conveyor comes out of the post office's door: your Ready parcel is pushed out along it to the
+// end and waits there; your Next one waits just outside the door. Parcels on the belt are big.
+const BELT_SC = 1.7, BELT_SLIDE = 1.6; let beltSlide = 0;
+const readyAt = () => World.PO.end;
 const near = (o, r, dy = 1.6) => hyp(me.x - o.x, me.z - o.z) < r && Math.abs(me.y - o.y) < dy;
 function nearTrigger() { return World.zips.some((z) => near(z, 2.6) || near({ x: z.tx, z: z.tz, y: z.ty }, 2.6)) || near(World.PIPE.a, World.PIPE.r + 3.5) || near(World.PIPE.b, World.PIPE.r + 3.5) || World.pads.some((p) => near(p, 2.4) || near({ x: p.tx, z: p.tz, y: p.ty }, 2.4)) || World.balloons.some((b) => near(b, 7, 3)); }
 let askAt = 0, shakeAt = 0;
@@ -646,6 +662,7 @@ function triggers(t) {
 // ---- the camera: behind and above; drag to look round, pinch or wheel to zoom ----
 const camPos = new THREE.Vector3(), camAt = new THREE.Vector3(me.x, 2, me.z);
 function stepCamera(dt) {
+  if (cine && stepCine(dt)) return;
   const sc = mine ? mine.sc : 1, ty = me.y + 1.5 + 0.9 * sc; camAt.x = me.x; camAt.z = me.z; camAt.y += (ty - camAt.y) * Math.min(1, 10 * dt);
   const cp = Math.cos(cam.pitch), ux = Math.sin(cam.yaw) * cp, uy = Math.sin(cam.pitch), uz = Math.cos(cam.yaw) * cp;
   let d = cam.dist * (0.75 + 0.25 * sc); for (let k = 1.5; k < d; k += 0.7) if (World.wallAt(camAt.x + ux * k, camAt.z + uz * k, camAt.y + uy * k - 1)) { d = Math.max(1.5, k - 0.7); break; }   // nothing solid between you and the camera
@@ -729,7 +746,8 @@ function giftsUi(fresh) {
 // a delivery: its rarity over the mailbox, the parcel on the left; merges (four into one) play out before it settles
 function delivered(h, gift, near, merges) {
   const c = RARITY_C[gift.r]; popup(RARITY[gift.r] + "!", c, h.mx, h.my + 3.2, h.mz, gift.r >= 2); sfx(near ? "near" : gift.r >= 3 ? "shiny" : "pop");
-  if (gift.r >= 3) emit(h.mx, h.my + 2.6, h.mz, 10 + gift.r * 8, { colors: [c, "#ffffff"], speed: 4, up: 5, life: 1, size: 0.16 });
+  if (gift.r >= 2) { emit(h.mx, h.my + 2.6, h.mz, 10 + gift.r * 12, { colors: [c, "#ffffff"], speed: 3 + gift.r, up: 5, life: 1.1, size: 0.18 }); cam.shake = Math.max(cam.shake, 0.08 * gift.r); }
+  if (gift.r >= 3) { banner(RARITY[gift.r].toUpperCase() + " PARCEL!", c); flash(c); }
   if (!merges || !merges.length) { giftsUi([gift.gid]); return; }
   merging = true; playMerges(merges.slice());
 }
@@ -758,8 +776,8 @@ function resultRows(list, R) {   // what came out of a gift (or several): coins,
 function landGifts(list, lvUp) {   // what the server says came out: totals under the parcels
   const best = Math.max(...list.map((g) => g.r)), c = RARITY_C[best], tot = { coins: 0, xp: 0, coupons: 0, eggs: [], mounts: [] };
   for (const g of list) { tot.coins += g.coins; tot.xp += g.xp; tot.coupons += g.coupons; if (g.egg) tot.eggs.push(g.egg); if (g.mount) tot.mounts.push(g.mount); }
-  $("gopen").style.display = "none"; opening = null;
-  sfx("win", best); emit(me.x, me.y + 2.4, me.z, 8 + best * 10, { colors: [c, "#ffffff"], speed: 3 + best, up: 5, life: 1, size: 0.16 }); if (best >= 3) { flash(c); cam.shake = Math.max(cam.shake, 0.15 * best); }
+  $("gopen").style.display = "none"; $("gopen").style.setProperty("--ray", 0); opening = null;
+  sfx("win", best); if (best >= 3) sfx("fanfare", best); confetti(best); if (best >= 2) banner(RARITY[best].toUpperCase() + "!", c); emit(me.x, me.y + 2.4, me.z, 8 + best * 10, { colors: [c, "#ffffff"], speed: 3 + best, up: 5, life: 1, size: 0.16 }); if (best >= 1) { flash(c); cam.shake = Math.max(cam.shake, 0.15 * best); }
   flyCoins(me.x, me.y + 2, me.z, 2 + best * 2); setTimeout(() => sfx("coin"), 200); if (tot.eggs.length) setTimeout(() => sfx("egg"), 350);
   const res = $("gres"), lst = $("glist"); res.style.display = "flex"; res.style.setProperty("--gc", c); lst.innerHTML = "";
   const head = $("gtitle"); head.innerHTML = ""; if (list.length > 1) for (const g of list) { const d = el("i", "gchip"); d.style.background = RARITY_C[g.r]; d.title = RARITY[g.r]; head.appendChild(d); }
@@ -770,6 +788,12 @@ function landGifts(list, lvUp) {   // what the server says came out: totals unde
   const m = list.find((g) => g.mount); if (m) setTimeout(() => { selMount = m.mount.id; hatchShow("gift", m.mount); }, 900);
   hudDirty = true; giftsUi(); if (panel === "stable" || panel === "odds") renderPanel();
 }
+// (owner, 2026-11-11) confetti from the parcels on a reveal: more, and in the rarity's colors, the rarer it is
+function confetti(r, X, Y) {
+  const at = $("gifts").getBoundingClientRect(), x0 = X ?? at.left + at.width / 2, y0 = Y ?? at.top + 60, cs = r ? [RARITY_C[r], "#ffffff", RARITY_C[Math.max(1, r - 1)]] : ["#ffffff", "#ffd84a"];
+  for (let k = 0; k < 8 + r * 14; k++) { const d = el("i", "confetti"); d.style.left = x0 + "px"; d.style.top = y0 + "px"; d.style.background = cs[k % cs.length]; document.body.appendChild(d);
+    const a = Math.random() * TAU, v = 120 + Math.random() * (160 + r * 70); d.animate([{ transform: "translate(-50%,-50%) rotate(0deg)", opacity: 1 }, { transform: `translate(${Math.cos(a) * v}px, ${Math.sin(a) * v * 0.6 - 60}px) rotate(${Math.random() * 720}deg)`, opacity: 1, offset: 0.5 }, { transform: `translate(${Math.cos(a) * v * 1.2}px, ${Math.sin(a) * v * 0.6 + 220}px) rotate(${Math.random() * 1080}deg)`, opacity: 0 }], { duration: 1300 + Math.random() * 700, easing: "cubic-bezier(.2,.7,.4,1)" }).onfinish = () => d.remove(); }
+}
 function hurryGift() { if (opening && !opening.all) { opening.speed = Math.min(8, opening.speed * 2.5); sfx("tick"); } }   // a tap while it builds up: faster
 $("gopen").onclick = hurryGift; $("gall").onclick = openAll; $("gx").onclick = () => { $("gres").style.display = "none"; giftsUi(); };
 for (const id of ["gopen", "gall", "gx"]) $(id).addEventListener("pointerdown", (e) => e.stopPropagation());
@@ -778,7 +802,7 @@ for (const id of ["gopen", "gall", "gx"]) $(id).addEventListener("pointerdown", 
 // three move on when you do them; the rest with Next. Skip ends it; it's shown once (saved), to couriers with no
 // deliveries yet. ----
 const TUT = [
-  { t: "Pick up parcels", p: "Ride into your parcel on the post office counter. The pink arrow shows the way.", on: "grab" },
+  { t: "Pick up parcels", p: "Ride up to your parcel at the end of the post office conveyor. The pink arrow shows the way.", on: "grab" },
   { t: "Drop them off", p: "Follow the pink arrow to the pink beam and ride into the ring by the mailbox.", on: "deliver" },
   { t: "Open your parcels", p: "Delivered parcels wait on the left. Tap one to open it (tap again to hurry it), or Open all. Four of one rarity merge into a better one.", on: "open", hi: "gifts" },
   { t: "Stable", p: "Your mounts: ride one, level it up with coins or Level Coupons, hatch eggs, and merge two of the same into a cooler skin.", hi: "mstable" },
@@ -794,18 +818,26 @@ function tutShow(n) {
 function tutDid(what) { if (tut >= 0 && TUT[tut].on === what) setTimeout(() => tutShow(tut + 1), what === "open" ? 1800 : 900); }
 $("tutnext").onclick = () => tutShow(tut + 1); $("tutskip").onclick = () => tutShow(-2);
 for (const id of ["tutnext", "tutskip"]) $(id).addEventListener("pointerdown", (e) => e.stopPropagation());
-function levelFx() { sfx("level"); popup("LEVEL UP!", "#ffd84a", me.x, me.y + 3.2, me.z, true); for (let k = 0; k < 28; k++) { const a = (k / 28) * TAU; parts.length < PN && parts.push({ x: me.x, y: me.y + 0.3, z: me.z, vx: Math.cos(a) * 6, vy: 2.5, vz: Math.sin(a) * 6, t: 0, life: 0.8, size: 0.2, grav: 3, c: k % 2 ? "#ffd84a" : "#ffffff", r: k }); } }
+// (owner, 2026-11-11) a level up also shows the mount on screen: it pops in over golden rays, hops, a shine sweeps across it
+function levelFx() { const q = riding(), L = $("lvup"), src = portrait(q.sp, q.va); $("lvimg").src = src; L.style.setProperty("--lvm", `url(${src})`); $("lvt").textContent = "LEVEL " + q.lv; L.classList.remove("go"); void L.offsetWidth; L.classList.add("go"); clearTimeout(levelFx.t); levelFx.t = setTimeout(() => L.classList.remove("go"), 2300);
+  if (mine) mine.spin = 0.7; for (let k = 0; k < 16; k++) setTimeout(() => emit(me.x + (Math.random() - 0.5) * 2, me.y + 0.5 + Math.random() * 2.5, me.z + (Math.random() - 0.5) * 2, 3, { colors: ["#ffd84a", "#ffffff", "#fff3b8"], speed: 1.5, up: 2.5, life: 0.9, grav: -0.5, size: 0.16 }), k * 60);
+  sfx("level"); popup("LEVEL UP!", "#ffd84a", me.x, me.y + 3.2, me.z, true); for (let k = 0; k < 28; k++) { const a = (k / 28) * TAU; parts.length < PN && parts.push({ x: me.x, y: me.y + 0.3, z: me.z, vx: Math.cos(a) * 6, vy: 2.5, vz: Math.sin(a) * 6, t: 0, life: 0.8, size: 0.2, grav: 3, c: k % 2 ? "#ffd84a" : "#ffffff", r: k }); } }
 function stepGifts(dt) {   // the build-up: three shakes, each bigger, the sparkle growing, then the prize (once the server's said)
   const o = opening; if (!o) return; o.t += dt * (o.speed || 1);
   if (o.all) { if (o.res) landGifts(o.res.list, o.res.lvUp); return; }
-  const T = 2.2, b = $("gbig").firstChild, u = Math.min(1, o.t / T);
+  // (owner, 2026-11-11: more umph) the rarer, the longer and bigger the build-up: rays behind it, a heartbeat from Rare,
+  // the screen shaking from Epic
+  const r = o.g.r, T = 2.2 + 0.35 * r, b = $("gbig").firstChild, u = Math.min(1, o.t / T);
   const n = Math.floor(u * 3.4); if (n > o.shook && n <= 3) { o.shook = n; sfx("wobble"); if (b) { b.classList.remove("shake1", "shake2", "shake3"); void b.offsetWidth; b.classList.add("shake" + n); } }
-  $("gopen").style.setProperty("--glow", (6 + u * 36).toFixed(0) + "px"); $("gopen").style.setProperty("--grow", (1 + u * 1.6).toFixed(2));
+  $("gopen").style.setProperty("--glow", (6 + u * (36 + 14 * r)).toFixed(0) + "px"); $("gopen").style.setProperty("--grow", (1 + u * (1.6 + 0.3 * r)).toFixed(2)); $("gopen").style.setProperty("--ray", (u * (0.2 + 0.2 * r)).toFixed(2));
+  if (r >= 2) { o.beat = (o.beat || 0) - dt * (o.speed || 1); if (o.beat <= 0) { sfx("beat"); o.beat = 0.7 - u * 0.45; } }
+  if (r >= 3) cam.shake = Math.max(cam.shake, u * 0.05 * r);
   if (o.t >= T && o.res) landGifts(o.res.list, o.res.lvUp);
 }
 let hudDirty = true, shownCoins = 0, cardKey = "", myName = "", myRole = "player", myId = null, loggedIn = false;
 const cdBtn = (id, left, total) => { const b = $(id), k = total > 0 ? clamp(left / total, 0, 1) : 0; b.style.setProperty("--cd", (k * 360).toFixed(0) + "deg"); b.classList.toggle("cool", k > 0); };
 function hud(dt) {
+  watchZones();
   // coins count up to what the server says
   const coinsNow = save.coins;
   if (shownCoins !== coinsNow) { const d = coinsNow - shownCoins; shownCoins = Math.abs(d) < 1 ? coinsNow : shownCoins + d * Math.min(1, dt * 8); $("coinn").textContent = fmt(Math.round(shownCoins)); }
@@ -858,6 +890,7 @@ function renderPanel() {
     const acts = el("div", "acts"); if (m.id !== save.ride) acts.appendChild(btn("Ride", () => netSend({ t: "equip", id: m.id }), "go"));
     if (m.lv < World.MAX_LV) { acts.appendChild(coinBtn(World.levelCost(m.lv), () => netSend({ t: "level", id: m.id }), save.coins >= World.levelCost(m.lv))); const cb = btn("Coupon " + save.coupons, () => netSend({ t: "coupon", id: m.id }), "coupon"); cb.disabled = save.coupons < 1; acts.appendChild(cb); }
     if (World.fuseSet(save.mounts, m.id)) acts.appendChild(btn("Merge", () => netSend({ t: "fuse", id: m.id }), "fuse"));   // two the same: the next skin
+    for (const k of World.trailsFor(save)) { const T = World.TRAILS.find((q) => q.k === k), on = m.tr === k, b = btn(T.name, () => netSend({ t: "trail", id: m.id, k: on ? "" : k }), "trail" + (on ? " on" : "")); acts.appendChild(b); }   // (owner, 2026-11-11) unlocked trails, on any mount
     info.appendChild(acts); d.appendChild(info);
     const eggs = el("div", "eggs"); for (const k of Object.keys(EGGS)) { const E = EGGS[k], c = el("div", "eggc"), e = el("i", "egg"); e.style.background = E.c; c.appendChild(e); c.appendChild(el("b", "", E.name)); c.appendChild(oddsRow(E.odds)); const hb = btn("Hatch " + save.eggs[k], () => netSend({ t: "hatch", kind: k }), "go"); hb.disabled = save.eggs[k] < 1 || save.mounts.length >= World.MOUNT_CAP; c.appendChild(hb); eggs.appendChild(c); }
     body.appendChild(d); body.appendChild(eggs); body.appendChild(grid);
@@ -905,9 +938,11 @@ for (const [id, k] of [["mstable", "stable"], ["mup", "up"], ["modds", "odds"], 
 
 // ---- hatching: the egg wobbles three times, cracks, and there's your mount ----
 function hatchShow(kind, m) {
-  const o = $("hatch"), egg = $("hegg"), im = $("himg"), nm = $("hname"), rr = $("hrar"), M = MOUNTS[m.sp], c = RARITY_C[M.r]; o.style.display = "flex"; egg.style.display = "block"; egg.style.background = EGGS[kind] ? EGGS[kind].c : ""; im.style.display = nm.style.display = rr.style.display = "none"; egg.className = kind === "gift" ? "egg gift wob" : kind === "fuse" ? "egg fuse wob" : "egg wob";   // a new mount as a gift comes in a box
+  const o = $("hatch"), egg = $("hegg"), im = $("himg"), nm = $("hname"), rr = $("hrar"), M = MOUNTS[m.sp], c = RARITY_C[M.r]; o.classList.remove("won", "first"); o.style.display = "flex"; egg.style.display = "block"; egg.style.background = EGGS[kind] ? EGGS[kind].c : ""; im.style.display = nm.style.display = rr.style.display = "none"; egg.className = kind === "gift" ? "egg gift wob" : kind === "fuse" ? "egg fuse wob" : "egg wob";   // a new mount as a gift comes in a box
   for (const k of [0, 1, 2]) setTimeout(() => sfx("wobble"), 150 + k * 420);
-  setTimeout(() => { egg.style.display = "none"; im.src = portrait(m.sp, m.va); im.style.display = nm.style.display = rr.style.display = "block"; nm.textContent = mountName(m); rr.textContent = RARITY[M.r]; rr.style.color = c; o.style.setProperty("--glow", m.va === 3 ? "#b06bff" : m.va === 2 ? "#ffd84a" : m.va === 1 ? "#bfe6ff" : c); sfx("hatch"); if (m.va) sfx("shiny"); flash(c); }, 1500);
+  setTimeout(() => { egg.style.display = "none"; im.src = portrait(m.sp, m.va); im.style.display = nm.style.display = rr.style.display = "block"; nm.textContent = mountName(m); rr.textContent = RARITY[M.r]; rr.style.color = c; o.style.setProperty("--glow", m.va === 3 ? "#b06bff" : m.va === 2 ? "#ffd84a" : m.va === 1 ? "#bfe6ff" : c); sfx("hatch"); if (m.va) sfx("shiny"); flash(c);
+    // (owner, 2026-11-11) a new mount gets its own moment on top: it drops in spinning over rays, with confetti; the first of its kind says NEW!
+    o.classList.add("won"); if (save.mounts.filter((k) => k.sp === m.sp).length <= 1) o.classList.add("first"); setTimeout(() => { confetti(Math.max(1, M.r + (m.va ? 1 : 0)), innerWidth / 2, innerHeight / 2); if (M.r >= 3 || m.va) sfx("fanfare", Math.max(3, M.r)); }, 450); }, 1500);
   setTimeout(() => { o.onclick = () => { o.style.display = "none"; o.onclick = null; }; }, 1900);
 }
 
@@ -926,7 +961,7 @@ const others = new Map(); let party = [], invites = [];
 function addOther(p) {
   if (p.id === myId) return; const old = others.get(p.id); if (old) unrig(old.rig);
   const rig = rigMount(p.sp, clamp(p.lv | 0, 1, World.MAX_LV), p.va | 0, p.shirt || "#3a8ee6", p.name, p.rank | 0); rig.m.g.position.set(p.x, p.y || 0, p.z); setCarry(rig, p.carry);
-  others.set(p.id, Object.assign(old || { buf: [], x: p.x, y: p.y || 0, z: p.z, yaw: p.yaw || 0, mv: 0, stunT: 0, graceT: 0, kickT: 0, hideT: 0, stepT: 0, mx: p.x, my: p.y || 0, mz: p.z, myaw: 0, wasFoot: false }, { id: p.id, name: p.name, sp: p.sp, lv: p.lv, va: p.va | 0, shirt: p.shirt, rank: p.rank | 0, friendly: !!p.friendly, carry: p.carry || null, rig }));
+  others.set(p.id, Object.assign(old || { buf: [], x: p.x, y: p.y || 0, z: p.z, yaw: p.yaw || 0, mv: 0, stunT: 0, graceT: 0, kickT: 0, hideT: 0, stepT: 0, mx: p.x, my: p.y || 0, mz: p.z, myaw: 0, wasFoot: false }, { id: p.id, name: p.name, sp: p.sp, lv: p.lv, va: p.va | 0, tr: p.tr || "", shirt: p.shirt, rank: p.rank | 0, friendly: !!p.friendly, carry: p.carry || null, rig }));
 }
 function dropOther(id) { const o = others.get(id); if (!o) return; unrig(o.rig); others.delete(id); }
 function renderParty() { const d = $("party"); d.innerHTML = ""; d.style.display = party.length ? "flex" : "none"; for (const q of party) d.appendChild(el("span", q.id === myId ? "me" : "", q.name)); if (party.length) { const x = el("button", "", "✕"); x.title = "Leave"; x.onclick = () => netSend({ t: "party_leave" }); d.appendChild(x); } }
@@ -1022,7 +1057,7 @@ function onNet(m) {
       for (const [id, x, z, yaw, mv, y] of m.ps || []) { const o = others.get(id); if (!o) continue; o.buf.push({ t: m.ts, x, y, z, yaw, mv }); if (o.buf.length > 12) o.buf.shift(); }
       setNpc(m); break;
     }
-    case "mount": { const o = others.get(m.id); if (o) addOther(Object.assign({}, o, { sp: m.sp, lv: m.lv, va: m.va })); break; }
+    case "mount": { const o = others.get(m.id); if (o) addOther(Object.assign({}, o, { sp: m.sp, lv: m.lv, va: m.va, tr: m.tr || "" })); break; }
     case "rank": { const o = others.get(m.id); if (o) addOther(Object.assign({}, o, { rank: m.rank })); else if (m.id === myId) remount(); break; }
     case "look": { const o = others.get(m.id); if (o) addOther(Object.assign({}, o, { friendly: m.friendly, shirt: m.shirt })); break; }
     case "carry": { const o = others.get(m.id); if (o) { o.carry = m.c; setCarry(o.rig, m.c); } break; }
@@ -1089,11 +1124,11 @@ function onFx(m) {
 }
 
 // ---- the conveyor's two parcels (yours alone), the address you're riding to ----
-let readyMesh = null, nextMesh = null; const targetFx = new Map();   // house id -> its marker
+let readyMesh = null, nextMesh = null, pusher = null; const beltStripes = [], targetFx = new Map();   // house id -> its marker
 function beltShow(slide, pop) {
   if (readyMesh) scene.remove(readyMesh); if (nextMesh) scene.remove(nextMesh); readyMesh = nextMesh = null;
-  if (belt.ready) { readyMesh = parcelMesh(belt.ready.tier, belt.ready.mod); scene.add(readyMesh); beltLag = slide ? BELT_GAP : 0; }
-  if (belt.next) { nextMesh = parcelMesh(belt.next.tier, belt.next.mod); nextMesh.position.y = pop ? 4 : 1.16; nextMesh.traverse((o) => { if (o.isMesh) { o.material = o.material.clone(); o.material.transparent = true; o.material.opacity = 0.45; } }); scene.add(nextMesh); if (pop && loggedIn) setTimeout(() => { if (hyp(me.x, me.z) < 40) sfx("pop"); }, 220); }
+  if (belt.ready) { readyMesh = parcelMesh(belt.ready.tier, belt.ready.mod); readyMesh.scale.setScalar(BELT_SC); scene.add(readyMesh); beltSlide = slide || pop ? BELT_SLIDE : 0; }
+  if (belt.next) { nextMesh = parcelMesh(belt.next.tier, belt.next.mod); nextMesh.scale.setScalar(BELT_SC); nextMesh.position.y = pop ? 4 : World.PO.belt.top; nextMesh.traverse((o) => { if (o.isMesh) { o.material = o.material.clone(); o.material.transparent = true; o.material.opacity = 0.45; } }); scene.add(nextMesh); if (pop && loggedIn) setTimeout(() => { if (hyp(me.x, me.z) < 40) sfx("pop"); }, 220); }
 }
 function setTargets() {   // a marker over every address I'm carrying a parcel to
   const want = new Set(bag.map((q) => q.house)); for (const [id, g] of targetFx) if (!want.has(id)) { scene.remove(g); targetFx.delete(id); }
@@ -1129,7 +1164,8 @@ function pose(rig, s, dt, t, speed) {   // s: { x, y, z, yaw, moving, foot, air,
     w.g.position.set(s.x, s.y, s.z); w.g.rotation.set(0, s.yaw, 0);
     if (s.stun > 0) { w.g.rotation.x = -Math.PI / 2; w.g.rotation.z = t * 6; w.g.position.y = s.y + 0.35; }
     else { const sw = s.moving ? Math.sin(t * 12) * 0.8 : 0; w.legs[0].rotation.x = sw; w.legs[1].rotation.x = -sw; w.arms[0].rotation.x = -sw; w.arms[1].rotation.x = sw; } }
-  else { g.position.set(s.x, s.y + (s.hop > 0 ? Math.sin((s.hop / 0.3) * Math.PI) * 0.5 : 0), s.z); g.rotation.y = s.yaw; animatePet(rig.m, t, s.moving, speed, s.air);
+  else { if (rig.spin > 0) rig.spin = Math.max(0, rig.spin - dt); const sp = rig.spin > 0 ? 1 - rig.spin / 0.7 : 0;   // a level up: a hop and a full spin
+    g.position.set(s.x, s.y + (s.hop > 0 ? Math.sin((s.hop / 0.3) * Math.PI) * 0.5 : 0) + (sp ? Math.sin(sp * Math.PI) * 1.4 : 0), s.z); g.rotation.y = s.yaw + sp * TAU; animatePet(rig.m, t, s.moving, speed, s.air);
     rig.m.body.rotation.x = s.kickT > 0 ? Math.sin((s.kickT / 0.28) * Math.PI) * 0.5 : s.glide ? 0.18 : 0; if (s.kickT > 0) rig.m.body.position.z = Math.sin((s.kickT / 0.28) * Math.PI) * 0.9; else rig.m.body.position.z = 0;
     const q = s.squash > 0 ? 1 + Math.sin((s.squash / 0.25) * Math.PI) * 0.22 : 1; g.scale.set(rig.sc / Math.sqrt(q), rig.sc * q, rig.sc / Math.sqrt(q)); }
   if (rig.slot.children.length) rig.slot.rotation.z = Math.sin(t * 9) * (s.moving ? 0.07 : 0.02);
@@ -1145,12 +1181,12 @@ function stepOthers(dt, t) {
     if (o.graceT > 0) { o.graceT -= dt; if (Math.random() < 0.4) emit(o.x, o.y + 1.2, o.z, 1, { colors: ["#ffffff", "#bfe6ff"], speed: 1.2, up: 1, life: 0.5, grav: -1, size: 0.1, spread: 1.6 }); }
     if (o.kickT > 0) o.kickT -= dt; if (o.hideT > 0) o.hideT -= dt;
     pose(o.rig, { x: o.x, y: o.y, z: o.z, yaw: o.yaw, moving: !!(o.mv & 1), foot, air: !!(o.mv & 4), stun: o.stunT, mx: o.mx, my: o.my, mz: o.mz, myaw: o.myaw, kickT: o.kickT, hidden: o.hideT > 0, glide: !!(o.mv & 16) }, dt, t, 10);
-    if ((o.mv & 1) && !(o.mv & 6) && (o.va || o.lv >= World.MAX_LV)) { o.stepT -= dt; if (o.stepT <= 0) { o.stepT = 0.18; trail(o.x, o.y, o.z, o, ""); } }
+    if ((o.mv & 1) && !(o.mv & 6) && (o.va || o.lv >= World.MAX_LV || o.tr)) { o.stepT -= dt; if (o.stepT <= 0) { o.stepT = 0.18; trail(o.x, o.y, o.z, o, ""); } }
   }
 }
 function stepNpcs(dt, t) {
   const k = 1 - Math.exp(-14 * dt);
-  const far = (o) => { const v = Math.abs(o.x - me.x) < 170 && Math.abs(o.z - me.z) < 170; o.m.g.visible = v; return !v; };   // animals a long way off aren't drawn
+  const far = (o) => { const v = Math.abs(o.x - camera.position.x) < 170 && Math.abs(o.z - camera.position.z) < 170; o.m.g.visible = v; return !v; };   // animals a long way off aren't drawn
   for (const d of dogMesh) { if (far(d)) { d.x = d.tx; d.z = d.tz; d.y = d.ty; continue; } const mv = hyp(d.tx - d.x, d.tz - d.z) > 0.02; d.x += (d.tx - d.x) * k; d.z += (d.tz - d.z) * k; d.y += (d.ty - d.y) * k; d.yaw += angDiff(d.tyaw, d.yaw) * k; d.m.g.position.set(d.x, d.y, d.z); d.m.g.rotation.y = d.yaw; animatePet(d.m, t + d.x, mv, 11, false); if (d.mode === 1) d.m.g.position.y = d.y + Math.abs(Math.sin(t * 22)) * 0.25; }
   for (const g of gooseMesh) { if (far(g)) { g.x = g.tx; g.z = g.tz; g.y = g.ty; continue; } const mv = hyp(g.tx - g.x, g.tz - g.z) > 0.03; g.x += (g.tx - g.x) * k; g.z += (g.tz - g.z) * k; g.y += (g.ty - g.y) * k; g.yaw += angDiff(g.tyaw, g.yaw) * k; const m = g.m; m.g.position.set(g.x, g.y, g.z); m.g.rotation.y = g.yaw;
     const sw = mv ? Math.sin(t * (g.mode >= 2 ? 22 : 9) + g.x) * 0.6 : 0; m.legs[0].rotation.x = sw; m.legs[1].rotation.x = -sw; m.body.rotation.z = mv ? Math.sin(t * 9 + g.x) * 0.1 : 0;
@@ -1162,9 +1198,13 @@ function stepNpcs(dt, t) {
   for (let i = fallers.length - 1; i >= 0; i--) { const f = fallers[i]; f.t += dt; const u = clamp(f.t / f.s, 0, 1); f.g.position.y = lerp(f.y0, f.y1, u * u); f.g.rotation.x += dt * 4; if (f.t > f.s + 1.2) { scene.remove(f.g); fallers.splice(i, 1); } }
   for (let i = divers.length - 1; i >= 0; i--) { const d = divers[i]; d.t += dt; const u = d.t / d.s, g = d.g.g; if (u < 1) g.position.set(d.x + 9 * (1 - u), d.y + 0.6 + 14 * (1 - u) * (1 - u), d.z); else g.position.set(d.x - 12 * (u - 1), d.y + 0.6 + 16 * (u - 1), d.z); g.rotation.y = -Math.PI / 2; d.g.wings[0].rotation.z = -1.2 + Math.sin(d.t * 20) * 0.4; d.g.wings[1].rotation.z = 1.2 - Math.sin(d.t * 20) * 0.4; if (u > 2) { scene.remove(g); divers.splice(i, 1); } }
   for (const h of houseMesh) { if (h.shake > 0) { h.shake -= dt; h.mb.rotation.z = h.shake > 0 ? Math.sin(t * 40) * 0.25 : 0; } if (h.pop > 0) { h.pop -= dt; h.mb.scale.setScalar(1 + Math.max(0, Math.sin((h.pop / 0.3) * Math.PI)) * 0.4); } }
-  beltLag *= Math.exp(-7 * dt);
-  if (readyMesh) { const q = readyAt(); readyMesh.position.set(q.x, 1.16 + Math.abs(Math.sin(t * 3)) * 0.18, q.z); readyMesh.rotation.y = t * 0.8; }
-  if (nextMesh) { const q = beltPos(beltS() - BELT_GAP - beltLag); nextMesh.position.set(q.x, Math.max(1.16, nextMesh.position.y - dt * 14), q.z); }
+  { const P = World.PO, BT = P.belt, top = BT.top, door = BT.z0 - 0.2, endZ = P.end.z, u = beltSlide > 0 ? 1 - beltSlide / BELT_SLIDE : 1, run = beltSlide > 0;
+    if (beltSlide > 0) beltSlide = Math.max(0, beltSlide - dt);
+    const e = u < 1 ? 1 - Math.pow(1 - u, 2) : 1, rz = door + (endZ - door) * e;
+    if (readyMesh) { readyMesh.position.set(P.end.x, top + (run ? 0 : Math.abs(Math.sin(t * 3)) * 0.12), rz); readyMesh.rotation.y = run ? 0 : Math.sin(t * 0.8) * 0.25; }
+    if (nextMesh) nextMesh.position.set(P.end.x, Math.max(top, nextMesh.position.y - dt * 14), door + 0.9);
+    if (pusher) pusher.position.z = run ? rz - 0.9 * BELT_SC * 0.72 - 0.25 : Math.max(BT.z0 - 0.4, pusher.position.z - dt * 6);   // the pusher follows the parcel out, then goes back in
+    const L = BT.z1 - BT.z0; if (run) beltStripes.off = (beltStripes.off || 0) + dt * 4.4; beltStripes.forEach((m, k) => { m.position.z = BT.z0 + (((k / 10) * L + (beltStripes.off || 0)) % L); }); }
   for (const fx of targetFx.values()) { const u = fx.userData; u.ring.scale.setScalar(1 + Math.sin(t * 5) * 0.06); u.gem.position.y = 4.2 + Math.sin(t * 3) * 0.4; u.gem.rotation.y = t * 2; }
   for (const g of dropMeshes.values()) { const dq = g.userData.q; g.position.y = dq.y + 0.3 + Math.abs(Math.sin(t * 4)) * 0.5; g.rotation.y = t * 2; if (Math.random() < 0.2) emit(dq.x, dq.y + 1, dq.z, 1, { colors: ["#ffd84a"], speed: 1, up: 2, life: 0.6, grav: 0, size: 0.1 }); }
   for (const b of World.balloons) b.g.position.y = b.y + Math.sin(t * 1.2 + b.x) * 0.25;
@@ -1185,7 +1225,44 @@ function buildGates() {
   const w = new THREE.Mesh(new THREE.SphereGeometry(C.r + 1.6, 24, 14, 0, TAU, 0, Math.PI / 2), new THREE.MeshBasicMaterial({ color: "#9aa8ff", transparent: true, opacity: 0.28, side: THREE.DoubleSide, depthWrite: false })); g.add(w);
   gates.push({ g, w, L: lock(g, C.r + 2.6), d: 4 });
 }
-function stepGates(t) { const open = World.openFor(save); for (const q of gates) { q.g.visible = q.d >= open; if (q.g.visible) { q.w.material.opacity = 0.34 + Math.sin(t * 2 + q.d) * 0.08; q.L.rotation.y = Math.sin(t * 0.8 + q.d) * 0.4; } } }
+function stepGates(t) { const open = World.openFor(save); for (const q of gates) { q.g.visible = q.d >= open || q.d === gateHold; if (q.g.visible) { q.w.material.opacity = 0.34 + Math.sin(t * 2 + q.d) * 0.08; q.L.rotation.y = Math.sin(t * 0.8 + q.d) * 0.4; } } }
+// (owner, 2026-11-11) a newly opened area gets a short showing: letterbox bars, the camera flies to its gate as it
+// bursts open, then to its chasers (the rarest one), then to its other dangers. A tap or a key skips it. Your mount stays put.
+let cine = null, gateHold = -1, lastOpen = 0, lastOpenFor = "";
+const CINE_HAZ = [
+  null,
+  [{ at: () => ({ x: 136.5, y: 0, z: -22 }), t: "GEESE" }, { at: () => World.sprinklers[1], t: "SPRINKLERS" }],
+  [{ at: () => ({ x: 226, y: -0.4, z: 23 }), t: "GEESE" }, { at: () => ({ x: 224, y: 0, z: 0 }), t: "MUD" }],
+  [{ at: () => goatMesh[0], t: "GOATS" }, { at: () => ({ x: World.TERRACE(2).x0 + 14, y: World.TERRACE(2).y, z: 6 }), t: "FALLING ROCKS", fx: (p) => onNet({ t: "rock", x: p.x, y: p.y, z: p.z, s: 1 }) }],
+  [{ at: () => ({ x: World.ISLES[1].x, y: World.ISLES[1].y, z: World.ISLES[1].z }), t: "WIND" }, { at: () => ({ x: World.ISLES[0].x + 4, y: World.ISLES[0].y, z: World.ISLES[0].z }), t: "SKY GEESE", fx: (p) => onNet({ t: "dive", x: p.x, y: p.y, z: p.z, s: 1.4 }) }],
+];
+function zoneShow(d) {
+  const gx = d < 4 ? World.GATES[d - 1] : World.CANNON.x, gy = d < 4 ? 0 : World.CANNON.y, shots = [];
+  shots.push({ dur: 2.4, cam: (u) => ({ x: gx - 20 + 8 * u, y: gy + 10 - 3 * u, z: 15 - 5 * u }), look: () => ({ x: gx + 6, y: gy + 2, z: 0 }), title: World.DISTRICTS[d].toUpperCase(), sub: "OPEN!", at: 1.0,
+    fx: () => { gateHold = -1; sfx("unlock"); flash("#ffffff"); cam.shake = 0.5; for (let k = 0; k < 60; k++) emit(gx, gy + 1 + Math.random() * 8, (Math.random() - 0.5) * 50, 1, { colors: ["#9aa8ff", "#ffffff", "#ffd84a"], speed: 6, up: 4, life: 1.2, size: 0.3 }); } });
+  const ch = dogMesh.filter((a, n) => World.dogs[n].d === d).map((a) => ({ a, r: World.dogs[dogMesh.indexOf(a)].r })).sort((p, q) => q.r - p.r)[0];
+  if (ch) shots.push({ dur: 2.4, cam: (u) => { const A = ch.a, th = 0.6 + u * 1.2; return { x: A.x + Math.cos(th) * 6, y: A.y + 2.6, z: A.z + Math.sin(th) * 6 }; }, look: () => ({ x: ch.a.x, y: ch.a.y + 0.8, z: ch.a.z }), title: World.CHASER_NAME[World.CHASERS[d]].toUpperCase() + "S", sub: RARITY[ch.r], subC: RARITY_C[ch.r], at: 0.2 });
+  for (const h of CINE_HAZ[d]) { const p0 = h.at(); shots.push({ dur: 2.2, cam: (u) => { const P = h.at(), th = 2.2 + u; return { x: P.x + Math.cos(th) * 11, y: (P.y || 0) + 7 - u, z: P.z + Math.sin(th) * 11 }; }, look: () => { const P = h.at(); return { x: P.x, y: (P.y || 0) + 1, z: P.z }; }, title: h.t, at: 0.2, fx: h.fx ? () => h.fx(p0) : null }); }
+  return shots;
+}
+function playZones(ds) { if (!ds.length) return; const shots = ds.flatMap(zoneShow); gateHold = ds[0]; cine = { shots, i: 0, t: 0 }; $("cine").classList.add("on"); document.body.classList.add("cinema"); keys.clear(); }
+function endCine() { cine = null; gateHold = -1; $("cine").classList.remove("on"); document.body.classList.remove("cinema"); cam.d = undefined; }
+function stepCine(dt) {
+  const c = cine, S = c.shots[c.i]; if (!S) { endCine(); return false; }
+  if (c.t === 0) { if (S.title) setTimeout(() => banner(S.title, "#ffffff", S.sub || ""), 120); if (S.subC) setTimeout(() => { $("banner").lastChild.style.color = S.subC; }, 140); }
+  const was = c.t; c.t += dt; if (S.fx && was < S.at && c.t >= S.at) S.fx();
+  const u = Math.min(1, c.t / S.dur), e = u * u * (3 - 2 * u), P = S.cam(e), L = S.look();
+  camPos.set(P.x, P.y, P.z); if (cam.shake > 0) { cam.shake = Math.max(0, cam.shake - dt * 1.6); camPos.x += (Math.random() - 0.5) * cam.shake * 0.6; camPos.y += (Math.random() - 0.5) * cam.shake * 0.6; }
+  camera.position.copy(camPos); camera.lookAt(L.x, L.y, L.z); sun.position.set(L.x + 60, L.y + 110, L.z + 40); sun.target.position.set(L.x, L.y, L.z);
+  if (c.t >= S.dur) { c.i++; c.t = 0; if (c.i >= c.shots.length) endCine(); }
+  return true;
+}
+function watchZones() {   // a new area opened (not on logging in): show it
+  const o = World.openFor(save); if (lastOpenFor !== myName) { lastOpenFor = myName; lastOpen = o; return; }
+  if (o > lastOpen) { const ds = []; for (let d = lastOpen; d < o; d++) ds.push(d); lastOpen = o; setTimeout(() => playZones(ds), 1200); }   // after the level-up has had its moment
+}
+addEventListener("pointerdown", () => { if (cine && (cine.i > 0 || cine.t > 0.8)) endCine(); });
+addEventListener("keydown", (e) => { if (cine && (e.code === "Escape" || e.code === "Space" || e.code === "Enter")) endCine(); });
 // (owner, 2026-11-11) a stolen parcel's time to get it back, over the goose; a dropped one's, over the parcel
 const timerTags = new Map();   // pid -> { s: sprite, n: the number shown }
 function stepTimers() {
@@ -1219,6 +1296,6 @@ function frame(tms) {
 }
 buildTown(); buildAnimals(); buildGates(); beltShow(); stepCamera(0.016);
 // for the tests and the console
-window.Pets = { World, me, cam, others, get save() { return save; }, get parcel() { return bag[0] || null; }, get bag() { return bag; }, get cap() { return cap; }, get belt() { return belt; }, get stolen() { return stolen; }, get dropped() { return dropped; }, get loggedIn() { return loggedIn; }, get panel() { return panel; }, dogMesh, gooseMesh, goatMesh, get arrow() { return wayArrow; }, readyAt, onNet, teleport(x, z, y = 0) { me.x = x; me.z = z; me.y = y; me.vx = me.vz = me.vy = 0; me.transit = null; me.ground = false; sendPos(true); }, netSend, openPanel };
+window.Pets = { World, me, cam, others, show: { playZones, levelFx, hatchShow, get cine() { return cine; } }, get save() { return save; }, get parcel() { return bag[0] || null; }, get bag() { return bag; }, get cap() { return cap; }, get belt() { return belt; }, get stolen() { return stolen; }, get dropped() { return dropped; }, get loggedIn() { return loggedIn; }, get panel() { return panel; }, dogMesh, gooseMesh, goatMesh, get arrow() { return wayArrow; }, readyAt, onNet, teleport(x, z, y = 0) { me.x = x; me.z = z; me.y = y; me.vx = me.vz = me.vy = 0; me.transit = null; me.ground = false; sendPos(true); }, netSend, openPanel };
 $("lgo").disabled = $("lnew").disabled = true;
 connect(); requestAnimationFrame(frame);

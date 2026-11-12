@@ -38,10 +38,11 @@ A parcel that breaks or is lost is gone; the conveyor always has the next one. *
 
 ## The conveyor
 
-- Runs round all four sides of the post office counter (a 10 m square in the middle of town). Each courier sees only
-  their own two parcels riding it: **Ready** (grabbable) and **Next** (faded, just behind).
-- Grabbing: Next slides up to Ready and a new Next drops in with a pop. The server allows a grab within about 4.6 m of
-  the counter.
+- (owner, 2026-11-11) **The post office is a building** (16 x 10 m, a red gabled roof, its sign over the door) on the
+  north side of the square, with a **conveyor belt** coming out of its door 9 m toward the square. Each courier sees
+  only their own two parcels on it, **big** (1.7x): **Ready** waits at the belt's end, **Next** (faded) just outside the
+  door. Grabbing: the belt runs and a pusher pushes Next out to the end (1.6 s), and a new Next drops in with a pop. The
+  building and the belt are solid; the server allows a grab within 1.8 + 4.6 m of the end.
 - The address is picked when you grab. Nobody else sees your target; two couriers can have the same house.
 
 ## Parcels
@@ -85,6 +86,10 @@ A parcel that breaks or is lost is gone; the conveyor always has the next one. *
 - The Odds menu always shows the current odds for every tier, the Express bonus and the eggs.
 
 ## Mounts
+
+- (owner, 2026-11-11) **Trails:** one more to unlock every five areas opened; with five areas, the **Cloud Trail** (soft
+  white puffs behind) once the Floating Islands are open. Any mount can wear any unlocked trail (its button in the
+  Stable, on or off); everyone sees it.
 
 - (owner, 2026-11-11) **A gift on the second delivery:** a random Uncommon mount (Cat, Fox or Deer), shown in a pink
   box after you close the roll's card.
@@ -253,7 +258,19 @@ bark; a hit shakes the screen, flashes red and shows "-20%"; a break bursts into
 courier; "KICK!" with a 0.05 s hold; a goose's honk, and feathers when it's busted; confetti and flying coins on
 delivery; the roll's ticks, near miss and a burst in the rarity's color (Common white, Uncommon green, Rare blue, Epic
 purple, Legendary gold); an egg popping out; the hatch; "LEVEL UP!" with a ring; sparkles on an upgrade; the Sky
-Cannon's boom. Floating numbers rise and fade in 0.8 s. Every sound is made in the page (no files); music is a small
+Cannon's boom. (owner, 2026-11-11: more umph, and moments for the big things)
+- **Opening a parcel** builds up longer the rarer it is (2.2 s + 0.35 s a rank), with spinning rays in its color
+  behind it, a heartbeat from Rare and the screen shaking from Epic; the reveal flashes, throws confetti (more the
+  rarer), and from Rare says the rarity big; Epic and Legendary add a fanfare. A Rare or better delivery bursts bigger
+  over the mailbox; Epic and Legendary say "EPIC PARCEL!" / "LEGENDARY PARCEL!".
+- **A new mount** (hatched, merged or a gift), after the egg or box opens: it drops in spinning over rays with
+  confetti (a fanfare for Epic, Legendary and the special skins); the first of its kind says NEW!.
+- **A level up** also pops a card in the middle of the screen: the mount over golden rays, hopping, a shine across it,
+  "LEVEL n"; the mount in the world hops and spins with golden sparkles.
+- **A newly opened area** gets a short showing (about 9 s, letterbox bars, the HUD hidden, a tap or a key skips): the
+  camera flies to its gate as it bursts open (its name and "OPEN!"), round its rarest chaser (the kind and its
+  rarity), then to its other dangers: Suburbs geese and sprinklers; Marsh geese and mud; Cliffside goats and falling
+  rocks; Islands wind and sky geese. Not when logging in. Floating numbers rise and fade in 0.8 s. Every sound is made in the page (no files); music is a small
 loop. (owner, 2026-11-11) The same tune in every area, a little different in each, switching at the next loop: Main
 Street as it is; Maple Suburbs with a soft chime an octave up; Goose Marsh a touch slower and reedy with a bluesy note
 or two; Cliffside brassier over a deeper bass; the Floating Islands an octave up, airy, with an echo.
