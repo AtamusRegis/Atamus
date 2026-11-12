@@ -4,7 +4,7 @@
 // deliveries, rolls, damage, coins, mounts; this page shows the town (pets-world.js, shared with the server), moves you
 // and asks. Phone first: a thumb joystick, drag to look, pinch to zoom, big buttons.
 import * as THREE from "./vendor/three.module.min.js";
-import * as World from "./pets-world.js?v=1794472117";
+import * as World from "./pets-world.js?v=1794473393";
 
 const $ = (id) => document.getElementById(id);
 const { TAU, clamp, hyp, MOUNTS, TIERS, RARITY, RARITY_C, MODS, UPGRADES } = World;
@@ -578,8 +578,20 @@ function useAbility() {
   if (me.stun > 0 || me.transit || me.foot) return; const q = riding(), ab = MOUNTS[q.sp].ab, tier = World.abilityTier(q), t = now(); if (!tier) { sfx("no"); return; }
   if (ab === "jump2") { tryJump(); return; }
   if (t < me.abilityAt + World.abilityCd(q)) return; me.abilityAt = t;
-  if (ab === "dash") { me.dash = 0.32 + 0.06 * tier; sfx("dash"); cam.shake = Math.max(cam.shake, 0.15); }
-  else { netSend({ t: "ability" }); sfx("bark"); }
+  if (ab === "dash") { me.dash = 0.32 + 0.06 * tier; sfx("dash"); cam.shake = Math.max(cam.shake, 0.15); return; }
+  // (owner, 2026-11-12) every animal its own ability; the server does its part (scaring, freezing, shielding, hiding)
+  const T = World.abilityTime(ab, tier), fx = Math.sin(me.yaw), fz = Math.cos(me.yaw); netSend({ t: "ability" });
+  if (ab === "bark") sfx("bark");
+  else if (ab === "howl") { me.howl = T; sfx("boost"); emit(me.x, me.y + 1.5, me.z, 20, { colors: ["#bfe6ff", "#ffffff"], speed: 3, up: 2, life: 0.6, grav: 0 }); }
+  else if (ab === "pounce") { me.pounce = 0.55; me.vy = myStats().jump * 0.9; me.ground = false; sfx("jump"); cam.shake = Math.max(cam.shake, 0.2); }
+  else if (ab === "charge") { me.charge = T; sfx("dash"); cam.shake = Math.max(cam.shake, 0.3); }
+  else if (ab === "hide") { me.hide = T; sfx("level"); }
+  else if (ab === "vanish") { me.vanish = T; sfx("pop"); emit(me.x, me.y + 1, me.z, 30, { colors: ["#c9ced6", "#ffffff", "#8a96a2"], speed: 3, up: 1.5, life: 0.8, grav: -1, size: 0.3 }); }
+  else if (ab === "roar") sfx("fanfare", 1);
+  else if (ab === "blink") {   // the farthest clear ground up to BLINK_D ahead
+    let bx = me.x, bz = me.z, by = me.y; for (let d = 1; d <= World.BLINK_D(tier); d += 0.5) { const x = me.x + fx * d, z = me.z + fz * d, g = World.surfaceAt(x, z, me.y + 2); if (g > -1e9 && Math.abs(g - me.y) < 3 && !World.blocked(x, z, g, 0.6)) { bx = x; bz = z; by = g; } }
+    emit(me.x, me.y + 1, me.z, 24, { colors: ["#ffd1f3", "#c9a6ff", "#ffffff"], speed: 3, up: 2, life: 0.6, grav: 0, tw: 1 }); me.x = bx; me.z = bz; me.y = by; me.vy = 0; sfx("pad");
+    emit(me.x, me.y + 1, me.z, 24, { colors: ["#ffd1f3", "#c9a6ff", "#ffffff"], speed: 3, up: 2, life: 0.6, grav: 0, tw: 1 }); sendPos(true); }
 }
 function doKick() { const t = now(); if (me.stun > 0 || me.transit || t < me.kickAt + World.KICK.cd) return; me.kickAt = t; me.kickT = 0.28; netSend({ t: "kick" }); sfx("swish"); }
 function doWhistle() {   // (owner, 2026-11-11) instant: back on your mount at once, even while stunned
@@ -613,10 +625,13 @@ function stepMe(dt) {
   if (me.stun > 0) mx = mz = 0;
   const kind = me.ground ? World.groundKind(me.x, me.z, me.y) : "", mud = kind === "mud" && !World.inPond(me.x, me.z, me.y) ? World.MUD_SLOW : kind === "mud" ? 0.6 : kind === "sand" ? World.SAND_SLOW : kind === "water" ? World.WATER_SLOW : 1;   // (owner, 2026-11-12) sand and the jungle's rivers slow you too
   const zoneNow = World.districtAt(me.x, me.z, me.y);
-  if (me.boost > 0) me.boost -= dt; if (me.dash > 0) me.dash -= dt;
+  if (me.boost > 0) me.boost -= dt; if (me.dash > 0) me.dash -= dt; for (const k of ["howl", "pounce", "charge", "hide", "vanish"]) if (me[k] > 0) me[k] -= dt;
+  if (me.hide > 0 && Math.random() < 0.5) emit(me.x, me.y + 1.2, me.z, 1, { colors: ["#ffd84a", "#fff3b8"], speed: 1.5, up: 0.5, life: 0.5, grav: 0, size: 0.14, spread: 2 });   // Tough Hide's glint
+  if (me.vanish > 0 && Math.random() < 0.4) emit(me.x, me.y + 1, me.z, 1, { colors: ["#c9ced6", "#ffffff"], speed: 0.5, up: 0.6, life: 0.7, grav: -0.5, size: 0.3, spread: 1.6 });   // Vanish's haze
+  if (me.charge > 0 && me.moving) emit(me.x, me.y + 0.2, me.z, 2, { colors: ["#e9e2d2", "#c9a27e"], speed: 2, up: 1.5, life: 0.4, grav: 4, size: 0.2 });
   const real = !World.startArea(me.x, me.z, me.y); if (real && !me.real && !me.foot) { sfx("boost"); cam.shake = Math.max(cam.shake, 0.15); emit(me.x, me.y + 1, me.z, 24, { colors: ["#c77dff", "#ffffff", "#e2b8ff"], speed: 4, up: 2, life: 0.6, grav: 0, size: 0.2 }); } me.real = real;
   let speed = me.foot ? 5.5 : (real ? st.speed : World.BASE_SPEED) * (bag.length ? 1 : World.EMPTY_FAST) * mud   // (owner, 2026-11-11) a parcel weighs you down: empty-handed you ride back much faster
-    * (me.dash > 0 ? 2.4 : me.boost > 0 ? 1.6 : 1);
+    * (me.dash > 0 ? 2.4 : me.boost > 0 ? 1.6 : 1) * (me.howl > 0 ? World.HOWL_X : 1) * (me.charge > 0 ? World.CHARGE_X : 1) * (me.pounce > 0 ? 2.2 : 1);
   if (me.dash > 0 && hyp(mx, mz) < 0.1) { mx = Math.sin(me.yaw); mz = Math.cos(me.yaw); }
   const grip = Math.max(70, speed * 7), acc = (me.ground ? (kind === "ice" ? grip * World.ICE_GRIP : grip) : Math.max(26, speed * 2.5)) * dt,   /* (owner, 2026-11-12) no drifting: quick to speed up and stop however fast it goes */   /* (owner, 2026-11-12) ice: hard to start, turn and stop */ tvx = mx * speed, tvz = mz * speed;
   me.vx += clamp(tvx - me.vx, -acc, acc); me.vz += clamp(tvz - me.vz, -acc, acc);
@@ -1224,6 +1239,8 @@ function onFx(m) {
     case "del": { const h = World.houses[m.house]; if (h && hyp(h.mx - me.x, h.mz - me.z) < 70) { emit(h.mx, h.my + 1.6, h.mz, 36, { colors: CONFETTI, speed: 5, up: 7, life: 1.2 }); if (m.roll >= 2) setTimeout(() => emit(h.mx, h.my + 2.6, h.mz, 20 + m.roll * 10, { colors: [RARITY_C[m.roll], "#ffffff"], speed: 5, up: 5, life: 1.1 }), 1500); houseMesh[m.house].pop = 0.3; } break; }
     case "busted": popup("GOOSE BUSTED!", "#ffd84a", m.x, m.y + 2, m.z, true); emit(m.x, m.y + 1, m.z, 30, { colors: ["#ffffff", "#e8eef2", "#ffd84a"], speed: 5, up: 5, life: 1.1, grav: 4 }); if (hyp(m.x - me.x, m.z - me.z) < 60) sfx("busted"); if (mineFx) { hitStop = 0.05; cam.shake = Math.max(cam.shake, 0.4); } break;
     case "yelp": { const d = dogMesh[m.dog]; if (d && hyp(d.x - me.x, d.z - me.z) < 45) tone(900, 500, 0.18, { type: "sawtooth", vol: 0.25 }); break; }
+    case "roar": if (o) { if (nearMe) { sfx("fanfare", 1); cam.shake = Math.max(cam.shake, 0.4); } for (let k = 0; k < 40; k++) { const a = (k / 40) * TAU; parts.length < PN && parts.push({ x: o.x, y: o.y + 0.8, z: o.z, vx: Math.cos(a) * m.r * 1.4, vy: 0.3, vz: Math.sin(a) * m.r * 1.4, t: 0, life: 0.7, size: 0.3, grav: 0, c: k % 2 ? "#ff6a1f" : "#ffd84a", r: k }); } } break;   // (owner, 2026-11-12)
+    case "ab": if (o && nearMe) emit(o.x, o.y + 1.2, o.z, 16, { colors: { hide: ["#ffd84a", "#fff3b8"], vanish: ["#c9ced6", "#ffffff"], howl: ["#bfe6ff", "#ffffff"], pounce: ["#e9e2d2"], charge: ["#e9e2d2", "#c9a27e"], blink: ["#ffd1f3", "#c9a6ff"] }[m.ab] || ["#ffffff"], speed: 3, up: 2, life: 0.6, grav: 0 }); break;
     case "bark": if (o) { if (!mineFx && nearMe) sfx("bark"); for (let k = 0; k < 26; k++) { const a = (k / 26) * TAU; parts.length < PN && parts.push({ x: o.x, y: o.y + 0.6, z: o.z, vx: Math.cos(a) * m.r * 1.6, vy: 0.5, vz: Math.sin(a) * m.r * 1.6, t: 0, life: 0.6, size: 0.22, grav: 0, c: "#ffffff", r: k }); } } break;
     case "bite": { const d = dogMesh[m.dog]; if (d && hyp(d.x - me.x, d.z - me.z) < 45) sfx("growl"); break; }
     case "steal": if (o && nearMe) sfx("steal"); break;

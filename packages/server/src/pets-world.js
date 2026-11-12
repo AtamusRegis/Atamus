@@ -81,22 +81,28 @@ export const MOUNTS = {
   dog: { name: "Dog", ab: "bark", look: "pup", size: 1, coats: [["Tan", "#c98a4b", "#f3dcc0"], ["Chocolate", "#5a3a24", "#d9a77a"], ["Blue Merle", "#5a6f8a", "#c9d6e8"], ["Ember", "#b8361c", "#ffb347"], ["Starlight", "#22305a", "#f2c94c"]] },
   cat: { name: "Cat", ab: "jump2", look: "cat", size: 0.95, coats: [["Tabby", "#b98a5a", "#f3e0c8"], ["Ginger", "#e8862e", "#ffe1bf"], ["Siamese", "#efe2cc", "#4a3426"], ["Lilac", "#b9a2d9", "#f5ecff"], ["Cosmic", "#3a1d6e", "#7fd0ff"]] },
   gator: { name: "Gator", ab: "dash", look: "gator", size: 1, coats: [["Green", "#4f7a3a", "#c9d48a"], ["Albino", "#efe6d8", "#ff9aa8"], ["Sapphire", "#2a5fb8", "#9fe0ff"], ["Black", "#1f2329", "#4fe08a"], ["Magma", "#2a1a14", "#ff6a1f"]] },
-  bear: { name: "Bear", ab: "bark", look: "bear", size: 1.05, coats: [["Brown", "#7a5236", "#c9a27e"], ["Black", "#2b2523", "#8a6a4e"], ["Polar", "#f4f8fb", "#bfe0f0"], ["Honey", "#d99a2b", "#fff0c2"], ["Aurora", "#2c4a7a", "#7ef0c8"]] },
-  wolf: { name: "Wolf", ab: "dash", look: "wolf", size: 1, coats: [["Gray", "#8a96a2", "#e9eef2"], ["Timber", "#7a5a3a", "#d9c3a2"], ["Arctic", "#eef3f8", "#a9c9e8"], ["Shadow", "#1b1d24", "#e33a4a"], ["Spirit", "#6fc8ff", "#ffffff"]] },
+  bear: { name: "Bear", ab: "hide", look: "bear", size: 1.05, coats: [["Brown", "#7a5236", "#c9a27e"], ["Black", "#2b2523", "#8a6a4e"], ["Polar", "#f4f8fb", "#bfe0f0"], ["Honey", "#d99a2b", "#fff0c2"], ["Aurora", "#2c4a7a", "#7ef0c8"]] },
+  wolf: { name: "Wolf", ab: "howl", look: "wolf", size: 1, coats: [["Gray", "#8a96a2", "#e9eef2"], ["Timber", "#7a5a3a", "#d9c3a2"], ["Arctic", "#eef3f8", "#a9c9e8"], ["Shadow", "#1b1d24", "#e33a4a"], ["Spirit", "#6fc8ff", "#ffffff"]] },
   // (owner, 2026-11-12) zones 6 to 10: Frostbite Fields foxes, Sunscorch Dunes raptors, Jungle Ruins trikes, Lava Flats
   // T-Rexes, Moon Garden unicorns
-  fox: { name: "Fox", ab: "jump2", look: "fox", size: 1, coats: [["Snow", "#f4f6f8", "#c9d6e2"], ["Silver", "#9aa6b4", "#f4f6f8"], ["Red", "#d9541f", "#fff1dc"], ["Frost", "#7fd0ff", "#ffffff"], ["Aurora", "#1d2a4a", "#7ef0c8"]] },
-  raptor: { name: "Raptor", ab: "dash", look: "raptor", size: 1, coats: [["Sand", "#d9b47a", "#8a6a3e"], ["Rust", "#a8582a", "#f0c48a"], ["Scarab", "#2f7a6a", "#e8c84a"], ["Sunset", "#e8662e", "#7a2a6a"], ["Pharaoh", "#1d1d2a", "#f2c94c"]] },
-  trike: { name: "Trike", ab: "bark", look: "trike", size: 1, coats: [["Moss", "#6a8a4a", "#d9c99a"], ["Clay", "#b9744a", "#f0d9b8"], ["Jade", "#2a9a7a", "#d9fff0"], ["Orchid", "#b05ad9", "#ffd1f3"], ["Temple Gold", "#d9a52a", "#2a5a3a"]] },
-  trex: { name: "T-Rex", ab: "bark", look: "trex", size: 0.9, coats: [["Ash", "#6a6a6a", "#b9b9b9"], ["Obsidian", "#1d1d22", "#8a8a9a"], ["Ember", "#c8401e", "#ffb347"], ["Molten", "#2a1a14", "#ff6a1f"], ["Inferno", "#ffd84a", "#ff3a1f"]] },
-  unicorn: { name: "Unicorn", ab: "jump2", look: "unicorn", size: 1, coats: [["Moonbeam", "#e9e6f4", "#b9b2d9"], ["Lavender", "#b9a2e8", "#ffffff"], ["Nebula", "#4a2a8a", "#ff8fd9"], ["Comet", "#2a4a8a", "#9fe0ff"], ["Celestial", "#1a1030", "#ffd84a"]] },
+  fox: { name: "Fox", ab: "vanish", look: "fox", size: 1, coats: [["Snow", "#f4f6f8", "#c9d6e2"], ["Silver", "#9aa6b4", "#f4f6f8"], ["Red", "#d9541f", "#fff1dc"], ["Frost", "#7fd0ff", "#ffffff"], ["Aurora", "#1d2a4a", "#7ef0c8"]] },
+  raptor: { name: "Raptor", ab: "pounce", look: "raptor", size: 1, coats: [["Sand", "#d9b47a", "#8a6a3e"], ["Rust", "#a8582a", "#f0c48a"], ["Scarab", "#2f7a6a", "#e8c84a"], ["Sunset", "#e8662e", "#7a2a6a"], ["Pharaoh", "#1d1d2a", "#f2c94c"]] },
+  trike: { name: "Trike", ab: "charge", look: "trike", size: 1, coats: [["Moss", "#6a8a4a", "#d9c99a"], ["Clay", "#b9744a", "#f0d9b8"], ["Jade", "#2a9a7a", "#d9fff0"], ["Orchid", "#b05ad9", "#ffd1f3"], ["Temple Gold", "#d9a52a", "#2a5a3a"]] },
+  trex: { name: "T-Rex", ab: "roar", look: "trex", size: 0.9, coats: [["Ash", "#6a6a6a", "#b9b9b9"], ["Obsidian", "#1d1d22", "#8a8a9a"], ["Ember", "#c8401e", "#ffb347"], ["Molten", "#2a1a14", "#ff6a1f"], ["Inferno", "#ffd84a", "#ff3a1f"]] },
+  unicorn: { name: "Unicorn", ab: "blink", look: "unicorn", size: 1, coats: [["Moonbeam", "#e9e6f4", "#b9b2d9"], ["Lavender", "#b9a2e8", "#ffffff"], ["Nebula", "#4a2a8a", "#ff8fd9"], ["Comet", "#2a4a8a", "#9fe0ff"], ["Celestial", "#1a1030", "#ffd84a"]] },
 };
 export const ZONE_KIND = ["dog", "cat", "gator", "bear", "wolf", "fox", "raptor", "trike", "trex", "unicorn"];   // each area's animal, in order (the same as CHASERS)
 export const coat = (sp, r) => (MOUNTS[sp] || MOUNTS.dog).coats[clamp(r | 0, 0, 4)].slice(1);   // [body, trim]
 export const coatName = (sp, r) => (MOUNTS[sp] || MOUNTS.dog).coats[clamp(r | 0, 0, 4)][0];
 // the mounts from before (and their rarity): (owner, 2026-11-11) each became a Dog of that rarity, keeping level and skin
 export const MOUNT_MOVED = { pup: ["dog", 0], piglet: ["dog", 0], bunny: ["dog", 0], fox: ["cat", 1], deer: ["cat", 1], parrot: ["cat", 1], raptor: ["gator", 2], stego: ["gator", 2], pony: ["gator", 2], owl: ["gator", 2], trex: ["bear", 3], trike: ["bear", 3], unicorn: ["wolf", 4], dragon: ["wolf", 4] };
-export const ABILITY = { bark: "Bark", dash: "Dash", jump2: "Double Jump" };
+// (owner, 2026-11-12) every animal its own ability: Dog Bark (animals near run home), Cat Double Jump, Gator Dash (a
+// burst), Bear Tough Hide (nothing hits or stuns you), Wolf Howl (a sprint), Fox Vanish (animals can't see you), Raptor
+// Pounce (a long leap), Trike Charge (a ram that knocks animals aside), T-Rex Roar (animals near freeze), Unicorn Blink
+// (a short teleport ahead)
+export const ABILITY = { bark: "Bark", jump2: "Double Jump", dash: "Dash", hide: "Tough Hide", howl: "Howl", vanish: "Vanish", pounce: "Pounce", charge: "Charge", roar: "Roar", blink: "Blink" };
+export const abilityTime = (ab, tier) => ({ hide: 2.5 + 0.75 * tier, howl: 3 + tier, vanish: 2.5 + 0.75 * tier, charge: 1.2 + 0.3 * tier, roar: 2 + 0.5 * tier }[ab] || 0);   // s
+export const ROAR_R = (tier) => 12 + 3 * tier, BLINK_D = (tier) => 10 + 3 * tier, CHARGE_R = 3, HOWL_X = 1.5, CHARGE_X = 1.6;
 export const VARIANTS = ["", "Shiny"], SHINY = 0.0001;   // (owner, 2026-11-11) 1 in 10,000; no Golden or Rainbow
 // (owner, 2026-11-11) the same mounts (kind, coat and skin) merge into one of the next coat up, keeping the skin; a
 // Legendary is the last. (owner, 2026-11-12) how many: 2 Commons make an Uncommon, 4 Uncommons a Rare, 8 Rares an Epic,
@@ -149,7 +155,7 @@ export function mountStats(m, zone) {   // m: { sp, r (rarity), spd }; zone: whe
 }
 // (owner, 2026-11-12) cooldowns are 20% shorter per rarity step too
 export const abilityCd = (m) => { const ab = (MOUNTS[m.sp] || MOUNTS.dog).ab; return ab === "jump2" ? 0 : ABILITY_BASE_CD[ab] / (1 + RARITY_UP * clamp(m.r | 0, 0, 4)); };
-export const ABILITY_BASE_CD = { bark: 12, dash: 8 };
+export const ABILITY_BASE_CD = { bark: 12, dash: 8, hide: 16, howl: 14, vanish: 14, pounce: 6, charge: 10, roar: 18, blink: 6 };
 // (owner, 2026-11-11) trails: one more to unlock every five areas opened (with five areas, the first at the Floating
 // Islands); any mount can wear any trail you've unlocked
 // (owner, 2026-11-12) and trails bought with Aura (d.trails)
