@@ -6,6 +6,9 @@ and any rule decided. Use `git log` for the code detail (and for the older Atamu
 
 ## 2026-11-11
 
+- **One reward screen; abilities for all (owner).** When a run's parcels open, the boxes shake together and everything
+  shows at once, a new mount right in its card (no separate unboxing to click through). Every mount has its animal's
+  ability from Common up; rarity only makes it stronger.
 - **All at once, then home (owner).** A run's parcels open together, each in its own centered card; the new mount's
   unboxing is centered. When the run's over you're taken back to the post office. A box for each parcel on the saddle
   again. Mount chances per rarity: Common 80%, Uncommon 40%, Rare 20%, Epic 10%, Legendary 5%, tried from the parcel's

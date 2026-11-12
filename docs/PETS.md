@@ -26,10 +26,12 @@ Every rule below is in `website/pets-world.js` (shared with the server, an ident
    best of the four, with a little animation (they slide together and the new one pops out); merges chain up to
    Legendary. (owner, 2026-11-11: the loop) **They open by themselves once you have no parcels left** (all delivered
    or lost): your only parcel opens straight after its delivery; with several, they wait on the left until the last is
-   delivered or lost, then (owner, 2026-11-11) **all open at once, full screen**, each in its own card in the middle of
-   the screen. They build up together (three shakes, rays and glow growing, longer the rarer the best one), burst and
-   each card shows what was inside (coins, and maybe a mount); then each new mount gets its own unboxing (centered), one
-   after another. A tap hurries the build-up, then closes it (it closes by itself after a few seconds too).
+   delivered or lost, then (owner, 2026-11-11) **all open at once, on one screen**: each box in its own card in the
+   middle of the screen with its rarity; they shake together (rays and glow growing, a little longer the rarer the best
+   one), burst, and every card shows what was inside at once: coins, and a mount the parcel brought right there in its
+   card (it drops in spinning over rays, its name and rarity under it, NEW! for the first of its kind and rarity). No
+   separate unboxing to click through. A tap hurries the shaking, then closes it (it closes by itself after a few
+   seconds too).
    (owner, 2026-11-11) **When the run's over** (nothing left delivered, carried, with a goose or on the ground) you're
    taken straight back to the post office. Up to 60 can wait;
    past that the oldest open by themselves.
@@ -118,9 +120,10 @@ A parcel that breaks or is lost is gone; the conveyor always has the next one. *
   area's animal is faster than the last, and rarity speeds any of them up, so a Common Cat beats a Common Dog, a
   Legendary Dog beats a Rare Cat and matches a Common Bear; Jump 8 + 0.5 x rarity + 0.25 x a; Grip (shortens stuns) 10%
   x rarity + 3% x a.
-- **Ability** by rarity: none when Common; Uncommon and Rare tier 1, Epic tier 2, Legendary tier 3: Dash (a burst of
-  speed; every 8 / 6 / 4 s), Double Jump (a second jump, higher at tier 2, a third at tier 3), Bark (chasers within
-  10.5 / 14 / 17.5 m run home; every 12 / 9 / 6 s).
+- **Ability:** (owner, 2026-11-11) every mount has its animal's ability, whatever its rarity; rarity only makes it
+  stronger: Common and Uncommon tier 1, Rare and Epic tier 2, Legendary tier 3. Dash (a burst of speed; every 8 / 6 /
+  4 s), Double Jump (a second jump, higher at tier 2, a third at tier 3), Bark (chasers within 10.5 / 14 / 17.5 m run
+  home; every 12 / 9 / 6 s).
 - Legendary: a glowing name tag and sparkling footsteps.
 - **Whistle** calls your mount. A stun knocks you off; you get up on foot (5.5 m/s) and the mount comes back when you
   whistle (owner, 2026-11-11: instantly, even while still stunned), when you reach it, or by itself after about 2 s.
@@ -259,7 +262,7 @@ gets those coins back the next time their data loads.
 - Coins top left (they count up; coins fly to it). Chat button under it. Delivered parcels down the left.
 - The parcel card top center: a row per parcel (tier, modifier, durability pips, address, distance, the Express
   countdown), stolen or dropped ones faded, and how many you carry of how many.
-- Bottom right: Kick (with its cooldown), Whistle above it, the Ability beside it (gray on a Common mount), Jump.
+- Bottom right: Kick (with its cooldown), Whistle above it, the Ability beside it, Jump.
 - Right edge: Stable, Upgrades, Odds, Settings (Friendly, music and SFX volume, shirt color, Admin for staff, Log out).
 - Controls: WASD or arrows, Space to jump, F kick, Q whistle, E ability, Enter chat; drag to look, wheel to zoom. Touch:
   a thumb joystick on the left, drag to look, pinch to zoom, the buttons.
@@ -330,6 +333,9 @@ its own fresh saves, with the same logins. It is described in `docs/POKEMON.md`;
 Courier's rules.
 
 ## Rejected / removed
+
+- (owner, 2026-11-11) A second screen for each new mount's unboxing after the parcels open (now shown in its card);
+  abilities locked on Common mounts.
 
 - (owner, 2026-11-11) Opening a run's parcels one after another (now all at once, each in its own card); one big box on
   the saddle for several parcels (a box each again); mount chances by parcel rarity (5% to 75%) with the rarity picked
