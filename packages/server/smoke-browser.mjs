@@ -74,7 +74,7 @@ try {
   // (owner, 2026-11-11) the only parcel: it opens full screen by itself; taps hurry it, then move on
   await until(page, () => getComputedStyle(document.getElementById("reveal")).display !== "none", "the parcel didn't open full screen");
   for (let k = 0; k < 3; k++) { await page.mouse.click(640, 400); await page.waitForTimeout(80); }
-  await until(page, () => document.querySelectorAll("#rlist .grow").length > 0, "the parcel's contents didn't show", null, 8000);
+  await until(page, () => document.querySelectorAll("#rgrid .rcard .grow").length > 0, "the parcel's contents didn't show", null, 8000);
   await page.waitForTimeout(500); for (let k = 0; k < 6 && (await page.evaluate(() => getComputedStyle(document.getElementById("reveal")).display !== "none" || getComputedStyle(document.getElementById("hatch")).display !== "none")); k++) { await page.mouse.click(640, 400); await page.waitForTimeout(700); }
   await until(page, () => getComputedStyle(document.getElementById("reveal")).display === "none", "the reveal didn't close");
   await until(page, () => document.getElementById("coinn").textContent !== "0", "the coin counter didn't move");

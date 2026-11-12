@@ -80,7 +80,10 @@ export function attachPets(server, { origins = [], allowLocal = false, store = m
     drop(p.bag, q); drop(p.stolen, q); const o = p.dropped.find((k) => k.parcel === q); if (o) drop(p.dropped, o); if (was) settle(p);
     const d = p.acct.data; d.fails = Math.min(99, d.fails + 1); changed(p);
     sendBag(p, { k: "lost", why, pid: q.pid }); carry(p); all(p.room, { t: "fx", k: "break", id: p.id, x: r1(p.x), y: r1(p.y), z: r1(p.z) }, p);
+    runDone(p);
   }
+  // (owner, 2026-11-11) the run's over (nothing left delivered, carried, with a goose or on the ground): back to the post office
+  function runDone(p) { if (!held(p) && !p.gone) teleport(p, W.SPAWN.x + (Math.random() - 0.5) * 6, W.SPAWN.z + 4 + Math.random() * 3, 0, "home"); }
   function hit(p, why) {   // one hit to one of the parcels on the saddle: a durability pip and 20% of its payout
     const q = pick1(p.bag); if (!q) return;
     q.dur--; q.hits++;
@@ -115,6 +118,7 @@ export function attachPets(server, { origins = [], allowLocal = false, store = m
     send(p.ws, { t: "delivered", pid: q.pid, house: q.house, coins, gift, near: roll.near, merges, data: d });
     sendBag(p, { k: "delivered", pid: q.pid });
     all(p.room, { t: "fx", k: "del", id: p.id, house: q.house, roll: roll.tier }, p); carry(p);
+    runDone(p);
   }
   const announce = (p, q, fused) => { const s = JSON.stringify({ t: "announce", name: p.name, sp: q.sp, r: q.r, va: q.va, ...(fused ? { fused: 1 } : {}) }); for (const o of online.values()) if (o.ws.readyState === 1) o.ws.send(s); };   // the whole server hears of a Shiny, Golden, Epic or Legendary
   function openGifts(p, gids, quiet) {   // open these gifts: roll what's inside each and add it

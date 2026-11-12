@@ -45,7 +45,8 @@ ok(sp("dog", 4) > sp("dog", 0) * 1.3 && sp("cat", 0) > sp("dog", 0) && sp("dog",
 ok(W.deliveryCoins(0, "", 0, 0, false) === 10 && W.deliveryCoins(4, "", 0, 1, false) === 120 && W.deliveryCoins(1, "express", 0, 0, true) === 20 && W.deliveryCoins(1, "express", 10, 0, false) === 100, "delivery coins");
 { const lo = () => 0.3, up = fresh.up;   // 0.3: a Common roll
   ok(W.rewardRoll(0, up, lo).tier === 0 && W.rewardRoll(0, up, () => 0.999).tier === 4, "a roll is its own (no pity)");
-  { const seq = (...v) => { let n = 0; return () => v[Math.min(n++, v.length - 1)]; }, c = W.giftContents(3, 2, up, seq(0.5, 0.0, 0.5, 0.5)); ok(c.pet && c.pet.sp === "gator" && c.pet.r === 2, "an Epic parcel from Goose Marsh can bring a Gator of its rarity or lower"); }
+  { const seq = (...v) => { let n = 0; return () => v[Math.min(n++, v.length - 1)]; }, c = W.giftContents(3, 2, up, seq(0.5, 0.05, 0.5)), c2 = W.giftContents(3, 2, up, seq(0.5, 0.15, 0.25, 0.3, 0.5)), c3 = W.giftContents(0, 0, up, seq(0.5, 0.85));
+    ok(c.pet && c.pet.sp === "gator" && c.pet.r === 3 && c2.pet.r === 1 && !c3.pet && W.PET_CHANCE.join() === "0.8,0.4,0.2,0.1,0.05", "a parcel tries its own rarity's chance first, then each one below (Epic 10%, Rare 20%, Uncommon 40%, Common 80%)"); }
   ok(Object.keys(W.MOUNTS).join() === "dog,cat,gator,bear,wolf" && W.CHASERS.join() === Object.keys(W.MOUNTS).join() && W.skinRoll(() => 0.0005) === 2, "the mounts are the areas' animals; one in a thousand is Golden");
   { const old = W.cleanData({ mounts: [{ id: 1, sp: "trex", lv: 7, va: 1 }, { id: 2, sp: "cat", lv: 3 }, { id: 3, sp: "unicorn", lv: 2 }], eggs: { basic: 1, rare: 1, legendary: 1 } });
     ok(old.mounts.map((m) => m.sp + m.r).join() === "dog3,dog1,dog4,dog0,dog2,dog4" && old.mounts[0].va === 1 && !("eggs" in old) && W.cleanData(old).mounts.length === 6, "every mount from before became a Dog of its rarity (level and skin kept); old eggs became Dogs, once"); }
@@ -71,7 +72,7 @@ function client(name) {
 }
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 const who = (name) => [...game.online.values()].find((p) => p.name === name);
-const put = (c, name, x, z, y = 0, yaw = 0) => { const p = who(name); c.send({ t: "pos", x, y, z, yaw, mv: 0, ct: 1 }); return sleep(60).then(() => { p.sus = 0; p.tpAt = 0; }); };   // a test's jump across town isn't a speed hack
+const put = (c, name, x, z, y = 0, yaw = 0) => { const p = who(name); p.tpAt = 0; c.send({ t: "pos", x, y, z, yaw, mv: 0, ct: 1 }); return sleep(60).then(() => { p.sus = 0; p.tpAt = 0; }); };   // a test's jump across town isn't a speed hack
 try {
   const a = client("A"), b = client("B"); await Promise.all([a.open, b.open]);
   a.send({ t: "register", user: "smokeA", pass: "pass1234" });
@@ -120,15 +121,16 @@ try {
     ok(op.list.length === 1 && op.list[0].r === del.gift.r && op.data.gifts.length === 0 && op.data.coins === W.GOOSE.bonus + 8 + op.list[0].coins, "opening a gift adds what's inside (once)");
     await b.wait((m) => m.t === "fx" && m.k === "del" && m.id === wa.id, "B sees the delivery"); }
   // a dog: bark, chase, bite
-  { const pa = who("smokeA"), D = W.dogs[0], q = pa.room.dogs[0]; for (const o of [...pa.room.dogs, ...pa.room.geese, ...pa.room.goats]) if (o.target === pa) { o.target = null; o.mode = 0; } pa.slots = new Set(); pa.calmUntil = 0; q.cool = 0; pa.stunUntil = 0; pa.graceUntil = 0; /* (an earlier animal may still hold one of A's attack slots) */ await put(a, "smokeA", 0, 7.5); pa.ready = { tier: 0, mod: "" }; a.send({ t: "grab" }); await a.wait((m) => m.t === "bag" && m.ev.k === "grab", "another parcel");
+  { const pa = who("smokeA"), D = W.dogs[0], q = pa.room.dogs[0]; for (const o of [...pa.room.dogs, ...pa.room.geese, ...pa.room.goats]) if (o.target === pa) { o.target = null; o.mode = 0; } pa.slots = new Set(); pa.calmUntil = 0; q.cool = 0; q.mode = 0; q.target = null; q.pause = 0; q.t3 = undefined; pa.stunUntil = 0; pa.graceUntil = 0; /* (an earlier animal may still hold one of A's attack slots) */ await put(a, "smokeA", 0, 7.5); pa.ready = { tier: 0, mod: "" }; a.send({ t: "grab" }); await a.wait((m) => m.t === "bag" && m.ev.k === "grab", "another parcel");
     await put(a, "smokeA", q.x + 0.6, q.z + 0.6, q.y); const bite = await a.wait((m) => m.t === "stun" && m.why === "dog", "the dog's bite"); ok(bite.s > 1 && pa.bag[0].hits === 1, "a dog's bite stuns and cracks the parcel");
     for (const d of pa.room.dogs) d.cool = Date.now() + 60000; await sleep(1200); const h = W.houses[pa.bag[0].house]; pa.stunUntil = 0; await put(a, "smokeA", h.mx, h.mz, h.my);
-    const d2 = await a.wait((m) => m.t === "delivered", "the second delivery"); { const nm = d2.data.mounts.find((m) => m.id === d2.gift.m); ok(d2.gift.m && nm.sp === "dog" && nm.r === d2.gift.r && d2.data.mounts.length === 2, "the second delivery brings a new mount: the parcel's area's animal, at the gift's rarity"); }
+    const d2 = await a.wait((m) => m.t === "delivered", "the second delivery"); { const nm = d2.data.mounts.find((m) => m.id === d2.gift.m); ok(d2.gift.m && nm.sp === "dog" && nm.r === d2.gift.r, "the second delivery brings a new mount: the parcel's area's animal, at the gift's rarity"); }
     pa.acct.data.mounts.find((m) => m.id === pa.acct.data.ride).r = 2; await put(a, "smokeA", 0, 7.5);
     for (let k = 0; k < 3; k++) { pa.ready = { tier: 0, mod: "" }; a.send({ t: "grab" }); await a.wait((m) => m.t === "bag" && m.ev.k === "grab" && m.bag.length === k + 1, "grab " + (k + 1)); await sleep(850); }
     pa.ready = { tier: 0, mod: "" }; a.send({ t: "grab" }); await sleep(300); ok(pa.bag.length === 3, "a Rare mount carries three parcels, each to its own address");
+    for (let i = a.inbox.length - 1; i >= 0; i--) if (a.inbox[i].t === "tp") a.inbox.splice(i, 1);   // (earlier runs' trips home)
     for (const q of [...pa.bag]) { const h = W.houses[q.house]; pa.stunUntil = 0; await put(a, "smokeA", h.mx, h.mz, h.my); await sleep(250); }
-    ok(!pa.bag.length && pa.acct.data.stats.del === 5, "each parcel is delivered at its own mailbox"); }
+    ok(!pa.bag.length && pa.acct.data.stats.del === 5, "each parcel is delivered at its own mailbox"); { const home = await a.wait((m) => m.t === "tp" && m.why === "home", "back to the post office after the run"); ok(Math.hypot(home.x - W.SPAWN.x, home.z - W.SPAWN.z) < 8, "the run over, back at the post office"); } }
   // (owner, 2026-11-11) the attack queue, the calm, and kicks all round
   { const pa = who("smokeA"), q = pa.room.dogs[0], q2 = pa.room.dogs[1]; await put(a, "smokeA", 0, 7.5); pa.ready = { tier: 0, mod: "" }; pa.stunUntil = 0; pa.graceUntil = 0; a.send({ t: "grab" }); await a.wait((m) => m.t === "bag" && m.ev.k === "grab", "a parcel for the queue");
     pa.slots = new Set([{}, {}]); q.cool = 0; q.mode = 0; await put(a, "smokeA", q.x + 2, q.z, q.y); await sleep(300); ok(q.mode === 0 && !q.target, "with both slots taken, another animal can't go after you");
