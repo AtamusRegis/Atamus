@@ -71,11 +71,12 @@ try {
   step = "deliver it and see the roll";
   await page.evaluate(() => { const P = window.Pets, h = P.World.houses[P.parcel.house]; P.teleport(h.mx, h.mz, h.my); });
   await until(page, () => window.Pets.save.stats.del === 1 && !window.Pets.parcel, "the delivery didn't land");
-  await until(page, () => getComputedStyle(document.getElementById("gifts")).display !== "none" && document.querySelectorAll("#gq .gtile").length === 1, "no delivered parcel on the left");
-  await page.click("#gq .gtile"); await until(page, () => getComputedStyle(document.getElementById("gopen")).display !== "none", "the gift didn't start opening");
-  for (let k = 0; k < 3; k++) { await page.click("#gopen").catch(() => {}); await page.waitForTimeout(80); }   // taps hurry the build-up
-  await until(page, () => getComputedStyle(document.getElementById("gres")).display !== "none" && document.querySelectorAll("#glist .grow").length > 0, "the gift's contents didn't show", null, 8000);
-  await page.click("#gx"); await until(page, () => getComputedStyle(document.getElementById("gifts")).display === "none", "the gift didn't close");
+  // (owner, 2026-11-11) the only parcel: it opens full screen by itself; taps hurry it, then move on
+  await until(page, () => getComputedStyle(document.getElementById("reveal")).display !== "none", "the parcel didn't open full screen");
+  for (let k = 0; k < 3; k++) { await page.mouse.click(640, 400); await page.waitForTimeout(80); }
+  await until(page, () => document.querySelectorAll("#rlist .grow").length > 0, "the parcel's contents didn't show", null, 8000);
+  await page.waitForTimeout(500); for (let k = 0; k < 6 && (await page.evaluate(() => getComputedStyle(document.getElementById("reveal")).display !== "none" || getComputedStyle(document.getElementById("hatch")).display !== "none")); k++) { await page.mouse.click(640, 400); await page.waitForTimeout(700); }
+  await until(page, () => getComputedStyle(document.getElementById("reveal")).display === "none", "the reveal didn't close");
   await until(page, () => document.getElementById("coinn").textContent !== "0", "the coin counter didn't move");
   await page.click("#tutskip"); await until(page, () => getComputedStyle(document.getElementById("tut")).display === "none" && window.Pets.save.set.tut, "the tutorial didn't skip");
   step = "open the menus";

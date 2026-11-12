@@ -66,7 +66,7 @@ export function attachPets(server, { origins = [], allowLocal = false, store = m
   const held = (p) => p.bag.length + p.stolen.length + p.dropped.length;
   const pick1 = (a) => a[Math.floor(Math.random() * a.length)];
   // everything about my parcels, after any change; ev says what happened
-  const sendBag = (p, ev) => send(p.ws, { t: "bag", bag: p.bag.map(parcelView), stolen: p.stolen.map((q) => ({ ...parcelView(q), goose: q.goose, left: r1(Math.max(0, (q.sinkAt - Date.now()) / 1000)) })), dropped: p.dropped.map((o) => ({ ...parcelView(o.parcel), x: r1(o.x), y: r1(o.y), z: r1(o.z), left: r1(Math.max(0, (o.until - Date.now()) / 1000)) })), cap: W.bagSize(mountOf(p).lv), ev });
+  const sendBag = (p, ev) => send(p.ws, { t: "bag", bag: p.bag.map(parcelView), stolen: p.stolen.map((q) => ({ ...parcelView(q), goose: q.goose, left: r1(Math.max(0, (q.sinkAt - Date.now()) / 1000)) })), dropped: p.dropped.map((o) => ({ ...parcelView(o.parcel), x: r1(o.x), y: r1(o.y), z: r1(o.z), left: r1(Math.max(0, (o.until - Date.now()) / 1000)) })), cap: W.bagSize(mountOf(p)), ev });
   const drop = (a, q) => { const n = a.indexOf(q); if (n >= 0) a.splice(n, 1); };
   // (owner, 2026-11-11) the attack queue: an animal takes one of a courier's slots to go after them (p.slots: the animals
   // chasing them) and leaves it when it attacks or gives up. No animal attacks while a parcel is with a goose or on the
@@ -92,7 +92,7 @@ export function attachPets(server, { origins = [], allowLocal = false, store = m
     send(p.ws, { t: "stun", s, why }); all(p.room, { t: "fx", k: "stun", id: p.id, s }, p);
   }
   function grab(p) {
-    const now = Date.now(), d = p.acct.data, lv = mountOf(p).lv; if (held(p) >= W.bagSize(lv) || !p.ready || now < p.stunUntil || W.counterDist(p.x, p.z) > W.GRAB_R + 1.2 || Math.abs(p.y) > 3) return;
+    const now = Date.now(), d = p.acct.data, lv = mountOf(p).lv; if (held(p) >= W.bagSize(mountOf(p)) || !p.ready || now < p.stunUntil || W.counterDist(p.x, p.z) > W.GRAB_R + 1.2 || Math.abs(p.y) > 3) return;
     if (p.ready.tier >= W.openFor(d)) { fillBelt(p); return; }   // rolled before the area closed (a reset): a new one
     const c = p.ready, hs = W.housesIn(c.tier), h = hs[Math.floor(Math.random() * hs.length)], max = W.boxDur(d.up.boxes);
     const q = { pid: ++p.pids, tier: c.tier, mod: c.mod, dur: max, max, hits: 0, house: h.id, t0: now, left: W.DROP_S * 1000, due: c.mod === "express" ? now + 1000 * (Math.max(W.EXPRESS_MIN, hyp(h.mx, h.mz) * W.EXPRESS_PER_M) + EXPRESS_EXTRA[c.tier]) : 0 };
@@ -126,7 +126,7 @@ export function attachPets(server, { origins = [], allowLocal = false, store = m
       const c = W.giftContents(g.r, g.pt, d.up); d.coins += c.coins; d.coupons += c.coupons; lvUp += W.addXp(m, c.xp);
       let mount = g.m ? d.mounts.find((k) => k.id === g.m) || null : null; if (mount) mount.r = g.r;   // the second delivery's mount: the gift's rarity
       else if (c.pet && d.mounts.length < W.MOUNT_CAP) { mount = { id: d.nextId++, sp: c.pet.sp, r: c.pet.r, va: c.pet.va, lv: 1, xp: 0 }; d.mounts.push(mount); if (mount.va || mount.r >= 3) announce(p, mount); }   // (owner, 2026-11-11) a mount, the parcel's area's animal at its rarity
-      delete c.pet; list.push({ gid, r: g.r, ...c, mount });
+      delete c.pet; list.push({ gid, r: g.r, pt: g.pt, ...c, mount });
     }
     if (!list.length) return; changed(p); flush(p.acct);
     if (!quiet) send(p.ws, { t: "opened", list, lvUp, data: d });

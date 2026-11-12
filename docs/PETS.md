@@ -24,13 +24,15 @@ Every rule below is in `website/pets-world.js` (shared with the server, an ident
    its rarity's color, the rarity popping up over the mailbox. The rarity is rolled on delivery; what's inside is
    rolled when you open it. **Four of one rarity merge** into one of the next (owner, 2026-11-11), its parcel tier the
    best of the four, with a little animation (they slide together and the new one pops out); merges chain up to
-   Legendary. Tap a parcel to open it: it builds up (three shakes, its sparkle and glow growing, about 2 s) then shows
-   the prize; tapping while it builds up makes it go faster. **Open all** opens every waiting parcel at once, showing
-   each one's rarity and the totals. What came out (coins, XP, Level Coupons, eggs, a mount) stays under them until
-   the next opening or you close it. Up to 60 can wait; past that the oldest open by themselves.
+   Legendary. (owner, 2026-11-11: the loop) **They open by themselves once you have no parcels left** (all delivered
+   or lost): your only parcel opens straight after its delivery; with several, they wait on the left until the last is
+   delivered or lost, then open **full screen, one after another**. Each builds up (three shakes, rays and glow growing,
+   longer the rarer), bursts and shows what was inside (coins, XP, Level Coupons, a mount, which then gets its own
+   unboxing); a tap hurries the build-up, then moves on (it moves on by itself after a moment too). Up to 60 can wait;
+   past that the oldest open by themselves.
 
-(owner, 2026-11-11) **A stack of parcels:** a mount carries 1 parcel, one more at levels 5, 10, 15 and 20 (5 at level
-20); ride back into the conveyor to load up. (owner, 2026-11-11) However many it carries, the mount shows **one big
+(owner, 2026-11-11) **A stack of parcels:** a mount carries one parcel per rarity rank: a Common one 1, Uncommon 2, Rare
+3, Epic 4, Legendary 5; ride back into the conveyor to load up. (owner, 2026-11-11) However many it carries, the mount shows **one big
 box** (the best tier's color, taped blue if any is Express), a little bigger for each extra parcel. Each has its own address (the same neighborhood as another or a
 different one), its own marker, and its own row on the parcel card (with its distance; the card shows how many of how
 many). The ground arrow points to the nearest. Each delivers at its own mailbox and rolls; several rolls take turns.
@@ -57,8 +59,10 @@ A parcel that breaks or is lost is gone; the conveyor always has the next one. *
 | Sky | Floating Islands | x15 | +100% | 4% |
 
 - (owner, 2026-11-11) **At least 30% go to the farthest area you've opened**; the rest spread over the ones in between.
-- (owner, 2026-11-11) **Districts open by themselves as your mounts level up** (Route Permits went): one more each time
-  your best mount reaches level 3, 6, 9 and 12 (`OPEN_LV`). Tiers for districts you haven't opened never appear. The
+- (owner, 2026-11-11) **The next area opens once you have an Uncommon or better of the area before's animal** (Route
+  Permits went): an Uncommon Dog opens Maple Suburbs, an Uncommon Cat Goose Marsh, an Uncommon Gator Cliffside, an
+  Uncommon Bear the Floating Islands (`openFor`; in order: a Cat alone opens nothing). Tiers for districts you haven't
+  opened never appear. The
   more districts are open, the bigger the higher tiers' share (tier n's weight x (1 + n x (open - 1) / 5)), and so does
   the ridden mount's level (owner, 2026-11-11: the higher level, the pricier the parcels and the
   longer the trips): tier n's weight x (1 + n x (level - 1) / 8).
@@ -80,10 +84,11 @@ A parcel that breaks or is lost is gone; the conveyor always has the next one. *
 | Epic | 4% | 220-420 | a Level Coupon |
 | Legendary | 1% | 1,500-2,600 | 2 Level Coupons |
 
-- (owner, 2026-11-11) **Mounts drop from parcels:** a parcel can bring its area's animal at the parcel's rarity (a Rare
-  parcel from Goose Marsh: a Rare Gator): Common 5%, Uncommon 10%, Rare 20%, Epic 40%, Legendary 75% (1 in 100 Shiny,
-  1 in 1,000 Golden). Delivering in the same area again is how you chase a rarer one. Each new mount gets the unboxing
-  (several after Open all, one after another); an Epic, Legendary, Shiny or Golden one is announced to the server.
+- (owner, 2026-11-11) **Mounts drop from parcels:** a parcel can bring its area's animal, at the parcel's rarity or
+  lower, any of them equally (a Legendary parcel from Main Street: a Common, Uncommon, Rare, Epic or Legendary Dog). The
+  chance by parcel rarity: Common 5%, Uncommon 10%, Rare 20%, Epic 40%, Legendary 75% (1 in 100 Shiny, 1 in 1,000
+  Golden). Delivering in the same area again is how you chase a rarer one. Each new mount gets the unboxing in the
+  opening sequence; an Epic, Legendary, Shiny or Golden one is announced to the server.
 
 - Every delivery also gives the mount 5 + 3 per tier Training XP.
 - **Luck** (the tier's, plus Lucky Stamps) weights each roll by (1 + luck) to the power of its rank, then the odds are
@@ -104,11 +109,12 @@ A parcel that breaks or is lost is gone; the conveyor always has the next one. *
 - (owner, 2026-11-11) **The mounts are the areas' animals:** Dog (Main Street, Bark), Cat (Maple Suburbs, Double
   Jump), Gator (Goose Marsh, Dash), Bear (Cliffside, Bark), Wolf (Floating Islands, Dash), each **Common to Legendary**
   (the rarity is the mount's own: its coat, its stats and its name, e.g. "Rare Gator"; the town's animals of that kind
-  and rarity wear the same coat). A new courier starts with a Common Dog. Mounts from before became the animal of
-  their old rarity, keeping level and skin (Pup, Piglet, Bunny: Dog; Cat, Fox, Deer, Parrot: Cat; Raptor,
-  Stegosaurus, Pony, Owl: Gator; T-Rex, Triceratops: Bear; Unicorn, Dragon: Wolf).
-- **Stats** (rarity 0-4, n = level - 1): Speed 10 + 0.6 x rarity + (0.3 + 0.03 x rarity) x n m/s (owner, 2026-11-11:
-  faster as it levels; about 16 to 20 m/s at level 20); Jump 8 + 0.25 x rarity
+  and rarity wear the same coat). A new courier starts with a Common Dog. (owner, 2026-11-11) Every mount from before (and every
+  leftover egg) became a **Dog** of the same rarity, level and skin, once (saved data version 2), so nobody has an animal
+  from an area they haven't reached.
+- **Stats** (rarity 0-4, area a 0-4 for Dog to Wolf, n = level - 1): (owner, 2026-11-11) Speed 10 + 1.5 x a + 1 x
+  rarity + 0.3 x n m/s: each area's animal is faster than the last, and rarity speeds any of them up, so a Common Cat
+  beats a Common Dog, a Legendary Dog beats a Rare Cat and matches a Common Bear; Jump 8 + 0.25 x rarity
   + (0.08 + 0.01 x rarity) x n; Grip (shortens stuns) 5% x rarity + 2% x n, up to 60%.
 - **Ability** from level 5, stronger at 10 and 20: Dash (a burst of speed; every 8 / 6 / 4 s), Double Jump (a second jump, higher at 10, a third at 20), Bark (dogs within 10.5 / 14 / 17.5 m
   run home; every 12 / 9 / 6 s).
@@ -141,7 +147,7 @@ as a setting).
 (owner, 2026-11-11) **Areas you haven't opened are there to see but closed off:** a shimmering wall with a padlock
 across the town at each one's start (the Floating Islands: a bubble over the Sky Cannon). Heading east stops at it;
 heading west is always fine. Ziplines, the sewer pipe and the Sky Cannon don't take you into a closed area. They go
-when your mounts open the area (see Parcels).
+when you open the area (an Uncommon or better of the area before's animal; see Parcels).
 
 A fixed town made in code (`buildTown` in pets-world.js); 30 houses. (owner, 2026-11-11) **One line, short
 neighborhoods, harder the farther out:** the post office at the west end, then one road east through every district;
@@ -326,6 +332,10 @@ its own fresh saves, with the same logins. It is described in `docs/POKEMON.md`;
 Courier's rules.
 
 ## Rejected / removed
+
+- (owner, 2026-11-11) Areas opening with mount levels (3 / 6 / 9 / 12); parcels carried by level (now by rarity);
+  turning old mounts into the area animal of their rarity (they all became Dogs); tapping a parcel to open it and Open
+  all (they open by themselves once you have none left to deliver).
 
 - (owner, 2026-11-11) **Eggs** (and hatching): parcels drop mounts directly. The twelve old species (Pup, Piglet,
   Bunny, Fox, Deer, Raptor, Stegosaurus, Pony, T-Rex, Triceratops, Unicorn, and before them Parrot, Owl, Dragon): the
