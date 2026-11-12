@@ -4,7 +4,7 @@
 // deliveries, rolls, damage, coins, mounts; this page shows the town (pets-world.js, shared with the server), moves you
 // and asks. Phone first: a thumb joystick, drag to look, pinch to zoom, big buttons.
 import * as THREE from "./vendor/three.module.min.js";
-import * as World from "./pets-world.js?v=1794471281";
+import * as World from "./pets-world.js?v=1794472117";
 
 const $ = (id) => document.getElementById(id);
 const { TAU, clamp, hyp, MOUNTS, TIERS, RARITY, RARITY_C, MODS, UPGRADES } = World;
@@ -111,7 +111,7 @@ function buildTown() {
     m.position.copy(a).lerp(b, 0.5); m.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), b.clone().sub(a).normalize()); scene.add(m);
     box(0.3, 3.2, 0.3, "#8a5a34", z.x, z.y + 1.6, z.z); box(0.3, 3.2, 0.3, "#8a5a34", z.tx, z.ty + 1.6, z.tz); box(1.6, 0.14, 1.6, "#ffd84a", z.x, z.y + 0.07, z.z, null, false);
   }
-  for (const e of [World.PIPE.a, World.PIPE.b]) {
+  for (const e of World.PIPE.off ? [] : [World.PIPE.a, World.PIPE.b]) {
     const m = new THREE.Mesh(new THREE.CylinderGeometry(World.PIPE.r, World.PIPE.r, 0.6, 20, 1, true), new THREE.MeshLambertMaterial({ color: "#4f9a5a", side: THREE.DoubleSide })); m.position.set(e.x, e.y + 0.3, e.z); m.castShadow = true; scene.add(m);
     const lip = new THREE.Mesh(new THREE.TorusGeometry(World.PIPE.r, 0.22, 8, 24).rotateX(Math.PI / 2), mat("#5fb56b")); lip.position.set(e.x, e.y + 0.6, e.z); scene.add(lip);
     const dark = new THREE.Mesh(new THREE.CircleGeometry(World.PIPE.r - 0.05, 20).rotateX(-Math.PI / 2), basic("#10151a")); dark.position.set(e.x, e.y + 0.42, e.z); scene.add(dark);
@@ -690,7 +690,7 @@ function triggers(t) {
   const C = World.CANNON; if (near(C, C.r) && openNow >= 5) { const I = World.ISLES[C.to]; arc(I.x - 9, I.y, I.z, 3.2, 27, "cannon"); sfx("cannon"); cam.shake = 0.9; banner("SKY CANNON!", "#9aa8ff"); emit(C.x, C.y + 1, C.z, 40, { colors: ["#ffffff", "#c9ced6"], speed: 9, up: 5, life: 0.9, grav: 2, size: 0.4 }); return; }
   for (const p of World.pads) if (near(p, 1.7)) { arc(p.tx, p.ty, p.tz, 1.1 + hyp(p.tx - p.x, p.tz - p.z) / 70, 9, "pad"); sfx("pad"); return; }
   // (owner, 2026-11-11) the pipe's mouth and the balloon take you from farther off
-  if (((near(World.PIPE.a, World.PIPE.r + 1.5) && openNow >= 4) || near(World.PIPE.b, World.PIPE.r + 1.5)) && t > askAt) { askAt = t + 1; netSend({ t: "pipe" }); return; }
+  if (!World.PIPE.off && ((near(World.PIPE.a, World.PIPE.r + 1.5) && openNow >= 4) || near(World.PIPE.b, World.PIPE.r + 1.5)) && t > askAt) { askAt = t + 1; netSend({ t: "pipe" }); return; }
   if (World.balloons.some((b) => near(b, BALLOON_R, 6)) && t > askAt) { askAt = t + 1; netSend({ t: "balloon" }); }
 }
 
@@ -1329,7 +1329,7 @@ function buildGates() {
 function stepGates(t) { const open = World.openFor(save); for (const q of gates) { q.g.visible = q.d >= open || q.d === gateHold; if (q.g.visible) { q.w.material.opacity = 0.34 + Math.sin(t * 2 + q.d) * 0.08; q.L.rotation.y = Math.sin(t * 0.8 + q.d) * 0.4; } } }
 // (owner, 2026-11-11) a newly opened area gets a short showing: letterbox bars, the camera flies to its gate as it
 // bursts open, then to its chasers (the rarest one), then to its other dangers. A tap or a key skips it. Your mount stays put.
-let cine = null, gateHold = -1, lastOpen = 0, lastOpenFor = "";
+let cine = null, gateHold = -1, lastOpen = 0, lastOpenFor = "", zoneCalm = 0;
 const CINE_HAZ = [
   null,
   [{ at: () => ({ x: 136.5, y: 0, z: -22 }), t: "GEESE" }, { at: () => World.sprinklers[1], t: "SPRINKLERS" }],
@@ -1365,8 +1365,10 @@ function stepCine(dt) {
 }
 function watchZones() {   // a new area opened (not on logging in): show it
   const o = World.openFor(save); if (lastOpenFor !== myName) { lastOpenFor = myName; lastOpen = o; return; }
-  if (reveal || opening || $("hatch").style.display === "flex") return;   // after the parcels and the new mount have had their moment
-  if (o > lastOpen) { const ds = []; for (let d = lastOpen; d < o; d++) ds.push(d); lastOpen = o; setTimeout(() => playZones(ds), 1200); }   // after the level-up has had its moment
+  // (owner, 2026-11-12) only once every parcel's been opened and every window is closed (the reward screen, a new mount,
+  // a merge, the menus), and it's stayed that way for a moment
+  const t = performance.now(); if (cine || reveal || opening || merging || save.gifts.length || hatchQ.length || panel || $("hatch").style.display === "flex") { zoneCalm = t; return; }
+  if (o > lastOpen && t - zoneCalm > 1200) { const ds = []; for (let d = lastOpen; d < o; d++) ds.push(d); lastOpen = o; playZones(ds); }
 }
 addEventListener("pointerdown", () => { if (cine && (cine.i > 0 || cine.t > 0.8)) endCine(); });
 addEventListener("keydown", (e) => { if (cine && (e.code === "Escape" || e.code === "Space" || e.code === "Enter")) endCine(); });

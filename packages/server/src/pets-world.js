@@ -252,10 +252,10 @@ export const PO = { x: 0, z: 0, b: { x: 0, z: -9, hw: 8, hd: 5, h: 6.5 }, belt: 
 export const SPAWN = { x: 0, z: 17 }, SUBURBS_X = 110, TOWN = { x0: -45, x1: 190, z0: -30, z1: 30 }, MARSH = { x0: 190, x1: 290, z0: -30, z1: 30 }, CLIFF = { x0: 290, x1: 415, z0: -30, z1: 30 };   // (owner, 2026-11-11) narrow: the road down the middle, houses both sides
 export const TERRACE = (n) => ({ x0: 300 + 38 * (n - 1), x1: n === 3 ? 414 : 300 + 38 * n, z0: -27, z1: 27, y: 6 * n });   // n = 1..3: Cliffside's three steps, each with a ramp up the road onto it
 export const ISLES = [{ x: 462, z: 0, y: 32, r: 18 }, { x: 512, z: -16, y: 38, r: 16 }, { x: 562, z: 6, y: 44, r: 17 }];
-export const ISLE_X = 425, FALL_Y = 22;   // past ISLE_X and high up: the Floating Islands; below FALL_Y there, you've fallen off
+export const ISLE_X = 425, FALL_Y = 22, EDGE_Y = -20;   // EDGE_Y: (owner, 2026-11-12) below it anywhere but the islands, you rode off the edge;   // past ISLE_X and high up: the Floating Islands; below FALL_Y there, you've fallen off
 const MARSH_X = [212, 240, 268];
 // shortcuts: the sewer pipe (Main Street to the foot of Cliffside; a goose sits in it part of the time), ziplines
-export const PIPE = { a: { x: 54.5, z: -25, y: 0 }, b: { x: 294, z: -24, y: 0 }, r: 2, time: 4, every: 24, goose: 8 };
+export const PIPE = { a: { x: 54.5, z: -25, y: 0 }, b: { x: 294, z: -24, y: 0 }, r: 2, time: 4, every: 24, goose: 8, off: true };   // (owner, 2026-11-12) no more shortcuts: the pipe and the zipline tower went
 export const pipeGoose = (t) => t % PIPE.every < PIPE.goose;   // t: seconds (the server's clock)
 export const ZIP_SPEED = 24, STEP_H = 2;
 // district hazards (the page runs sprinklers and wind off the server's clock; the server runs the rest)
@@ -307,10 +307,8 @@ function buildTown() {
   ISLES.forEach((s) => disc(s.x, s.z, s.r, s.y, "isle"));
   // ---- walls round the edges; the road passes through ----
   const wall = (x0, x1, z0, z1, h) => solid((x0 + x1) / 2, (z0 + z1) / 2, Math.abs(x1 - x0) / 2 + 0.5, Math.abs(z1 - z0) / 2 + 0.5, -5, h);
-  wall(TOWN.x0, TOWN.x1, TOWN.z0, TOWN.z0, 6); wall(TOWN.x0, TOWN.x1, TOWN.z1, TOWN.z1, 6); wall(TOWN.x0, TOWN.x0, TOWN.z0, TOWN.z1, 6);
+  // (owner, 2026-11-12) no walls round the outside: ride off the edge and you're back at the post office (the run starts over)
   wall(TOWN.x1, TOWN.x1, TOWN.z0, -6, 6); wall(TOWN.x1, TOWN.x1, 6, TOWN.z1, 6);
-  wall(MARSH.x0, MARSH.x1, MARSH.z0, MARSH.z0, 6); wall(MARSH.x0, MARSH.x1, MARSH.z1, MARSH.z1, 6);
-  wall(CLIFF.x0, CLIFF.x1, CLIFF.z0, CLIFF.z0, 6); wall(CLIFF.x0, CLIFF.x1, CLIFF.z1, CLIFF.z1, 6); wall(CLIFF.x1, CLIFF.x1, CLIFF.z0, CLIFF.z1, 40);
   wall(MARSH.x1, MARSH.x1, MARSH.z0, -6, 6); wall(MARSH.x1, MARSH.x1, 6, MARSH.z1, 6); wall(MARSH.x0, MARSH.x0, MARSH.z0, -6, 6); wall(MARSH.x0, MARSH.x0, 6, MARSH.z1, 6);
   // ---- the post office: the building, and the conveyor out of its door ----
   solid(PO.b.x, PO.b.z, PO.b.hw, PO.b.hd, -1, PO.b.h + 3);
@@ -342,15 +340,12 @@ function buildTown() {
   zips.push({ x: ISLES[2].x + 13, z: ISLES[2].z - 6, y: ISLES[2].y, tx: FAR.x0 + 8, tz: -6, ty: 0, far: 1 });   // (owner, 2026-11-12) from the last island down to Frostbite Fields
   // each island's two houses stand where they're farthest from its pads, landing spots, balloon and middle (owner, 2026-11-11: couriers landed inside them)
   ISLES.forEach((s, n) => {
-    const keep = [{ x: s.x, z: s.z }, ...pads.filter((p) => p.from === n), ...pads.filter((p) => p.to === n).map((p) => ({ x: p.tx, z: p.tz })), ...balloons.filter((b) => hyp(b.x - s.x, b.z - s.z) < s.r), ...zips.filter((q) => hyp(q.x - s.x, q.z - s.z) < s.r)];   // (owner, 2026-11-12) and clear of the zipline if (n === CANNON.to) keep.push({ x: s.x - 9, z: s.z });
+    const keep = [{ x: s.x, z: s.z }, ...pads.filter((p) => p.from === n), ...pads.filter((p) => p.to === n).map((p) => ({ x: p.tx, z: p.tz })), ...balloons.filter((b) => hyp(b.x - s.x, b.z - s.z) < s.r), ...zips.filter((q) => hyp(q.x - s.x, q.z - s.z) < s.r)];   /* (owner, 2026-11-12) and clear of the zipline */ if (n === CANNON.to) for (let dx = -20; dx <= -4; dx += 2) keep.push({ x: s.x + dx, z: s.z });   // (owner, 2026-11-12) clear of where the cannon lands you, and the way in
     for (let k = 0; k < 2; k++) { let best = null, bs = -1;
       for (let q = 0; q < 72; q++) { const a = (q / 72) * TAU, x = s.x + Math.cos(a) * s.r * 0.62, z = s.z + Math.sin(a) * s.r * 0.62, yaw = Math.atan2(s.x - x, s.z - z), mx = x + Math.sin(yaw) * 5.5, mz = z + Math.cos(yaw) * 5.5;
         const sc = Math.min(...keep.map((o) => Math.min(hyp(o.x - x, o.z - z) - 3.6, hyp(o.x - mx, o.z - mz)))); if (sc > bs) { bs = sc; best = { x, z, yaw }; } }
       house(best.x, best.z, s.y, best.yaw, 4, 5); keep.push({ x: best.x, z: best.z }, { x: best.x + Math.sin(best.yaw) * 5.5, z: best.z + Math.cos(best.yaw) * 5.5 }); }
   });
-  // ---- the zipline tower at the suburbs' end, down to the marsh's far side; and from the top step back to it ----
-  rampX(176, 186, 19, 27, 0, 6, "stone"); rect(186, 189.4, 19, 27, 6, "stone");
-  zips.push({ x: 187.7, z: 21, y: 6, tx: 284, tz: 0, ty: 0.12 }, { x: TERRACE(3).x0 + 30, z: 20, y: 18, tx: 187.7, tz: 25, ty: 6 });
   // ---- goats: one on each step, and one more on the top ----
   for (let n = 1; n <= 3; n++) { const t = TERRACE(n); goats.push({ id: goats.length, hx: t.x0 + 6, hz: n % 2 ? 22 : -22, y: t.y }); }
   goats.push({ id: goats.length, hx: TERRACE(3).x0 + 26, hz: -10, y: TERRACE(3).y });
@@ -358,7 +353,6 @@ function buildTown() {
   const FK = ["ice", "sand", "jungle", "basalt", "moon"];
   for (let k = 0; k < FAR.n; k++) { const x0 = farX(5 + k); rect(x0, x0 + FAR.len, FAR.z0, FAR.z1, 0, FK[k]); row(x0 + 18, 5 + k, 17, 0, 8, false); }
   const F1 = FAR.x0 + FAR.n * FAR.len; road(FAR.x0, 0, F1, 0, 8);
-  wall(FAR.x0, F1, FAR.z0, FAR.z0, 8); wall(FAR.x0, F1, FAR.z1, FAR.z1, 8); wall(FAR.x0, FAR.x0, FAR.z0, FAR.z1, 8); wall(F1, F1, FAR.z0, FAR.z1, 8);
   balloons.push({ x: FAR.x0 + FAR.n * FAR.len - 9, z: 14, y: 0 });   // (owner, 2026-11-12) the one balloon home: at the very end of the last zone
   { const x0 = farX(7); for (const dx of [22, 50, 78]) rect(x0 + dx - 3, x0 + dx + 3, FAR.z0, FAR.z1, 0.02, "water", -0.5); }   // the jungle's rivers
   { const x0 = farX(8); for (const [dx, z, r] of [[14, 12, 4], [30, -3, 3], [46, -16, 5], [62, 4, 3.5], [80, -12, 4], [88, 20, 3.5]]) { lavas.push({ x: x0 + dx, z, r }); disc(x0 + dx, z, r, 0.03, "lava", -0.5); } }

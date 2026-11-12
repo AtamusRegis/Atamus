@@ -206,7 +206,7 @@ power (4 x (rarity + half its area's number)) is past 4 x the animal's area numb
   You start just south of it, facing east down the road.
 - **Main Street** (Bronze, x 40-90): 6 houses; 2 dogs.
 - **Maple Suburbs** (Silver, x 120-170): 6 houses, fenced yards by the first two, two small ponds between houses
-  (6 geese), 4 dogs, 4 sprinklers beside the road, and low hedges across half the road, side to side (jump or weave). The zipline tower at its east end.
+  (6 geese), 4 dogs, 4 sprinklers beside the road, and low hedges across half the road, side to side (jump or weave).
 - **Goose Marsh** (Gold, x 190-290): over the bridge where the road leaves town. Mud (25% slower; 40% in a pond), a
   broken boardwalk on (gaps of mud to jump), one across the middle, 6 houses on platforms, three ponds (11 geese), 5 dogs.
 - **Cliffside** (Diamond, x 290-415): three steps up the road, 6 m each, a ramp up the road onto each; a house each side
@@ -216,11 +216,12 @@ power (4 x (rarity + half its area's number)) is past 4 x the animal's area numb
   anywhere inside the red ring round it, 9 m (it was 3).
 - **Floating Islands** (Sky): three islands 32 to 44 m up off Cliffside's far side, two houses each, joined by jump
   pads; 3 dogs, wind and sky geese (every 8 to 14 s). Each island's houses stand as far as they can from its pads,
-  landing spots and middle (owner, 2026-11-12: and the zipline down); anyone who somehow ends up inside something solid is moved out to the nearest
+  landing spots and middle (owner, 2026-11-12: and the zipline down, and the first island's houses clear of the cannon's
+  landing and the way in); anyone who somehow ends up inside something solid is moved out to the nearest
   clear spot. Falling off costs a parcel 1 hit and puts you back on the last island you stood on.
 - (owner, 2026-11-12) **Zones 6 to 10**, on the ground past the islands (`FAR`: x 600 to 1100, 100 m each), reached
   by the **zipline** from the last island (closed in a bubble until Frostbite Fields opens). (owner, 2026-11-12) The one
-  **balloon** home to the post office is at the very end of the Moon Garden. One road down the middle, three houses each side, five of each zone's animal, walls round it. Express
+  **balloon** home to the post office is at the very end of the Moon Garden. One road down the middle, three houses each side, five of each zone's animal. Express
   parcels get 70 / 75 / 80 / 85 / 90 s on top. Each has its own going:
   - **Frostbite Fields** (Fox): ice everywhere: slow to start, turn and stop (12% grip).
   - **Sunscorch Dunes** (Raptor): sand (80% speed) and sandstorms: gusts like the islands' wind, 1.4x as strong.
@@ -230,9 +231,10 @@ power (4 x (rarity + half its area's number)) is past 4 x the animal's area numb
   - **Moon Garden** (Unicorn): low gravity (45%).
   Falling off the islands only counts over the islands, not the zones below or the zipline down.
 
-**Shortcuts:** the sewer pipe (Main Street to the foot of Cliffside in 4 s; a goose sits in it 8 s in every 24, eyes showing at both
-ends, and costs 1 hit), ziplines (the tower at the suburbs' east end down into the marsh; the top of Cliffside back to
-the tower), boost pads (x1.6 speed for 2.5 s) on the road, the alleys and the marsh's main
+**Shortcuts:** (owner, 2026-11-12) none any more (the sewer pipe and the zipline tower went; the only zipline is the
+way down to Frostbite Fields). **No walls round the outside:** ride or jump off any edge of the town (anywhere but
+the islands, which put you back on the last one) and the run starts over: every parcel you hold is lost and you're
+back at the post office (below 20 m down, `EDGE_Y`). Still there: boost pads (x1.6 speed for 2.5 s) on the road, the alleys and the marsh's main
 boardwalk, and rooftop hops (three roofs, each 2 m higher, up the side of each Cliffside step's face: they need a jump
 of about 2 m).
 
@@ -330,7 +332,8 @@ Cannon's boom. (owner, 2026-11-11: more umph, and moments for the big things)
 - **A newly opened area** gets a short showing (about 9 s, letterbox bars, the HUD hidden, a tap or a key skips): the
   camera flies to its gate as it bursts open (its name and "OPEN!"), round its rarest chaser (the kind and its
   rarity), then to its other dangers: Suburbs geese and sprinklers; Marsh geese and mud; Cliffside goats and falling
-  rocks; Islands wind and sky geese. Not when logging in. Floating numbers rise and fade in 0.8 s. Every sound is made in the page (no files); music is a small
+  rocks; Islands wind and sky geese. Not when logging in. (owner, 2026-11-12) It waits until every parcel has been opened and
+  every window is closed (the reward screen, a new mount or merge, the menus), then a moment more. Floating numbers rise and fade in 0.8 s. Every sound is made in the page (no files); music is a small
 loop. (owner, 2026-11-11) The same tune in every area, a little different in each, switching at the next loop: Main
 Street as it is; Maple Suburbs with a soft chime an octave up; Goose Marsh a touch slower and reedy with a bluesy note
 or two; Cliffside brassier over a deeper bass; the Floating Islands an octave up, airy, with an echo.
@@ -380,6 +383,9 @@ its own fresh saves, with the same logins. It is described in `docs/POKEMON.md`;
 Courier's rules.
 
 ## Rejected / removed
+
+- (owner, 2026-11-12) The sewer pipe and the zipline tower (shortcuts); the walls round the outside of the town (ride
+  off the edge to start a run over).
 
 - (owner, 2026-11-12) The balloons on the last Floating Island and at Frostbite Fields' start: the only balloon is at
   the end of all the zones.

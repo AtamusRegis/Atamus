@@ -132,6 +132,9 @@ try {
     for (let i = a.inbox.length - 1; i >= 0; i--) if (a.inbox[i].t === "tp") a.inbox.splice(i, 1);   // (earlier runs' trips home)
     for (const q of [...pa.bag]) { const h = W.houses[q.house]; pa.stunUntil = 0; await put(a, "smokeA", h.mx, h.mz, h.my); await sleep(250); }
     ok(!pa.bag.length && pa.acct.data.stats.del === 5, "each parcel is delivered at its own mailbox"); { const home = await a.wait((m) => m.t === "tp" && m.why === "home", "back to the post office after the run"); ok(Math.hypot(home.x - W.SPAWN.x, home.z - W.SPAWN.z) < 8, "the run over, back at the post office"); } }
+  // (owner, 2026-11-12) off the edge of the town: the run starts over at the post office
+  { for (let i = a.inbox.length - 1; i >= 0; i--) if (a.inbox[i].t === "tp") a.inbox.splice(i, 1); await put(a, "smokeA", 60, 40, 0); who("smokeA").tpAt = 0; a.send({ t: "pos", x: 60, y: -25, z: 40, yaw: 0, mv: 4, ct: 1 }); const f = await a.wait((m) => m.t === "tp" && m.why === "home", "riding off the edge");
+    ok(Math.hypot(f.x - W.SPAWN.x, f.z - W.SPAWN.z) < 8 && !W.PIPE.off === false && W.zips.length === 1, "riding off the edge starts the run over at the post office; no pipe or zipline tower"); }
   // (owner, 2026-11-11) the attack queue, the calm, and kicks all round
   { const pa = who("smokeA"), q = pa.room.dogs[0], q2 = pa.room.dogs[1]; await put(a, "smokeA", 0, 7.5); pa.ready = { tier: 0, mod: "" }; pa.stunUntil = 0; pa.graceUntil = 0; a.send({ t: "grab" }); await a.wait((m) => m.t === "bag" && m.ev.k === "grab", "a parcel for the queue");
     pa.slots = new Set([{}, {}]); q.cool = 0; q.mode = 0; await put(a, "smokeA", q.x + 2, q.z, q.y); await sleep(300); ok(q.mode === 0 && !q.target, "with both slots taken, another animal can't go after you");

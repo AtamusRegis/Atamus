@@ -386,7 +386,7 @@ export function attachPets(server, { origins = [], allowLocal = false, store = m
           changed(me); if (was !== s.friendly || shirt !== s.shirt) all(room, { t: "look", id: me.id, friendly: s.friendly, shirt: s.shirt }, me); break;
         }
         case "pipe": {   // the sewer pipe: in one end, out the other; a goose inside costs a hit
-          if (now < me.stunUntil || now - me.pipeAt < 2000) break;
+          if (PIPE.off || now < me.stunUntil || now - me.pipeAt < 2000) break;
           const a = hyp(me.x - PIPE.a.x, me.z - PIPE.a.z) < PIPE.r + 3 && Math.abs(me.y - PIPE.a.y) < 2, b = hyp(me.x - PIPE.b.x, me.z - PIPE.b.z) < PIPE.r + 3 && Math.abs(me.y - PIPE.b.y) < 2; if (!a && !b) break;
           if (a && W.openFor(d) < 4) break;   // (owner, 2026-11-11) Cliffside isn't open yet
           me.pipeAt = now + PIPE.time * 1000; const out = a ? PIPE.b : PIPE.a, goose = W.pipeGoose(now / 1000);
@@ -528,6 +528,9 @@ export function attachPets(server, { origins = [], allowLocal = false, store = m
     for (const p of players) {
       const dist = W.districtAt(p.x, p.z, p.y);
       if (dist === 8 && W.lavaAt(p.x, p.z, p.y) && now >= (p.lavaAt || 0) && now >= p.stunUntil && now - p.tpAt > 600) { p.lavaAt = now + W.LAVA.every * 1000; stun(p, W.LAVA.stun, "lava"); hit(p, "lava"); }   // (owner, 2026-11-12) a lava pool burns
+      if (p.y < W.EDGE_Y && !(p.x > W.ISLE_X && p.x < W.FAR.x0 - 15) && now - p.tpAt > 600) {   // (owner, 2026-11-12) off the edge of the town: the run starts over at the post office
+        const held = [...p.bag, ...p.stolen, ...p.dropped.map((o) => o.parcel)]; p.tpAt = now; if (held.length) for (const q of held) lose(p, "fall", q); else runDone(p); continue;
+      }
       if (dist === 3 && p.y > 1 && p.y < W.SKY_Y) {
         if (!p.nextRock) p.nextRock = now + between(ROCK.every) * 1000;
         else if (now > p.nextRock) { p.nextRock = now + between(ROCK.every) * 1000; const k = { x: r1(p.x + p.vx * 0.8 + (Math.random() - 0.5) * 3), z: r1(p.z + p.vz * 0.8 + (Math.random() - 0.5) * 3), y: r1(p.y), at: now + ROCK.delay * 1000 }; r.rocks.push(k); all(r, { t: "rock", x: k.x, z: k.z, y: k.y, s: ROCK.delay }); }

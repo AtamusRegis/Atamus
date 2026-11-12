@@ -6,6 +6,11 @@ and any rule decided. Use `git log` for the code detail (and for the older Atamu
 
 ## 2026-11-12
 
+- **No shortcuts; ride off the edge to start over (owner).** The sewer pipe and zipline tower are gone, and so are the
+  walls round the town: riding or jumping off an edge loses what you carry and puts you back at the post office. The
+  first island's houses keep clear of where the cannon lands you.
+- **Showings wait (owner).** A newly opened area's showing waits until the parcels are all opened and every window is
+  closed.
 - **Start pad, no drift, ride through rewards (owner).** Every mount goes the same speed around the post office; the
   purple Aura pad on the way out switches on its real speed. Fast mounts no longer drift. The reward screen no longer
   takes the controls: you keep riding while it shows (tap a card to skip).
