@@ -375,6 +375,9 @@ a mount of a kind, rarity and variant), quick commands (coins, all mounts (every
 everything, **Reset to new player**: owner, 2026-11-11, a brand new courier in every way: coins,
 mounts, upgrades, unopened parcels, the parcels being carried and on the conveyor, stats, settings and the
 tutorial; their page reloads as a new courier), and edit coins. Everything is logged (`pet_admin_log`).
+- (owner, 2026-11-12) **Freecam** (admins, the Admin panel's top button): the camera leaves your courier and flies where
+  you look: WASD or the stick, Space up, C down, Shift 3x faster, drag to look (up and down too); Escape or the button
+  again ends it. Your courier stays where it was.
 
 ## Pet Delivery Co. at /pokemon
 

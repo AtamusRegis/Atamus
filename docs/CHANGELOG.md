@@ -6,6 +6,7 @@ and any rule decided. Use `git log` for the code detail (and for the older Atamu
 
 ## 2026-11-12
 
+- **Admin freecam (owner).** Admins can fly the camera freely round the town from the Admin panel.
 - **No shortcuts; ride off the edge to start over (owner).** The sewer pipe and zipline tower are gone, and so are the
   walls round the town: riding or jumping off an edge loses what you carry and puts you back at the post office. The
   first island's houses keep clear of where the cannon lands you.
