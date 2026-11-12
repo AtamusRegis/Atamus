@@ -607,8 +607,8 @@ function stepMe(dt) {
   if (World.blocked(me.x, me.z, me.y)) out: for (let r = 1; r < 16; r++) for (let k = 0; k < 12; k++) { const x = me.x + Math.cos((k / 12) * TAU) * r, z = me.z + Math.sin((k / 12) * TAU) * r; if (!World.blocked(x, z, me.y) && World.surfaceAt(x, z, me.y + 0.5) > -1e9) { me.x = x; me.z = z; break out; } }   // inside something solid (it shouldn't happen): out to the nearest clear spot
   // what the player's asking for, relative to the camera
   let ix = 0, iz = 0;
-  if (!chatting && !panelOpen() && !cine) { if (keys.has("KeyW") || keys.has("ArrowUp")) iz += 1; if (keys.has("KeyS") || keys.has("ArrowDown")) iz -= 1; if (keys.has("KeyD") || keys.has("ArrowRight")) ix += 1; if (keys.has("KeyA") || keys.has("ArrowLeft")) ix -= 1; }
-  if (!cine) { ix += joy.x; iz -= joy.y; } const il = hyp(ix, iz); if (il > 1) { ix /= il; iz /= il; }
+  if (!chatting && !panelOpen() && !cine && !free) { if (keys.has("KeyW") || keys.has("ArrowUp")) iz += 1; if (keys.has("KeyS") || keys.has("ArrowDown")) iz -= 1; if (keys.has("KeyD") || keys.has("ArrowRight")) ix += 1; if (keys.has("KeyA") || keys.has("ArrowLeft")) ix -= 1; }
+  if (!cine && !free) { ix += joy.x; iz -= joy.y; } const il = hyp(ix, iz); if (il > 1) { ix /= il; iz /= il; }
   let mx = -Math.sin(cam.yaw) * iz + Math.cos(cam.yaw) * ix, mz = -Math.cos(cam.yaw) * iz - Math.sin(cam.yaw) * ix;
   if (me.stun > 0) mx = mz = 0;
   const kind = me.ground ? World.groundKind(me.x, me.z, me.y) : "", mud = kind === "mud" && !World.inPond(me.x, me.z, me.y) ? World.MUD_SLOW : kind === "mud" ? 0.6 : kind === "sand" ? World.SAND_SLOW : kind === "water" ? World.WATER_SLOW : 1;   // (owner, 2026-11-12) sand and the jungle's rivers slow you too
@@ -696,8 +696,22 @@ function triggers(t) {
 
 // ---- the camera: behind and above; drag to look round, pinch or wheel to zoom ----
 const camPos = new THREE.Vector3(), camAt = new THREE.Vector3(me.x, 2, me.z);
+// (owner, 2026-11-12) the admin's freecam: the camera leaves your courier and flies where you look (WASD or the stick,
+// Space up, C down, Shift faster; drag to look); Escape or the Admin panel's button ends it
+let free = null;
+function setFree(on) { free = on ? { x: camera.position.x, y: camera.position.y, z: camera.position.z } : null; keys.clear(); if (on) closePanel(); }
+function stepFree(dt) {
+  const cp = Math.cos(cam.pitch), fx = -Math.sin(cam.yaw) * cp, fy = -Math.sin(cam.pitch), fz = -Math.cos(cam.yaw) * cp, rx = Math.cos(cam.yaw), rz = -Math.sin(cam.yaw);
+  let f = joy.y ? -joy.y : 0, r = joy.x || 0, u = 0;
+  if (!chatting && !panelOpen()) { if (keys.has("KeyW") || keys.has("ArrowUp")) f += 1; if (keys.has("KeyS") || keys.has("ArrowDown")) f -= 1; if (keys.has("KeyD") || keys.has("ArrowRight")) r += 1; if (keys.has("KeyA") || keys.has("ArrowLeft")) r -= 1; if (keys.has("Space")) u += 1; if (keys.has("KeyC")) u -= 1; }
+  const v = 30 * (keys.has("ShiftLeft") || keys.has("ShiftRight") ? 3 : 1) * dt;
+  free.x += (fx * f + rx * r) * v; free.y += (fy * f + u) * v; free.z += (fz * f + rz * r) * v;
+  camera.position.set(free.x, free.y, free.z); camera.lookAt(free.x + fx, free.y + fy, free.z + fz);
+  sun.position.set(free.x + 60, free.y + 110, free.z + 40); sun.target.position.set(free.x, free.y, free.z);
+}
 function stepCamera(dt) {
   if (cine && stepCine(dt)) return;
+  if (free) { stepFree(dt); return; }
   const sc = mine ? mine.sc : 1, ty = me.y + 1.5 + 0.9 * sc; camAt.x = me.x; camAt.z = me.z; camAt.y += (ty - camAt.y) * Math.min(1, 10 * dt);
   const cp = Math.cos(cam.pitch), ux = Math.sin(cam.yaw) * cp, uy = Math.sin(cam.pitch), uz = Math.cos(cam.yaw) * cp;
   let d = cam.dist * (0.75 + 0.25 * sc); for (let k = 1.5; k < d; k += 0.7) if (World.wallAt(camAt.x + ux * k, camAt.z + uz * k, camAt.y + uy * k - 1)) { d = Math.max(1.5, k - 0.7); break; }   // nothing solid between you and the camera
@@ -721,7 +735,7 @@ canvas.addEventListener("pointermove", (e) => {
   if (e.pointerId === joy.id) { let dx = e.clientX - joy.ox, dy = e.clientY - joy.oy; const l = hyp(dx, dy), R = 52; if (l > R) { dx *= R / l; dy *= R / l; } joy.x = dx / R; joy.y = dy / R; knob.style.transform = `translate(${dx}px, ${dy}px)`; return; }
   const d = drags.get(e.pointerId); if (!d) return;
   if (drags.size === 2) { const o = { x: e.clientX, y: e.clientY }; drags.set(e.pointerId, o); const [a, b] = [...drags.values()], p = hyp(a.x - b.x, a.y - b.y); if (pinch) cam.dist = clamp(cam.dist * (pinch / p), 5, 26); pinch = p; return; }
-  cam.yaw -= (e.clientX - d.x) * 0.006; cam.pitch = clamp(cam.pitch + (e.clientY - d.y) * 0.005, -0.15, 1.35); d.x = e.clientX; d.y = e.clientY;
+  cam.yaw -= (e.clientX - d.x) * 0.006; cam.pitch = clamp(cam.pitch + (e.clientY - d.y) * 0.005, free ? -1.4 : -0.15, free ? 1.5 : 1.35); d.x = e.clientX; d.y = e.clientY;
 });
 const endPointer = (e) => {
   if (e.pointerId === joy.id) { joy.id = null; joy.x = joy.y = 0; joyEl.style.display = "none"; return; }
@@ -734,8 +748,8 @@ canvas.addEventListener("contextmenu", (e) => e.preventDefault());
 addEventListener("keydown", (e) => {
   if (e.target && (e.target.tagName === "INPUT" || e.target.tagName === "SELECT")) return;
   if (e.code === "Enter") { openChat(); e.preventDefault(); return; }
-  if (e.code === "Escape") { closePanel(); return; }
-  if (e.repeat) return; keys.add(e.code);
+  if (e.code === "Escape") { if (free) setFree(false); closePanel(); return; }
+  if (e.repeat) return; keys.add(e.code); if (free) { e.preventDefault(); return; }   // the freecam takes the keys
   if (e.code === "Space") { jumpHeld = true; jumpTap = true; e.preventDefault(); }
   if (e.code === "KeyF") doKick(); if (e.code === "KeyQ") doWhistle(); if (e.code === "KeyE" || e.code === "ShiftLeft") useAbility();
 });
@@ -1007,6 +1021,7 @@ function renderPanel() {
   } else if (panel === "admin") renderAdmin(body);
 }
 function renderAdmin(body) {
+  if (myRole === "admin") { const fc = el("div", "acts"); fc.appendChild(btn(free ? "Freecam off" : "Freecam", () => setFree(!free), free ? "go" : "")); body.appendChild(fc); }   // (owner, 2026-11-12)
   const q = el("input"); q.placeholder = "Name"; q.value = adminQ; q.maxLength = 16; q.onchange = () => { adminQ = q.value.trim(); netSend({ t: "admin", op: "list", q: adminQ }); }; body.appendChild(q);
   const list = el("div", "alist"); for (const a of adminList) { const b = el("button", "arow" + (adminSel === a.id ? " sel" : "") + (a.online ? " on" : ""), a.name + (a.role !== "player" ? " · " + a.role : "") + (a.banned ? " · banned" : a.muted ? " · muted" : "")); b.onclick = () => { adminSel = a.id; adminData = null; netSend({ t: "admin", op: "inspect", id: a.id }); renderPanel(); }; list.appendChild(b); } body.appendChild(list);
   const a = adminList.find((k) => k.id === adminSel); if (!a) return;
