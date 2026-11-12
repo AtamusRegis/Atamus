@@ -4,7 +4,7 @@
 set -euo pipefail
 cd "$(dirname "$0")/.."
 fail=0
-for f in packages/server/src/*.js website/*.js scripts/*.mjs; do
+for f in packages/server/src/*.js packages/server/src/pokemon/*.js packages/server/pokemon/*.mjs website/*.js website/pokemon/*.js scripts/*.mjs; do
   [ -f "$f" ] || continue
   # ES module check first: a plain `node --check` can pass a broken ES module (Node 22 falls back to treating it as a
   # module and doesn't report the error), which once let a broken game page reach live (2026-10-14)
@@ -13,4 +13,6 @@ for f in packages/server/src/*.js website/*.js scripts/*.mjs; do
 done
 # The game's world is one file used by both the page and the server: the two copies must match
 cmp -s website/pets-world.js packages/server/src/pets-world.js || { echo "MISMATCH: website/pets-world.js and packages/server/src/pets-world.js differ (copy one over the other)"; fail=1; }
+# (owner, 2026-11-11) the same for Pet Delivery Co. at atamus.io/pokemon
+cmp -s website/pokemon/pets-world.js packages/server/src/pokemon/pets-world.js || { echo "MISMATCH: website/pokemon/pets-world.js and packages/server/src/pokemon/pets-world.js differ (copy one over the other)"; fail=1; }
 [ $fail -eq 0 ] && echo "check: all files parse" || exit 1

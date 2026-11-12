@@ -6,6 +6,9 @@ and any rule decided. Use `git log` for the code detail (and for the older Atamu
 
 ## 2026-11-11
 
+- **Pet Delivery Co. is back at atamus.io/pokemon (owner).** The game from before the remake, as it was, beside
+  Critter Courier: same logins, everyone starting fresh there (its own saves and block world; the old saves and world
+  stay untouched, the old town used as its starting town). Docs in `docs/POKEMON.md`.
 - **Tutorial; merging mounts (owner).** New couriers get a six-step tutorial: picking up parcels, dropping them off,
   opening them, the Stable, Upgrades and the Stamp Meter. Four of the same mount with the same skin merge into the
   best of them with the next skin, up to the new Rainbow.

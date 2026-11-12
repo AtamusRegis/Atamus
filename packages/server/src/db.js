@@ -28,6 +28,13 @@ export async function migrate() {
     -- (owner, 2026-11-11) Critter Courier: the game remade, everyone starting fresh. A courier's data lives in its own
     -- column; the old game's data column (and the pet_world table) stay in the live database untouched, unused.
     ALTER TABLE pet_accounts ADD COLUMN IF NOT EXISTS courier JSONB NOT NULL DEFAULT '{}';
+    -- (owner, 2026-11-11) Pet Delivery Co. back at atamus.io/pokemon, everyone starting fresh there too: its player data
+    -- and staff's block world have their own column and table (the old data column and pet_world stay untouched)
+    ALTER TABLE pet_accounts ADD COLUMN IF NOT EXISTS poke JSONB NOT NULL DEFAULT '{}';
+    ALTER TABLE pet_accounts ADD COLUMN IF NOT EXISTS poke_rev INTEGER NOT NULL DEFAULT 0;
+    CREATE TABLE IF NOT EXISTS poke_world (
+      id INT PRIMARY KEY, data JSONB NOT NULL, updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+    );
     CREATE TABLE IF NOT EXISTS pet_tokens (
       token TEXT PRIMARY KEY, account_id BIGINT NOT NULL REFERENCES pet_accounts(id) ON DELETE CASCADE,
       created_at TIMESTAMPTZ NOT NULL DEFAULT now(), last_used TIMESTAMPTZ NOT NULL DEFAULT now()

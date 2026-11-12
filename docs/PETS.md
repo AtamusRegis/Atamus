@@ -261,6 +261,12 @@ mute, kick and ban those below them. The Admin panel (Settings): find a courier,
 Level Coupons, eggs, a mount at a level and variant), quick commands (coins, all mounts, max levels, eggs, coupons,
 upgrades, everything, reset), and edit coins and coupons. Everything is logged (`pet_admin_log`).
 
+## Pet Delivery Co. at /pokemon
+
+(owner, 2026-11-11) The game from before the remake runs again at atamus.io/pokemon, on its own socket (`/pokemon`) and
+its own fresh saves, with the same logins. It is described in `docs/POKEMON.md`; nothing of it is shared with Critter
+Courier's rules.
+
 ## Rejected / removed
 
 - (owner, 2026-11-11) Back alleys; the wide (120 m) town; rewards rolled in full on delivery (now the rarity on

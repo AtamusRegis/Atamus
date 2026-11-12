@@ -1,0 +1,58 @@
+// Pet Delivery Co. at atamus.io/pokemon (owner, 2026-11-11): the game from before the Critter Courier remake, brought
+// back beside it. Same logins (pet_accounts / pet_tokens, shared with Critter Courier), but everyone starts fresh: its
+// player data is the "poke" column (with its own "poke_rev"), and staff's block world is the poke_world table. The old
+// game's "data" column and "pet_world" table are left exactly as they were: the only read of pet_world is the town staff
+// built back then, used as the starting town until staff save an edit here (then it's poke_world's own copy).
+import crypto from "node:crypto";
+
+const newToken = () => crypto.randomBytes(24).toString("hex");
+
+export function pokeStore(pool) {
+  const ms = (t) => (t === null || t === undefined ? 0 : t === Infinity || String(t) === "infinity" ? Infinity : new Date(t).getTime());
+  const row = (r) => (r ? { id: Number(r.id), name: r.name, pass: r.pass, data: r.poke, rev: r.poke_rev, role: r.role || "player", vip: !!r.vip, muteUntil: ms(r.mute_until), banUntil: ms(r.ban_until) } : null);
+  const ts = (v) => (!v ? null : v === Infinity ? "infinity" : new Date(v).toISOString());
+  return {
+    async byName(name) { const { rows } = await pool.query("SELECT * FROM pet_accounts WHERE name_lc = $1", [name.toLowerCase()]); return row(rows[0]); },
+    async byId(id) { const { rows } = await pool.query("SELECT * FROM pet_accounts WHERE id = $1", [id]); return row(rows[0]); },
+    async create(name, pass, data) {
+      const { rows } = await pool.query("INSERT INTO pet_accounts (name, name_lc, pass, poke) VALUES ($1, $2, $3, $4) ON CONFLICT (name_lc) DO NOTHING RETURNING *", [name, name.toLowerCase(), pass, data]);
+      return row(rows[0]);
+    },
+    async save(id, data, rev) { await pool.query("UPDATE pet_accounts SET poke = $2, poke_rev = $3, updated_at = now() WHERE id = $1", [id, data, rev]); },
+    async tokenFor(id) { const t = newToken(); await pool.query("INSERT INTO pet_tokens (token, account_id) VALUES ($1, $2)", [t, id]); return t; },
+    async tokenAccount(t) { const { rows } = await pool.query("UPDATE pet_tokens SET last_used = now() WHERE token = $1 RETURNING account_id", [String(t)]); return rows[0] ? Number(rows[0].account_id) : null; },
+    // staff: roles, mutes, bans and VIP are the account's, the same in both games
+    async setRole(id, role) { await pool.query("UPDATE pet_accounts SET role = $2 WHERE id = $1", [id, role]); },
+    async setMute(id, until) { await pool.query("UPDATE pet_accounts SET mute_until = $2 WHERE id = $1", [id, ts(until)]); },
+    async setBan(id, until) { await pool.query("UPDATE pet_accounts SET ban_until = $2 WHERE id = $1", [id, ts(until)]); },
+    async setVip(id, on) { await pool.query("UPDATE pet_accounts SET vip = $2 WHERE id = $1", [id, !!on]); },
+    async search(q) { const { rows } = await pool.query("SELECT * FROM pet_accounts WHERE name_lc LIKE $1 ORDER BY name_lc LIMIT 30", [String(q).toLowerCase().replace(/[%_\\]/g, "\\$&") + "%"]); return rows.map(row); },
+    async getWorld() {
+      const { rows } = await pool.query("SELECT data FROM poke_world WHERE id = 1"); if (rows[0]) return rows[0].data;
+      const old = await pool.query("SELECT to_regclass('pet_world') IS NOT NULL AS has"); if (!old.rows[0].has) return null;
+      const { rows: o } = await pool.query("SELECT data FROM pet_world WHERE id = 1"); return o[0] ? o[0].data : null;   // read only
+    },
+    async saveWorld(data) { await pool.query("INSERT INTO poke_world (id, data, updated_at) VALUES (1, $1, now()) ON CONFLICT (id) DO UPDATE SET data = $1, updated_at = now()", [data]); },
+    async log(by, target, action, detail) { await pool.query("INSERT INTO pet_admin_log (by_name, target_name, action, detail) VALUES ($1, $2, $3, $4)", [by, target, action, detail ? "pokemon: " + detail : "pokemon"]); },
+  };
+}
+
+export function memPokeStore() {
+  const accts = new Map(), tokens = new Map(); let next = 1, world = null;
+  return {
+    async byName(name) { for (const a of accts.values()) if (a.name.toLowerCase() === name.toLowerCase()) return { ...a }; return null; },
+    async byId(id) { const a = accts.get(id); return a ? { ...a } : null; },
+    async create(name, pass, data) { if (await this.byName(name)) return null; const a = { id: next++, name, pass, data, rev: 0, role: "player", muteUntil: 0, banUntil: 0 }; accts.set(a.id, a); return { ...a }; },
+    async save(id, data, rev) { const a = accts.get(id); if (a) { a.data = data; a.rev = rev; } },
+    async tokenFor(id) { const t = newToken(); tokens.set(t, id); return t; },
+    async tokenAccount(t) { return tokens.get(String(t)) || null; },
+    async setRole(id, role) { const a = accts.get(id); if (a) a.role = role; },
+    async setMute(id, until) { const a = accts.get(id); if (a) a.muteUntil = until || 0; },
+    async setBan(id, until) { const a = accts.get(id); if (a) a.banUntil = until || 0; },
+    async setVip(id, on) { const a = accts.get(id); if (a) a.vip = !!on; },
+    async search(q) { q = String(q).toLowerCase(); return [...accts.values()].filter((a) => a.name.toLowerCase().startsWith(q)).slice(0, 30).map((a) => ({ ...a })); },
+    async log() {},
+    async getWorld() { return world ? JSON.parse(JSON.stringify(world)) : null; },
+    async saveWorld(data) { world = JSON.parse(JSON.stringify(data)); },
+  };
+}

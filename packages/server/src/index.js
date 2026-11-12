@@ -6,6 +6,9 @@ import { migrate, pool } from "./db.js";
 import { game } from "./gamehttp.js";
 import { attachPets } from "./pets.js";
 import { pgStore } from "./petstore.js";
+import { attachPokemon } from "./pokemon/pets.js";
+import { pokeStore } from "./pokemon/store.js";
+import { routeUpgrades } from "./upgrades.js";
 
 import { SERVER_BUILD as BUILD } from "./build.js";
 
@@ -51,7 +54,10 @@ async function main() {
 
   const server = http.createServer(app);
   // Critter Courier (owner, 2026-11-11): accounts, rooms, the conveyor, deliveries, kicks, dogs and geese, chat and parties over a WebSocket at /pets
-  attachPets(server, { origins: config.allowedOrigins, allowLocal: process.env.ATAMUS_PTR === "1", store: pgStore(pool) });
+  const ends = routeUpgrades(server, ["/pets", "/pokemon"]);
+  attachPets(ends["/pets"], { origins: config.allowedOrigins, allowLocal: process.env.ATAMUS_PTR === "1", store: pgStore(pool) });
+  // (owner, 2026-11-11) Pet Delivery Co., the game from before the remake, at atamus.io/pokemon (fresh saves of its own)
+  attachPokemon(ends["/pokemon"], { origins: config.allowedOrigins, allowLocal: process.env.ATAMUS_PTR === "1", store: pokeStore(pool) });
   server.listen(config.port, "127.0.0.1", () => {
     console.log(`Critter Courier server listening on 127.0.0.1:${config.port} (http + ws)`);
   });

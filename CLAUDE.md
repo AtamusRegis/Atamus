@@ -51,6 +51,9 @@ website/              GitHub Pages site (atamus.io)
                       (cleanData). packages/server/src/pets-world.js must be an identical copy (scripts/check.sh
                       compares them)
   vendor/             Three.js (self-hosted); fonts/, assets/ (logo), favicon, CNAME
+  pokemon/            (owner, 2026-11-11) Pet Delivery Co., the game from before the remake, at atamus.io/pokemon:
+                      index.html, pets.js, pets-world.js (copy in packages/server/src/pokemon/, keep identical);
+                      described in docs/POKEMON.md (its own fresh saves, the same logins)
 packages/server/src/
   index.js            Express bootstrap: /healthz {build}, the deploy workflows' /game routes, the /pets socket; in the
                       PTR it also serves website/
@@ -62,6 +65,11 @@ packages/server/src/
   pets-world.js       copy of website/pets-world.js (keep identical)
   build.js            SERVER_BUILD, website build polling (a new site build reloads players), the update countdown
   gamehttp.js         the deploy workflows' calls; db.js the schema; config.js; hash.js
+  upgrades.js         hands each WebSocket connection to its game by path (/pets, /pokemon)
+  pokemon/            Pet Delivery Co.'s server: pets.js (WebSocket /pokemon), package-events.js, store.js (the poke
+                      column and poke_world table; the old data column and pet_world stay untouched), pets-world.js
+packages/server/pokemon/    Pet Delivery Co.'s tests (smoke, smoke-browser, smoke-both: both games on one server), run
+                            by npm run smoke / smoke:browser
 packages/server/smoke.mjs   the smoke test (npm run smoke); smoke-browser.mjs the game page in headless Chrome
                             (npm run smoke:browser)
 scripts/

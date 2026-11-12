@@ -8,8 +8,9 @@ export let SERVER_BUILD = "dev";
 try { SERVER_BUILD = fs.readFileSync(new URL("../BUILD", import.meta.url), "utf8").trim(); } catch {}
 
 const SITE = "https://atamus.io/version.json";
-let webBuild = null, webBy = "", onChange = () => {}, burstUntil = 0, burstTimer = 0;
-export const onWebsiteUpdate = (fn) => { onChange = fn; };
+let webBuild = null, webBy = "", burstUntil = 0, burstTimer = 0;
+const onChanges = [], onChange = (v, by) => { for (const fn of onChanges) fn(v, by); };
+export const onWebsiteUpdate = (fn) => { onChanges.push(fn); };   // (owner, 2026-11-11) each game (/pets, /pokemon) listens
 export const websiteBuild = () => webBuild;
 export const websiteBy = () => webBy;   // (owner, 2026-11-09) whose update it is (version.json's "by", from the commit's Update-By trailer)
 export async function checkWebsiteBuild() {
