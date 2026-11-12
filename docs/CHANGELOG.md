@@ -6,6 +6,9 @@ and any rule decided. Use `git log` for the code detail (and for the older Atamu
 
 ## 2026-11-11
 
+- **Five coats, and a real Shiny (owner).** Every animal has the same five coats, one per rarity: Black, Orange, Gold,
+  Diamond, Void (e.g. "Shiny Void Wolf"). The only other skin is Shiny, now 1 in 10,000: the same coat with sparkles
+  twinkling around it. Golden and Rainbow went (owned ones became Shiny); merging two of the same makes a Shiny.
 - **One reward screen; abilities for all (owner).** When a run's parcels open, the boxes shake together and everything
   shows at once, a new mount right in its card (no separate unboxing to click through). Every mount has its animal's
   ability from Common up; rarity only makes it stronger.

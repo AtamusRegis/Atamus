@@ -69,21 +69,23 @@ export const rankOf = (total) => (total >= 23 ? 4 : total >= 15 ? 3 : total >= 8
 // Goose Marsh gators, Cliffside bears, the Floating Islands wolves), and each comes Common to Legendary. A mount is a kind
 // and a rarity (m.r): the rarity sets its coat, its stats and how it shows; the kind sets its ability. An area's parcels
 // drop its kind, at the parcel's rarity. The town's animals wear the same coats.
+// (owner, 2026-11-11) one coat per rarity, the same five for every animal: Black (Common), Orange (Uncommon), Gold (Rare),
+// Diamond (Epic), Void (Legendary); each also comes Shiny (the same coat, sparkling)
+export const COATS = [{ name: "Black", c: ["#2b2f36", "#5a6470"] }, { name: "Orange", c: ["#e8862e", "#ffd9a8"] }, { name: "Gold", c: ["#e8b923", "#fff3b8"] }, { name: "Diamond", c: ["#a9e4ff", "#ffffff"] }, { name: "Void", c: ["#2a1446", "#a45be0"] }];
 export const MOUNTS = {
-  dog: { name: "Dog", ab: "bark", look: "pup", size: 1, coats: [["#c98a4b", "#f3dcc0"], ["#8a5a34", "#e9d6b8"], ["#3d4650", "#cfd6dd"], ["#e8e2d8", "#c9a27e"], ["#2b2f36", "#f2b01e"]] },
-  cat: { name: "Cat", ab: "jump2", look: "cat", size: 0.95, coats: [["#f0a04b", "#fff1dc"], ["#b9b2a8", "#ffffff"], ["#3d4650", "#e9eef2"], ["#f4f1ea", "#9aa8ff"], ["#1d232a", "#a45be0"]] },
-  gator: { name: "Gator", ab: "dash", look: "gator", size: 1, coats: [["#4f7a3a", "#c9d48a"], ["#3f6a4a", "#b9c98a"], ["#2f5f6a", "#9fd8c8"], ["#5a3f7a", "#d9b9f0"], ["#c9a23a", "#fff3b8"]] },
-  bear: { name: "Bear", ab: "bark", look: "bear", size: 1.05, coats: [["#7a5236", "#c9a27e"], ["#3a2c22", "#8a6a4e"], ["#c9a27e", "#f3e3cc"], ["#f4f6f8", "#c9d6e2"], ["#2b2f36", "#f2b01e"]] },
-  wolf: { name: "Wolf", ab: "dash", look: "wolf", size: 1, coats: [["#8a96a2", "#e9eef2"], ["#5a6470", "#cfd6dd"], ["#d9dde2", "#ffffff"], ["#3a4a6a", "#9ad8ff"], ["#f4f6f8", "#f2b01e"]] },
+  dog: { name: "Dog", ab: "bark", look: "pup", size: 1 },
+  cat: { name: "Cat", ab: "jump2", look: "cat", size: 0.95 },
+  gator: { name: "Gator", ab: "dash", look: "gator", size: 1 },
+  bear: { name: "Bear", ab: "bark", look: "bear", size: 1.05 },
+  wolf: { name: "Wolf", ab: "dash", look: "wolf", size: 1 },
 };
 export const ZONE_KIND = ["dog", "cat", "gator", "bear", "wolf"];   // each area's animal, in order (the same as CHASERS)
-export const coat = (sp, r) => (MOUNTS[sp] || MOUNTS.dog).coats[clamp(r | 0, 0, 4)];
+export const coat = (sp, r) => COATS[clamp(r | 0, 0, 4)].c;
 // the mounts from before (and their rarity): (owner, 2026-11-11) each became a Dog of that rarity, keeping level and skin
 export const MOUNT_MOVED = { pup: ["dog", 0], piglet: ["dog", 0], bunny: ["dog", 0], fox: ["cat", 1], deer: ["cat", 1], parrot: ["cat", 1], raptor: ["gator", 2], stego: ["gator", 2], pony: ["gator", 2], owl: ["gator", 2], trex: ["bear", 3], trike: ["bear", 3], unicorn: ["wolf", 4], dragon: ["wolf", 4] };
 export const ABILITY = { bark: "Bark", dash: "Dash", jump2: "Double Jump" };
-export const VARIANTS = ["", "Shiny", "Golden", "Rainbow"], SHINY = 0.01, GOLDEN = 0.001;
-// (owner, 2026-11-11) two of the same mount (kind and rarity) with the same skin merge into the better of them (the higher level), which
-// gets the next skin: normal, Shiny, Golden, Rainbow (Rainbow only by merging)
+export const VARIANTS = ["", "Shiny"], SHINY = 0.0001;   // (owner, 2026-11-11) 1 in 10,000; no Golden or Rainbow
+// (owner, 2026-11-11) two of the same normal mount (kind and rarity) merge into one Shiny
 export const FUSE_N = 2;
 export function fuseSet(mounts, id) {   // the ones a merge would take (the chosen one and the lowest-level other), or null
   const m = mounts.find((k) => k.id === id); if (!m || m.va >= VARIANTS.length - 1) return null;
@@ -127,7 +129,7 @@ export function cleanData(d) {
   const v = int(d.v, 1, 9, 1), out = { v: 2, coins: int(d.coins, 0, 1e12, 0), nextId: int(d.nextId, 1, 1e9, 1), mounts: [], ride: 0, up: {}, stats: {}, set: {}, fails: int(d.fails, 0, 99, 0) };
   for (const m of Array.isArray(d.mounts) ? d.mounts.slice(0, MOUNT_CAP) : []) {
     if (!m) continue; const now = MOUNTS[m.sp] && Number.isFinite(+m.r), old = MOUNT_MOVED[m.sp] || (m.sp === "cat" ? ["cat", 1] : null); if (!now && !old) continue;
-    out.mounts.push({ id: int(m.id, 1, 1e9, 0) || out.nextId++, sp: v < 2 ? "dog" : now ? m.sp : old[0], /* (owner, 2026-11-11) once: every mount from before became a Dog of the same rarity, level and skin */ r: now ? int(m.r, 0, 4, 0) : old[1], va: int(m.va, 0, 3, 0), ...(TRAILS.some((t) => t.k === m.tr) ? { tr: m.tr } : {}) });
+    out.mounts.push({ id: int(m.id, 1, 1e9, 0) || out.nextId++, sp: v < 2 ? "dog" : now ? m.sp : old[0], /* (owner, 2026-11-11) once: every mount from before became a Dog of the same rarity, level and skin */ r: now ? int(m.r, 0, 4, 0) : old[1], va: int(m.va, 0, 3, 0) ? 1 : 0, ...(TRAILS.some((t) => t.k === m.tr) ? { tr: m.tr } : {}) });
   }
   out.nextId = Math.max(out.nextId, ...out.mounts.map((m) => m.id + 1));
   for (const k of Object.keys(EGG_TO)) for (let n = int(d.eggs && d.eggs[k], 0, MOUNT_CAP, 0); n > 0 && out.mounts.length < MOUNT_CAP; n--) out.mounts.push({ id: out.nextId++, sp: "dog", r: EGG_TO[k][1], va: 0 });
@@ -178,7 +180,7 @@ export function mergeGifts(gifts, nextGid) {   // merges in place; returns the m
   }
   return out;
 }
-export const skinRoll = (rnd = Math.random) => { const v = rnd(); return v < GOLDEN ? 2 : v < GOLDEN + SHINY ? 1 : 0; };   // 1 in 100 Shiny, 1 in 1,000 Golden
+export const skinRoll = (rnd = Math.random) => (rnd() < SHINY ? 1 : 0);   // 1 in 10,000 Shiny
 
 // ---------------------------------------------------------------------------------------------------------------------
 // The town (owner, 2026-11-11: one long line, harder the farther out): the post office at the west end, then one road east

@@ -73,7 +73,7 @@
     .mgrid { display: grid; grid-template-columns: repeat(auto-fill, minmax(64px, 1fr)); gap: 8px; }
     .mtile { position: relative; aspect-ratio: 1; border: 3px solid var(--line); border-radius: 14px; background: #f3f7fa; padding: 0; overflow: hidden; } .mtile img { width: 100%; height: 100%; display: block; }
     .mtile b { position: absolute; right: 3px; bottom: 2px; font-size: 12px; background: #fff; border-radius: 6px; padding: 0 4px; } .mtile.sel { box-shadow: 0 0 0 3px var(--ink); } .mtile.ride::after { content: ""; position: absolute; left: 4px; top: 4px; width: 10px; height: 10px; border-radius: 50%; background: var(--green); border: 2px solid #fff; }
-    .mtile.va1 { background: #e8f6ff; } .mtile.va2 { background: #fff3c4; } .mtile.va3 { background: linear-gradient(135deg, #ffd1d1, #fff3c4, #d4f7d4, #d1e8ff, #ead1ff); }
+    .mtile.va1 { background: radial-gradient(circle at 50% 40%, #ffffff, #e3f4ff 70%); } .mtile.va1::before { content: ""; position: absolute; inset: 0; pointer-events: none; background: radial-gradient(circle at 18% 22%, #fff 0 2px, transparent 3px), radial-gradient(circle at 80% 30%, #fff6c2 0 2px, transparent 3px), radial-gradient(circle at 70% 78%, #c9f0ff 0 2px, transparent 3px), radial-gradient(circle at 30% 70%, #ffd1f3 0 1.5px, transparent 2.5px); animation: twinkle 1.4s ease-in-out infinite alternate; } @keyframes twinkle { from { opacity: 0.25; } to { opacity: 1; } }
     .btn.trail { background: #e8f2ff; color: #3a5a80; } .btn.trail.on { background: #9aa8ff; color: #fff; }
     .btn.fuse { background: linear-gradient(90deg, #ff6b6b, #ffd84a, #7ee08a, #6bb8ff, #b48cff); color: #fff; text-shadow: 0 1px 0 rgba(0,0,0,.35); }
     .rank { display: flex; align-items: center; gap: 8px; font-size: 16px; } .badge { width: 20px; height: 24px; clip-path: polygon(0 0, 100% 0, 100% 62%, 50% 100%, 0 62%); }
@@ -229,6 +229,6 @@
     <button id="lgo" class="btn go" type="submit">Log in</button>
     <button id="lnew" class="btn" type="button">Create account</button>
   </form>
-  <script type="module" src="pets.js?v=1794464884"></script>
+  <script type="module" src="pets.js?v=1794465528"></script>
 </body>
 </html>

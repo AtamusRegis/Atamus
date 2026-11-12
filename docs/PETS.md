@@ -92,8 +92,8 @@ A parcel that breaks or is lost is gone; the conveyor always has the next one. *
   lower (a Legendary parcel from Main Street: a Common, Uncommon, Rare, Epic or Legendary Dog). (owner, 2026-11-11)
   Each rarity has its own chance: Common 80%, Uncommon 40%, Rare 20%, Epic 10%, Legendary 5% (`PET_CHANCE`). A parcel
   tries its own rarity first, then each one below, and gives one mount at most: a Legendary parcel 5% Legendary, else
-  10% Epic, else 20% Rare, else 40% Uncommon, else 80% Common. 1 in 100 is Shiny, 1 in 1,000 Golden. Delivering in the same area again is how you chase a rarer one. Each new mount gets the unboxing in the
-  opening sequence; an Epic, Legendary, Shiny or Golden one is announced to the server.
+  10% Epic, else 20% Rare, else 40% Uncommon, else 80% Common. 1 in 10,000 is Shiny. Delivering in the same area again is how you chase a rarer one. Each new mount gets the unboxing in the
+  opening sequence; an Epic, Legendary or Shiny one is announced to the server.
 
 - **Luck** (the tier's, plus Lucky Stamps) weights each roll by (1 + luck) to the power of its rank, then the odds are
   scaled back to 100%. Lucky Stamps at level 10 takes Legendary from 1% to 3% on a Bronze parcel.
@@ -112,8 +112,10 @@ A parcel that breaks or is lost is gone; the conveyor always has the next one. *
   rarity decides.** A mount's size is 1 + 0.25 x rarity (Common 1x, Legendary 2x); the rider stays the same size.
 - (owner, 2026-11-11) **The mounts are the areas' animals:** Dog (Main Street, Bark), Cat (Maple Suburbs, Double
   Jump), Gator (Goose Marsh, Dash), Bear (Cliffside, Bark), Wolf (Floating Islands, Dash), each **Common to Legendary**
-  (the rarity is the mount's own: its coat, its stats and its name, e.g. "Rare Gator"; the town's animals of that kind
-  and rarity wear the same coat). A new courier starts with a Common Dog. (owner, 2026-11-11) Every mount from before (and every
+  (the rarity is the mount's own: its coat, its stats and its name; the town's animals of that kind and rarity wear the
+  same coat). (owner, 2026-11-11) **One coat per rarity, the same five for every animal** (`COATS`): Black (Common),
+  Orange (Uncommon), Gold (Rare), Diamond (Epic), Void (Legendary); a mount is named by its coat, e.g. "Gold Gator",
+  "Shiny Void Wolf". A new courier starts with a Common Dog. (owner, 2026-11-11) Every mount from before (and every
   leftover egg) became a **Dog** of the same rarity and skin, once (saved data version 2), so nobody has an animal
   from an area they haven't reached.
 - **Stats** (rarity 0-4, area a 0-4 for Dog to Wolf): (owner, 2026-11-11) Speed 10 + 1.5 x a + 1 x rarity m/s: each
@@ -131,12 +133,12 @@ A parcel that breaks or is lost is gone; the conveyor always has the next one. *
 
 ## Merging and skins
 
-- (owner, 2026-11-11) **Merging mounts:** two of the same mount (kind and rarity) with the same skin merge (the Stable's Merge button,
-  on either) into the one you chose, which gets the next skin: normal, Shiny, Golden,
-  **Rainbow** (violet with a sea-green trim and a rainbow trail; only by merging). The other goes. A Golden or
-  Rainbow merge is announced to the server.
-- 1 in 100 is **Shiny** (a lighter coat and a sparkle trail), 1 in 1,000 **Golden** (a gold coat and trail); the whole
-  server is told. Up to 60 mounts.
+- (owner, 2026-11-11) **Two skins only: normal and Shiny.** 1 in 10,000 new mounts is **Shiny**: the same coat, but
+  little stars twinkle on and around it all the time (in town, for everyone; its pictures have sparkles too). A Shiny
+  drop is announced to the server.
+- **Merging mounts:** two of the same normal mount (kind and rarity) merge (the Stable's Merge button, on either) into
+  the one you chose, which becomes Shiny; the other goes. A Shiny Epic or Legendary by merging is announced. Up to 60
+  mounts.
 
 ## The tutorial
 
@@ -355,6 +357,8 @@ Courier's rules.
 - (owner, 2026-11-11) The **Stamp Meter** (pity: Rare at every 25 rolls below Rare, Epic at 100), its bar on the HUD
   and its tutorial card; **Route Permits** (districts open with mount levels now; their coins refunded); the **Fragile,
   Heavy and Golden** parcels (only tiers and Express stay); merging **four** mounts (now two).
+- (owner, 2026-11-11) The **Golden and Rainbow** skins (owned ones became Shiny), the Shiny's lighter coat (it sparkles
+  now), the 1 in 100 Shiny chance (now 1 in 10,000), and each animal's own five coats (now the same five for all).
 
 - (owner, 2026-11-11) Back alleys; the wide (120 m) town; rewards rolled in full on delivery (now the rarity on
   delivery, the contents on opening).
