@@ -22,7 +22,7 @@ for (const q of [...W.pads.flatMap((p) => [[p.x, p.z, p.y], [p.tx, p.tz, p.ty]])
 ok(W.spawnWeights(5, 1)[4] >= 0.3 - 1e-9 && W.spawnWeights(3, 1)[2] >= 0.3 - 1e-9 && W.spawnWeights(3, 1)[0] > 0 && W.spawnWeights(3, 1)[1] > 0, "at least 30% of parcels go to the farthest open area, the rest in between");
 ok(W.shakeOff({ sp: "dog", r: 0 }, 0) === 0 && W.shakeOff({ sp: "dog", r: 4 }, 0) > 0.8 && W.shakeOff({ sp: "dog", r: 4 }, 4) === 0 && W.shakeOff({ sp: "wolf", r: 0 }, 4) === 0 && W.shakeOff({ sp: "wolf", r: 4 }, 4) > 0.5, "a rarer mount outgrows the easier areas' animals");
 ok(W.dogs.length >= 18 && W.dogs.every((d) => W.roamOk(d.hx, d.hz, d.y, d.d)) && W.geese.length >= 15 && W.goats.length === 4, "dogs, geese and goats all over town");
-ok([0, 1, 2, 3, 4].map((r) => W.bagSize({ r })).join() === "1,2,3,4,5" && W.spawnWeights(5, 4).reduce((a, p, n) => a + p * n, 0) > W.spawnWeights(5, 0).reduce((a, p, n) => a + p * n, 0) + 0.4 && W.spawnWeights(5, 4)[0] < W.spawnWeights(5, 0)[0] / 2, "a mount carries 1 to 5 parcels by its rarity (Common 1, Legendary 5); a rarer mount brings pricier parcels");
+ok([0, 1, 2, 3, 4].map((r) => W.bagSize({ r })).join() === "1,1,1,1,1" && W.bagSize({ r: 0, cap: 4 }) === 5 && W.petUpCost({ sp: "dog", r: 0, cap: 1 }, "cap") === 4 * W.petUpCost({ sp: "dog", r: 0 }, "cap") && W.petUpCost({ sp: "wolf", r: 4 }, "spd") > W.petUpCost({ sp: "dog", r: 0 }, "spd") && W.cleanData({ v: 2, mounts: [{ id: 1, sp: "cat", r: 3 }] }).mounts[0].cap === 3 && W.spawnWeights(5, 4).reduce((a, p, n) => a + p * n, 0) > W.spawnWeights(5, 0).reduce((a, p, n) => a + p * n, 0) + 0.4 && W.spawnWeights(5, 4)[0] < W.spawnWeights(5, 0)[0] / 2, "every mount carries 1 parcel, Aura raises it to 5 (dearer each level, and for rarer, farther animals; mounts from before keep what they carried); a rarer mount brings pricier parcels");
 ok([0, 1, 2, 3, 4].map((d) => W.housesIn(d).length).join() === "6,6,6,6,6", "five districts, three houses each side");
 for (const h of W.houses) ok(Math.abs(W.surfaceAt(h.mx, h.mz, h.my + 0.3) - h.my) < 0.01 && !W.blocked(h.mx, h.mz, h.my), "mailbox in the open: " + h.name);
 ok(W.blocked(W.houses[0].x, W.houses[0].z, 0) && !W.blocked(W.SPAWN.x, W.SPAWN.z, 0) && Math.abs(W.counterDist(0, 8) - 2.3) < 1e-9 && W.blocked(W.PO.b.x, W.PO.b.z, 0) && W.blocked(0, 0, 0) && !W.blocked(0, 7.5, 0), "houses are solid; the post office is a building with its conveyor out front");
@@ -40,8 +40,8 @@ ok(W.dogs.every((q) => q.sp === W.CHASERS[q.d] && q.r >= 0 && q.r <= 4) && W.gee
   ok(!W.trailsFor(lo).length && W.trailsFor(hi).join() === "cloud" && W.cleanData(hi).mounts[0].tr === "cloud" && !("tr" in W.cleanData(hi).mounts[1]), "a trail unlocks every five areas; any mount can wear one"); }
 ok(W.gateX(1) === W.SUBURBS_X && W.gateX(3) === W.CLIFF.x0 && W.gateX(4) === Infinity && W.ATTACK.slots === 2 && W.ATTACK.calm === 3 && W.DROP_S === 15, "closed areas' gates; two slots and a 3 s calm; 15 s on the ground");
 ok(Object.keys(W.MODS).join() === "express" && Array.from({ length: 400 }, (_, k) => W.rollParcel(5, 1, () => (k * 0.618) % 1).mod).every((m) => m === "" || m === "express"), "only timed (Express) parcels as modifiers");
-const sp = (s, r) => W.mountStats({ sp: s, r }).speed;
-ok(sp("dog", 4) > sp("dog", 0) * 1.3 && sp("cat", 0) > sp("dog", 0) && sp("dog", 4) > sp("cat", 2) && sp("dog", 4) >= sp("gator", 0) && sp("wolf", 0) > sp("bear", 0) && W.EMPTY_FAST >= 2 && W.GOAT.speed >= 18, "mounts get faster with level, much faster empty; goats charge fast");
+const sp = (s, r, z, spd = 0) => W.mountStats({ sp: s, r, spd }, z).speed, near = (a, b) => Math.abs(a - b) < 1e-9;
+ok(near(sp("dog", 1, 0), sp("dog", 0, 0) * 1.2) && near(sp("wolf", 0, 0), sp("dog", 0, 0) * 1.2) && near(sp("dog", 0, 4), sp("dog", 0, 0) * 0.8) && near(sp("dog", 0, 0, 2), sp("dog", 0, 0) * 1.1) && W.abilityCd({ sp: "dog", r: 4 }) < W.abilityCd({ sp: "dog", r: 0 }) && W.EMPTY_FAST >= 2 && W.GOAT.speed >= 18, "rarity +20% speed and shorter cooldowns; +5% a zone short of its own, -5% a zone past it; +5% an Aura level; goats charge fast");
 ok(W.deliveryCoins(0, "", 0, 0, false) === 10 && W.deliveryCoins(4, "", 0, 1, false) === 120 && W.deliveryCoins(1, "express", 0, 0, true) === 20 && W.deliveryCoins(1, "express", 10, 0, false) === 100, "delivery coins");
 { const lo = () => 0.3, up = fresh.up;   // 0.3: a Common roll
   ok(W.rewardRoll(0, up, lo).tier === 0 && W.rewardRoll(0, up, () => 0.999).tier === 4, "a roll is its own (no pity)");
@@ -77,6 +77,7 @@ try {
   const a = client("A"), b = client("B"); await Promise.all([a.open, b.open]);
   a.send({ t: "register", user: "smokeA", pass: "pass1234" });
   const wa = await a.wait((m) => m.t === "welcome", "welcome");
+  for (const r of game.rooms) r.podPay = Infinity;   // the podiums pay only in their own test below
   ok(wa.data.mounts.length === 1 && wa.data.coins === 0 && wa.geese.length === W.geese.length, "A starts as a new courier");
   const belt = await a.wait((m) => m.t === "belt", "the conveyor"); ok(belt.ready.tier === 0 && belt.next.tier === 0, "a new courier's conveyor has Bronze parcels");
   b.send({ t: "register", user: "smokeB", pass: "pass1234" });
@@ -125,9 +126,9 @@ try {
     await put(a, "smokeA", q.x + 0.6, q.z + 0.6, q.y); const bite = await a.wait((m) => m.t === "stun" && m.why === "dog", "the dog's bite"); ok(bite.s > 1 && pa.bag[0].hits === 1, "a dog's bite stuns and cracks the parcel");
     for (const d of pa.room.dogs) d.cool = Date.now() + 60000; await sleep(1200); const h = W.houses[pa.bag[0].house]; pa.stunUntil = 0; await put(a, "smokeA", h.mx, h.mz, h.my);
     const d2 = await a.wait((m) => m.t === "delivered", "the second delivery"); { const nm = d2.data.mounts.find((m) => m.id === d2.gift.m); ok(d2.gift.m && nm.sp === "dog" && nm.r === d2.gift.r, "the second delivery brings a new mount: the parcel's area's animal, at the gift's rarity"); }
-    pa.acct.data.mounts.find((m) => m.id === pa.acct.data.ride).r = 2; await put(a, "smokeA", 0, 7.5);
+    { const rm = pa.acct.data.mounts.find((m) => m.id === pa.acct.data.ride); rm.r = 2; const c0 = pa.acct.data.coins; pa.acct.data.coins = 1e6; a.send({ t: "petup", id: rm.id, k: "cap" }); const pu = await a.wait((m) => m.t === "petup", "an Aura carry level"); ok(pu.data.mounts.find((m) => m.id === rm.id).cap === 1 && pu.data.coins < 1e6, "Aura buys a carry level"); pa.acct.data.coins = c0; rm.cap = 2; } await put(a, "smokeA", 0, 7.5);
     for (let k = 0; k < 3; k++) { pa.ready = { tier: 0, mod: "" }; a.send({ t: "grab" }); await a.wait((m) => m.t === "bag" && m.ev.k === "grab" && m.bag.length === k + 1, "grab " + (k + 1)); await sleep(850); }
-    pa.ready = { tier: 0, mod: "" }; a.send({ t: "grab" }); await sleep(300); ok(pa.bag.length === 3, "a Rare mount carries three parcels, each to its own address");
+    pa.ready = { tier: 0, mod: "" }; a.send({ t: "grab" }); await sleep(300); ok(pa.bag.length === 3, "a mount with two Aura carry levels carries three parcels, each to its own address");
     for (let i = a.inbox.length - 1; i >= 0; i--) if (a.inbox[i].t === "tp") a.inbox.splice(i, 1);   // (earlier runs' trips home)
     for (const q of [...pa.bag]) { const h = W.houses[q.house]; pa.stunUntil = 0; await put(a, "smokeA", h.mx, h.mz, h.my); await sleep(250); }
     ok(!pa.bag.length && pa.acct.data.stats.del === 5, "each parcel is delivered at its own mailbox"); { const home = await a.wait((m) => m.t === "tp" && m.why === "home", "back to the post office after the run"); ok(Math.hypot(home.x - W.SPAWN.x, home.z - W.SPAWN.z) < 8, "the run over, back at the post office"); } }
@@ -151,6 +152,10 @@ try {
   b.send({ t: "admin", op: "quick", cmd: "coins", n: 5000, name: "smokeB" });   // a player: nothing happens
   n.send({ t: "admin", op: "quick", cmd: "coins", n: 5000, name: "smokeB" });
   ok((await b.wait((m) => m.t === "data", "B's coins")).data.coins === 5000, "an admin gives coins once; a player's command is ignored");
+  // (owner, 2026-11-12) the podiums: the room's best mounts stand there and pay Aura
+  { const pa = who("smokeA"), pb = who("smokeB"), r = pa.room; pb.acct.data.mounts.push({ id: pb.acct.data.nextId++, sp: "wolf", r: 4, va: 1, cap: 0, spd: 0 }); await sleep(1300);
+    const best = r.pods[0] && r.pods.find((q) => q && q.m.sp === "wolf" && q.m.r === 4); ok(r.pods.every(Boolean) && best && best.p === pb, "a rarer mount takes a podium");
+    const c0 = pb.acct.data.coins; r.podPay = 0; const au = await b.wait((m) => m.t === "aura", "a podium's Aura"); r.podPay = Infinity; ok(au.n >= W.podiumPay(best.m) && pb.acct.data.coins > c0, "a podium pays its courier Aura"); pb.acct.data.coins = c0; }
   n.send({ t: "admin", op: "give", what: "mount:gator", n: 1, r: 2, name: "smokeB" });
   const gg = await b.wait((m) => m.t === "data" && m.data.mounts.some((k) => k.sp === "gator" && k.r === 2), "B's Rare Gator");
   // upgrades and mounts: the server takes the coins and saves

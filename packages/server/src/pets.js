@@ -35,7 +35,7 @@ const rankOf = (a) => (a.name.toLowerCase() === OWNER ? 3 : RANK[a.role] || 0);
 const between = ([a, b]) => a + Math.random() * (b - a);
 
 function makeRoom() {
-  const r = { players: new Map(), last: Date.now(), tick: 0, slow: 0, rocks: [], dives: [] };
+  const r = { players: new Map(), last: Date.now(), tick: 0, slow: 0, rocks: [], dives: [], pods: [null, null, null], podAt: 0, podPay: Date.now() + W.PODIUM.every * 1000 };
   r.dogs = W.dogs.map((d) => ({ id: d.id, x: d.hx, z: d.hz, y: d.y, yaw: 0, mode: 0, t: 0, target: null, cool: 0, pause: 0, stuck: 0, awake: false }));
   r.geese = W.geese.map((g) => ({ id: g.id, x: g.x, z: g.z, y: g.y, yaw: 0, mode: 0, t: 0, target: null, carry: null, wx: g.x, wz: g.z, awake: false }));
   r.goats = W.goats.map((g) => ({ id: g.id, x: g.hx, z: g.hz, y: g.y, yaw: Math.PI / 2, mode: 0, t: 0, dx: 0, dz: 0, cool: 0, stuck: 0, awake: false }));
@@ -160,9 +160,15 @@ export function attachPets(server, { origins = [], allowLocal = false, store = m
     all(r, { t: "fx", k: "kick", id: me.id, hit: landed ? 1 : 0 });
   }
   function bark(me) {   // the Bark ability: dogs near turn tail
-    const m = mountOf(me), tier = W.abilityTier(m), now = Date.now(); if (MOUNTS[m.sp].ab !== "bark" || !tier || now < me.abilityAt + W.ABILITY_CD.bark[tier] * 1000 - 150) return;
-    me.abilityAt = now; const R = 7 + 3.5 * tier;
-    for (const q of me.room.dogs) if (q.mode !== 3 && hyp(q.x - me.x, q.z - me.z) < R) { q.mode = 3; release(q); q.cool = now + DOG.cool * 1000; all(me.room, { t: "fx", k: "yelp", dog: q.id }); }
+    const m = mountOf(me), tier = W.abilityTier(m), now = Date.now(); if (MOUNTS[m.sp].ab !== "bark" || !tier || now < me.abilityAt + W.abilityCd(m) * 1000 - 150) return;
+    me.abilityAt = now; const R = 7 + 3.5 * tier, r = me.room, near = (x, z, y) => Math.abs(y - me.y) < 4 && hyp(x - me.x, z - me.z) < R;
+    // (owner, 2026-11-12) a bark hits every animal: the town's animals turn tail, geese let go and back off, goats too
+    for (const q of r.dogs) if (q.mode !== 3 && near(q.x, q.z, q.y)) { q.mode = 3; release(q); q.cool = now + DOG.cool * 1000; all(r, { t: "fx", k: "yelp", dog: q.id }); }
+    for (const g of r.geese) if (g.mode !== 4 && near(g.x, g.z, g.y)) {
+      if (g.carry) { const o = g.carry.p, q = g.carry.parcel; drop(o.stolen, q); o.dropped.push({ parcel: q, x: g.x, z: g.z, y: g.y, until: now + q.left }); g.carry = null; sendBag(o, { k: "dropped", pid: q.pid }); all(r, { t: "fx", k: "busted", id: me.id, x: r1(g.x), y: r1(g.y), z: r1(g.z) }); }
+      g.mode = 4; g.t = 3; release(g);
+    }
+    for (const g of r.goats) if (g.mode !== 3 && near(g.x, g.z, W.goats[g.id].y)) { g.mode = 3; release(g); g.cool = now + GOAT.cool * 1000; }
     all(me.room, { t: "fx", k: "bark", id: me.id, r: R });
   }
   function teleport(p, x, z, y, why) { p.x = x; p.z = z; p.y = y; p.tpAt = Date.now(); p.lx = x; p.lz = z; p.lt = p.tpAt; send(p.ws, { t: "tp", x, z, y, why }); }
@@ -287,7 +293,7 @@ export function attachPets(server, { origins = [], allowLocal = false, store = m
         me.lx = me.x; me.lz = me.z; me.lt = now;
         online.set(acct.id, me);
         send(ws, { t: "welcome", web: websiteBuild(), by: websiteBy(), now, id: me.id, name: me.name, role: rankOf(acct) >= 2 ? "admin" : acct.role, token, data: acct.data, x: me.x, z: me.z, players: [...room.players.values()].map(pub),
-          dogs: room.dogs.map(dogView), geese: room.geese.map(gooseView), goats: room.goats.map(goatView) });
+          dogs: room.dogs.map(dogView), geese: room.geese.map(gooseView), goats: room.goats.map(goatView), pods: podView(room) });
         room.players.set(me.id, me);
         all(room, { t: "join", p: pub(me) }, me);
         fillBelt(me); sendBag(me, { k: "mount" });
@@ -338,10 +344,20 @@ export function attachPets(server, { origins = [], allowLocal = false, store = m
         case "fuse": {   // (owner, 2026-11-11) two of the same mount (coat and skin): the chosen one goes up a coat (rarity), the other goes
           const four = W.fuseSet(d.mounts, m.id); if (!four) break;
           const best = four[0]; best.r++;   // the one you chose
+          for (const k of four) { best.cap = Math.max(best.cap | 0, k.cap | 0); best.spd = Math.max(best.spd | 0, k.spd | 0); }   // (owner, 2026-11-12) it keeps the better Aura upgrades of the two
           d.mounts = d.mounts.filter((k) => k === best || !four.includes(k)); if (!d.mounts.some((k) => k.id === d.ride)) d.ride = best.id;
           changed(me); flush(me.acct); send(ws, { t: "fused", m: best, data: d }); showMount(me);
           if (best.r >= 3 || best.va) announce(me, best, true);   // an Epic, Legendary or Shiny made by merging tells everyone
           break;
+        }
+        case "petup": {   // (owner, 2026-11-12) Aura on one mount: carrying (cap) or speed (spd)
+          const q = d.mounts.find((k) => k.id === m.id), k = m.k === "cap" || m.k === "spd" ? m.k : ""; if (!q || !k || (q[k] | 0) >= (k === "cap" ? W.CAP_MAX : W.SPD_MAX)) break;
+          const cost = W.petUpCost(q, k); if (d.coins < cost) break;
+          d.coins -= cost; q[k] = (q[k] | 0) + 1; changed(me); flush(me.acct); send(ws, { t: "petup", id: q.id, k, data: d }); break;
+        }
+        case "buytrail": {   // (owner, 2026-11-12) a trail bought with Aura
+          const T = W.TRAILS.find((t) => t.k === m.k && t.cost); if (!T || d.trails.includes(T.k) || d.coins < T.cost) break;
+          d.coins -= T.cost; d.trails.push(T.k); changed(me); flush(me.acct); pushData(me); break;
         }
         case "upgrade": {
           const k = UPGRADES[m.k] ? m.k : ""; if (!k || d.up[k] >= W.UP_MAX || d.coins < W.upgradeCost(k, d.up[k])) break;
@@ -520,9 +536,23 @@ export function attachPets(server, { origins = [], allowLocal = false, store = m
     for (let n = r.rocks.length - 1; n >= 0; n--) { const k = r.rocks[n]; if (now < k.at) continue; r.rocks.splice(n, 1); for (const p of players) if (Math.abs(p.y - k.y) < 3 && hyp(p.x - k.x, p.z - k.z) < ROCK.r && now >= p.stunUntil && now >= p.tpAt) { stun(p, ROCK.stun, "rock"); hit(p, "rock"); } }
     for (let n = r.dives.length - 1; n >= 0; n--) { const k = r.dives[n]; if (now < k.at) continue; r.dives.splice(n, 1); const p = k.p; if (!p.gone && p.bag.length && Math.abs(p.y - k.y) < 3 && hyp(p.x - k.x, p.z - k.z) < SKYGOOSE.r && now >= p.graceUntil && !calmNow(p, now)) { all(r, { t: "fx", k: "skysteal", id: p.id }, p); lose(p, "skygoose", pick1(p.bag)); p.calmUntil = now + W.ATTACK.calm * 1000; } }
   }
+  // (owner, 2026-11-12) the podiums: each room's three best mounts (up to three a courier) stand by the post office and pay Aura
+  const podView = (r) => r.pods.map((q) => (q ? { id: q.p.id, name: q.p.name, sp: q.m.sp, r: q.m.r, va: q.m.va } : null));
+  function stepPodiums(r, now) {
+    const keep = r.pods.map((q) => (q && r.players.get(q.p.id) === q.p && q.p.acct.data.mounts.includes(q.m) ? q : null)), cands = [];
+    for (const p of r.players.values()) for (const m of [...p.acct.data.mounts].sort((a, b) => W.podiumScore(b) - W.podiumScore(a)).slice(0, 3)) cands.push({ p, m, s: W.podiumScore(m), was: keep.some((q) => q && q.m === m) });
+    cands.sort((a, b) => b.s - a.s || b.was - a.was);   // a rarer mount takes a podium; a tie keeps the one already standing
+    const top = cands.slice(0, 3), next = [null, null, null];
+    for (const c of top) { const n = keep.findIndex((q) => q && q.m === c.m); if (n >= 0) next[n] = keep[n]; }
+    for (const c of top) if (!next.some((q) => q && q.m === c.m)) { const n = next.indexOf(null); next[n] = { p: c.p, m: c.m }; }
+    const changedPods = next.some((q, n) => (q && q.m) !== (r.pods[n] && r.pods[n].m)); r.pods = next;
+    if (changedPods) all(r, { t: "podiums", pods: podView(r) });
+    if (now >= r.podPay) { r.podPay = now + W.PODIUM.every * 1000; for (const q of r.pods) if (q) { const a = W.podiumPay(q.m); q.p.acct.data.coins += a; changed(q.p); send(q.p.ws, { t: "aura", n: a, coins: q.p.acct.data.coins }); } }
+  }
   setInterval(() => {
     const now = Date.now();
     for (const [k, exp] of invites) if (exp < now) invites.delete(k);
+    for (const r of rooms) if (now >= r.podAt) { r.podAt = now + 1000; stepPodiums(r, now); }
     for (const r of rooms) {
       const dt = Math.min(0.25, (now - r.last) / 1000); r.last = now;
       const players = [...r.players.values()];

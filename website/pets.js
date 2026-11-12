@@ -4,7 +4,7 @@
 // deliveries, rolls, damage, coins, mounts; this page shows the town (pets-world.js, shared with the server), moves you
 // and asks. Phone first: a thumb joystick, drag to look, pinch to zoom, big buttons.
 import * as THREE from "./vendor/three.module.min.js";
-import * as World from "./pets-world.js?v=1794466362";
+import * as World from "./pets-world.js?v=1794468246";
 
 const $ = (id) => document.getElementById(id);
 const { TAU, clamp, hyp, MOUNTS, TIERS, RARITY, RARITY_C, MODS, UPGRADES } = World;
@@ -45,7 +45,7 @@ function textSprite(text, { size = 40, color = "#23303b", bg = "rgba(255,255,255
 // ---- the town, drawn from the shared world ----
 // (owner, 2026-11-11) the town's colors are kept calm so the delivery marker (POI: the one hot pink thing in town) stands out
 const POI = "#ff1f8f";
-const KIND_C = { grass: "#78b765", mud: "#75583e", rock: "#9a948b", plank: "#b9905f", isle: "#80bd6c", road: "#84878f", stone: "#a9adb5", roof: "#b9573f" };
+const KIND_C = { grass: "#78b765", mud: "#75583e", rock: "#9a948b", plank: "#b9905f", isle: "#80bd6c", road: "#84878f", stone: "#a9adb5", roof: "#b9573f", pod0: "#e8b923", pod1: "#c9d1d9", pod2: "#c98a4b" };
 const HOUSE_C = [["#efe3cc", "#c8604c"], ["#ecd5b8", "#5c86bd"], ["#cfdcc0", "#7a5a3c"], ["#dcd3c6", "#8368b0"], ["#f1f1ec", "#3fa9a4"]];   // walls and roofs, by district
 const houseMesh = [], dogMesh = [], gooseMesh = [], goatMesh = [], sprinklerMesh = [], pipeEyes = [];
 function rampGeo(s) {   // a wedge: flat at the bottom, rising along z (k 2) or x (k 3)
@@ -529,7 +529,7 @@ addEventListener("keydown", () => { const a = audio(); if (a && a.state === "sus
 // ---- the courier's data (the server's copy; this page only shows it) and me ----
 let save = World.cleanData({});
 const riding = () => save.mounts.find((m) => m.id === save.ride) || save.mounts[0];
-const myStats = () => World.mountStats(riding());
+const myStats = () => World.mountStats(riding(), World.districtAt(me.x, me.z, me.y));   // (owner, 2026-11-12) faster short of its own zone, slower past it
 const me = { x: World.SPAWN.x, y: 0, z: World.SPAWN.z, yaw: Math.PI / 2, vx: 0, vz: 0, vy: 0, px: 0, pz: 0, ground: true, moving: false, foot: false, footT: 0, stun: 0, grace: 0, jumps: 0, boost: 0, dash: 0, abilityAt: -99, kickAt: -99, kickT: 0, transit: null, armed: true, mx: 0, my: 0, mz: 0, myaw: 0, hidden: false, glide: false, stepT: 0 };
 let mine = null, walker = null, myTag = null, bag = [], stolen = [], dropped = [], cap = 1, belt = { ready: null, next: null };   // my parcels: on the saddle, with geese, on the ground
 function makeTag(name, rank, r) { return textSprite(String(name || "Courier").slice(0, 18), { size: 34, badge: rank ? World.RANK_C[rank] : "", glow: r >= 4 ? "#ffd84a" : "" }); }
@@ -542,6 +542,16 @@ function rigMount(sp, va, r, shirt, name, rank) {   // a mount with its rider, n
 function unrig(r) { if (!r) return; scene.remove(r.m.g, r.w.g); }
 function setCarry(r, c) { r.slot.clear(); let y = 0; for (const [tier, mod] of c || []) { const b = parcelMesh(tier, mod); b.scale.setScalar(1.4); b.position.y = y; b.rotation.y = (y * 1.7) % 0.6 - 0.3; y += b.userData.s * 1.4; r.slot.add(b); } }   // (owner, 2026-11-11) a box for each parcel, stacked, and big
 const bagCarry = () => bag.map((q) => [q.tier, q.mod]);
+// (owner, 2026-11-12) the podiums by the post office: the server's three best mounts, each with its courier's name
+const podMesh = [null, null, null];
+function setPods(pods) {
+  World.PODIUM.spots.forEach((q, n) => { const P = pods[n] || null, o = podMesh[n], key = P ? [P.id, P.sp, P.r, P.va, P.name].join() : "";
+    if (o && o.key === key) return; if (o) scene.remove(o.m.g); podMesh[n] = null; if (!P) return;
+    const m = petModel(MOUNTS[P.sp] ? P.sp : "dog", null, P.va, P.r); sizePet(m, World.mountScale(P)); m.g.position.set(q.x, q.y, q.z); m.g.rotation.y = 0;
+    const tag = textSprite(String(P.name || "").slice(0, 18), { size: 30, glow: P.va ? "#bfe6ff" : P.r >= 4 ? "#ffd84a" : "" }); tag.position.y = (m.top + 0.8) / m.g.scale.x; tag.scale.multiplyScalar(1 / m.g.scale.x); m.g.add(tag);
+    scene.add(m.g); podMesh[n] = { m, key, va: P.va, sc: World.mountScale(P) * MOUNTS[P.sp].size, x: q.x, y: q.y, z: q.z }; });
+}
+function stepPods(dt, t) { for (const P of podMesh) if (P) { P.m.g.rotation.y = Math.sin(t * 0.6) * 0.5; if (P.va) sparkle(P.x, P.y, P.z, P.sc, dt); } }
 function remount() { unrig(mine); const q = riding(); mine = rigMount(q.sp, q.va, q.r, save.set.shirt, myName, World.rankOf(World.upTotal(save.up))); setCarry(mine, bagCarry()); }
 
 // ---- moving ----
@@ -557,7 +567,7 @@ function tryJump() {
 function useAbility() {
   if (me.stun > 0 || me.transit || me.foot) return; const q = riding(), ab = MOUNTS[q.sp].ab, tier = World.abilityTier(q), t = now(); if (!tier) { sfx("no"); return; }
   if (ab === "jump2") { tryJump(); return; }
-  if (t < me.abilityAt + World.ABILITY_CD[ab][tier]) return; me.abilityAt = t;
+  if (t < me.abilityAt + World.abilityCd(q)) return; me.abilityAt = t;
   if (ab === "dash") { me.dash = 0.32 + 0.06 * tier; sfx("dash"); cam.shake = Math.max(cam.shake, 0.15); }
   else { netSend({ t: "ability" }); sfx("bark"); }
 }
@@ -638,6 +648,10 @@ function stepMe(dt) {
   if (q.va) { const f = me.foot; sparkle(f ? me.mx : me.x, f ? me.my : me.y, f ? me.mz : me.z, World.mountScale(q) * MOUNTS[q.sp].size, dt); }
 }
 function trail(x, y, z, q, kind) {
+  if (q.tr === "spark") emit(x, y + 0.6, z, 2, { colors: ["#ffd84a", "#ffffff", "#ffb347"], speed: 1.6, up: 1.8, life: 0.5, grav: 4, size: 0.1 });   // (owner, 2026-11-12) the Aura trails
+  else if (q.tr === "bubble") emit(x + (Math.random() - 0.5) * 0.8, y + 0.5, z + (Math.random() - 0.5) * 0.8, 1, { colors: ["#bfe6ff", "#e8f6ff", "#9fd8ff"], speed: 0.2, up: 0.9, life: 1.4, grav: -0.4, size: 0.3 });
+  else if (q.tr === "heart") emit(x, y + 0.7, z, 1, { colors: ["#ff5c8a", "#ff9ab8", "#ffd1e0"], speed: 0.3, up: 1.1, life: 1.1, grav: -0.6, size: 0.24, tw: 1 });
+  else if (q.tr === "flame") for (let k = 0; k < 2; k++) emit(x + (Math.random() - 0.5) * 0.6, y + 0.3, z + (Math.random() - 0.5) * 0.6, 1, { colors: ["#ff6a1f", "#ffb347", "#ffd84a", "#c8401e"], speed: 0.3, up: 2.2, life: 0.55, grav: -1.5, size: 0.26 });
   if (q.tr === "cloud") for (let k = 0; k < 2; k++) emit(x + (Math.random() - 0.5) * 0.8, y + 0.35 + Math.random() * 0.4, z + (Math.random() - 0.5) * 0.8, 1, { colors: ["#ffffff", "#e8f2ff", "#d6e6fb"], speed: 0.3, up: 0.6, life: 1.3, grav: -0.3, size: 0.42 });   // (owner, 2026-11-11) the Cloud Trail: soft puffs behind
   if (q.r >= 4) emit(x, y + 0.1, z, 2, { colors: ["#ffd84a", "#ffffff"], speed: 1.2, up: 1.5, life: 0.6, grav: 2, size: 0.12 });
   else if (kind === "mud") emit(x, y + 0.1, z, 2, { colors: ["#6b4d33"], speed: 1.5, up: 2, life: 0.4, grav: 9, size: 0.14 });
@@ -856,7 +870,7 @@ const TUT = [
   { t: "Drop them off", p: "Follow the pink arrow to the pink beam and ride into the ring by the mailbox.", on: "deliver" },
   { t: "Open your parcels", p: "Delivered parcels wait on the left and open once you've none left to deliver. Tap to hurry them. A parcel can bring its neighborhood's animal: an Uncommon or better one opens the next neighborhood.", on: "open", hi: "gifts" },
   { t: "Stable", p: "Your mounts: ride one, and merge two of the same into a cooler skin. The rarer the mount, the faster it is and the more parcels it carries.", hi: "mstable" },
-  { t: "Upgrades", p: "Spend coins on better pay, luck and sturdier boxes.", hi: "mup" },
+  { t: "Upgrades", p: "Spend Aura on better pay, luck and sturdier boxes.", hi: "mup" },
 ];
 let tut = -1;
 function tutShow(n) {
@@ -893,7 +907,7 @@ function hud(dt) {
   if (shownCoins !== coinsNow) { const d = coinsNow - shownCoins; shownCoins = Math.abs(d) < 1 ? coinsNow : shownCoins + d * Math.min(1, dt * 8); $("coinn").textContent = fmt(Math.round(shownCoins)); }
   const t = now(), q = riding(), ab = MOUNTS[q.sp].ab, tier = World.abilityTier(q);
   cdBtn("bkick", me.kickAt + World.KICK.cd - t, World.KICK.cd);
-  cdBtn("bability", tier && World.ABILITY_CD[ab][tier] ? me.abilityAt + World.ABILITY_CD[ab][tier] - t : 0, tier ? World.ABILITY_CD[ab][tier] : 0);
+  const acd = tier ? World.abilityCd(q) : 0; void ab; cdBtn("bability", acd ? me.abilityAt + acd - t : 0, acd);
   // the parcel cards: one row per parcel (a stolen or dropped one faded)
   const all = [...bag, ...dropped.map((q) => ({ ...q, gone: 1 })), ...stolen.map((q) => ({ ...q, gone: 1 }))], key = all.map((P) => [P.pid, P.dur, P.gone ? 1 : 0].join(":")).join() + "/" + cap;
   if (key !== cardKey) {
@@ -934,12 +948,22 @@ function renderPanel() {
     const m = save.mounts.find((k) => k.id === selMount) || riding(), S = World.mountStats(m), M = MOUNTS[m.sp], tier = World.abilityTier(m), d = el("div", "mdetail");
     const im = el("img", "big"); im.src = portrait(m.sp, m.va, m.r); im.alt = ""; d.appendChild(im);
     const info = el("div", "minfo"); info.appendChild(el("h3", "", mountName(m))); const rr = el("div", "rar", RARITY[m.r]); rr.style.color = RARITY_C[m.r] === "#ffffff" ? "#6f7d8a" : RARITY_C[m.r]; info.appendChild(rr);
-    for (const [name, v, max] of [["Speed", S.speed, 20], ["Jump", S.jump, 11], ["Grip", S.grip * 100, 60]]) { const r = el("div", "stat"); r.appendChild(el("span", "", name)); const b = el("div", "bar"), f = el("i"); f.style.width = clamp((v / max) * 100, 4, 100) + "%"; b.appendChild(f); r.appendChild(b); r.appendChild(el("em", "", name === "Grip" ? Math.round(v) + "%" : v.toFixed(1))); info.appendChild(r); }
+    for (const [name, v, max] of [["Speed", S.speed, 33], ["Jump", S.jump, 11], ["Grip", S.grip * 100, 60]]) { const r = el("div", "stat"); r.appendChild(el("span", "", name)); const b = el("div", "bar"), f = el("i"); f.style.width = clamp((v / max) * 100, 4, 100) + "%"; b.appendChild(f); r.appendChild(b); r.appendChild(el("em", "", name === "Grip" ? Math.round(v) + "%" : v.toFixed(1))); info.appendChild(r); }
     const ar = el("div", "stat ab" + (tier ? "" : " off")); ar.appendChild(el("span", "", World.ABILITY[M.ab])); const pp = el("div", "pips"); for (const need of [0, 2, 4]) pp.appendChild(el("i", m.r >= need ? "on" : "", RARITY[need][0])); ar.appendChild(pp); info.appendChild(ar);
     const acts = el("div", "acts"); if (m.id !== save.ride) acts.appendChild(btn("Ride", () => netSend({ t: "equip", id: m.id }), "go"));
     if (World.fuseSet(save.mounts, m.id)) acts.appendChild(btn("Merge", () => netSend({ t: "fuse", id: m.id }), "fuse"));   // two the same: the next coat up
-    for (const k of World.trailsFor(save)) { const T = World.TRAILS.find((q) => q.k === k), on = m.tr === k, b = btn(T.name, () => netSend({ t: "trail", id: m.id, k: on ? "" : k }), "trail" + (on ? " on" : "")); acts.appendChild(b); }   // (owner, 2026-11-11) unlocked trails, on any mount
-    info.appendChild(acts); d.appendChild(info);
+    info.appendChild(acts);
+    // (owner, 2026-11-12) Aura on this mount: how much it carries and how fast it goes
+    for (const [k, name, lv, max, show] of [["cap", "Carry", m.cap | 0, World.CAP_MAX, World.bagSize(m)], ["spd", "Boost", m.spd | 0, World.SPD_MAX, "+" + (m.spd | 0) * 5 + "%"]]) {
+      const r = el("div", "stat pup"); r.appendChild(el("span", "", name)); r.appendChild(el("em", "", String(show)));
+      if (lv < max) { const c = World.petUpCost(m, k); r.appendChild(coinBtn(c, () => netSend({ t: "petup", id: m.id, k }), save.coins >= c)); } else r.appendChild(el("span", "max", "MAX"));
+      info.appendChild(r); }
+    // trails: the ones the zones gave and the ones bought with Aura, on any mount
+    const tr = el("div", "acts wrap");
+    for (const T of World.TRAILS) { const have = World.trailsFor(save).includes(T.k), on = m.tr === T.k;
+      if (have) tr.appendChild(btn(T.name, () => netSend({ t: "trail", id: m.id, k: on ? "" : T.k }), "trail" + (on ? " on" : "")));
+      else if (T.cost) { const b = coinBtn(T.cost, () => netSend({ t: "buytrail", k: T.k }), save.coins >= T.cost); b.insertBefore(document.createTextNode(T.name + " "), b.firstChild); b.title = T.name; tr.appendChild(b); } }
+    info.appendChild(tr); d.appendChild(info);
     body.appendChild(d); body.appendChild(grid);
   } else if (panel === "up") {
     const total = World.upTotal(save.up), rk = World.rankOf(total), head = el("div", "rank"); const bd = el("i", "badge"); bd.style.background = rk ? World.RANK_C[rk] : "#d7e1ea"; head.appendChild(bd); head.appendChild(el("b", "", rk ? World.RANKS[rk] + " Postmaster" : "Postmaster")); head.appendChild(el("span", "", total + " / " + World.UP_MAX * Object.keys(UPGRADES).length)); body.appendChild(head);
@@ -971,12 +995,12 @@ function renderAdmin(body) {
   acts.appendChild(btn("Mute", () => op({ op: "mute", mins: mins.value }))); acts.appendChild(btn("Kick", () => op({ op: "kick" }))); acts.appendChild(btn("Ban", () => op({ op: "ban", mins: mins.value })));
   if (myRole === "admin") {
     const role = el("select"); for (const r of ["player", "moderator", "admin"]) { const o = el("option", "", r); o.value = r; if (a.role === r) o.selected = true; role.appendChild(o); } role.onchange = () => op({ op: "role", role: role.value }); acts.appendChild(role);
-    const what = el("select"); for (const [v, n] of [["coins", "Coins"], ...Object.keys(MOUNTS).map((k) => ["mount:" + k, MOUNTS[k].name])]) { const o = el("option", "", n); o.value = v; what.appendChild(o); }
+    const what = el("select"); for (const [v, n] of [["coins", "Aura"], ...Object.keys(MOUNTS).map((k) => ["mount:" + k, MOUNTS[k].name])]) { const o = el("option", "", n); o.value = v; what.appendChild(o); }
     const n = el("input"); n.type = "number"; n.value = 1; n.min = 1; const va = el("select"); World.VARIANTS.forEach((v, i) => { const o = el("option", "", v || "Normal"); o.value = i; va.appendChild(o); }); const rar = el("select"); RARITY.forEach((v, i) => { const o = el("option", "", v); o.value = i; rar.appendChild(o); });
     const give = el("div", "acts wrap"); give.appendChild(what); give.appendChild(n); give.appendChild(rar); give.appendChild(va); give.appendChild(btn("Give", () => op({ op: "give", what: what.value, n: +n.value, va: +va.value, r: +rar.value }), "go"));
     const quick = el("div", "acts wrap"); for (const [c, name] of [["coins", "+100,000"], ["allmounts", "All mounts"], ["upgrades", "Upgrades"], ["everything", "Everything"], ["reset", "Reset to new player"]]) quick.appendChild(btn(name, () => op({ op: "quick", cmd: c, n: 100000 })));
     body.appendChild(acts); body.appendChild(give); body.appendChild(quick);
-    if (adminData) { const ed = el("div", "acts wrap"); const f = {}; for (const k of ["coins"]) { const i = el("input"); i.type = "number"; i.value = adminData[k]; i.title = k; f[k] = i; const l = el("label", "", "Coins "); l.appendChild(i); ed.appendChild(l); }
+    if (adminData) { const ed = el("div", "acts wrap"); const f = {}; for (const k of ["coins"]) { const i = el("input"); i.type = "number"; i.value = adminData[k]; i.title = "Aura"; f[k] = i; const l = el("label", "", "Coins "); l.appendChild(i); ed.appendChild(l); }
       ed.appendChild(btn("Save", () => op({ op: "edit", coins: +f.coins.value }), "go")); ed.appendChild(el("span", "", adminData.mounts.length + " mounts")); body.appendChild(ed); }
   } else body.appendChild(acts);
 }
@@ -1088,7 +1112,7 @@ function onNet(m) {
       save = World.cleanData(m.data); shownCoins = save.coins; $("coinn").textContent = fmt(save.coins); remount(); setVolumes(); giftsUi(); if (!again && !save.set.tut && !save.stats.del && tut < 0) setTimeout(() => tutShow(0), 900);
       if (!again) { me.x = m.x; me.z = m.z; me.y = 0; me.yaw = Math.PI / 2; cam.yaw = -Math.PI / 2; msgs.innerHTML = ""; }
       me.foot = false; me.stun = 0; me.transit = null; me.hidden = false;
-      for (const p of m.players) addOther(p); setNpc(m); for (const g of gooseMesh) { g.x = g.tx; g.z = g.tz; g.y = g.ty; } for (const d of dogMesh) { d.x = d.tx; d.z = d.tz; d.y = d.ty; } for (const g of goatMesh) { g.x = g.tx; g.z = g.tz; } hudDirty = true; sendPos(true);
+      setPods(m.pods || []); for (const p of m.players) addOther(p); setNpc(m); for (const g of gooseMesh) { g.x = g.tx; g.z = g.tz; g.y = g.ty; } for (const d of dogMesh) { d.x = d.tx; d.z = d.tz; d.y = d.ty; } for (const g of goatMesh) { g.x = g.tx; g.z = g.tz; } hudDirty = true; sendPos(true);
       break;
     }
     case "auth_err": if (m.why === "expired") { setTok(null); showLogin(); } else showLogin(m.why === "banned" ? "Banned" + untilText(m.until) : ERR[m.why] || ERR.server); break;
@@ -1115,7 +1139,7 @@ function onNet(m) {
       const ev = m.ev || {}, before = bag.length; bag = m.bag || []; stolen = m.stolen || []; dropped = m.dropped || []; { const tn = performance.now() / 1000; for (const q of [...stolen, ...dropped]) q.endAt = tn + (q.left || 0); } cap = m.cap || 1; setCarry(mine, bagCarry()); setTargets(); syncDropped(); hudDirty = true; cardKey = "";
       const q = bag.find((k) => k.pid === ev.pid);
       if (ev.k === "grab") { tutDid("grab"); sfx("grab"); me.squash = 0.25; if (bag.length > 1) popup(bag.length + " / " + cap, "#ffffff", me.x, me.y + 3, me.z); }
-      else if (ev.k === "pickup") { sfx("grab"); me.squash = 0.25; if (ev.bonus) { popup("+" + ev.bonus, "#ffd84a", me.x, me.y + 2.6, me.z); save.coins = ev.coins; flyCoins(me.x, me.y + 2, me.z, 3); } }
+      else if (ev.k === "pickup") { sfx("grab"); me.squash = 0.25; if (ev.bonus) { popup("+" + ev.bonus, "#d9a6ff", me.x, me.y + 2.6, me.z); save.coins = ev.coins; flyCoins(me.x, me.y + 2, me.z, 3); } }
       else if (ev.k === "crack") { sfx("crack"); cam.shake = Math.max(cam.shake, 0.35); flash("#e5534b"); popup("-20%", "#ff6b6b", me.x, me.y + 2.8, me.z); emit(me.x, me.y + 1.4, me.z, 12, { colors: ["#c89a5e", "#8a5a34"], speed: 4, up: 3, life: 0.6, size: 0.14 }); }
       else if (ev.k === "lost") { sfx("smash"); cam.shake = Math.max(cam.shake, 0.5); flash("#e5534b"); banner(ev.why === "broke" ? "PARCEL BROKE!" : "PARCEL LOST!", "#ff6b6b"); emit(me.x, me.y + 1.4, me.z, 26, { colors: ["#c89a5e", "#8a5a34", "#fff8e6"], speed: 6, up: 5, life: 0.9 }); }
       else if (ev.k === "stolen") { sfx("steal"); sfx("honk"); banner("STOLEN!", "#ff6b6b"); cam.shake = Math.max(cam.shake, 0.3); }
@@ -1123,7 +1147,7 @@ function onNet(m) {
     }
     case "delivered": {
       const h = World.houses[m.house]; sfx("deliver"); emit(h.mx, h.my + 1.6, h.mz, 60, { colors: CONFETTI, speed: 6, up: 8, life: 1.3 }); me.squash = 0.2;
-      popup("+" + fmt(m.coins), "#ffd84a", h.mx, h.my + 2.4, h.mz); flyCoins(h.mx, h.my + 1.6, h.mz, 5); houseMesh[m.house].shake = 0.01; houseMesh[m.house].pop = 0.3;
+      popup("+" + fmt(m.coins), "#d9a6ff", h.mx, h.my + 2.4, h.mz); flyCoins(h.mx, h.my + 1.6, h.mz, 5); houseMesh[m.house].shake = 0.01; houseMesh[m.house].pop = 0.3;
       save = World.cleanData(m.data); lastDelAt = performance.now(); delivered(h, m.gift, m.near, m.merges); tutDid("deliver"); break;
     }
     case "opened": {   // what came out of the parcels I opened
@@ -1140,6 +1164,9 @@ function onNet(m) {
     case "fx": onFx(m); break;
     case "fused": adopt(m.data); selMount = m.m.id; if (panel === "stable") renderPanel(); hatchShow("fuse", m.m); break;
     case "reset": location.reload(); break;   // (owner, 2026-11-11) staff made this a brand new courier
+    case "petup": adopt(m.data); remount(); sfx("buy"); if (panel === "stable") renderPanel(); emit(me.x, me.y + 2, me.z, 30, { colors: ["#c77dff", "#ffffff", "#e2b8ff"], speed: 4, up: 5, life: 1 }); break;
+    case "aura": save.coins = m.coins; popup("+" + fmt(m.n), "#d9a6ff", me.x, me.y + 2.6, me.z); hudDirty = true; break;   // (owner, 2026-11-12) a podium paid
+    case "podiums": setPods(m.pods); break;
     case "upgraded": adopt(m.data); remount(); sfx("buy"); emit(me.x, me.y + 2, me.z, 30, { colors: ["#ffd84a", "#ffffff", "#7ee08a"], speed: 4, up: 5, life: 1 }); break;
     case "announce": { const a = $("announce"); a.textContent = m.name + (m.fused ? " merged a " : " found a ") + mountName(m) + "!"; a.style.color = m.va ? "#bfe6ff" : RARITY_C[m.r | 0]; a.classList.remove("go"); void a.offsetWidth; a.classList.add("go"); sfx("shiny"); break; }
     case "chat": { const o = others.get(m.id); chatLine(o ? o.name : m.name, m.text); if (o) bubble(o.rig, m.text); break; }
@@ -1341,7 +1368,7 @@ function frame(tms) {
     if (mine) pose(mine, { x: me.x, y: me.y, z: me.z, yaw: me.yaw, moving: me.moving, foot: me.foot, air: !me.ground, stun: me.stun, mx: me.mx, my: me.my, mz: me.mz, myaw: me.myaw, kickT: me.kickT, hidden: me.hidden, squash: me.squash, hop: me.hop, glide: me.glide }, dt, t, myStats().speed);
     if (tms - lastSent > 66) sendPos();
   }
-  stepOthers(dt, t); stepNpcs(dt, t); stepParts(dt); stepMarks(dt); blobStep(); stepCamera(dt);
+  stepOthers(dt, t); stepNpcs(dt, t); stepPods(dt, t); stepParts(dt); stepMarks(dt); blobStep(); stepCamera(dt);
   renderer.render(scene, camera);
   if (loggedIn) { hud(dt); stepGifts(dt); stepReveal(dt); maybeOpenRun(); } stepPops(dt);
 }

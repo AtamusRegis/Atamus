@@ -36,8 +36,9 @@ Every rule below is in `website/pets-world.js` (shared with the server, an ident
    taken straight back to the post office. Up to 60 can wait;
    past that the oldest open by themselves.
 
-(owner, 2026-11-11) **A stack of parcels:** a mount carries one parcel per rarity rank: a Common one 1, Uncommon 2, Rare
-3, Epic 4, Legendary 5; ride back into the conveyor to load up. (owner, 2026-11-11) The mount shows **a big box for each parcel**, stacked. Each has its own address (the same neighborhood as another or a
+(owner, 2026-11-12) **A stack of parcels:** every mount carries 1 parcel; Aura raises it a level at a time, up to 5
+(the Stable's Carry row: 150 Aura x 4^level x (1 + 0.5 x rarity) x (1 + 0.5 x its area), so rarer and farther animals
+cost more). Mounts from before kept what they carried (one per rarity rank), once. Ride back into the conveyor to load up. (owner, 2026-11-11) The mount shows **a big box for each parcel**, stacked. Each has its own address (the same neighborhood as another or a
 different one), its own marker, and its own row on the parcel card (with its distance; the card shows how many of how
 many). The ground arrow points to the nearest. Each delivers at its own mailbox and rolls; several rolls take turns.
 A parcel that breaks or is lost is gone; the conveyor always has the next one. **Empty-handed you ride twice as fast**
@@ -103,7 +104,8 @@ A parcel that breaks or is lost is gone; the conveyor always has the next one. *
 ## Mounts
 
 - (owner, 2026-11-11) **Trails:** one more to unlock every five areas opened; with five areas, the **Cloud Trail** (soft
-  white puffs behind) once the Floating Islands are open. Any mount can wear any unlocked trail (its button in the
+  white puffs behind) once the Floating Islands are open. (owner, 2026-11-12) More are bought with Aura (the Stable):
+  Spark 2,500, Bubble 6,000, Heart 15,000, Flame 40,000 (kept in the courier's `trails`). Any mount can wear any unlocked trail (its button in the
   Stable, on or off); everyone sees it.
 
 - (owner, 2026-11-11) **A gift on the second delivery:** a mount, that parcel's area's animal at the gift's rarity when
@@ -119,18 +121,29 @@ A parcel that breaks or is lost is gone; the conveyor always has the next one. *
   A mount is named by its coat, e.g. "Black Gator", "Shiny Spirit Wolf". A new courier starts with a Common Dog. (owner, 2026-11-11) Every mount from before (and every
   leftover egg) became a **Dog** of the same rarity and skin, once (saved data version 2), so nobody has an animal
   from an area they haven't reached.
-- **Stats** (rarity 0-4, area a 0-4 for Dog to Wolf): (owner, 2026-11-11) Speed 10 + 1.5 x a + 1 x rarity m/s: each
-  area's animal is faster than the last, and rarity speeds any of them up, so a Common Cat beats a Common Dog, a
-  Legendary Dog beats a Rare Cat and matches a Common Bear; Jump 8 + 0.5 x rarity + 0.25 x a; Grip (shortens stuns) 10%
+- **Stats** (rarity 0-4, area a 0-4 for Dog to Wolf): (owner, 2026-11-12) Speed 12 m/s x (1 + 20% per rarity step) x
+  (1 + 5% for each area its animal's own area is ahead of where it is, - 5% for each it's behind: a Wolf goes 120% on
+  Main Street, a Dog 80% on the Floating Islands) x (1 + 5% per Aura **Boost** level, up to 10: the Stable's Boost row,
+  100 Aura x 1.7^level x (1 + 0.5 x rarity) x (1 + 0.5 x a)); Jump 8 + 0.5 x rarity + 0.25 x a; Grip (shortens stuns) 10%
   x rarity + 3% x a.
 - **Ability:** (owner, 2026-11-11) every mount has its animal's ability, whatever its rarity; rarity only makes it
-  stronger: Common and Uncommon tier 1, Rare and Epic tier 2, Legendary tier 3. Dash (a burst of speed; every 8 / 6 /
-  4 s), Double Jump (a second jump, higher at tier 2, a third at tier 3), Bark (chasers within 10.5 / 14 / 17.5 m run
-  home; every 12 / 9 / 6 s).
+  stronger: Common and Uncommon tier 1, Rare and Epic tier 2, Legendary tier 3. Dash (a burst of speed), Double Jump (a second jump, higher at tier 2, a third at tier 3), Bark (within 10.5 / 14 /
+  17.5 m: (owner, 2026-11-12) it hits every animal: chasers run home, geese let go of a parcel and back off, goats too).
+  (owner, 2026-11-12) Cooldowns: Dash 8 s and Bark 12 s, divided by 1 + 20% per rarity step.
 - Legendary: a glowing name tag and sparkling footsteps.
 - **Whistle** calls your mount. A stun knocks you off; you get up on foot (5.5 m/s) and the mount comes back when you
   whistle (owner, 2026-11-11: instantly, even while still stunned), when you reach it, or by itself after about 2 s.
 - Every mount fits every shortcut. Kinds differ only by ability; rarity sets the stats.
+
+## Aura and the podiums
+
+- (owner, 2026-11-12) **Aura** (a shiny purple orb) is the money: it replaced coins one for one (the saved field is
+  still `coins`). Deliveries, gifts, geese and everything else that paid coins pay Aura; the farther the area, the more
+  a delivery pays (its tier). Aura buys courier upgrades, carry and Boost levels on a mount, and trails.
+- **The podiums:** three by the post office (gold, silver, bronze). Each server's three best mounts stand on them, with
+  their courier's name; each courier's best three can stand. Best: rarity, then Shiny, then the farther area, then its
+  Aura levels. A better mount takes a podium from a lesser one; a tie keeps the one already standing; a courier leaving
+  frees theirs. Every 10 s each podium pays its courier 2 x 2^rarity x (3 if Shiny) x (1 + 0.5 x its area) Aura.
 
 ## Merging and skins
 
@@ -139,8 +152,8 @@ A parcel that breaks or is lost is gone; the conveyor always has the next one. *
   drop is announced to the server.
 - **Merging mounts:** two of the same mount (kind, coat and skin) merge (the Stable's Merge button, on either) into the
   one you chose, which goes up to the next coat (rarity) and keeps its skin: two Tan Dogs make a Chocolate Dog, two
-  Shiny Tan Dogs a Shiny Chocolate Dog. A Legendary can't merge. An Epic, Legendary or Shiny made by merging is
-  announced. Up to 60 mounts.
+  Shiny Tan Dogs a Shiny Chocolate Dog. A Legendary can't merge. (owner, 2026-11-12) It keeps the better carry and
+  Boost levels of the two. An Epic, Legendary or Shiny made by merging is announced. Up to 60 mounts.
 
 ## The tutorial
 
@@ -263,7 +276,7 @@ gets those coins back the next time their data loads.
 
 ## The screen
 
-- Coins top left (they count up; coins fly to it). Chat button under it. Delivered parcels down the left.
+- Aura top left (it counts up; orbs fly to it). Chat button under it. Delivered parcels down the left.
 - The parcel card top center: a row per parcel (tier, modifier, durability pips, address, distance, the Express
   countdown), stolen or dropped ones faded, and how many you carry of how many.
 - Bottom right: Kick (with its cooldown), Whistle above it, the Ability beside it, Jump.
@@ -337,6 +350,9 @@ its own fresh saves, with the same logins. It is described in `docs/POKEMON.md`;
 Courier's rules.
 
 ## Rejected / removed
+
+- (owner, 2026-11-12) **Coins** (now Aura); carrying set by rarity (now 1 for every mount, raised with Aura); each
+  area's animal being faster than the last (now the same base speed, faster short of its own area and slower past it).
 
 - (owner, 2026-11-11) A second screen for each new mount's unboxing after the parcels open (now shown in its card);
   abilities locked on Common mounts.
