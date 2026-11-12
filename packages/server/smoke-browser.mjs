@@ -90,7 +90,7 @@ try {
   await page.evaluate(() => { window.Pets.netSend({ t: "admin", op: "quick", cmd: "coins", n: 5000, name: "Nyssary" }); window.Pets.netSend({ t: "admin", op: "give", what: "mount:bear", n: 1, r: 3, name: "Nyssary" }); });
   await until(page, (h) => window.Pets.save.coins >= 5000 && window.Pets.save.mounts.length === h.mounts + 1 && window.Pets.save.mounts.some((m) => m.sp === "bear" && m.r === 3), "the admin's gifts didn't arrive", had);
   await page.click("#mstable");
-  await until(page, (h) => document.querySelectorAll(".mtile").length === h.mounts + 1, "the new mount isn't in the Stable", had); await page.click("#pclose");
+  await until(page, () => document.querySelectorAll(".mtile").length === new Set(window.Pets.save.mounts.map((m) => [m.sp, m.r, m.va, m.cap | 0, m.spd | 0, m.tr || ""].join())).size && [...document.querySelectorAll(".mtile img")].length > 0, "the new mount isn't in the Stable (identical ones stacked)", had); await page.click("#pclose");
   await page.click("#mup"); await page.click(".uprow .btn.buy"); await until(page, () => window.Pets.save.up.payout === 1, "the upgrade wasn't bought"); await page.click("#pclose");
   // a second player joins: the first must see them move, and take their kick (out of the post office's safe zone)
   step = "see a second player move";
