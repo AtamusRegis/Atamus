@@ -40,7 +40,7 @@ page.on("console", (m) => { if (m.type() === "error" && !m.text().startsWith("Fa
 page.on("response", (r) => { if (r.status() >= 400 && !new URL(r.url()).pathname.endsWith("/version.json")) problems.push(`HTTP ${r.status()} ${r.url()}`); });
 const until = async (pg, fn, what, arg, ms = 12000) => {
   for (let i = 0; i < ms / 100; i++) { if (await pg.evaluate(fn, arg)) return; await pg.waitForTimeout(100); }
-  const state = await pg.evaluate(() => { const P = window.Pets, s = P.save; return JSON.stringify({ in: P.loggedIn, coins: s.coins, mounts: s.mounts.map((m) => m.sp + m.r + "/" + m.lv), up: s.up, del: s.stats.del, parcel: !!P.parcel, at: [Math.round(P.me.x), Math.round(P.me.z)] }); }).catch(() => "");
+  const state = await pg.evaluate(() => { const P = window.Pets, s = P.save; return JSON.stringify({ in: P.loggedIn, coins: s.coins, mounts: s.mounts.map((m) => m.sp + m.r), up: s.up, del: s.stats.del, parcel: !!P.parcel, at: [Math.round(P.me.x), Math.round(P.me.z)] }); }).catch(() => "");
   throw new Error(what + " " + state);
 };
 const join = async (pg, name) => {
@@ -71,11 +71,12 @@ try {
   step = "deliver it and see the roll";
   await page.evaluate(() => { const P = window.Pets, h = P.World.houses[P.parcel.house]; P.teleport(h.mx, h.mz, h.my); });
   await until(page, () => window.Pets.save.stats.del === 1 && !window.Pets.parcel, "the delivery didn't land");
-  await until(page, () => getComputedStyle(document.getElementById("gifts")).display !== "none" && document.querySelectorAll("#gq .gtile").length === 1, "no delivered parcel on the left");
-  await page.click("#gq .gtile"); await until(page, () => getComputedStyle(document.getElementById("gopen")).display !== "none", "the gift didn't start opening");
-  for (let k = 0; k < 3; k++) { await page.click("#gopen").catch(() => {}); await page.waitForTimeout(80); }   // taps hurry the build-up
-  await until(page, () => getComputedStyle(document.getElementById("gres")).display !== "none" && document.querySelectorAll("#glist .grow").length > 0, "the gift's contents didn't show", null, 8000);
-  await page.click("#gx"); await until(page, () => getComputedStyle(document.getElementById("gifts")).display === "none", "the gift didn't close");
+  // (owner, 2026-11-11) the only parcel: it opens full screen by itself; taps hurry it, then move on
+  await until(page, () => getComputedStyle(document.getElementById("reveal")).display !== "none", "the parcel didn't open full screen");
+  for (let k = 0; k < 3; k++) { await page.mouse.click(640, 400); await page.waitForTimeout(80); }
+  await until(page, () => document.querySelectorAll("#rlist .grow").length > 0, "the parcel's contents didn't show", null, 8000);
+  await page.waitForTimeout(500); for (let k = 0; k < 6 && (await page.evaluate(() => getComputedStyle(document.getElementById("reveal")).display !== "none" || getComputedStyle(document.getElementById("hatch")).display !== "none")); k++) { await page.mouse.click(640, 400); await page.waitForTimeout(700); }
+  await until(page, () => getComputedStyle(document.getElementById("reveal")).display === "none", "the reveal didn't close");
   await until(page, () => document.getElementById("coinn").textContent !== "0", "the coin counter didn't move");
   await page.click("#tutskip"); await until(page, () => getComputedStyle(document.getElementById("tut")).display === "none" && window.Pets.save.set.tut, "the tutorial didn't skip");
   step = "open the menus";
@@ -84,11 +85,11 @@ try {
     if (!(await page.evaluate(() => document.getElementById("pbody").children.length))) problems.push(title + " is empty");
     await page.click("#pclose");
   }
-  step = "level the mount; a new mount shows in the Stable";
+  step = "a new mount shows in the Stable";
   const had = await page.evaluate(() => ({ mounts: window.Pets.save.mounts.length }));   // (the roll may have brought a mount)
   await page.evaluate(() => { window.Pets.netSend({ t: "admin", op: "quick", cmd: "coins", n: 5000, name: "Nyssary" }); window.Pets.netSend({ t: "admin", op: "give", what: "mount:bear", n: 1, r: 3, name: "Nyssary" }); });
   await until(page, (h) => window.Pets.save.coins >= 5000 && window.Pets.save.mounts.length === h.mounts + 1 && window.Pets.save.mounts.some((m) => m.sp === "bear" && m.r === 3), "the admin's gifts didn't arrive", had);
-  await page.click("#mstable"); await page.click(".btn.buy"); await until(page, () => window.Pets.save.mounts[0].lv === 2, "the level wasn't bought");
+  await page.click("#mstable");
   await until(page, (h) => document.querySelectorAll(".mtile").length === h.mounts + 1, "the new mount isn't in the Stable", had); await page.click("#pclose");
   await page.click("#mup"); await page.click(".uprow .btn.buy"); await until(page, () => window.Pets.save.up.payout === 1, "the upgrade wasn't bought"); await page.click("#pclose");
   // a second player joins: the first must see them move, and take their kick (out of the post office's safe zone)

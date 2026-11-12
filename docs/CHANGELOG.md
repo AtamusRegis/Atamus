@@ -6,6 +6,12 @@ and any rule decided. Use `git log` for the code detail (and for the older Atamu
 
 ## 2026-11-11
 
+- **The loop (owner).** Parcels open by themselves once you have none left to deliver: one straight away, several as a
+  full-screen sequence. A parcel can bring its area's animal at its rarity or lower; an Uncommon or better of an area's
+  animal opens the next area. A mount carries one parcel per rarity rank (Common 1 to Legendary 5). No mount levels:
+  rarity (and the area) sets speed, size and ability (Training XP, Level Coupons and the Coupon Press went; its coins
+  came back). Each area's animal is faster than the last, and rarity speeds it up. Every existing mount became a Dog
+  of the same rarity and skin. Fixed: the town's chasers weren't drawn at all.
 - **The areas' animals are the mounts; fixes (owner).** Mounts are now Dog, Cat, Gator, Bear and Wolf, each Common to
   Legendary; an area's parcels drop its animal at the parcel's rarity (no more eggs; old mounts and eggs became the
   animal of their rarity). The balloon is bigger and takes you from anywhere in its ring. Whistle is instant. One big

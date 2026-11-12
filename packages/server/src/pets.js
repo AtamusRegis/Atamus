@@ -1,7 +1,7 @@
 // Critter Courier (owner, 2026-11-11: the game remade from the design document): a WebSocket at /pets.
-// The server decides everything that matters; the page shows it and asks: grab, kick, equip, buy a level, use a coupon,
+// The server decides everything that matters; the page shows it and asks: grab, kick, equip, merge,
 // buy an upgrade, use a shortcut.
-// - Accounts: username / password (or a remembered token); each courier's data (coins, mounts, coupons, upgrades,
+// - Accounts: username / password (or a remembered token); each courier's data (coins, mounts, upgrades,
 //   stats, settings) is kept here and saved to the store (petstore.js) every minute, when they leave,
 //   and at once after a purchase.
 // - Rooms of up to 100 sharing one town: where everyone is (10 times a second, stamped with the server's clock), which
@@ -46,7 +46,7 @@ const send = (ws, o) => { if (ws && ws.readyState === 1) ws.send(JSON.stringify(
 const all = (r, o, skip) => { const s = JSON.stringify(o); for (const p of r.players.values()) if (p !== skip && p.ws.readyState === 1) p.ws.send(s); };
 const mountOf = (p) => { const d = p.acct.data; return d.mounts.find((m) => m.id === d.ride) || d.mounts[0]; };
 const statsOf = (p) => W.mountStats(mountOf(p));
-const pub = (p) => { const m = mountOf(p), d = p.acct.data; return { id: p.id, name: p.name, sp: m.sp, r: m.r, lv: m.lv, va: m.va, tr: m.tr || "", shirt: d.set.shirt, rank: W.rankOf(W.upTotal(d.up)), friendly: d.set.friendly, x: p.x, y: p.y, z: p.z, yaw: p.yaw, carry: p.bag.map((q) => [q.tier, q.mod]) }; };
+const pub = (p) => { const m = mountOf(p), d = p.acct.data; return { id: p.id, name: p.name, sp: m.sp, r: m.r, va: m.va, tr: m.tr || "", shirt: d.set.shirt, rank: W.rankOf(W.upTotal(d.up)), friendly: d.set.friendly, x: p.x, y: p.y, z: p.z, yaw: p.yaw, carry: p.bag.map((q) => [q.tier, q.mod]) }; };
 const parcelView = (q) => (q ? { pid: q.pid, tier: q.tier, mod: q.mod, dur: q.dur, max: q.max, hits: q.hits, house: q.house, due: q.due } : null);
 const dogView = (d) => [d.id, r1(d.x), r1(d.z), r2(d.yaw), d.mode, r1(d.y)], gooseView = (g) => [g.id, r1(g.x), r1(g.z), r1(g.y), r2(g.yaw), g.mode, g.carry ? g.carry.parcel.tier : -1], goatView = (g) => [g.id, r1(g.x), r1(g.z), r2(g.yaw), g.mode];
 
@@ -57,16 +57,16 @@ export function attachPets(server, { origins = [], allowLocal = false, store = m
   setInterval(() => { for (const a of [...dirty]) flush(a); }, SAVE_MS).unref();
   const changed = (p) => { p.acct.rev++; dirty.add(p.acct); };
   const pushData = (p) => send(p.ws, { t: "data", data: p.acct.data });
-  const showMount = (p) => { const m = mountOf(p); all(p.room, { t: "mount", id: p.id, sp: m.sp, r: m.r, lv: m.lv, va: m.va, tr: m.tr || "" }, p); };
+  const showMount = (p) => { const m = mountOf(p); all(p.room, { t: "mount", id: p.id, sp: m.sp, r: m.r, va: m.va, tr: m.tr || "" }, p); };
 
   // ---- parcels ----
-  const fillBelt = (p) => { const open = W.openFor(p.acct.data), lv = mountOf(p).lv; for (const k of ["ready", "next"]) if (p[k] && p[k].tier >= open) p[k] = null;   /* (owner, 2026-11-11) never a parcel for an area that isn't open (after a reset, say) */ if (!p.ready) { p.ready = p.next || W.rollParcel(open, lv); p.next = null; } if (!p.next) p.next = W.rollParcel(open, lv); send(p.ws, { t: "belt", ready: p.ready, next: p.next }); };
+  const fillBelt = (p) => { const open = W.openFor(p.acct.data), rr = mountOf(p).r | 0; for (const k of ["ready", "next"]) if (p[k] && p[k].tier >= open) p[k] = null;   /* (owner, 2026-11-11) never a parcel for an area that isn't open (after a reset, say) */ if (!p.ready) { p.ready = p.next || W.rollParcel(open, rr); p.next = null; } if (!p.next) p.next = W.rollParcel(open, rr); send(p.ws, { t: "belt", ready: p.ready, next: p.next }); };
   // (owner, 2026-11-11) a mount carries 1 to 5 parcels by its level: p.bag (on the saddle), p.stolen (geese have them), p.dropped (on the ground after a busted goose)
   const carry = (p) => all(p.room, { t: "carry", id: p.id, c: p.bag.map((q) => [q.tier, q.mod]) }, p);
   const held = (p) => p.bag.length + p.stolen.length + p.dropped.length;
   const pick1 = (a) => a[Math.floor(Math.random() * a.length)];
   // everything about my parcels, after any change; ev says what happened
-  const sendBag = (p, ev) => send(p.ws, { t: "bag", bag: p.bag.map(parcelView), stolen: p.stolen.map((q) => ({ ...parcelView(q), goose: q.goose, left: r1(Math.max(0, (q.sinkAt - Date.now()) / 1000)) })), dropped: p.dropped.map((o) => ({ ...parcelView(o.parcel), x: r1(o.x), y: r1(o.y), z: r1(o.z), left: r1(Math.max(0, (o.until - Date.now()) / 1000)) })), cap: W.bagSize(mountOf(p).lv), ev });
+  const sendBag = (p, ev) => send(p.ws, { t: "bag", bag: p.bag.map(parcelView), stolen: p.stolen.map((q) => ({ ...parcelView(q), goose: q.goose, left: r1(Math.max(0, (q.sinkAt - Date.now()) / 1000)) })), dropped: p.dropped.map((o) => ({ ...parcelView(o.parcel), x: r1(o.x), y: r1(o.y), z: r1(o.z), left: r1(Math.max(0, (o.until - Date.now()) / 1000)) })), cap: W.bagSize(mountOf(p)), ev });
   const drop = (a, q) => { const n = a.indexOf(q); if (n >= 0) a.splice(n, 1); };
   // (owner, 2026-11-11) the attack queue: an animal takes one of a courier's slots to go after them (p.slots: the animals
   // chasing them) and leaves it when it attacks or gives up. No animal attacks while a parcel is with a goose or on the
@@ -92,7 +92,7 @@ export function attachPets(server, { origins = [], allowLocal = false, store = m
     send(p.ws, { t: "stun", s, why }); all(p.room, { t: "fx", k: "stun", id: p.id, s }, p);
   }
   function grab(p) {
-    const now = Date.now(), d = p.acct.data, lv = mountOf(p).lv; if (held(p) >= W.bagSize(lv) || !p.ready || now < p.stunUntil || W.counterDist(p.x, p.z) > W.GRAB_R + 1.2 || Math.abs(p.y) > 3) return;
+    const now = Date.now(), d = p.acct.data; if (held(p) >= W.bagSize(mountOf(p)) || !p.ready || now < p.stunUntil || W.counterDist(p.x, p.z) > W.GRAB_R + 1.2 || Math.abs(p.y) > 3) return;
     if (p.ready.tier >= W.openFor(d)) { fillBelt(p); return; }   // rolled before the area closed (a reset): a new one
     const c = p.ready, hs = W.housesIn(c.tier), h = hs[Math.floor(Math.random() * hs.length)], max = W.boxDur(d.up.boxes);
     const q = { pid: ++p.pids, tier: c.tier, mod: c.mod, dur: max, max, hits: 0, house: h.id, t0: now, left: W.DROP_S * 1000, due: c.mod === "express" ? now + 1000 * (Math.max(W.EXPRESS_MIN, hyp(h.mx, h.mz) * W.EXPRESS_PER_M) + EXPRESS_EXTRA[c.tier]) : 0 };
@@ -102,35 +102,32 @@ export function attachPets(server, { origins = [], allowLocal = false, store = m
   // it's opened. Four unopened gifts of one rarity merge into one of the next.
   function deliver(p, q) {
     const d = p.acct.data, m = mountOf(p), now = Date.now(), late = q.mod === "express" && now > q.due;
-    const coins = W.deliveryCoins(q.tier, q.mod, d.up.payout, q.hits, late), roll = W.rewardRoll(q.tier, d.up), xp = 5 + 3 * q.tier;
-    const lvUp = W.addXp(m, xp);
+    const coins = W.deliveryCoins(q.tier, q.mod, d.up.payout, q.hits, late), roll = W.rewardRoll(q.tier, d.up);
     d.coins += coins; d.stats.del++; d.fails = 0;
     const gift = { gid: d.nextGid++, r: roll.tier, pt: q.tier };
     // a courier's second delivery brings a new mount, revealed when that gift is opened: (owner, 2026-11-11) the parcel's
     // area's animal, at the gift's rarity (set when it's opened, so a merged-up gift gives the better one)
-    if (d.stats.del === 2 && d.mounts.length < W.MOUNT_CAP) { const nm = { id: d.nextId++, sp: W.CHASERS[q.tier], r: gift.r, va: 0, lv: 1, xp: 0 }; d.mounts.push(nm); gift.m = nm.id; }
+    if (d.stats.del === 2 && d.mounts.length < W.MOUNT_CAP) { const nm = { id: d.nextId++, sp: W.CHASERS[q.tier], r: gift.r, va: 0 }; d.mounts.push(nm); gift.m = nm.id; }
     d.gifts.push(gift); const merges = W.mergeGifts(d.gifts, () => d.nextGid++);
     const over = d.gifts.length > W.GIFT_CAP ? d.gifts.slice(0, d.gifts.length - W.GIFT_CAP) : [];   // too many waiting: the oldest open by themselves
     if (over.length) openGifts(p, over.map((g) => g.gid), true);
     drop(p.bag, q); changed(p); flush(p.acct);
-    send(p.ws, { t: "delivered", pid: q.pid, house: q.house, coins, xp, gift, near: roll.near, merges, lvUp, data: d });
+    send(p.ws, { t: "delivered", pid: q.pid, house: q.house, coins, gift, near: roll.near, merges, data: d });
     sendBag(p, { k: "delivered", pid: q.pid });
     all(p.room, { t: "fx", k: "del", id: p.id, house: q.house, roll: roll.tier }, p); carry(p);
-    if (lvUp) { showMount(p); sendBag(p, { k: "mount" }); }
   }
   const announce = (p, q, fused) => { const s = JSON.stringify({ t: "announce", name: p.name, sp: q.sp, r: q.r, va: q.va, ...(fused ? { fused: 1 } : {}) }); for (const o of online.values()) if (o.ws.readyState === 1) o.ws.send(s); };   // the whole server hears of a Shiny, Golden, Epic or Legendary
   function openGifts(p, gids, quiet) {   // open these gifts: roll what's inside each and add it
-    const d = p.acct.data, m = mountOf(p), list = []; let lvUp = 0;
+    const d = p.acct.data, list = [];
     for (const gid of new Set(gids)) {
       const g = d.gifts.find((k) => k.gid === gid); if (!g) continue; d.gifts.splice(d.gifts.indexOf(g), 1);
-      const c = W.giftContents(g.r, g.pt, d.up); d.coins += c.coins; d.coupons += c.coupons; lvUp += W.addXp(m, c.xp);
+      const c = W.giftContents(g.r, g.pt, d.up); d.coins += c.coins;
       let mount = g.m ? d.mounts.find((k) => k.id === g.m) || null : null; if (mount) mount.r = g.r;   // the second delivery's mount: the gift's rarity
-      else if (c.pet && d.mounts.length < W.MOUNT_CAP) { mount = { id: d.nextId++, sp: c.pet.sp, r: c.pet.r, va: c.pet.va, lv: 1, xp: 0 }; d.mounts.push(mount); if (mount.va || mount.r >= 3) announce(p, mount); }   // (owner, 2026-11-11) a mount, the parcel's area's animal at its rarity
-      delete c.pet; list.push({ gid, r: g.r, ...c, mount });
+      else if (c.pet && d.mounts.length < W.MOUNT_CAP) { mount = { id: d.nextId++, sp: c.pet.sp, r: c.pet.r, va: c.pet.va }; d.mounts.push(mount); if (mount.va || mount.r >= 3) announce(p, mount); }   // (owner, 2026-11-11) a mount, the parcel's area's animal at its rarity
+      delete c.pet; list.push({ gid, r: g.r, pt: g.pt, ...c, mount });
     }
     if (!list.length) return; changed(p); flush(p.acct);
-    if (!quiet) send(p.ws, { t: "opened", list, lvUp, data: d });
-    if (lvUp) { showMount(p); sendBag(p, { k: "mount" }); }
+    if (!quiet) send(p.ws, { t: "opened", list, data: d });
   }
   const kickable = (me, x, z, y, extra = 0) => { const fx = Math.sin(me.yaw), fz = Math.cos(me.yaw), dx = x - me.x, dz = z - me.z, along = dx * fx + dz * fz; return Math.abs(y - me.y) < 2.6 && along > -0.6 && along < KICK.range + extra && Math.abs(dx * fz - dz * fx) < KICK.half + 0.9 + extra; };
   function kick(me) {
@@ -159,7 +156,7 @@ export function attachPets(server, { origins = [], allowLocal = false, store = m
     all(r, { t: "fx", k: "kick", id: me.id, hit: landed ? 1 : 0 });
   }
   function bark(me) {   // the Bark ability: dogs near turn tail
-    const m = mountOf(me), tier = W.abilityTier(m.lv), now = Date.now(); if (MOUNTS[m.sp].ab !== "bark" || !tier || now < me.abilityAt + W.ABILITY_CD.bark[tier] * 1000 - 150) return;
+    const m = mountOf(me), tier = W.abilityTier(m), now = Date.now(); if (MOUNTS[m.sp].ab !== "bark" || !tier || now < me.abilityAt + W.ABILITY_CD.bark[tier] * 1000 - 150) return;
     me.abilityAt = now; const R = 7 + 3.5 * tier;
     for (const q of me.room.dogs) if (q.mode !== 3 && hyp(q.x - me.x, q.z - me.z) < R) { q.mode = 3; release(q); q.cool = now + DOG.cool * 1000; all(me.room, { t: "fx", k: "yelp", dog: q.id }); }
     all(me.room, { t: "fx", k: "bark", id: me.id, r: R });
@@ -175,7 +172,7 @@ export function attachPets(server, { origins = [], allowLocal = false, store = m
   }
   // ---- the staff panel ----
   const staffView = (a, p) => ({ id: a.id, name: a.name, role: rankOf(a) === 3 ? "owner" : a.role, online: !!p, muted: a.muteUntil > Date.now() ? (a.muteUntil === Infinity ? -1 : a.muteUntil) : 0, banned: a.banUntil > Date.now() ? (a.banUntil === Infinity ? -1 : a.banUntil) : 0 });
-  const inv = (d) => ({ coins: d.coins, coupons: d.coupons, mounts: d.mounts, ride: d.ride, up: d.up });
+  const inv = (d) => ({ coins: d.coins, mounts: d.mounts, ride: d.ride, up: d.up });
   async function admin(me, m) {
     const my = rankOf(me.acct); if (my < 1) return;
     const reply = (msg) => send(me.ws, { t: "admin_msg", msg });
@@ -206,12 +203,11 @@ export function attachPets(server, { origins = [], allowLocal = false, store = m
         if (u && p) { send(p.ws, { t: "kicked", why: "banned", until: u === Infinity ? -1 : u }); p.ws.terminate(); }
         log("ban", String(m.mins)); break;
       }
-      case "give": {   // admins: coins, Level Coupons or a mount (a kind, rarity, level and skin)
+      case "give": {   // admins: coins or a mount (a kind, rarity and skin)
         if (my < 2) return reply("Not allowed");
         const n = Math.max(1, Math.min(1e7, Math.floor(+m.n || 1))), what = String(m.what || ""), d = cleanData(a.data);
         if (what === "coins") d.coins += n;
-        else if (what === "coupons") d.coupons += n;
-        else if (what.startsWith("mount:") && MOUNTS[what.slice(6)]) { const lv = clamp(Math.floor(+m.lv || 1), 1, W.MAX_LV), va = clamp(Math.floor(+m.va || 0), 0, 2), r = clamp(Math.floor(+m.r || 0), 0, 4); for (let k = 0; k < Math.min(n, 20) && d.mounts.length < W.MOUNT_CAP; k++) d.mounts.push({ id: d.nextId++, sp: what.slice(6), r, va, lv, xp: 0 }); }
+        else if (what.startsWith("mount:") && MOUNTS[what.slice(6)]) { const va = clamp(Math.floor(+m.va || 0), 0, 2), r = clamp(Math.floor(+m.r || 0), 0, 4); for (let k = 0; k < Math.min(n, 20) && d.mounts.length < W.MOUNT_CAP; k++) d.mounts.push({ id: d.nextId++, sp: what.slice(6), r, va }); }
         else return reply("Unknown");
         await putData(d); log("give", what + " x" + n); break;
       }
@@ -219,7 +215,7 @@ export function attachPets(server, { origins = [], allowLocal = false, store = m
       case "quick": {
         if (my < 2) return reply("Not allowed");
         const cmd = String(m.cmd || ""), every = cmd === "everything";
-        if (!["coins", "allmounts", "maxlv", "coupons", "upgrades", "everything", "reset"].includes(cmd)) return reply("Unknown");
+        if (!["coins", "allmounts", "upgrades", "everything", "reset"].includes(cmd)) return reply("Unknown");
         let d = cleanData(a.data);
         if (cmd === "reset") {   // (owner, 2026-11-11) a brand new courier: everything (coins, mounts, levels, upgrades, parcels, stats, settings, the tutorial)
           a.data = cleanData({}); log("quick", "reset");
@@ -228,24 +224,17 @@ export function attachPets(server, { origins = [], allowLocal = false, store = m
           break;
         }
         if (cmd === "coins" || every) d.coins = Math.min(1e12, d.coins + (every ? 1e7 : Math.max(1, Math.min(1e9, Math.floor(+m.n || 0)))));
-        if (cmd === "allmounts" || every) { const have = new Set(d.mounts.map((q) => q.sp + q.r)); for (const sp of Object.keys(MOUNTS)) for (let r = 0; r < 5; r++) if (!have.has(sp + r) && d.mounts.length < W.MOUNT_CAP) d.mounts.push({ id: d.nextId++, sp, r, va: 0, lv: every ? W.MAX_LV : 1, xp: 0 }); }
-        if (cmd === "maxlv" || every) for (const q of d.mounts) { q.lv = W.MAX_LV; q.xp = 0; }
-        if (cmd === "coupons" || every) d.coupons += 20;
+        if (cmd === "allmounts" || every) { const have = new Set(d.mounts.map((q) => q.sp + q.r)); for (const sp of Object.keys(MOUNTS)) for (let r = 0; r < 5; r++) if (!have.has(sp + r) && d.mounts.length < W.MOUNT_CAP) d.mounts.push({ id: d.nextId++, sp, r, va: 0 }); }
         if (cmd === "upgrades" || every) for (const k of Object.keys(UPGRADES)) d.up[k] = W.UP_MAX;
         await putData(d); log("quick", cmd + (cmd === "coins" ? " " + m.n : "")); break;
       }
       case "inspect": { if (my < 2) return reply("Not allowed"); send(me.ws, { t: "admin_data", id: a.id, name: a.name, data: inv(cleanData(a.data)) }); return; }
-      case "edit": {   // coins, coupons, upgrades, and each mount's level (0 takes it away)
+      case "edit": {   // coins and upgrades
         if (my < 2) return reply("Not allowed");
         const d = cleanData(a.data), n = (v, hi) => Math.max(0, Math.min(hi, Math.floor(+v) || 0));
         if (m.coins !== undefined) d.coins = n(m.coins, 1e12);
-        if (m.coupons !== undefined) d.coupons = n(m.coupons, 1e6);
         if (m.up && typeof m.up === "object") for (const k of Object.keys(UPGRADES)) if (m.up[k] !== undefined) d.up[k] = n(m.up[k], W.UP_MAX);
-        if (m.mounts && typeof m.mounts === "object") {
-          for (const q of d.mounts) if (m.mounts[q.id] !== undefined) q.lv = Math.floor(+m.mounts[q.id]) || 0;
-          const keep = d.mounts.filter((q) => q.lv > 0); if (keep.length) d.mounts = keep; else for (const q of d.mounts) q.lv = Math.max(1, q.lv);
-        }
-        await putData(d); log("edit", JSON.stringify({ coins: m.coins, coupons: m.coupons, up: m.up, mounts: m.mounts }).slice(0, 300));
+        await putData(d); log("edit", JSON.stringify({ coins: m.coins, up: m.up }).slice(0, 300));
         send(me.ws, { t: "admin_data", id: a.id, name: a.name, data: inv(a.data) });
         break;
       }
@@ -342,17 +331,9 @@ export function attachPets(server, { origins = [], allowLocal = false, store = m
           if (k) q.tr = k; else delete q.tr; changed(me); pushData(me); if (q.id === d.ride) showMount(me); break;
         }
         case "equip": { const q = d.mounts.find((k) => k.id === m.id); if (q && d.ride !== q.id) { d.ride = q.id; changed(me); pushData(me); showMount(me); sendBag(me, { k: "mount" }); } break; }
-        case "level": {   // pay coins for a level
-          const q = d.mounts.find((k) => k.id === m.id); if (!q || q.lv >= W.MAX_LV || d.coins < W.levelCost(q.lv)) break;
-          d.coins -= W.levelCost(q.lv); q.lv++; if (q.lv >= W.MAX_LV) q.xp = 0; changed(me); flush(me.acct); send(ws, { t: "leveled", id: q.id, lv: q.lv, data: d }); if (q.id === d.ride) { showMount(me); sendBag(me, { k: "mount" }); } break;
-        }
-        case "coupon": {   // a Level Coupon: one whole level
-          const q = d.mounts.find((k) => k.id === m.id); if (!q || q.lv >= W.MAX_LV || d.coupons < 1) break;
-          d.coupons--; q.lv++; if (q.lv >= W.MAX_LV) q.xp = 0; changed(me); flush(me.acct); send(ws, { t: "leveled", id: q.id, lv: q.lv, data: d }); if (q.id === d.ride) { showMount(me); sendBag(me, { k: "mount" }); } break;
-        }
         case "fuse": {   // (owner, 2026-11-11) two of the same mount and skin: the better gets the next skin, the other goes
           const four = W.fuseSet(d.mounts, m.id); if (!four) break;
-          const best = four.reduce((a, b) => (b.lv > a.lv || (b.lv === a.lv && b.xp > a.xp) ? b : a)); best.va++;
+          const best = four[0]; best.va++;   // the one you chose
           d.mounts = d.mounts.filter((k) => k === best || !four.includes(k)); if (!d.mounts.some((k) => k.id === d.ride)) d.ride = best.id;
           changed(me); flush(me.acct); send(ws, { t: "fused", m: best, data: d }); showMount(me);
           if (best.va >= 2) announce(me, best, true);
@@ -441,7 +422,7 @@ export function attachPets(server, { origins = [], allowLocal = false, store = m
         const d = hyp(p.x - q.x, p.z - q.z);
         pace(q, p.x, p.z, S.speed * (p.acct.data.fails >= 3 ? 0.8 : 1) * dt, 0.75);   // three failed runs in a row: the animals ease off
         if (d < DOG.bite && p.y - q.y < 0.8 && !calmNow(p, now)) {   // a courier jumping over it isn't bitten; nor in the calm after an attack (it keeps after them)
-          if (Math.random() < W.shakeOff(mountOf(p).lv, D.d, D.r)) all(r, { t: "fx", k: "shake", id: p.id });   // outgrown: the mount shakes it off
+          if (Math.random() < W.shakeOff(mountOf(p), D.d, D.r)) all(r, { t: "fx", k: "shake", id: p.id });   // outgrown: the mount shakes it off
           else { stun(p, DOG.stun, "dog"); hit(p, "dog"); all(r, { t: "fx", k: "bite", dog: q.id, id: p.id }); }
           p.calmUntil = now + W.ATTACK.calm * 1000; release(q); q.mode = 0; q.cool = now + DOG.cool * 1000; q.pause = 2; q.wx = undefined; }
         continue;
@@ -480,7 +461,7 @@ export function attachPets(server, { origins = [], allowLocal = false, store = m
       if (g.mode === 1) { if (!p || p.gone) { release(g); g.mode = 0; continue; } g.yaw = Math.atan2(p.x - g.x, p.z - g.z); if ((g.t -= dt) <= 0) { g.mode = 2; g.t = GOOSE.lungeFor; } continue; }
       if (!p || p.gone || !p.bag.length || !exposed(p, now) || (g.t -= dt) <= 0) { release(g); g.mode = 0; g.cool = now + GOOSE.cool * 1000; continue; }
       if (go(p.x, p.z, S.lunge) < GOOSE.touch && Math.abs(p.y - g.y) < 2.5 && !calmNow(p, now)) {   // it has the parcel (no stun): off to the pond
-        if (Math.random() < W.shakeOff(mountOf(p).lv, G.d, G.r)) { all(r, { t: "fx", k: "shake", id: p.id }); p.calmUntil = now + W.ATTACK.calm * 1000; release(g); g.mode = 4; g.t = 1.5; continue; }   // outgrown: shaken off
+        if (Math.random() < W.shakeOff(mountOf(p), G.d, G.r)) { all(r, { t: "fx", k: "shake", id: p.id }); p.calmUntil = now + W.ATTACK.calm * 1000; release(g); g.mode = 4; g.t = 1.5; continue; }   // outgrown: shaken off
         const q = pick1(p.bag); drop(p.bag, q); q.goose = g.id; q.sinkAt = now + 1000 * (hyp(P.x - g.x, P.z - g.z) / GOOSE.carry + GOOSE.dunk + 1); p.stolen.push(q); g.carry = { p, parcel: q }; g.stuck = 0; release(g); g.mode = 3;
         sendBag(p, { k: "stolen", pid: q.pid, goose: g.id }); carry(p); all(r, { t: "fx", k: "steal", goose: g.id, id: p.id }, p);
       }

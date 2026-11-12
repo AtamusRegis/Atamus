@@ -112,6 +112,15 @@
     #lvt { position: relative; font-size: 40px; color: #ffd84a; text-shadow: 0 3px 0 rgba(0,0,0,.4), 0 0 18px rgba(255,216,74,.7); }
     body.cinema #hud, body.cinema #joy, body.cinema #tut { opacity: 0; pointer-events: none; transition: opacity .4s; }
     #cine i { position: fixed; left: 0; right: 0; height: 0; background: #0b1218; z-index: 28; transition: height .5s; } #cine i:first-child { top: 0; } #cine i:last-child { bottom: 0; } #cine.on i { height: 11vh; }
+    /* (owner, 2026-11-11) a run's parcels open full screen, one after another, once there are none left to deliver */
+    #reveal { position: fixed; inset: 0; z-index: 29; display: none; flex-direction: column; align-items: center; justify-content: center; gap: 14px; background: radial-gradient(circle, color-mix(in srgb, var(--rc, #fff) 55%, transparent) 0, rgba(20,40,60,.88) 58%); cursor: pointer; }
+    #reveal > :not(#rrays) { position: relative; }
+    #rrays { position: absolute; left: 50%; top: 50%; width: 900px; height: 900px; margin: -480px 0 0 -450px; pointer-events: none; opacity: var(--ray, 0); background: repeating-conic-gradient(from 0deg, var(--rc, #fff) 0 7deg, transparent 7deg 22deg); -webkit-mask: radial-gradient(circle, #000 8%, transparent 55%); mask: radial-gradient(circle, #000 8%, transparent 55%); animation: spin 6s linear infinite; }
+    #rbox { height: 170px; display: flex; align-items: center; } #rbox .gtile.big { transform: scale(2.6); } #rbox .gtile.big.burst { animation: rburst .5s ease-out forwards; }
+    @keyframes rburst { 0% { transform: scale(2.6); filter: brightness(1); } 40% { transform: scale(4); filter: brightness(3) drop-shadow(0 0 30px var(--rc)); } 100% { transform: scale(.5); opacity: 0; } }
+    #rlabel { font-size: 46px; text-transform: uppercase; color: var(--rcl, #fff); text-shadow: 0 3px 0 rgba(0,0,0,.4); }
+    #rlist { display: flex; flex-direction: column; align-items: flex-start; gap: 6px; min-height: 120px; } #rlist .grow { font-size: 28px; color: #fff; text-shadow: 0 2px 0 rgba(0,0,0,.4); } #rlist .grow .coin { width: 28px; height: 28px; } #rlist .gmount { width: 56px; height: 56px; }
+    #rdots { display: flex; gap: 6px; } #rdots i { width: 12px; height: 12px; border-radius: 50%; background: rgba(255,255,255,.3); } #rdots i.on { background: #fff; }
     /* things that pop up */
     #pops { position: fixed; inset: 0; pointer-events: none; overflow: hidden; }
     .pop { position: absolute; left: 0; top: 0; font: 800 24px "Big Shoulders Display", system-ui, sans-serif; text-shadow: 0 2px 0 rgba(0,0,0,.55), 0 0 8px rgba(0,0,0,.35); white-space: nowrap; will-change: transform, opacity; } .pop.big { font-size: 36px; }
@@ -193,6 +202,7 @@
   </div>
   <div id="banner"><b></b><i></i></div>
   <div id="flash"></div>
+  <div id="reveal"><i id="rrays"></i><div id="rdots"></div><div id="rbox"></div><b id="rlabel" class="disp"></b><div id="rlist"></div></div>
   <div id="lvup"><i id="lvrays"></i><img id="lvimg" alt=""><b id="lvt" class="disp"></b></div>
   <div id="cine"><i></i><i></i></div>
   <div id="toast"></div>
@@ -208,6 +218,6 @@
     <button id="lgo" class="btn go" type="submit">Log in</button>
     <button id="lnew" class="btn" type="button">Create account</button>
   </form>
-  <script type="module" src="pets.js?v=1794459833"></script>
+  <script type="module" src="pets.js?v=1794462470"></script>
 </body>
 </html>

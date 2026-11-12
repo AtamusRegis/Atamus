@@ -4,7 +4,7 @@
 // deliveries, rolls, damage, coins, mounts; this page shows the town (pets-world.js, shared with the server), moves you
 // and asks. Phone first: a thumb joystick, drag to look, pinch to zoom, big buttons.
 import * as THREE from "./vendor/three.module.min.js";
-import * as World from "./pets-world.js?v=1794459567";
+import * as World from "./pets-world.js?v=1794462470";
 
 const $ = (id) => document.getElementById(id);
 const { TAU, clamp, hyp, MOUNTS, TIERS, RARITY, RARITY_C, MODS, UPGRADES } = World;
@@ -426,7 +426,7 @@ const KIND = {
 };
 function rarityRing(g, r, rad) { if (!r) return; const m = new THREE.Mesh(new THREE.RingGeometry(rad * 0.8, rad, 32).rotateX(-Math.PI / 2), basic(RARITY_C[r], 0.75)); m.position.y = 0.06; g.add(m); g.userData.rar = r; }
 function buildAnimals() {
-  for (const d of World.dogs) { const K = KIND[d.sp], [c, a] = World.coat(d.sp, d.r), m = petModel({ look: K.look, c, a, size: K.size * (1 + 0.08 * d.r) });   // (owner, 2026-11-11) the same coat as the mount of that kind and rarity m.g.position.set(d.hx, d.y, d.hz); scene.add(m.g); blobUnder(m.g, 1.6 * K.size); rarityRing(m.g, d.r, 1.1 * K.size);
+  for (const d of World.dogs) { const K = KIND[d.sp], [c, a] = World.coat(d.sp, d.r), m = petModel({ look: K.look, c, a, size: K.size * (1 + 0.08 * d.r) }); /* (owner, 2026-11-11) the same coat as the mount of that kind and rarity */ m.g.position.set(d.hx, d.y, d.hz); scene.add(m.g); blobUnder(m.g, 1.6 * K.size); rarityRing(m.g, d.r, 1.1 * K.size);
     const bang = textSprite("!", { size: 64, color: "#ffffff", bg: "#e5534b" }); bang.position.y = 2.3; bang.visible = false; m.g.add(bang); dogMesh.push({ m, bang, x: d.hx, z: d.hz, yaw: 0, tx: d.hx, tz: d.hz, tyaw: 0, mode: 0, y: d.y, ty: d.y }); }
   for (const q of World.geese) { const m = gooseModel(); m.g.scale.setScalar(1 + 0.08 * q.r); m.g.position.set(q.x, q.y, q.z); scene.add(m.g); blobUnder(m.g, 1.2); rarityRing(m.g, q.r, 0.8); gooseMesh.push({ m, x: q.x, y: q.y, z: q.z, yaw: 0, tx: q.x, ty: q.y, tz: q.z, tyaw: 0, mode: 0, carry: -1, box: null }); }
   for (const q of World.goats) { const m = petModel({ look: "goat", c: "#e9e4dc", a: "#8a7a66", size: 0.95 * (1 + 0.08 * q.r) }); m.g.position.set(q.hx, q.y, q.hz); scene.add(m.g); blobUnder(m.g, 1.7); rarityRing(m.g, q.r, 1.0); goatMesh.push({ m, x: q.hx, z: q.hz, yaw: Math.PI / 2, tx: q.hx, tz: q.hz, tyaw: Math.PI / 2, mode: 0, y: q.y }); }
@@ -525,19 +525,19 @@ const riding = () => save.mounts.find((m) => m.id === save.ride) || save.mounts[
 const myStats = () => World.mountStats(riding());
 const me = { x: World.SPAWN.x, y: 0, z: World.SPAWN.z, yaw: Math.PI / 2, vx: 0, vz: 0, vy: 0, px: 0, pz: 0, ground: true, moving: false, foot: false, footT: 0, stun: 0, grace: 0, jumps: 0, boost: 0, dash: 0, abilityAt: -99, kickAt: -99, kickT: 0, transit: null, armed: true, mx: 0, my: 0, mz: 0, myaw: 0, hidden: false, glide: false, stepT: 0 };
 let mine = null, walker = null, myTag = null, bag = [], stolen = [], dropped = [], cap = 1, belt = { ready: null, next: null };   // my parcels: on the saddle, with geese, on the ground
-function makeTag(name, rank, lv) { return textSprite(String(name || "Courier").slice(0, 18), { size: 34, badge: rank ? World.RANK_C[rank] : "", glow: lv >= World.MAX_LV ? "#ffd84a" : "" }); }
-function rigMount(sp, lv, va, r, shirt, name, rank) {   // a mount with its rider, name tag and (hidden) walking courier
-  const m = petModel(MOUNTS[sp] ? sp : "dog", shirt, va, r); sizePet(m, World.mountScale(lv)); const tag = makeTag(name, rank, lv); tag.position.y = (m.top + 0.9) / m.g.scale.x; tag.scale.multiplyScalar(1 / m.g.scale.x); m.g.add(tag);
+function makeTag(name, rank, r) { return textSprite(String(name || "Courier").slice(0, 18), { size: 34, badge: rank ? World.RANK_C[rank] : "", glow: r >= 4 ? "#ffd84a" : "" }); }
+function rigMount(sp, va, r, shirt, name, rank) {   // a mount with its rider, name tag and (hidden) walking courier
+  const m = petModel(MOUNTS[sp] ? sp : "dog", shirt, va, r); sizePet(m, World.mountScale({ r })); const tag = makeTag(name, rank, r); tag.position.y = (m.top + 0.9) / m.g.scale.x; tag.scale.multiplyScalar(1 / m.g.scale.x); m.g.add(tag);
   const w = courierModel(shirt); w.g.visible = false; scene.add(w.g); scene.add(m.g); blobUnder(m.g, 2.2 * (m.k || 1)); blobUnder(w.g, 1.1);
   const slot = new THREE.Group(); slot.position.set(0, m.seat + 0.02, -0.75 * m.k); slot.scale.setScalar(1 / m.g.scale.x); m.body.add(slot);
-  return { m, tag, w, slot, sc: m.g.scale.x, va, lv };
+  return { m, tag, w, slot, sc: m.g.scale.x, va, r };
 }
 function unrig(r) { if (!r) return; scene.remove(r.m.g, r.w.g); }
 // (owner, 2026-11-11) one big box on the saddle, however many parcels: the best tier's color (Express taped if any is),
 // a little bigger for each extra parcel
 function setCarry(r, c) { r.slot.clear(); if (!c || !c.length) return; const best = c.reduce((a, q) => (q[0] > a[0] ? q : a)), b = parcelMesh(best[0], c.some((q) => q[1] === "express") ? "express" : ""); b.scale.setScalar(1.7 * (1 + 0.15 * (c.length - 1))); r.slot.add(b); }
 const bagCarry = () => bag.map((q) => [q.tier, q.mod]);
-function remount() { unrig(mine); const q = riding(); mine = rigMount(q.sp, q.lv, q.va, q.r, save.set.shirt, myName, World.rankOf(World.upTotal(save.up))); setCarry(mine, bagCarry()); }
+function remount() { unrig(mine); const q = riding(); mine = rigMount(q.sp, q.va, q.r, save.set.shirt, myName, World.rankOf(World.upTotal(save.up))); setCarry(mine, bagCarry()); }
 
 // ---- moving ----
 const keys = new Set(), joy = { id: null, x: 0, y: 0, ox: 0, oy: 0 }, cam = { yaw: -Math.PI / 2, pitch: 0.42, dist: 12, shake: 0 };
@@ -545,12 +545,12 @@ let jumpHeld = false, jumpTap = false, hitStop = 0;
 const GRAV = 24, now = () => performance.now() / 1000;
 let clockOff = 0; const srvNow = () => (Date.now() + clockOff) / 1000;
 function tryJump() {
-  if (me.stun > 0 || me.transit) return; const st = myStats(), q = riding(), ab = MOUNTS[q.sp].ab, tier = World.abilityTier(q.lv);
+  if (me.stun > 0 || me.transit) return; const st = myStats(), q = riding(), ab = MOUNTS[q.sp].ab, tier = World.abilityTier(q);
   if (me.ground) { me.vy = me.foot ? 7.5 : st.jump; me.ground = false; me.jumps = 0; sfx("jump"); emit(me.x, me.y + 0.1, me.z, 5, { colors: ["#e9e2d2"], speed: 2, up: 1, life: 0.4, grav: 2 }); }
   else if (!me.foot && ab === "jump2" && tier && me.jumps < (tier >= 3 ? 2 : 1)) { me.vy = st.jump * (tier >= 2 ? 1.1 : 0.95); me.jumps++; sfx("jump"); emit(me.x, me.y, me.z, 10, { colors: ["#ffffff", "#bfe6ff"], speed: 3, up: 0.5, life: 0.5, grav: 0 }); }
 }
 function useAbility() {
-  if (me.stun > 0 || me.transit || me.foot) return; const q = riding(), ab = MOUNTS[q.sp].ab, tier = World.abilityTier(q.lv), t = now(); if (!tier) { sfx("no"); return; }
+  if (me.stun > 0 || me.transit || me.foot) return; const q = riding(), ab = MOUNTS[q.sp].ab, tier = World.abilityTier(q), t = now(); if (!tier) { sfx("no"); return; }
   if (ab === "jump2") { tryJump(); return; }
   if (t < me.abilityAt + World.ABILITY_CD[ab][tier]) return; me.abilityAt = t;
   if (ab === "dash") { me.dash = 0.32 + 0.06 * tier; sfx("dash"); cam.shake = Math.max(cam.shake, 0.15); }
@@ -606,7 +606,7 @@ function stepMe(dt) {
   // sideways, stopping at walls
   // (in small steps, riding up slopes as it goes, so a slow frame can't jam you against a ramp)
   // (owner, 2026-11-11) a mount is as wide as it looks: the bigger it's grown, the farther from a wall, hedge or tree it stops
-  let BR = me.foot ? 0.55 : clamp(0.55 + 0.32 * (World.mountScale(q.lv) * MOUNTS[q.sp].size - 1), 0.55, 1.05);
+  let BR = me.foot ? 0.55 : clamp(0.55 + 0.32 * (World.mountScale(q) * MOUNTS[q.sp].size - 1), 0.55, 1.05);
   if (BR > 0.55 && World.blocked(me.x, me.z, me.y, BR)) BR = 0.55;
   const GX = World.gateX(World.openFor(save)), gated = (nx) => nx > me.x && me.x < GX && nx > GX - BR;   // (owner, 2026-11-11) a closed area's gate: heading east stops at it (west is always fine)   // already up against something (it just grew, or landed there): the old width until it's clear
   const DX = (me.vx + me.px) * dt, DZ = (me.vz + me.pz) * dt, n = Math.max(1, Math.ceil(hyp(DX, DZ) / 0.3));
@@ -636,7 +636,7 @@ function trail(x, y, z, q, kind) {
   if (q.va === 3) emit(x, y + 0.5, z, 3, { colors: RAINBOW, speed: 0.9, up: 1.3, life: 0.9, grav: -1, size: 0.15 });
   else if (q.va === 2) emit(x, y + 0.5, z, 2, { colors: ["#ffd84a", "#fff3b8"], speed: 0.8, up: 1.2, life: 0.8, grav: -1, size: 0.14 });
   else if (q.va === 1) emit(x, y + 0.5, z, 2, { colors: ["#bfe6ff", "#ffffff", "#ffc7f0"], speed: 0.8, up: 1.2, life: 0.8, grav: -1, size: 0.12 });
-  if (q.lv >= World.MAX_LV) emit(x, y + 0.1, z, 2, { colors: ["#ffd84a", "#ffffff"], speed: 1.2, up: 1.5, life: 0.6, grav: 2, size: 0.12 });
+  if (q.r >= 4) emit(x, y + 0.1, z, 2, { colors: ["#ffd84a", "#ffffff"], speed: 1.2, up: 1.5, life: 0.6, grav: 2, size: 0.12 });
   else if (kind === "mud") emit(x, y + 0.1, z, 2, { colors: ["#6b4d33"], speed: 1.5, up: 2, life: 0.4, grav: 9, size: 0.14 });
   else if (Math.random() < 0.4) emit(x, y + 0.1, z, 1, { colors: ["#e9e2d2"], speed: 0.6, up: 0.8, life: 0.35, grav: 1, size: 0.12 });
 }
@@ -742,9 +742,9 @@ function parcelTile(g, big) {   // a parcel (its tier's label on the cardboard) 
 }
 function giftsUi(fresh) {
   if (merging) return; const q = $("gq"), list = waiting(); q.innerHTML = "";
-  list.slice(0, 12).forEach((g) => { const b = parcelTile(g); b.title = RARITY[g.r]; if (fresh && fresh.includes(g.gid)) b.classList.add("fresh"); b.onclick = () => openGift(g.gid); b.addEventListener("pointerdown", (e) => e.stopPropagation()); q.appendChild(b); });
+  list.slice(0, 12).forEach((g) => { const b = parcelTile(g); b.title = RARITY[g.r]; if (fresh && fresh.includes(g.gid)) b.classList.add("fresh"); q.appendChild(b); });   // (owner, 2026-11-11) they wait here until the run's done
   if (list.length > 12) q.appendChild(el("b", "disp", "+" + (list.length - 12)));
-  $("gall").style.display = list.length > 1 ? "block" : "none";
+  $("gall").style.display = "none";
   $("gifts").style.display = list.length || opening || $("gres").style.display === "flex" ? "flex" : "none";
 }
 // a delivery: its rarity over the mailbox, the parcel on the left; merges (four into one) play out before it settles
@@ -771,14 +771,14 @@ function openGift(gid) {   // one parcel: it shakes, its sparkle growing, then s
   const slot = $("gbig"); slot.innerHTML = ""; slot.appendChild(parcelTile(g, true)); $("glabel").textContent = RARITY[g.r]; $("glabel").style.color = sparkC(g.r); $("gres").style.display = "none"; giftsUi();
 }
 function openAll() { if (opening || merging) return; const gids = save.gifts.map((g) => g.gid); if (!gids.length) return; opening = { gids, all: true, t: 0, res: null }; netSend({ t: "open", gids }); giftsUi(); }
-function resultRows(list, R) {   // what came out of a gift (or several): coins, XP, Level Coupons, mounts
+function resultRows(list, R) {   // what came out of a gift (or several): coins, mounts
   const row = (icon, text) => { const d = el("div", "grow"); d.appendChild(icon); d.appendChild(el("b", "disp", text)); d.style.animationDelay = list.children.length * 120 + "ms"; list.appendChild(d); };
-  row(el("i", "coin"), "+" + fmt(R.coins)); if (R.xp) row(el("i", "ixp", "XP"), "+" + R.xp); if (R.coupons) row(el("i", "icoupon"), "+" + R.coupons);
+  row(el("i", "coin"), "+" + fmt(R.coins));
   for (const m of R.mounts) { const i = el("img", "gmount"); i.src = portrait(m.sp, m.va, m.r); row(i, mountName(m)); }
 }
-function landGifts(list, lvUp) {   // what the server says came out: totals under the parcels
-  const best = Math.max(...list.map((g) => g.r)), c = RARITY_C[best], tot = { coins: 0, xp: 0, coupons: 0, mounts: [] };
-  for (const g of list) { tot.coins += g.coins; tot.xp += g.xp; tot.coupons += g.coupons; if (g.mount) tot.mounts.push(g.mount); }
+function landGifts(list) {   // what the server says came out: totals under the parcels
+  const best = Math.max(...list.map((g) => g.r)), c = RARITY_C[best], tot = { coins: 0, mounts: [] };
+  for (const g of list) { tot.coins += g.coins; if (g.mount) tot.mounts.push(g.mount); }
   $("gopen").style.display = "none"; $("gopen").style.setProperty("--ray", 0); opening = null;
   sfx("win", best); if (best >= 3) sfx("fanfare", best); confetti(best); if (best >= 2) banner(RARITY[best].toUpperCase() + "!", c); emit(me.x, me.y + 2.4, me.z, 8 + best * 10, { colors: [c, "#ffffff"], speed: 3 + best, up: 5, life: 1, size: 0.16 }); if (best >= 1) { flash(c); cam.shake = Math.max(cam.shake, 0.15 * best); }
   flyCoins(me.x, me.y + 2, me.z, 2 + best * 2); setTimeout(() => sfx("coin"), 200); if (tot.mounts.length) setTimeout(() => sfx("egg"), 350);
@@ -787,7 +787,6 @@ function landGifts(list, lvUp) {   // what the server says came out: totals unde
   else { const t = el("b", "disp", RARITY[best]); t.style.color = c === "#ffffff" ? "#6f7d8a" : c; head.appendChild(t); }
   resultRows(lst, tot);
   if (tot.mounts.length) { $("mstable").classList.remove("bump"); void $("mstable").offsetWidth; $("mstable").classList.add("bump"); }
-  if (lvUp) setTimeout(levelFx, 500);
   if (tot.mounts.length) setTimeout(() => { selMount = tot.mounts[0].id; for (const mm of tot.mounts) hatchShow("gift", mm); }, 900);   // (owner, 2026-11-11) each mount a parcel dropped, one after another
   hudDirty = true; giftsUi(); if (panel === "stable" || panel === "odds") renderPanel();
 }
@@ -797,6 +796,45 @@ function confetti(r, X, Y) {
   for (let k = 0; k < 8 + r * 14; k++) { const d = el("i", "confetti"); d.style.left = x0 + "px"; d.style.top = y0 + "px"; d.style.background = cs[k % cs.length]; document.body.appendChild(d);
     const a = Math.random() * TAU, v = 120 + Math.random() * (160 + r * 70); d.animate([{ transform: "translate(-50%,-50%) rotate(0deg)", opacity: 1 }, { transform: `translate(${Math.cos(a) * v}px, ${Math.sin(a) * v * 0.6 - 60}px) rotate(${Math.random() * 720}deg)`, opacity: 1, offset: 0.5 }, { transform: `translate(${Math.cos(a) * v * 1.2}px, ${Math.sin(a) * v * 0.6 + 220}px) rotate(${Math.random() * 1080}deg)`, opacity: 0 }], { duration: 1300 + Math.random() * 700, easing: "cubic-bezier(.2,.7,.4,1)" }).onfinish = () => d.remove(); }
 }
+// (owner, 2026-11-11: the loop) delivered parcels wait on the left while you still have parcels to deliver; once none
+// are left (delivered or lost), they all open full screen, one after another: each builds up (longer and bigger the
+// rarer), bursts, shows what was inside; a mount gets its own unboxing. A tap hurries the build-up, or moves on.
+let reveal = null, lastDelAt = 0;
+function maybeOpenRun() {
+  if (opening || reveal || merging || cine || !loggedIn || !save.gifts.length || bag.length + stolen.length + dropped.length || performance.now() - lastDelAt < 900 || $("hatch").style.display === "flex") return;
+  opening = { gids: save.gifts.map((g) => g.gid), all: true, run: true, t: 0, res: null }; netSend({ t: "open", gids: opening.gids });
+}
+function startReveal(list) {
+  opening = null; if (!list.length) return; reveal = { list, i: 0 }; $("reveal").style.display = "flex"; giftsUi(); setupReveal();
+}
+function setupReveal() {
+  const R = reveal, g = R.list[R.i], c = sparkC(g.r); R.t = 0; R.phase = "build"; R.speed = 1; R.shook = 0; R.beat = 0;
+  const o = $("reveal"); o.style.setProperty("--rc", c); o.style.setProperty("--rcl", c === "#ffffff" ? "#ffffff" : c); o.style.setProperty("--ray", 0);
+  const box = $("rbox"); box.innerHTML = ""; box.appendChild(parcelTile({ gid: g.gid, r: g.r, pt: g.pt | 0 }, true)); $("rlabel").textContent = RARITY[g.r]; $("rlist").innerHTML = "";
+  const dots = $("rdots"); dots.innerHTML = ""; if (R.list.length > 1) R.list.forEach((_, k) => dots.appendChild(el("i", k <= R.i ? "on" : "")));
+}
+function stepReveal(dt) {
+  const R = reveal; if (!R) return; const g = R.list[R.i], r = g.r, o = $("reveal");
+  if (R.phase === "build") {
+    R.t += dt * R.speed; const T = 1.8 + 0.35 * r, u = Math.min(1, R.t / T), b = $("rbox").firstChild;
+    const n = Math.floor(u * 3.4); if (n > R.shook && n <= 3) { R.shook = n; sfx("wobble"); if (b) { b.classList.remove("shake1", "shake2", "shake3"); void b.offsetWidth; b.classList.add("shake" + n); } }
+    o.style.setProperty("--ray", (u * (0.25 + 0.18 * r)).toFixed(2));
+    if (r >= 2) { R.beat -= dt * R.speed; if (R.beat <= 0) { sfx("beat"); R.beat = 0.7 - u * 0.45; } }
+    if (r >= 3) cam.shake = Math.max(cam.shake, u * 0.05 * r);
+    if (u >= 1) {   // the reveal
+      R.phase = "shown"; R.t = 0; if (b) { b.classList.remove("shake1", "shake2", "shake3"); b.classList.add("burst"); }
+      sfx("win", r); if (r >= 3) sfx("fanfare", r); if (r >= 1) flash(sparkC(r)); cam.shake = Math.max(cam.shake, 0.12 * r); confetti(r, innerWidth / 2, innerHeight * 0.42);
+      resultRows($("rlist"), { coins: g.coins, mounts: g.mount ? [g.mount] : [] }); setTimeout(() => sfx("coin"), 200);
+      if (g.mount) setTimeout(() => { if (reveal === R) { selMount = g.mount.id; hatchShow("gift", g.mount); } }, 800);
+    }
+  } else if ($("hatch").style.display !== "flex") { R.t += dt; if (R.t > (g.mount ? 1.4 : 2.2)) nextReveal(); }   // moves on by itself, or with a tap
+}
+function nextReveal() {
+  const R = reveal; if (!R) return; R.i++;
+  if (R.i < R.list.length) { setupReveal(); return; }
+  reveal = null; $("reveal").style.display = "none"; cam.shake = 0; tutDid("open"); hudDirty = true; giftsUi(); if (panel === "stable" || panel === "odds") renderPanel();
+}
+$("reveal").addEventListener("pointerdown", (e) => { e.stopPropagation(); const R = reveal; if (!R) return; if (R.phase === "build") { R.speed = Math.min(8, R.speed * 2.5); sfx("tick"); } else if (R.t > 0.35 && $("hatch").style.display !== "flex") nextReveal(); });
 function hurryGift() { if (opening && !opening.all) { opening.speed = Math.min(8, opening.speed * 2.5); sfx("tick"); } }   // a tap while it builds up: faster
 $("gopen").onclick = hurryGift; $("gall").onclick = openAll; $("gx").onclick = () => { $("gres").style.display = "none"; giftsUi(); };
 for (const id of ["gopen", "gall", "gx"]) $(id).addEventListener("pointerdown", (e) => e.stopPropagation());
@@ -807,9 +845,9 @@ for (const id of ["gopen", "gall", "gx"]) $(id).addEventListener("pointerdown", 
 const TUT = [
   { t: "Pick up parcels", p: "Ride up to your parcel at the end of the post office conveyor. The pink arrow shows the way.", on: "grab" },
   { t: "Drop them off", p: "Follow the pink arrow to the pink beam and ride into the ring by the mailbox.", on: "deliver" },
-  { t: "Open your parcels", p: "Delivered parcels wait on the left. Tap one to open it (tap again to hurry it), or Open all. Four of one rarity merge into a better one.", on: "open", hi: "gifts" },
-  { t: "Stable", p: "Your mounts: ride one, level it up with coins or Level Coupons, and merge two of the same into a cooler skin. Each neighborhood's parcels can bring its animal.", hi: "mstable" },
-  { t: "Upgrades", p: "Spend coins on better pay, luck, Level Coupons and sturdier boxes. Farther neighborhoods open as your mounts level up.", hi: "mup" },
+  { t: "Open your parcels", p: "Delivered parcels wait on the left and open once you've none left to deliver. Tap to hurry them. A parcel can bring its neighborhood's animal: an Uncommon or better one opens the next neighborhood.", on: "open", hi: "gifts" },
+  { t: "Stable", p: "Your mounts: ride one, and merge two of the same into a cooler skin. The rarer the mount, the faster it is and the more parcels it carries.", hi: "mstable" },
+  { t: "Upgrades", p: "Spend coins on better pay, luck and sturdier boxes.", hi: "mup" },
 ];
 let tut = -1;
 function tutShow(n) {
@@ -822,12 +860,12 @@ function tutDid(what) { if (tut >= 0 && TUT[tut].on === what) setTimeout(() => t
 $("tutnext").onclick = () => tutShow(tut + 1); $("tutskip").onclick = () => tutShow(-2);
 for (const id of ["tutnext", "tutskip"]) $(id).addEventListener("pointerdown", (e) => e.stopPropagation());
 // (owner, 2026-11-11) a level up also shows the mount on screen: it pops in over golden rays, hops, a shine sweeps across it
-function levelFx() { const q = riding(), L = $("lvup"), src = portrait(q.sp, q.va, q.r); $("lvimg").src = src; L.style.setProperty("--lvm", `url(${src})`); $("lvt").textContent = "LEVEL " + q.lv; L.classList.remove("go"); void L.offsetWidth; L.classList.add("go"); clearTimeout(levelFx.t); levelFx.t = setTimeout(() => L.classList.remove("go"), 2300);
+function levelFx() { const q = riding(), L = $("lvup"), src = portrait(q.sp, q.va, q.r); $("lvimg").src = src; L.style.setProperty("--lvm", `url(${src})`); $("lvt").textContent = World.VARIANTS[q.va] ? World.VARIANTS[q.va].toUpperCase() + "!" : RARITY[q.r].toUpperCase(); L.classList.remove("go"); void L.offsetWidth; L.classList.add("go"); clearTimeout(levelFx.t); levelFx.t = setTimeout(() => L.classList.remove("go"), 2300);
   if (mine) mine.spin = 0.7; for (let k = 0; k < 16; k++) setTimeout(() => emit(me.x + (Math.random() - 0.5) * 2, me.y + 0.5 + Math.random() * 2.5, me.z + (Math.random() - 0.5) * 2, 3, { colors: ["#ffd84a", "#ffffff", "#fff3b8"], speed: 1.5, up: 2.5, life: 0.9, grav: -0.5, size: 0.16 }), k * 60);
   sfx("level"); popup("LEVEL UP!", "#ffd84a", me.x, me.y + 3.2, me.z, true); for (let k = 0; k < 28; k++) { const a = (k / 28) * TAU; parts.length < PN && parts.push({ x: me.x, y: me.y + 0.3, z: me.z, vx: Math.cos(a) * 6, vy: 2.5, vz: Math.sin(a) * 6, t: 0, life: 0.8, size: 0.2, grav: 3, c: k % 2 ? "#ffd84a" : "#ffffff", r: k }); } }
 function stepGifts(dt) {   // the build-up: three shakes, each bigger, the sparkle growing, then the prize (once the server's said)
   const o = opening; if (!o) return; o.t += dt * (o.speed || 1);
-  if (o.all) { if (o.res) landGifts(o.res.list, o.res.lvUp); return; }
+  if (o.all) { if (o.res) landGifts(o.res.list); return; }
   // (owner, 2026-11-11: more umph) the rarer, the longer and bigger the build-up: rays behind it, a heartbeat from Rare,
   // the screen shaking from Epic
   const r = o.g.r, T = 2.2 + 0.35 * r, b = $("gbig").firstChild, u = Math.min(1, o.t / T);
@@ -835,7 +873,7 @@ function stepGifts(dt) {   // the build-up: three shakes, each bigger, the spark
   $("gopen").style.setProperty("--glow", (6 + u * (36 + 14 * r)).toFixed(0) + "px"); $("gopen").style.setProperty("--grow", (1 + u * (1.6 + 0.3 * r)).toFixed(2)); $("gopen").style.setProperty("--ray", (u * (0.2 + 0.2 * r)).toFixed(2));
   if (r >= 2) { o.beat = (o.beat || 0) - dt * (o.speed || 1); if (o.beat <= 0) { sfx("beat"); o.beat = 0.7 - u * 0.45; } }
   if (r >= 3) cam.shake = Math.max(cam.shake, u * 0.05 * r);
-  if (o.t >= T && o.res) landGifts(o.res.list, o.res.lvUp);
+  if (o.t >= T && o.res) landGifts(o.res.list);
 }
 let hudDirty = true, shownCoins = 0, cardKey = "", myName = "", myRole = "player", myId = null, loggedIn = false;
 const cdBtn = (id, left, total) => { const b = $(id), k = total > 0 ? clamp(left / total, 0, 1) : 0; b.style.setProperty("--cd", (k * 360).toFixed(0) + "deg"); b.classList.toggle("cool", k > 0); };
@@ -844,7 +882,7 @@ function hud(dt) {
   // coins count up to what the server says
   const coinsNow = save.coins;
   if (shownCoins !== coinsNow) { const d = coinsNow - shownCoins; shownCoins = Math.abs(d) < 1 ? coinsNow : shownCoins + d * Math.min(1, dt * 8); $("coinn").textContent = fmt(Math.round(shownCoins)); }
-  const t = now(), q = riding(), ab = MOUNTS[q.sp].ab, tier = World.abilityTier(q.lv);
+  const t = now(), q = riding(), ab = MOUNTS[q.sp].ab, tier = World.abilityTier(q);
   cdBtn("bkick", me.kickAt + World.KICK.cd - t, World.KICK.cd);
   cdBtn("bability", tier && World.ABILITY_CD[ab][tier] ? me.abilityAt + World.ABILITY_CD[ab][tier] - t : 0, tier ? World.ABILITY_CD[ab][tier] : 0);
   // the parcel cards: one row per parcel (a stolen or dropped one faded)
@@ -881,17 +919,15 @@ function oddsRow(odds) { const r = el("div", "odds"); odds.forEach((v, n) => { i
 function renderPanel() {
   const body = $("pbody"); body.innerHTML = ""; body.className = "p-" + panel; $("ptitle").textContent = { stable: "Stable", up: "Upgrades", odds: "Odds", set: "Settings", admin: "Admin" }[panel] || "";
   if (panel === "stable") {
-    const grid = el("div", "mgrid"), list = [...save.mounts].sort((a, b) => b.r - a.r || b.lv - a.lv || a.id - b.id);
+    const grid = el("div", "mgrid"), list = [...save.mounts].sort((a, b) => b.r - a.r || World.ZONE_KIND.indexOf(b.sp) - World.ZONE_KIND.indexOf(a.sp) || b.va - a.va || a.id - b.id);
     for (const m of list) { const t = el("button", "mtile" + (m.id === selMount ? " sel" : "") + (m.id === save.ride ? " ride" : "") + (m.va ? " va" + m.va : "")); t.style.borderColor = RARITY_C[m.r] === "#ffffff" ? "#d7e1ea" : RARITY_C[m.r]; t.title = mountName(m);
-      const im = el("img"); im.src = portrait(m.sp, m.va, m.r); im.alt = ""; t.appendChild(im); t.appendChild(el("b", "", m.lv)); t.onclick = () => { selMount = m.id; renderPanel(); }; grid.appendChild(t); }
-    const m = save.mounts.find((k) => k.id === selMount) || riding(), S = World.mountStats(m), M = MOUNTS[m.sp], tier = World.abilityTier(m.lv), d = el("div", "mdetail");
+      const im = el("img"); im.src = portrait(m.sp, m.va, m.r); im.alt = ""; t.appendChild(im); t.onclick = () => { selMount = m.id; renderPanel(); }; grid.appendChild(t); }
+    const m = save.mounts.find((k) => k.id === selMount) || riding(), S = World.mountStats(m), M = MOUNTS[m.sp], tier = World.abilityTier(m), d = el("div", "mdetail");
     const im = el("img", "big"); im.src = portrait(m.sp, m.va, m.r); im.alt = ""; d.appendChild(im);
     const info = el("div", "minfo"); info.appendChild(el("h3", "", mountName(m))); const rr = el("div", "rar", RARITY[m.r]); rr.style.color = RARITY_C[m.r] === "#ffffff" ? "#6f7d8a" : RARITY_C[m.r]; info.appendChild(rr);
-    const lv = el("div", "lvrow"); lv.appendChild(el("span", "", "Level " + m.lv)); const bar = el("div", "bar"), fill = el("i"); fill.style.width = (m.lv >= World.MAX_LV ? 100 : (m.xp / World.xpNeed(m.lv)) * 100) + "%"; bar.appendChild(fill); lv.appendChild(bar); info.appendChild(lv);
-    for (const [name, v, max] of [["Speed", S.speed, 16], ["Jump", S.jump, 11], ["Grip", S.grip * 100, 60]]) { const r = el("div", "stat"); r.appendChild(el("span", "", name)); const b = el("div", "bar"), f = el("i"); f.style.width = clamp((v / max) * 100, 4, 100) + "%"; b.appendChild(f); r.appendChild(b); r.appendChild(el("em", "", name === "Grip" ? Math.round(v) + "%" : v.toFixed(1))); info.appendChild(r); }
-    const ar = el("div", "stat ab" + (tier ? "" : " off")); ar.appendChild(el("span", "", World.ABILITY[M.ab])); const pp = el("div", "pips"); for (const need of [5, 10, 20]) pp.appendChild(el("i", m.lv >= need ? "on" : "", need)); ar.appendChild(pp); info.appendChild(ar);
+    for (const [name, v, max] of [["Speed", S.speed, 20], ["Jump", S.jump, 11], ["Grip", S.grip * 100, 60]]) { const r = el("div", "stat"); r.appendChild(el("span", "", name)); const b = el("div", "bar"), f = el("i"); f.style.width = clamp((v / max) * 100, 4, 100) + "%"; b.appendChild(f); r.appendChild(b); r.appendChild(el("em", "", name === "Grip" ? Math.round(v) + "%" : v.toFixed(1))); info.appendChild(r); }
+    const ar = el("div", "stat ab" + (tier ? "" : " off")); ar.appendChild(el("span", "", World.ABILITY[M.ab])); const pp = el("div", "pips"); for (const need of [1, 3, 4]) pp.appendChild(el("i", m.r >= need ? "on" : "", RARITY[need][0])); ar.appendChild(pp); info.appendChild(ar);
     const acts = el("div", "acts"); if (m.id !== save.ride) acts.appendChild(btn("Ride", () => netSend({ t: "equip", id: m.id }), "go"));
-    if (m.lv < World.MAX_LV) { acts.appendChild(coinBtn(World.levelCost(m.lv), () => netSend({ t: "level", id: m.id }), save.coins >= World.levelCost(m.lv))); const cb = btn("Coupon " + save.coupons, () => netSend({ t: "coupon", id: m.id }), "coupon"); cb.disabled = save.coupons < 1; acts.appendChild(cb); }
     if (World.fuseSet(save.mounts, m.id)) acts.appendChild(btn("Merge", () => netSend({ t: "fuse", id: m.id }), "fuse"));   // two the same: the next skin
     for (const k of World.trailsFor(save)) { const T = World.TRAILS.find((q) => q.k === k), on = m.tr === k, b = btn(T.name, () => netSend({ t: "trail", id: m.id, k: on ? "" : k }), "trail" + (on ? " on" : "")); acts.appendChild(b); }   // (owner, 2026-11-11) unlocked trails, on any mount
     info.appendChild(acts); d.appendChild(info);
@@ -903,7 +939,7 @@ function renderPanel() {
       if (l < World.UP_MAX) r.appendChild(coinBtn(World.upgradeCost(k, l), () => netSend({ t: "upgrade", k }), save.coins >= World.upgradeCost(k, l))); else r.appendChild(el("span", "max", "MAX")); body.appendChild(r); }
   } else if (panel === "odds") {
     const head = el("div", "orow head"); head.appendChild(el("b", "", "")); const hr = el("div", "odds"); RARITY.forEach((n, i) => { const s = el("span", "", n); s.style.color = RARITY_C[i] === "#ffffff" ? "#6f7d8a" : RARITY_C[i]; hr.appendChild(s); }); head.appendChild(hr); body.appendChild(head);
-    const open = World.openFor(save), sw = World.spawnWeights(open, riding().lv);
+    const open = World.openFor(save), sw = World.spawnWeights(open, riding().r);
     TIERS.forEach((T, n) => { const r = el("div", "orow" + (n < open ? "" : " off")); const b = el("b", "", T.name); b.style.color = T.c; r.appendChild(b); const full = el("div", "odds"); World.rollOdds(T.luck + World.stampLuck(save.up.stamps)).forEach((v, i) => { const s = el("span", "", pct(v)); s.style.color = RARITY_C[i] === "#ffffff" ? "#6f7d8a" : RARITY_C[i]; full.appendChild(s); }); r.appendChild(full); r.appendChild(el("em", "", "x" + T.mult + " · " + pct(sw[n]))); body.appendChild(r); });
     for (const k of Object.keys(MODS)) { const r = el("div", "orow"); r.appendChild(el("span", "mod " + k, MODS[k].name)); r.appendChild(el("em", "", "+" + MODS[k].bonus * 100 + "%")); body.appendChild(r); }
     { const r = el("div", "orow"); r.appendChild(el("b", "", "Mount")); const full = el("div", "odds"); World.ROLLS.forEach((R, i) => { const s = el("span", "", pct(R.pet)); s.style.color = RARITY_C[i] === "#ffffff" ? "#6f7d8a" : RARITY_C[i]; full.appendChild(s); }); r.appendChild(full); body.appendChild(r); }   // (owner, 2026-11-11) the chance a parcel of each rarity brings its area's animal, at that rarity
@@ -926,13 +962,13 @@ function renderAdmin(body) {
   acts.appendChild(btn("Mute", () => op({ op: "mute", mins: mins.value }))); acts.appendChild(btn("Kick", () => op({ op: "kick" }))); acts.appendChild(btn("Ban", () => op({ op: "ban", mins: mins.value })));
   if (myRole === "admin") {
     const role = el("select"); for (const r of ["player", "moderator", "admin"]) { const o = el("option", "", r); o.value = r; if (a.role === r) o.selected = true; role.appendChild(o); } role.onchange = () => op({ op: "role", role: role.value }); acts.appendChild(role);
-    const what = el("select"); for (const [v, n] of [["coins", "Coins"], ["coupons", "Level Coupons"], ...Object.keys(MOUNTS).map((k) => ["mount:" + k, MOUNTS[k].name])]) { const o = el("option", "", n); o.value = v; what.appendChild(o); }
-    const n = el("input"); n.type = "number"; n.value = 1; n.min = 1; const lv = el("input"); lv.type = "number"; lv.value = 1; lv.min = 1; lv.max = 20; lv.title = "Level"; const va = el("select"); World.VARIANTS.forEach((v, i) => { const o = el("option", "", v || "Normal"); o.value = i; va.appendChild(o); }); const rar = el("select"); RARITY.forEach((v, i) => { const o = el("option", "", v); o.value = i; rar.appendChild(o); });
-    const give = el("div", "acts wrap"); give.appendChild(what); give.appendChild(n); give.appendChild(lv); give.appendChild(rar); give.appendChild(va); give.appendChild(btn("Give", () => op({ op: "give", what: what.value, n: +n.value, lv: +lv.value, va: +va.value, r: +rar.value }), "go"));
-    const quick = el("div", "acts wrap"); for (const [c, name] of [["coins", "+100,000"], ["allmounts", "All mounts"], ["maxlv", "Max levels"], ["coupons", "Coupons"], ["upgrades", "Upgrades"], ["everything", "Everything"], ["reset", "Reset to new player"]]) quick.appendChild(btn(name, () => op({ op: "quick", cmd: c, n: 100000 })));
+    const what = el("select"); for (const [v, n] of [["coins", "Coins"], ...Object.keys(MOUNTS).map((k) => ["mount:" + k, MOUNTS[k].name])]) { const o = el("option", "", n); o.value = v; what.appendChild(o); }
+    const n = el("input"); n.type = "number"; n.value = 1; n.min = 1; const va = el("select"); World.VARIANTS.forEach((v, i) => { const o = el("option", "", v || "Normal"); o.value = i; va.appendChild(o); }); const rar = el("select"); RARITY.forEach((v, i) => { const o = el("option", "", v); o.value = i; rar.appendChild(o); });
+    const give = el("div", "acts wrap"); give.appendChild(what); give.appendChild(n); give.appendChild(rar); give.appendChild(va); give.appendChild(btn("Give", () => op({ op: "give", what: what.value, n: +n.value, va: +va.value, r: +rar.value }), "go"));
+    const quick = el("div", "acts wrap"); for (const [c, name] of [["coins", "+100,000"], ["allmounts", "All mounts"], ["upgrades", "Upgrades"], ["everything", "Everything"], ["reset", "Reset to new player"]]) quick.appendChild(btn(name, () => op({ op: "quick", cmd: c, n: 100000 })));
     body.appendChild(acts); body.appendChild(give); body.appendChild(quick);
-    if (adminData) { const ed = el("div", "acts wrap"); const f = {}; for (const k of ["coins", "coupons"]) { const i = el("input"); i.type = "number"; i.value = adminData[k]; i.title = k; f[k] = i; const l = el("label", "", k === "coins" ? "Coins " : "Coupons "); l.appendChild(i); ed.appendChild(l); }
-      ed.appendChild(btn("Save", () => op({ op: "edit", coins: +f.coins.value, coupons: +f.coupons.value }), "go")); ed.appendChild(el("span", "", adminData.mounts.length + " mounts")); body.appendChild(ed); }
+    if (adminData) { const ed = el("div", "acts wrap"); const f = {}; for (const k of ["coins"]) { const i = el("input"); i.type = "number"; i.value = adminData[k]; i.title = k; f[k] = i; const l = el("label", "", "Coins "); l.appendChild(i); ed.appendChild(l); }
+      ed.appendChild(btn("Save", () => op({ op: "edit", coins: +f.coins.value }), "go")); ed.appendChild(el("span", "", adminData.mounts.length + " mounts")); body.appendChild(ed); }
   } else body.appendChild(acts);
 }
 $("pclose").onclick = closePanel; $("panel").addEventListener("pointerdown", (e) => { if (e.target === $("panel")) closePanel(); });
@@ -964,8 +1000,8 @@ function bubble(rig, text) { if (!rig) return; if (rig.bub) { rig.m.g.remove(rig
 const others = new Map(); let party = [], invites = [];
 function addOther(p) {
   if (p.id === myId) return; const old = others.get(p.id); if (old) unrig(old.rig);
-  const rig = rigMount(p.sp, clamp(p.lv | 0, 1, World.MAX_LV), p.va | 0, p.r | 0, p.shirt || "#3a8ee6", p.name, p.rank | 0); rig.m.g.position.set(p.x, p.y || 0, p.z); setCarry(rig, p.carry);
-  others.set(p.id, Object.assign(old || { buf: [], x: p.x, y: p.y || 0, z: p.z, yaw: p.yaw || 0, mv: 0, stunT: 0, graceT: 0, kickT: 0, hideT: 0, stepT: 0, mx: p.x, my: p.y || 0, mz: p.z, myaw: 0, wasFoot: false }, { id: p.id, name: p.name, sp: p.sp, r: p.r | 0, lv: p.lv, va: p.va | 0, tr: p.tr || "", shirt: p.shirt, rank: p.rank | 0, friendly: !!p.friendly, carry: p.carry || null, rig }));
+  const rig = rigMount(p.sp, p.va | 0, p.r | 0, p.shirt || "#3a8ee6", p.name, p.rank | 0); rig.m.g.position.set(p.x, p.y || 0, p.z); setCarry(rig, p.carry);
+  others.set(p.id, Object.assign(old || { buf: [], x: p.x, y: p.y || 0, z: p.z, yaw: p.yaw || 0, mv: 0, stunT: 0, graceT: 0, kickT: 0, hideT: 0, stepT: 0, mx: p.x, my: p.y || 0, mz: p.z, myaw: 0, wasFoot: false }, { id: p.id, name: p.name, sp: p.sp, r: p.r | 0, va: p.va | 0, tr: p.tr || "", shirt: p.shirt, rank: p.rank | 0, friendly: !!p.friendly, carry: p.carry || null, rig }));
 }
 function dropOther(id) { const o = others.get(id); if (!o) return; unrig(o.rig); others.delete(id); }
 function renderParty() { const d = $("party"); d.innerHTML = ""; d.style.display = party.length ? "flex" : "none"; for (const q of party) d.appendChild(el("span", q.id === myId ? "me" : "", q.name)); if (party.length) { const x = el("button", "", "✕"); x.title = "Leave"; x.onclick = () => netSend({ t: "party_leave" }); d.appendChild(x); } }
@@ -1017,7 +1053,7 @@ function stale(web, told, by) {
   try { sessionStorage.setItem("crittercourier.reload", String(Date.now())); } catch (e) { /* private mode */ }
   banner("Updating!", "#ffd35a", by ? by + "'s Update" : ""); setTimeout(() => location.reload(), 1500); return true;
 }
-function adopt(d) { const ride = save.ride, q0 = riding(), key = q0.sp + q0.lv + q0.va + save.set.shirt + World.upTotal(save.up); save = World.cleanData(d); const q = riding(); if (!mine || ride !== save.ride || key !== q.sp + q.lv + q.va + save.set.shirt + World.upTotal(save.up)) remount(); hudDirty = true; setVolumes(); if (panel && panel !== "admin") renderPanel(); }
+function adopt(d) { const ride = save.ride, q0 = riding(), key = q0.sp + q0.r + q0.va + save.set.shirt + World.upTotal(save.up); save = World.cleanData(d); const q = riding(); if (!mine || ride !== save.ride || key !== q.sp + q.r + q.va + save.set.shirt + World.upTotal(save.up)) remount(); hudDirty = true; setVolumes(); if (panel && panel !== "admin") renderPanel(); }
 function sendPos(force) {
   if (!netOk || (me.transit && me.transit.k === "pipe")) return;
   const mv = (me.moving ? 1 : 0) | (me.foot ? 2 : 0) | (me.ground ? 0 : 4) | (me.glide ? 16 : 0), s = [me.x.toFixed(2), me.y.toFixed(2), me.z.toFixed(2), me.yaw.toFixed(2), mv].join();
@@ -1061,7 +1097,7 @@ function onNet(m) {
       for (const [id, x, z, yaw, mv, y] of m.ps || []) { const o = others.get(id); if (!o) continue; o.buf.push({ t: m.ts, x, y, z, yaw, mv }); if (o.buf.length > 12) o.buf.shift(); }
       setNpc(m); break;
     }
-    case "mount": { const o = others.get(m.id); if (o) addOther(Object.assign({}, o, { sp: m.sp, r: m.r | 0, lv: m.lv, va: m.va, tr: m.tr || "" })); break; }
+    case "mount": { const o = others.get(m.id); if (o) addOther(Object.assign({}, o, { sp: m.sp, r: m.r | 0, va: m.va, tr: m.tr || "" })); break; }
     case "rank": { const o = others.get(m.id); if (o) addOther(Object.assign({}, o, { rank: m.rank })); else if (m.id === myId) remount(); break; }
     case "look": { const o = others.get(m.id); if (o) addOther(Object.assign({}, o, { friendly: m.friendly, shirt: m.shirt })); break; }
     case "carry": { const o = others.get(m.id); if (o) { o.carry = m.c; setCarry(o.rig, m.c); } break; }
@@ -1079,11 +1115,11 @@ function onNet(m) {
     case "delivered": {
       const h = World.houses[m.house]; sfx("deliver"); emit(h.mx, h.my + 1.6, h.mz, 60, { colors: CONFETTI, speed: 6, up: 8, life: 1.3 }); me.squash = 0.2;
       popup("+" + fmt(m.coins), "#ffd84a", h.mx, h.my + 2.4, h.mz); flyCoins(h.mx, h.my + 1.6, h.mz, 5); houseMesh[m.house].shake = 0.01; houseMesh[m.house].pop = 0.3;
-      save = World.cleanData(m.data); if (m.lvUp) { remount(); setTimeout(levelFx, 300); } delivered(h, m.gift, m.near, m.merges); tutDid("deliver"); break;
+      save = World.cleanData(m.data); lastDelAt = performance.now(); delivered(h, m.gift, m.near, m.merges); tutDid("deliver"); break;
     }
     case "opened": {   // what came out of the parcels I opened
-      save = World.cleanData(m.data); if (m.lvUp) remount();
-      if (opening) opening.res = { list: m.list, lvUp: m.lvUp }; else landGifts(m.list, m.lvUp); tutDid("open"); break;
+      save = World.cleanData(m.data);
+      if (opening && opening.run) startReveal(m.list); else if (opening) { opening.res = { list: m.list }; tutDid("open"); } else { landGifts(m.list); tutDid("open"); } break;
     }
     case "stun": me.stun = m.s; if (me.transit && me.transit.k !== "pipe") me.transit = null; knockedOff(); sfx("stun"); cam.shake = Math.max(cam.shake, 0.5); flash(m.why === "kick" ? "#ffffff" : "#e5534b"); if (m.why === "dog") sfx("growl"); break;
     case "knock": me.px = m.x; me.pz = m.z; me.vy = m.y; me.ground = false; sfx("kick"); cam.shake = Math.max(cam.shake, 0.5); break;
@@ -1093,7 +1129,6 @@ function onNet(m) {
       groundMark(m.x, m.y, m.z, World.ROCK.r, m.s, "#1d232a", (k) => { if (hyp(k.x - me.x, k.z - me.z) < 60) sfx("rock"); emit(k.x, k.y + 0.3, k.z, 22, { colors: ["#8a8278", "#c9bfae"], speed: 6, up: 4, life: 0.7 }); if (hyp(k.x - me.x, k.z - me.z) < 14) cam.shake = Math.max(cam.shake, 0.4); }); break; }
     case "dive": { const g = gooseModel(true); g.g.position.set(m.x + 9, m.y + 14, m.z); g.g.scale.setScalar(1.4); scene.add(g.g); divers.push({ g, x: m.x, y: m.y, z: m.z, t: 0, s: m.s }); if (hyp(m.x - me.x, m.z - me.z) < 40) sfx("honk"); groundMark(m.x, m.y, m.z, World.SKYGOOSE.r, m.s, "#2b3a66"); break; }
     case "fx": onFx(m); break;
-    case "leveled": { adopt(m.data); if (m.id === save.ride) { remount(); levelFx(); } else sfx("level"); break; }
     case "fused": adopt(m.data); selMount = m.m.id; if (panel === "stable") renderPanel(); hatchShow("fuse", m.m); break;
     case "reset": location.reload(); break;   // (owner, 2026-11-11) staff made this a brand new courier
     case "upgraded": adopt(m.data); remount(); sfx("buy"); emit(me.x, me.y + 2, me.z, 30, { colors: ["#ffd84a", "#ffffff", "#7ee08a"], speed: 4, up: 5, life: 1 }); break;
@@ -1186,7 +1221,7 @@ function stepOthers(dt, t) {
     if (o.graceT > 0) { o.graceT -= dt; if (Math.random() < 0.4) emit(o.x, o.y + 1.2, o.z, 1, { colors: ["#ffffff", "#bfe6ff"], speed: 1.2, up: 1, life: 0.5, grav: -1, size: 0.1, spread: 1.6 }); }
     if (o.kickT > 0) o.kickT -= dt; if (o.hideT > 0) o.hideT -= dt;
     pose(o.rig, { x: o.x, y: o.y, z: o.z, yaw: o.yaw, moving: !!(o.mv & 1), foot, air: !!(o.mv & 4), stun: o.stunT, mx: o.mx, my: o.my, mz: o.mz, myaw: o.myaw, kickT: o.kickT, hidden: o.hideT > 0, glide: !!(o.mv & 16) }, dt, t, 10);
-    if ((o.mv & 1) && !(o.mv & 6) && (o.va || o.lv >= World.MAX_LV || o.tr)) { o.stepT -= dt; if (o.stepT <= 0) { o.stepT = 0.18; trail(o.x, o.y, o.z, o, ""); } }
+    if ((o.mv & 1) && !(o.mv & 6) && (o.va || o.r >= 4 || o.tr)) { o.stepT -= dt; if (o.stepT <= 0) { o.stepT = 0.18; trail(o.x, o.y, o.z, o, ""); } }
   }
 }
 function stepNpcs(dt, t) {
@@ -1264,6 +1299,7 @@ function stepCine(dt) {
 }
 function watchZones() {   // a new area opened (not on logging in): show it
   const o = World.openFor(save); if (lastOpenFor !== myName) { lastOpenFor = myName; lastOpen = o; return; }
+  if (reveal || opening || $("hatch").style.display === "flex") return;   // after the parcels and the new mount have had their moment
   if (o > lastOpen) { const ds = []; for (let d = lastOpen; d < o; d++) ds.push(d); lastOpen = o; setTimeout(() => playZones(ds), 1200); }   // after the level-up has had its moment
 }
 addEventListener("pointerdown", () => { if (cine && (cine.i > 0 || cine.t > 0.8)) endCine(); });
@@ -1297,7 +1333,7 @@ function frame(tms) {
   }
   stepOthers(dt, t); stepNpcs(dt, t); stepParts(dt); stepMarks(dt); blobStep(); stepCamera(dt);
   renderer.render(scene, camera);
-  if (loggedIn) { hud(dt); stepGifts(dt); } stepPops(dt);
+  if (loggedIn) { hud(dt); stepGifts(dt); stepReveal(dt); maybeOpenRun(); } stepPops(dt);
 }
 buildTown(); buildAnimals(); buildGates(); beltShow(); stepCamera(0.016);
 // for the tests and the console
