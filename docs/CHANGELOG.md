@@ -6,6 +6,7 @@ and any rule decided. Use `git log` for the code detail (and for the older Atamu
 
 ## 2026-11-12
 
+- **Stacked Stable (owner).** Identical mounts share one tile in the Stable, with a count.
 - **Aura and podiums (owner).** Coins became Aura (one for one), a shiny purple currency. The server's three best
   mounts stand on three podiums by the post office and earn their couriers Aura. Every mount starts carrying one
   parcel; Aura buys carry levels (up to 5) and Boost levels (+5% speed each) per mount, and four new trails. Rarity

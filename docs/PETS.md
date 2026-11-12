@@ -147,6 +147,9 @@ A parcel that breaks or is lost is gone; the conveyor always has the next one. *
 
 ## Merging and skins
 
+- (owner, 2026-11-12) **The Stable stacks identical mounts** (kind, coat, skin, Aura levels and trail) in one tile with
+  a count (x3); selecting it shows one of them (the ridden one if it's there).
+
 - (owner, 2026-11-11) **Two skins only: normal and Shiny.** 1 in 10,000 new mounts is **Shiny**: the same coat, but
   little stars twinkle on and around it all the time (in town, for everyone; its pictures have sparkles too). A Shiny
   drop is announced to the server.

@@ -943,8 +943,11 @@ function renderPanel() {
   const body = $("pbody"); body.innerHTML = ""; body.className = "p-" + panel; $("ptitle").textContent = { stable: "Stable", up: "Upgrades", odds: "Odds", set: "Settings", admin: "Admin" }[panel] || "";
   if (panel === "stable") {
     const grid = el("div", "mgrid"), list = [...save.mounts].sort((a, b) => b.r - a.r || World.ZONE_KIND.indexOf(b.sp) - World.ZONE_KIND.indexOf(a.sp) || b.va - a.va || a.id - b.id);
-    for (const m of list) { const t = el("button", "mtile" + (m.id === selMount ? " sel" : "") + (m.id === save.ride ? " ride" : "") + (m.va ? " va" + m.va : "")); t.style.borderColor = RARITY_C[m.r] === "#ffffff" ? "#d7e1ea" : RARITY_C[m.r]; t.title = mountName(m);
-      const im = el("img"); im.src = portrait(m.sp, m.va, m.r); im.alt = ""; t.appendChild(im); t.onclick = () => { selMount = m.id; renderPanel(); }; grid.appendChild(t); }
+    // (owner, 2026-11-12) identical mounts (kind, coat, skin, Aura levels, trail) stack in one tile with a count
+    const stacks = new Map(); for (const m of list) { const k = [m.sp, m.r, m.va, m.cap | 0, m.spd | 0, m.tr || ""].join(); if (!stacks.has(k)) stacks.set(k, []); stacks.get(k).push(m); }
+    for (const ms of stacks.values()) { const pickId = ms.some((k) => k.id === selMount) ? selMount : ms.some((k) => k.id === save.ride) ? save.ride : ms[0].id, m = ms.find((k) => k.id === pickId);
+      const t = el("button", "mtile" + (ms.some((k) => k.id === selMount) ? " sel" : "") + (ms.some((k) => k.id === save.ride) ? " ride" : "") + (m.va ? " va" + m.va : "")); t.style.borderColor = RARITY_C[m.r] === "#ffffff" ? "#d7e1ea" : RARITY_C[m.r]; t.title = mountName(m);
+      const im = el("img"); im.src = portrait(m.sp, m.va, m.r); im.alt = ""; t.appendChild(im); if (ms.length > 1) t.appendChild(el("b", "", "x" + ms.length)); t.onclick = () => { selMount = m.id; renderPanel(); }; grid.appendChild(t); }
     const m = save.mounts.find((k) => k.id === selMount) || riding(), S = World.mountStats(m), M = MOUNTS[m.sp], tier = World.abilityTier(m), d = el("div", "mdetail");
     const im = el("img", "big"); im.src = portrait(m.sp, m.va, m.r); im.alt = ""; d.appendChild(im);
     const info = el("div", "minfo"); info.appendChild(el("h3", "", mountName(m))); const rr = el("div", "rar", RARITY[m.r]); rr.style.color = RARITY_C[m.r] === "#ffffff" ? "#6f7d8a" : RARITY_C[m.r]; info.appendChild(rr);
