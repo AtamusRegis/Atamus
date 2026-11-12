@@ -93,7 +93,7 @@ export function fuseSet(mounts, id) {   // the ones a merge would take (the chos
 // (owner, 2026-11-11) no mount levels: a mount's rarity (and its area) decides how fast, big and able it is
 export const bagSize = (m) => 1 + clamp(m.r | 0, 0, 4);                      // parcels a mount carries at once (owner, 2026-11-11): one more per rarity, Common 1 to Legendary 5
 export const mountScale = (m) => 1 + 0.25 * clamp(m.r | 0, 0, 4);             // Common 1x to Legendary 2x
-export const abilityTier = (m) => [0, 1, 1, 2, 3][clamp(m.r | 0, 0, 4)];      // its ability: none when Common, then stronger at Epic and Legendary
+export const abilityTier = (m) => [1, 1, 2, 2, 3][clamp(m.r | 0, 0, 4)];      // (owner, 2026-11-11) every rarity has its animal's ability: stronger at Rare and Legendary
 export function mountStats(m) {   // m: { sp, r (rarity) }
   const r = clamp(m.r | 0, 0, 4), z = Math.max(0, ZONE_KIND.indexOf(m.sp));
   // (owner, 2026-11-11) each area's animal is a little faster than the last (+1.5 m/s), and each rarity faster again
