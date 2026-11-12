@@ -6,6 +6,9 @@ and any rule decided. Use `git log` for the code detail (and for the older Atamu
 
 ## 2026-11-12
 
+- **New mount chances and merges (owner).** A parcel's mount: Common 40%, Uncommon 20%, Rare 10%, Epic 5%, Legendary 1%.
+  Merging takes 2 Commons for an Uncommon, 4 Uncommons for a Rare, 8 Rares for an Epic, 16 Epics for a Legendary.
+  The Stable gets Merge all, and mounts can be sold for Aura by rarity.
 - **Stacked Stable (owner).** Identical mounts share one tile in the Stable, with a count.
 - **Aura and podiums (owner).** Coins became Aura (one for one), a shiny purple currency. The server's three best
   mounts stand on three podiums by the post office and earn their couriers Aura. Every mount starts carrying one

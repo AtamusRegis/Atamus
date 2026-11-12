@@ -34,10 +34,10 @@ export const ROLLS = [
   { chance: 0.04, coins: [220, 420] },
   { chance: 0.01, coins: [1500, 2600] },
 ];
-// (owner, 2026-11-11) the chance of each rarity of mount from a parcel that can give it: a parcel tries its own rarity
-// first, then each one below (a Legendary parcel: 5% Legendary, else 10% Epic, else 20% Rare, else 40% Uncommon, else
-// 80% Common); one mount at most
-export const PET_CHANCE = [0.8, 0.4, 0.2, 0.1, 0.05];
+// (owner, 2026-11-12) the chance of each rarity of mount from a parcel that can give it: a parcel tries its own rarity
+// first, then each one below (a Legendary parcel: 1% Legendary, else 5% Epic, else 10% Rare, else 20% Uncommon, else
+// 40% Common); one mount at most
+export const PET_CHANCE = [0.4, 0.2, 0.1, 0.05, 0.01];   // (owner, 2026-11-12)
 // luck moves the odds toward the rarer tiers: tier n's chance is weighted by (1 + luck)^n
 export function rollOdds(luck) { const w = ROLLS.map((r, n) => r.chance * Math.pow(1 + luck, n)), s = w.reduce((a, b) => a + b, 0); return w.map((v) => v / s); }
 // courier upgrades: 10 levels each; a level costs base x 1.8^(level - 1). (owner, 2026-11-11) Route Permits went: the
@@ -85,14 +85,32 @@ export const coatName = (sp, r) => (MOUNTS[sp] || MOUNTS.dog).coats[clamp(r | 0,
 export const MOUNT_MOVED = { pup: ["dog", 0], piglet: ["dog", 0], bunny: ["dog", 0], fox: ["cat", 1], deer: ["cat", 1], parrot: ["cat", 1], raptor: ["gator", 2], stego: ["gator", 2], pony: ["gator", 2], owl: ["gator", 2], trex: ["bear", 3], trike: ["bear", 3], unicorn: ["wolf", 4], dragon: ["wolf", 4] };
 export const ABILITY = { bark: "Bark", dash: "Dash", jump2: "Double Jump" };
 export const VARIANTS = ["", "Shiny"], SHINY = 0.0001;   // (owner, 2026-11-11) 1 in 10,000; no Golden or Rainbow
-// (owner, 2026-11-11) two of the same mount (kind, coat and skin) merge into one of the next coat up, keeping the skin:
-// two Tan Dogs make a Chocolate Dog, two Shiny Tan Dogs a Shiny Chocolate Dog; a Legendary is the last
-export const FUSE_N = 2;
+// (owner, 2026-11-11) the same mounts (kind, coat and skin) merge into one of the next coat up, keeping the skin; a
+// Legendary is the last. (owner, 2026-11-12) how many: 2 Commons make an Uncommon, 4 Uncommons a Rare, 8 Rares an Epic,
+// 16 Epics a Legendary
+export const fuseN = (r) => Math.pow(2, clamp(r | 0, 0, 3) + 1);
 export function fuseSet(mounts, id) {   // the ones a merge would take (the chosen one and the lowest-level other), or null
   const m = mounts.find((k) => k.id === id); if (!m || m.r >= 4) return null;
   const same = mounts.filter((k) => k.sp === m.sp && k.r === m.r && k.va === m.va && k.id !== id).sort((a, b) => a.id - b.id);
-  return same.length >= FUSE_N - 1 ? [m, ...same.slice(0, FUSE_N - 1)] : null;
+  const n = fuseN(m.r); return same.length >= n - 1 ? [m, ...same.slice(0, n - 1)] : null;
 }
+// (owner, 2026-11-12) Merge all: every merge there is, Commons first, so what they make can merge again. In each group the
+// one kept is the ridden one if it's there, else the one with the most Aura levels; it keeps the best levels of the group.
+// Changes mounts in place; returns the mounts made
+export function fuseAll(mounts, ride) {
+  const made = [];
+  for (let r = 0; r < 4; r++) for (let again = true; again; ) { again = false;
+    const groups = new Map(); for (const m of mounts) if (m.r === r) { const k = m.sp + "/" + m.va; if (!groups.has(k)) groups.set(k, []); groups.get(k).push(m); }
+    for (const g of groups.values()) while (g.length >= fuseN(r)) {
+      g.sort((a, b) => (b.id === ride) - (a.id === ride) || ((b.cap | 0) + (b.spd | 0)) - ((a.cap | 0) + (a.spd | 0)) || a.id - b.id);
+      const set = g.splice(0, fuseN(r)), best = set[0]; best.r++; for (const k of set) { best.cap = Math.max(best.cap | 0, k.cap | 0); best.spd = Math.max(best.spd | 0, k.spd | 0); }
+      for (const k of set.slice(1)) mounts.splice(mounts.indexOf(k), 1); made.push(best); again = true;
+    }
+  }
+  return made.filter((m, n, a) => a.lastIndexOf(m) === n);
+}
+// (owner, 2026-11-12) a mount sells for Aura by its rarity (x5 Shiny); not the one you ride, nor your last
+export const SELL = [15, 60, 250, 1000, 4000], sellPrice = (m) => SELL[clamp(m.r | 0, 0, 4)] * (m.va ? 5 : 1);
 // (owner, 2026-11-11) no mount levels: a mount's rarity (and its area) decides how fast, big and able it is
 // (owner, 2026-11-12) every mount starts carrying 1 parcel; Aura raises it a level at a time (m.cap, 0 to 4: up to 5)
 export const CAP_MAX = 4, SPD_MAX = 10;

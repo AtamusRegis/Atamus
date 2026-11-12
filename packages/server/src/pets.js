@@ -350,6 +350,18 @@ export function attachPets(server, { origins = [], allowLocal = false, store = m
           if (best.r >= 3 || best.va) announce(me, best, true);   // an Epic, Legendary or Shiny made by merging tells everyone
           break;
         }
+        case "fuseall": {   // (owner, 2026-11-12) every merge there is, at once
+          const made = W.fuseAll(d.mounts, d.ride); if (!made.length) break;
+          if (!d.mounts.some((k) => k.id === d.ride)) d.ride = made[made.length - 1].id;
+          const top = [...made].sort((a, b) => b.r - a.r || b.va - a.va)[0];
+          changed(me); flush(me.acct); send(ws, { t: "fused", m: top, n: made.length, data: d }); showMount(me);
+          for (const q of made) if (q.r >= 3 || q.va) announce(me, q, true);
+          break;
+        }
+        case "sell": {   // (owner, 2026-11-12) a mount for Aura by its rarity
+          const q = d.mounts.find((k) => k.id === m.id); if (!q || q.id === d.ride || d.mounts.length <= 1) break;
+          const a = W.sellPrice(q); d.mounts = d.mounts.filter((k) => k !== q); d.coins += a; changed(me); flush(me.acct); send(ws, { t: "sold", n: a, data: d }); break;
+        }
         case "petup": {   // (owner, 2026-11-12) Aura on one mount: carrying (cap) or speed (spd)
           const q = d.mounts.find((k) => k.id === m.id), k = m.k === "cap" || m.k === "spd" ? m.k : ""; if (!q || !k || (q[k] | 0) >= (k === "cap" ? W.CAP_MAX : W.SPD_MAX)) break;
           const cost = W.petUpCost(q, k); if (d.coins < cost) break;
