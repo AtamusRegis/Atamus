@@ -35,6 +35,8 @@ ok(Math.abs(W.rollOdds(0).reduce((a, b) => a + b, 0) - 1) < 1e-9 && Math.abs(W.r
 ok(W.levelCost(1) === 100 && W.levelCost(5) === 655 && W.levelCost(19) > 470000 && Math.abs(W.mountScale(20) - 2.5) < 0.01 && W.upgradeCost("payout", 0) === 300 && W.upgradeCost("payout", 1) === 540 && !W.UPGRADES.routes, "level and upgrade costs (no Route Permits)");
 ok(W.spawnWeights(1).join() === "1,0,0,0,0" && [1, 2, 3, 6, 9, 12, 20].map(W.districtsOpen).join() === "1,1,2,3,4,5,5" && W.openFor({ mounts: [{ lv: 2 }, { lv: 7 }] }) === 3 && Math.abs(W.spawnWeights(5)[4] - 0.3) < 1e-9 && W.boxDur(10) === 5, "districts open as your best mount levels up; Sturdy Boxes add durability");
 { const c = W.cleanData({ coins: 10, up: { routes: 2, payout: 1 }, stamp: 40 }); ok(c.coins === 10 + 250 + 450 && c.up.payout === 1 && !("routes" in c.up) && !("stamp" in c) && W.cleanData(c).coins === c.coins, "Route Permits' coins come back once; no Stamp Meter"); }
+ok(W.dogs.every((q) => q.sp === W.CHASERS[q.d] && q.r >= 0 && q.r <= 4) && W.geese.every((g) => g.r >= 0 && g.r <= 4) && W.chaserStats({ d: 1, r: 4 }).speed > W.chaserStats({ d: 1, r: 0 }).speed && W.shakeOff(10, 0, 4) < W.shakeOff(10, 0, 0), "each area's own chasers, Common to Legendary; rarer is tougher");
+ok(W.gateX(1) === W.SUBURBS_X && W.gateX(3) === W.CLIFF.x0 && W.gateX(4) === Infinity && W.ATTACK.slots === 2 && W.ATTACK.calm === 3 && W.DROP_S === 15, "closed areas' gates; two slots and a 3 s calm; 15 s on the ground");
 ok(Object.keys(W.MODS).join() === "express" && Array.from({ length: 400 }, (_, k) => W.rollParcel(5, 1, () => (k * 0.618) % 1).mod).every((m) => m === "" || m === "express"), "only timed (Express) parcels as modifiers");
 ok(W.mountStats("pup", 20).speed > W.mountStats("pup", 1).speed * 1.5 && W.EMPTY_FAST >= 2 && W.GOAT.speed >= 18, "mounts get faster with level, much faster empty; goats charge fast");
 ok(W.deliveryCoins(0, "", 0, 0, false) === 10 && W.deliveryCoins(4, "", 0, 1, false) === 120 && W.deliveryCoins(1, "express", 0, 0, true) === 20 && W.deliveryCoins(1, "express", 10, 0, false) === 100, "delivery coins");
@@ -95,8 +97,10 @@ try {
   { const pa = who("smokeA"), g = pa.room.geese[0]; await put(a, "smokeA", g.x + 3, g.z);
     await a.wait((m) => m.t === "bag" && m.ev.k === "stolen", "the goose's theft"); ok(!pa.bag.length && pa.stolen.length === 1, "a goose takes the parcel");
     who("smokeB").kickAt = 0; const at = () => put(b, "smokeB", g.x, g.z - 1.5); await at(); b.send({ t: "kick" });
-    const dr = (await a.wait((m) => m.t === "bag" && m.ev.k === "dropped", "the parcel dropped")).dropped[0]; await put(a, "smokeA", dr.x, dr.z, dr.y);
-    const back = await a.wait((m) => m.t === "bag" && m.ev.k === "pickup", "the parcel back"); ok(back.bag[0].hits === 1 && back.ev.bonus === W.GOOSE.bonus && who("smokeB").acct.data.stats.geese === 1, "a busted goose drops the parcel unharmed"); }
+    const dr = (await a.wait((m) => m.t === "bag" && m.ev.k === "dropped", "the parcel dropped")).dropped[0]; ok(dr.left > 0 && dr.left <= W.DROP_S, "a dropped parcel shows its time on the ground"); await sleep(400); await put(a, "smokeA", dr.x, dr.z, dr.y);
+    const back = await a.wait((m) => m.t === "bag" && m.ev.k === "pickup", "the parcel back"); ok(back.bag[0].hits === 1 && back.ev.bonus === W.GOOSE.bonus && who("smokeB").acct.data.stats.geese === 1, "a busted goose drops the parcel unharmed");
+    ok(pa.bag[0].left < W.DROP_S * 1000 - 300 && pa.bag[0].left > 0, "picked up, its ground time stops where it was (and carries on if it's dropped again)");
+    ok(pa.calmUntil > Date.now() + 2000, "the calm starts once the parcel is back"); pa.calmUntil = 0; }
   // delivery: the right mailbox, checked by the server; coins, a roll, the Stamp Meter
   { const pa = who("smokeA"), h = W.houses[pa.bag[0].house], wrong = W.houses.find((q) => q.d === 0 && q.id !== h.id);
     for (const g of pa.room.geese) g.cool = Date.now() + 60000;
@@ -118,6 +122,15 @@ try {
     pa.ready = { tier: 0, mod: "" }; a.send({ t: "grab" }); await sleep(300); ok(pa.bag.length === 3, "a level 10 mount carries three parcels, each to its own address");
     for (const q of [...pa.bag]) { const h = W.houses[q.house]; pa.stunUntil = 0; await put(a, "smokeA", h.mx, h.mz, h.my); await sleep(250); }
     ok(!pa.bag.length && pa.acct.data.stats.del === 5, "each parcel is delivered at its own mailbox"); }
+  // (owner, 2026-11-11) the attack queue, the calm, and kicks all round
+  { const pa = who("smokeA"), q = pa.room.dogs[0], q2 = pa.room.dogs[1]; await put(a, "smokeA", 0, 7.5); pa.ready = { tier: 0, mod: "" }; pa.stunUntil = 0; pa.graceUntil = 0; a.send({ t: "grab" }); await a.wait((m) => m.t === "bag" && m.ev.k === "grab", "a parcel for the queue");
+    pa.slots = new Set([{}, {}]); q.cool = 0; q.mode = 0; await put(a, "smokeA", q.x + 2, q.z, q.y); await sleep(300); ok(q.mode === 0 && !q.target, "with both slots taken, another animal can't go after you");
+    pa.slots = new Set(); pa.calmUntil = Date.now() + 60000; await sleep(1500); ok(q.target === pa && pa.bag[0].hits === 0 && pa.stunUntil < Date.now(), "a free slot: it chases, but can't bite in the calm");
+    q.t = 10; q.sx = q.x; q.sz = q.z; pa.calmUntil = 0; await put(a, "smokeA", q.x + 0.5, q.z, q.y); await a.wait((m) => (m.t === "stun" && m.why === "dog") || (m.t === "fx" && m.k === "shake"), "the bite after the calm (or a shake-off: this mount's level 10)"); ok(!pa.slots.has(q) && pa.calmUntil > Date.now() + 2000, "an animal that bites leaves the queue, and the calm starts");
+    for (const d of pa.room.dogs) d.cool = Date.now() + 60000;
+    q2.mode = 2; q2.target = null; q2.x = pa.x - 2.5; q2.z = pa.z; q2.y = pa.y; pa.stunUntil = 0; const pb = who("smokeB"); pb.kickAt = 0; pb.stunUntil = 0; await put(b, "smokeB", pa.x - 1, pa.z + 0.5, pa.y);
+    pb.yaw = 0; b.send({ t: "kick" }); await a.wait((m) => m.t === "fx" && m.k === "yelp" && m.dog === q2.id, "a kick sends off any animal near, whichever way you face");
+    pa.calmUntil = 0; }
   // chat and parties
   a.send({ t: "chat", text: "hello" }); await b.wait((m) => m.t === "chat" && m.text === "hello", "chat");
   a.send({ t: "invite", id: wb.id }); const iv = await b.wait((m) => m.t === "invited", "the invitation"); b.send({ t: "answer", from: iv.from, yes: true });

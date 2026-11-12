@@ -128,6 +128,11 @@ as a setting).
 
 ## The town
 
+(owner, 2026-11-11) **Areas you haven't opened are there to see but closed off:** a shimmering wall with a padlock
+across the town at each one's start (the Floating Islands: a bubble over the Sky Cannon). Heading east stops at it;
+heading west is always fine. Ziplines, the sewer pipe and the Sky Cannon don't take you into a closed area. They go
+when your mounts open the area (see Parcels).
+
 A fixed town made in code (`buildTown` in pets-world.js); 30 houses. (owner, 2026-11-11) **One line, short
 neighborhoods, harder the farther out:** the post office at the west end, then one road east through every district;
 each district is three houses long, three each side of the road (owner: "do like 3 houses long per neighbourhood").
@@ -165,6 +170,19 @@ of about 2 m).
 
 ## Danger
 
+- (owner, 2026-11-11) **Each area has its own chasers:** Main Street dogs, Maple Suburbs cats, Goose Marsh gators,
+  Cliffside bears, the Floating Islands wolves (all run as "dogs" below, with that area's numbers). **Every animal
+  (chasers, geese, goats) has a rarity**, Common to Legendary, fixed for the town and a little likelier rarer farther
+  out (weights 50 / 25 / 14 / 8 / 3, each rank x (1 + 0.12 x the area's number)). Each rank: a bit bigger (+8%), a ring
+  of its rarity's color at its feet (none for Common), sparkles for Epic and Legendary; chasers +6% speed, +0.8 m
+  notice, 10% less warning, +0.5 s chase; geese +0.6 m sight, 10% less warning, +6% lunge; goats +5% charge. A rank
+  counts as half an area against a mount shaking it off. Each chaser has its own call when it spots you (a bark, a meow, a hiss, a growl, a howl).
+- (owner, 2026-11-11) **The attack queue:** a courier has 2 slots. An animal (any kind) has to take a free one to go
+  after them, and leaves it when it attacks or gives up, so at most two are after you at once. **The calm:** no animal
+  attacks while one of your parcels is with a goose or on the ground, nor for 3 s after it's back (picked up) or lost,
+  or after a bite, a butt or a sky goose's snatch; an animal can still join the queue and chase in the meantime, it
+  just can't bite, grab or butt. Sky geese don't dive in the calm either.
+
 - (owner, 2026-11-11: dangers roam, and more of them) **Dogs** (20) roam their district: a short trot somewhere, now
   and then a pause, staying within 45 m of where they started, off the post office's safe zone, out of ponds. A
   courier carrying a parcel within 10 m sets one off: a bark and a red "!" for 0.5 s, then it chases for up to 6 s at
@@ -172,8 +190,11 @@ of about 2 m).
   from where it started or reach the safe zone; then it rests 8 s. Scared off (a kick, Bark), it bolts away for 2.5 s.
 - **Geese** (15) roam up to 34 m out from their pond, round houses and fences. One that sees a parcel within 7 m honks and flaps for 1 s, then lunges (13 m/s for
   up to 2.2 s). Touching you it takes one of your parcels (no stun) and waddles to its pond (7.2 m/s), then takes 3 s out in the
-  middle to sink it: then it's lost. **Kick the goose** and the parcel drops where it stands, unharmed: pick it up
-  (within 20 s) for 15 coins x the tier. "GOOSE BUSTED!"
+  middle to sink it: then it's lost. (owner, 2026-11-11) A stolen parcel has a visible countdown (over the goose, and
+  on the parcel card): the goose's walk to its pond plus 4 s; when it runs out the parcel's gone, wherever the goose
+  is. **Kick the goose** and the parcel drops where it stands, unharmed: pick it up for 15 coins x the tier. "GOOSE
+  BUSTED!" (owner, 2026-11-11) **A parcel has 15 s on the ground** in all, counted down over it and on the card: picked
+  up, its time stops; dropped again, it carries on from there (drop it with 8 s left and you have 8 s next time).
 - (owner, 2026-11-11: animals have the same blocks couriers have) Houses, fences, hedges and trees stop geese as they
   stop couriers (and dogs): a goose slides along them; one stuck for over a second with a parcel squeezes through. A
   goose that would start inside something stands at a clear spot round its pond instead. Dogs, geese and goats face the
@@ -193,8 +214,9 @@ of about 2 m).
 
 ## Kicks
 
-- Reaches 3.6 m in front; every 4 s. On couriers: a 1 s stun (less with Grip), knocked off the mount, 1 hit to one of
-  their parcels. On geese: dizzy for 3 s (and they drop the parcel they stole). On dogs and goats: sent home. No reward.
+- Every 4 s. On couriers it reaches 3.6 m in front: a 1 s stun (less with Grip), knocked off the mount, 1 hit to one
+  of their parcels. (owner, 2026-11-11) **On animals it hits every one within 4.5 m, all round:** geese dizzy for 3 s
+  (and they drop the parcel they stole), chasers and goats sent home. No reward.
 - **Protection:** no kicks in the safe zone; 5 s of grace after being kicked (a shimmer); the same courier can crack
   your parcel only once in 30 s; party members can't kick each other; **Friendly** (Settings) means you can't be kicked
   by couriers and can't kick them (animals still apply).
@@ -232,7 +254,9 @@ courier; "KICK!" with a 0.05 s hold; a goose's honk, and feathers when it's bust
 delivery; the roll's ticks, near miss and a burst in the rarity's color (Common white, Uncommon green, Rare blue, Epic
 purple, Legendary gold); an egg popping out; the hatch; "LEVEL UP!" with a ring; sparkles on an upgrade; the Sky
 Cannon's boom. Floating numbers rise and fade in 0.8 s. Every sound is made in the page (no files); music is a small
-loop.
+loop. (owner, 2026-11-11) The same tune in every area, a little different in each, switching at the next loop: Main
+Street as it is; Maple Suburbs with a soft chime an octave up; Goose Marsh a touch slower and reedy with a bluesy note
+or two; Cliffside brassier over a deeper bass; the Floating Islands an octave up, airy, with an echo.
 
 ## Co-op
 

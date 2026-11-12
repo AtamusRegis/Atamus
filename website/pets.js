@@ -4,7 +4,7 @@
 // deliveries, rolls, damage, coins, mounts; this page shows the town (pets-world.js, shared with the server), moves you
 // and asks. Phone first: a thumb joystick, drag to look, pinch to zoom, big buttons.
 import * as THREE from "./vendor/three.module.min.js";
-import * as World from "./pets-world.js?v=1794454540";
+import * as World from "./pets-world.js?v=1794456374";
 
 const $ = (id) => document.getElementById(id);
 const { TAU, clamp, hyp, MOUNTS, TIERS, RARITY, RARITY_C, MODS, EGGS, UPGRADES } = World;
@@ -212,6 +212,10 @@ const LOOK = {
   deer: { plan: "quad", body: [0.6, 0.62, 1.25], leg: 0.9, neck: 0.5, head: 0.45, snout: 0.3, ears: "side", antlers: true, tail: "stub", spots: true, nose: "#1d232a" },
   stego: { plan: "quad", body: [1.0, 0.9, 1.7], leg: 0.5, legW: 0.34, head: 0.5, snout: 0.35, low: true, plates: true, tail: "spike" },
   trike: { plan: "quad", body: [1.1, 0.95, 1.7], leg: 0.55, legW: 0.36, head: 0.75, snout: 0.4, low: true, frill: true, tail: "thick" },
+  // (owner, 2026-11-11) each area's chasers: dogs (pup), cats, gators, bears, wolves
+  gator: { plan: "quad", body: [0.75, 0.42, 1.9], leg: 0.24, legW: 0.26, head: 0.5, snout: 0.8, low: true, tail: "thick", spikes: true, nose: "#1d232a" },
+  bear: { plan: "quad", round: true, body: [1.1, 1.0, 1.45], leg: 0.5, legW: 0.36, head: 0.72, roundHead: true, snout: 0.24, snoutC: "a", ears: "round", tail: "stub", nose: "#1d232a" },
+  wolf: { plan: "quad", body: [0.66, 0.62, 1.35], leg: 0.62, head: 0.56, snout: 0.42, ears: "point", tail: "bushy", nose: "#1d232a" },
   goat: { plan: "quad", body: [0.6, 0.62, 1.1], leg: 0.55, head: 0.5, snout: 0.3, ears: "side", horns: "curl", beard: true, tail: "stub" },
 };
 const shiny = (c) => "#" + new THREE.Color(c).lerp(new THREE.Color("#ffffff"), 0.45).offsetHSL(0.06, 0.2, 0).getHexString();   // a Shiny's lighter, shifted coat
@@ -397,12 +401,21 @@ function gooseModel(sky) {
   const slot = new THREE.Group(); slot.position.set(0, -0.05, 0.5); head.add(slot);
   return { g, body, head, wings, legs, slot };
 }
+// (owner, 2026-11-11) each area's chasers, and every animal's rarity: a bit bigger for each rank, and a ring of its rarity's
+// color at its feet (none for Common); Epic and Legendary ones sparkle
+const KIND = {
+  dog: { look: "pup", size: 0.8, c: [["#8a5a34", "#e9d6b8"], ["#3d4650", "#cfd6dd"], ["#d9a55a", "#fff4e0"]] },
+  cat: { look: "cat", size: 0.78, c: [["#f0a04b", "#fff1dc"], ["#3d4650", "#e9eef2"], ["#b9b2a8", "#ffffff"]] },
+  gator: { look: "gator", size: 0.9, c: [["#4f7a3a", "#c9d48a"], ["#3f6a4a", "#b9c98a"], ["#5a6b3a", "#d9d29a"]] },
+  bear: { look: "bear", size: 1.05, c: [["#7a5236", "#c9a27e"], ["#3a2c22", "#8a6a4e"], ["#c9a27e", "#f3e3cc"]] },
+  wolf: { look: "wolf", size: 0.9, c: [["#8a96a2", "#e9eef2"], ["#5a6470", "#cfd6dd"], ["#d9dde2", "#ffffff"]] },
+};
+function rarityRing(g, r, rad) { if (!r) return; const m = new THREE.Mesh(new THREE.RingGeometry(rad * 0.8, rad, 32).rotateX(-Math.PI / 2), basic(RARITY_C[r], 0.75)); m.position.y = 0.06; g.add(m); g.userData.rar = r; }
 function buildAnimals() {
-  const DOG_C = [["#8a5a34", "#e9d6b8"], ["#3d4650", "#cfd6dd"], ["#d9a55a", "#fff4e0"]];
-  for (const d of World.dogs) { const [c, a] = DOG_C[d.look], m = petModel({ look: "pup", c, a, size: 0.8 }); m.g.position.set(d.hx, d.y, d.hz); scene.add(m.g); blobUnder(m.g, 1.6);
+  for (const d of World.dogs) { const K = KIND[d.sp], [c, a] = K.c[d.look], m = petModel({ look: K.look, c, a, size: K.size * (1 + 0.08 * d.r) }); m.g.position.set(d.hx, d.y, d.hz); scene.add(m.g); blobUnder(m.g, 1.6 * K.size); rarityRing(m.g, d.r, 1.1 * K.size);
     const bang = textSprite("!", { size: 64, color: "#ffffff", bg: "#e5534b" }); bang.position.y = 2.3; bang.visible = false; m.g.add(bang); dogMesh.push({ m, bang, x: d.hx, z: d.hz, yaw: 0, tx: d.hx, tz: d.hz, tyaw: 0, mode: 0, y: d.y, ty: d.y }); }
-  for (const q of World.geese) { const m = gooseModel(); m.g.position.set(q.x, q.y, q.z); scene.add(m.g); blobUnder(m.g, 1.2); gooseMesh.push({ m, x: q.x, y: q.y, z: q.z, yaw: 0, tx: q.x, ty: q.y, tz: q.z, tyaw: 0, mode: 0, carry: -1, box: null }); }
-  for (const q of World.goats) { const m = petModel({ look: "goat", c: "#e9e4dc", a: "#8a7a66", size: 0.95 }); m.g.position.set(q.hx, q.y, q.hz); scene.add(m.g); blobUnder(m.g, 1.7); goatMesh.push({ m, x: q.hx, z: q.hz, yaw: Math.PI / 2, tx: q.hx, tz: q.hz, tyaw: Math.PI / 2, mode: 0, y: q.y }); }
+  for (const q of World.geese) { const m = gooseModel(); m.g.scale.setScalar(1 + 0.08 * q.r); m.g.position.set(q.x, q.y, q.z); scene.add(m.g); blobUnder(m.g, 1.2); rarityRing(m.g, q.r, 0.8); gooseMesh.push({ m, x: q.x, y: q.y, z: q.z, yaw: 0, tx: q.x, ty: q.y, tz: q.z, tyaw: 0, mode: 0, carry: -1, box: null }); }
+  for (const q of World.goats) { const m = petModel({ look: "goat", c: "#e9e4dc", a: "#8a7a66", size: 0.95 * (1 + 0.08 * q.r) }); m.g.position.set(q.hx, q.y, q.hz); scene.add(m.g); blobUnder(m.g, 1.7); rarityRing(m.g, q.r, 1.0); goatMesh.push({ m, x: q.hx, z: q.hz, yaw: Math.PI / 2, tx: q.hx, tz: q.hz, tyaw: Math.PI / 2, mode: 0, y: q.y }); }
 }
 // a parcel: its tier's color, taped; modifiers show on it
 function parcelMesh(tier, mod) {
@@ -446,7 +459,10 @@ function noise(dur, { vol = 0.4, freq = 1200, q = 0.8, at = 0, type = "bandpass"
 const SFX = {
   pop: () => tone(520, 880, 0.09, { type: "triangle" }), grab: () => { tone(330, 660, 0.1, { type: "square", vol: 0.25 }); tone(660, 990, 0.12, { at: 0.07, type: "triangle" }); },
   whistle: () => { tone(1500, 2300, 0.16, { vol: 0.3 }); tone(2300, 1700, 0.2, { at: 0.16, vol: 0.3 }); }, boost: () => { noise(0.5, { freq: 500, to: 3200, vol: 0.35 }); tone(220, 880, 0.4, { type: "sawtooth", vol: 0.18 }); },
-  bark: () => { for (const a of [0, 0.16]) { tone(420, 180, 0.11, { type: "sawtooth", vol: 0.4, at: a }); noise(0.09, { freq: 900, vol: 0.25, at: a }); } }, growl: () => tone(140, 90, 0.4, { type: "sawtooth", vol: 0.3 }),
+  bark: () => { for (const a of [0, 0.16]) { tone(420, 180, 0.11, { type: "sawtooth", vol: 0.4, at: a }); noise(0.09, { freq: 900, vol: 0.25, at: a }); } },
+  meow: () => { tone(700, 1100, 0.12, { type: "triangle", vol: 0.35 }); tone(1100, 600, 0.22, { type: "triangle", vol: 0.35, at: 0.12 }); },   // (owner, 2026-11-11) each area's chasers have their own call
+  growl: () => { tone(120, 80, 0.5, { type: "sawtooth", vol: 0.4 }); noise(0.4, { freq: 300, vol: 0.2 }); },
+  howl: () => { tone(400, 760, 0.35, { type: "sine", vol: 0.35 }); tone(760, 640, 0.4, { type: "sine", vol: 0.3, at: 0.35 }); }, growl: () => tone(140, 90, 0.4, { type: "sawtooth", vol: 0.3 }),
   crack: () => { noise(0.12, { freq: 2600, vol: 0.6 }); tone(300, 90, 0.15, { type: "square", vol: 0.3 }); }, smash: () => { noise(0.45, { freq: 1800, to: 300, vol: 0.7 }); tone(200, 50, 0.4, { type: "sawtooth", vol: 0.4 }); },
   stun: () => { for (let k = 0; k < 4; k++) tone(900 - k * 90, 1300 - k * 90, 0.12, { at: k * 0.1, vol: 0.2, type: "triangle" }); }, swish: () => noise(0.16, { freq: 700, to: 2600, vol: 0.4 }),
   kick: () => { noise(0.1, { freq: 300, vol: 0.9, type: "lowpass" }); tone(180, 60, 0.18, { type: "square", vol: 0.5 }); }, honk: () => { tone(330, 300, 0.16, { type: "sawtooth", vol: 0.35 }); tone(300, 250, 0.22, { type: "sawtooth", vol: 0.35, at: 0.18 }); },
@@ -463,11 +479,25 @@ const SFX = {
   jump: () => tone(300, 520, 0.1, { type: "triangle", vol: 0.18 }), dash: () => noise(0.25, { freq: 900, to: 3000, vol: 0.3 }), steal: () => { tone(700, 300, 0.25, { type: "sawtooth", vol: 0.3 }); },
 };
 const sfx = (k, a) => { if (AC && SFX[k]) SFX[k](a); };
+// (owner, 2026-11-11) the same tune in every area, a little different in each: Main Street as it is; Maple Suburbs with a
+// soft chime an octave up; Goose Marsh a touch slower and reedy, with a bluesy note or two; Cliffside brassier over a
+// deeper bass; the Floating Islands an octave up, airy, with an echo. It changes at the start of the next loop.
+const MUSIC_V = [
+  { w: "triangle", k: 1, step: 0.21, vol: 0.5 },
+  { w: "triangle", k: 1, step: 0.21, vol: 0.5, chime: true },
+  { w: "square", k: 1, step: 0.23, vol: 0.2, swap: { 659: 622, 880: 831 } },
+  { w: "sawtooth", k: 1, step: 0.2, vol: 0.22, bassK: 0.5 },
+  { w: "sine", k: 2, step: 0.22, vol: 0.42, echo: true },
+];
+let musicZone = 0;
 function startMusic() {   // a bouncy two-bar loop
-  const tune = [523, 0, 659, 784, 0, 659, 523, 0, 587, 0, 698, 880, 0, 698, 587, 0], bass = [131, 131, 196, 196, 147, 147, 196, 196], step = 0.21; let n = 0, next = AC.currentTime + 0.2;
+  const tune = [523, 0, 659, 784, 0, 659, 523, 0, 587, 0, 698, 880, 0, 698, 587, 0], bass = [131, 131, 196, 196, 147, 147, 196, 196]; let n = 0, next = AC.currentTime + 0.2, V = MUSIC_V[0];
+  const note = (f, type, at, len, vol) => { const o = AC.createOscillator(), g = AC.createGain(); o.type = type; o.frequency.value = f; g.gain.setValueAtTime(0.0001, at); g.gain.linearRampToValueAtTime(vol, at + 0.02); g.gain.exponentialRampToValueAtTime(0.0001, at + len * 0.95); o.connect(g); g.connect(musGain); o.start(at); o.stop(at + len); };
   setInterval(() => { if (!AC || AC.state !== "running") return; while (next < AC.currentTime + 0.5) {
-    const f = tune[n % tune.length]; if (f) { const o = AC.createOscillator(), g = AC.createGain(); o.type = "triangle"; o.frequency.value = f; g.gain.setValueAtTime(0.0001, next); g.gain.linearRampToValueAtTime(0.5, next + 0.02); g.gain.exponentialRampToValueAtTime(0.0001, next + step * 0.95); o.connect(g); g.connect(musGain); o.start(next); o.stop(next + step); }
-    if (n % 2 === 0) { const o = AC.createOscillator(), g = AC.createGain(); o.type = "sine"; o.frequency.value = bass[(n / 2) % bass.length]; g.gain.setValueAtTime(0.6, next); g.gain.exponentialRampToValueAtTime(0.0001, next + step * 1.8); o.connect(g); g.connect(musGain); o.start(next); o.stop(next + step * 2); }
+    if (n % tune.length === 0) V = MUSIC_V[musicZone] || MUSIC_V[0];
+    const step = V.step, f0 = tune[n % tune.length], f = f0 ? ((V.swap && V.swap[f0]) || f0) * V.k : 0;
+    if (f) { note(f, V.w, next, step, V.vol); if (V.chime && n % 4 === 2) note(f * 2, "sine", next, step * 1.6, 0.18); if (V.echo) note(f, "sine", next + step * 1.5, step, 0.14); }
+    if (n % 2 === 0) { const o = AC.createOscillator(), g = AC.createGain(); o.type = "sine"; o.frequency.value = bass[(n / 2) % bass.length] * (V.bassK || 1); g.gain.setValueAtTime(0.6, next); g.gain.exponentialRampToValueAtTime(0.0001, next + step * 1.8); o.connect(g); g.connect(musGain); o.start(next); o.stop(next + step * 2); }
     n++; next += step; } }, 200);
 }
 addEventListener("pointerdown", () => { const a = audio(); if (a && a.state === "suspended") a.resume(); }, { capture: true });
@@ -527,7 +557,7 @@ function stepTransit(dt) {
   me.moving = true;
 }
 function stepMe(dt) {
-  const t = now();
+  const t = now(); musicZone = World.districtAt(me.x, me.z, me.y);
   if (me.stun > 0) { me.stun -= dt; if (me.stun <= 0) { me.stun = 0; me.footT = 2.2; } }
   if (me.transit) { stepTransit(dt); return; }
   const st = myStats(), q = riding();
@@ -559,11 +589,12 @@ function stepMe(dt) {
   // (in small steps, riding up slopes as it goes, so a slow frame can't jam you against a ramp)
   // (owner, 2026-11-11) a mount is as wide as it looks: the bigger it's grown, the farther from a wall, hedge or tree it stops
   let BR = me.foot ? 0.55 : clamp(0.55 + 0.32 * (World.mountScale(q.lv) * MOUNTS[q.sp].size - 1), 0.55, 1.05);
-  if (BR > 0.55 && World.blocked(me.x, me.z, me.y, BR)) BR = 0.55;   // already up against something (it just grew, or landed there): the old width until it's clear
+  if (BR > 0.55 && World.blocked(me.x, me.z, me.y, BR)) BR = 0.55;
+  const GX = World.gateX(World.openFor(save)), gated = (nx) => nx > me.x && me.x < GX && nx > GX - BR;   // (owner, 2026-11-11) a closed area's gate: heading east stops at it (west is always fine)   // already up against something (it just grew, or landed there): the old width until it's clear
   const DX = (me.vx + me.px) * dt, DZ = (me.vz + me.pz) * dt, n = Math.max(1, Math.ceil(hyp(DX, DZ) / 0.3));
   for (let k = 0; k < n; k++) {
     const dx = DX / n, dz = DZ / n;
-    if (me.vx || me.px) { if (!World.blocked(me.x + dx, me.z, me.y, BR)) me.x += dx; else { me.vx = 0; me.px = 0; } }
+    if (me.vx || me.px) { if (!World.blocked(me.x + dx, me.z, me.y, BR) && !gated(me.x + dx)) me.x += dx; else { me.vx = 0; me.px = 0; } }
     if (me.vz || me.pz) { if (!World.blocked(me.x, me.z + dz, me.y, BR)) me.z += dz; else { me.vz = 0; me.pz = 0; } }
     if (me.ground) { const g = World.surfaceAt(me.x, me.z, me.y + 0.1); if (g > me.y && g - me.y < 0.6) me.y = g; }
   }
@@ -602,11 +633,13 @@ function triggers(t) {
   for (const b of World.boosts) if (near(b, 2) && me.boost < 2) { if (me.boost <= 0) { sfx("boost"); cam.shake = Math.max(cam.shake, 0.12); } me.boost = 2.5; }
   if (bag.length && t > shakeAt) for (const h of World.houses) if (!bag.some((q) => q.house === h.id) && hyp(me.x - h.mx, me.z - h.mz) < World.DELIVER_R - 0.6 && Math.abs(me.y - h.my) < 2) { shakeAt = t + 1.2; houseMesh[h.id].shake = 0.5; sfx("shake"); break; }   // the wrong mailbox shakes its head
   if (!me.armed) return;
-  for (const z of World.zips) if (near(z, 1.5)) { { const len = hyp(z.tx - z.x, z.ty - z.y, z.tz - z.z); me.transit = { k: "zip", ax: z.x, ay: z.y, az: z.z, bx: z.tx, by: z.ty, bz: z.tz, len, t: 0 }; me.vx = me.vz = me.vy = 0; sfx("zip"); } return; }
-  const C = World.CANNON; if (near(C, C.r)) { const I = World.ISLES[C.to]; arc(I.x - 9, I.y, I.z, 3.2, 27, "cannon"); sfx("cannon"); cam.shake = 0.9; banner("SKY CANNON!", "#9aa8ff"); emit(C.x, C.y + 1, C.z, 40, { colors: ["#ffffff", "#c9ced6"], speed: 9, up: 5, life: 0.9, grav: 2, size: 0.4 }); return; }
+  // (owner, 2026-11-11) nothing takes you into an area that isn't open yet
+  const openNow = World.openFor(save), opens = (x, z, y) => World.districtAt(x, z, y) < openNow;
+  for (const z of World.zips) if (near(z, 1.5) && opens(z.tx, z.tz, z.ty + 1)) { { const len = hyp(z.tx - z.x, z.ty - z.y, z.tz - z.z); me.transit = { k: "zip", ax: z.x, ay: z.y, az: z.z, bx: z.tx, by: z.ty, bz: z.tz, len, t: 0 }; me.vx = me.vz = me.vy = 0; sfx("zip"); } return; }
+  const C = World.CANNON; if (near(C, C.r) && openNow >= 5) { const I = World.ISLES[C.to]; arc(I.x - 9, I.y, I.z, 3.2, 27, "cannon"); sfx("cannon"); cam.shake = 0.9; banner("SKY CANNON!", "#9aa8ff"); emit(C.x, C.y + 1, C.z, 40, { colors: ["#ffffff", "#c9ced6"], speed: 9, up: 5, life: 0.9, grav: 2, size: 0.4 }); return; }
   for (const p of World.pads) if (near(p, 1.7)) { arc(p.tx, p.ty, p.tz, 1.1 + hyp(p.tx - p.x, p.tz - p.z) / 70, 9, "pad"); sfx("pad"); return; }
   // (owner, 2026-11-11) the pipe's mouth and the balloon take you from farther off
-  if ((near(World.PIPE.a, World.PIPE.r + 1.5) || near(World.PIPE.b, World.PIPE.r + 1.5)) && t > askAt) { askAt = t + 1; netSend({ t: "pipe" }); return; }
+  if (((near(World.PIPE.a, World.PIPE.r + 1.5) && openNow >= 4) || near(World.PIPE.b, World.PIPE.r + 1.5)) && t > askAt) { askAt = t + 1; netSend({ t: "pipe" }); return; }
   if (World.balloons.some((b) => near(b, 5.5, 3)) && t > askAt) { askAt = t + 1.5; netSend({ t: "balloon" }); }
 }
 
@@ -785,11 +818,11 @@ function hud(dt) {
     cardKey = key; const c = $("card"); c.style.display = all.length ? "flex" : "none"; c.innerHTML = "";
     for (const P of all) { const T = TIERS[P.tier], r = el("div", "prow" + (P.gone ? " gone" : "")); r.dataset.pid = P.pid; const tc = el("span", "ctier disp", T.name); tc.style.background = T.c; r.appendChild(tc);
       if (P.mod) r.appendChild(el("span", "mod " + P.mod, MODS[P.mod].name)); const pp = el("span", "cpips"); for (let k = 0; k < P.max; k++) pp.appendChild(el("i", k < P.dur ? "on" : "")); r.appendChild(pp);
-      r.appendChild(el("span", "caddr disp", World.houses[P.house].name)); r.appendChild(el("span", "cdist disp")); if (P.mod === "express") r.appendChild(el("span", "ctimer disp")); c.appendChild(r); }
+      r.appendChild(el("span", "caddr disp", World.houses[P.house].name)); r.appendChild(el("span", "cdist disp")); if (P.mod === "express" || P.gone) r.appendChild(el("span", "ctimer disp")); c.appendChild(r); }
     if (all.length) { const n = el("div", "pcount disp", all.length + " / " + cap); c.appendChild(n); }
   }
   for (const r of $("card").children) { const P = all.find((q) => String(q.pid) === r.dataset.pid); if (!P) continue; const h = World.houses[P.house], d = r.querySelector(".cdist"); d.textContent = Math.round(hyp(h.mx - me.x, h.mz - me.z, h.my - me.y)) + " m";
-    const tm = r.querySelector(".ctimer"); if (tm) { const left = Math.max(0, (P.due - (Date.now() + clockOff)) / 1000); tm.textContent = left.toFixed(1); tm.classList.toggle("late", left <= 5); } }
+    const tm = r.querySelector(".ctimer"); if (tm) { const left = Math.max(0, P.gone ? P.endAt - performance.now() / 1000 : (P.due - (Date.now() + clockOff)) / 1000); tm.textContent = left.toFixed(1); tm.classList.toggle("late", left <= 5); } }
   // the way there: the arrow on the ground round you points at the nearest address (or a dropped parcel, or a goose with one)
   let tg = null, best = Infinity; const consider = (x, y, z, c) => { const d = hyp(x - me.x, z - me.z); if (d < best) { best = d; tg = { x, y, z, c }; } };
   for (const q of bag) { const h = World.houses[q.house]; consider(h.mx, h.my, h.mz, POI); }
@@ -953,7 +986,7 @@ function sendPos(force) {
   netSend({ t: "pos", x: +me.x.toFixed(2), y: +me.y.toFixed(2), z: +me.z.toFixed(2), yaw: +me.yaw.toFixed(2), mv, ct: Math.round(performance.now()) }); lastPos = s; lastSent = performance.now();
 }
 function setNpc(m) {
-  for (const [id, x, z, yaw, mode, y] of m.dogs || []) { const d = dogMesh[id]; if (!d) continue; d.tx = x; d.tz = z; d.tyaw = yaw; if (Number.isFinite(y)) d.ty = y; if (mode !== d.mode) { if (mode === 1 && hyp(x - me.x, z - me.z) < 45) sfx("bark"); d.mode = mode; d.bang.visible = mode === 1; } }
+  for (const [id, x, z, yaw, mode, y] of m.dogs || []) { const d = dogMesh[id]; if (!d) continue; d.tx = x; d.tz = z; d.tyaw = yaw; if (Number.isFinite(y)) d.ty = y; if (mode !== d.mode) { if (mode === 1 && hyp(x - me.x, z - me.z) < 45) sfx({ dog: "bark", cat: "meow", gator: "hiss", bear: "growl", wolf: "howl" }[World.dogs[id].sp] || "bark"); d.mode = mode; d.bang.visible = mode === 1; } }
   for (const [id, x, z, y, yaw, mode, carry] of m.geese || []) { const g = gooseMesh[id]; if (!g) continue; g.tx = x; g.tz = z; g.ty = y; g.tyaw = yaw; if (mode !== g.mode) { if (mode === 1 && hyp(x - me.x, z - me.z) < 45) sfx("honk"); if (mode === 4) emit(g.x, g.y + 0.8, g.z, 14, { colors: ["#ffffff", "#e8eef2"], speed: 3, up: 3, life: 0.9, grav: 3 }); g.mode = mode; }
     if (carry !== g.carry) { g.carry = carry; g.m.slot.clear(); if (carry >= 0) { const b = parcelMesh(carry, ""); b.scale.setScalar(0.6); g.m.slot.add(b); } } }
   for (const [id, x, z, yaw, mode] of m.goats || []) { const g = goatMesh[id]; if (!g) continue; g.tx = x; g.tz = z; g.tyaw = yaw; if (mode !== g.mode) { if (mode === 1 && hyp(x - me.x, z - me.z) < 45) { sfx("stomp"); emit(x, g.y + 0.1, z, 10, { colors: ["#c9bfae"], speed: 2.5, up: 1.5, life: 0.5, grav: 4 }); } g.mode = mode; } }
@@ -995,7 +1028,7 @@ function onNet(m) {
     case "carry": { const o = others.get(m.id); if (o) { o.carry = m.c; setCarry(o.rig, m.c); } break; }
     case "belt": { const pop = !!m.next && JSON.stringify(m.next) !== JSON.stringify(belt.next), slide = belt.next && m.ready && JSON.stringify(m.ready) === JSON.stringify(belt.next); belt = { ready: m.ready, next: m.next }; beltShow(slide, pop); break; }
     case "bag": {   // my parcels changed; ev says how
-      const ev = m.ev || {}, before = bag.length; bag = m.bag || []; stolen = m.stolen || []; dropped = m.dropped || []; cap = m.cap || 1; setCarry(mine, bagCarry()); setTargets(); syncDropped(); hudDirty = true; cardKey = "";
+      const ev = m.ev || {}, before = bag.length; bag = m.bag || []; stolen = m.stolen || []; dropped = m.dropped || []; { const tn = performance.now() / 1000; for (const q of [...stolen, ...dropped]) q.endAt = tn + (q.left || 0); } cap = m.cap || 1; setCarry(mine, bagCarry()); setTargets(); syncDropped(); hudDirty = true; cardKey = "";
       const q = bag.find((k) => k.pid === ev.pid);
       if (ev.k === "grab") { tutDid("grab"); sfx("grab"); me.squash = 0.25; if (bag.length > 1) popup(bag.length + " / " + cap, "#ffffff", me.x, me.y + 3, me.z); }
       else if (ev.k === "pickup") { sfx("grab"); me.squash = 0.25; if (ev.bonus) { popup("+" + ev.bonus, "#ffd84a", me.x, me.y + 2.6, me.z); save.coins = ev.coins; flyCoins(me.x, me.y + 2, me.z, 3); } }
@@ -1135,6 +1168,34 @@ function stepNpcs(dt, t) {
   for (const fx of targetFx.values()) { const u = fx.userData; u.ring.scale.setScalar(1 + Math.sin(t * 5) * 0.06); u.gem.position.y = 4.2 + Math.sin(t * 3) * 0.4; u.gem.rotation.y = t * 2; }
   for (const g of dropMeshes.values()) { const dq = g.userData.q; g.position.y = dq.y + 0.3 + Math.abs(Math.sin(t * 4)) * 0.5; g.rotation.y = t * 2; if (Math.random() < 0.2) emit(dq.x, dq.y + 1, dq.z, 1, { colors: ["#ffd84a"], speed: 1, up: 2, life: 0.6, grav: 0, size: 0.1 }); }
   for (const b of World.balloons) b.g.position.y = b.y + Math.sin(t * 1.2 + b.x) * 0.25;
+  for (const a of [...dogMesh, ...gooseMesh, ...goatMesh]) { const r = a.m.g.userData.rar; if (r >= 3 && a.m.g.visible && Math.random() < (r === 4 ? 0.12 : 0.06)) emit(a.x + (Math.random() - 0.5), (a.y || 0) + 0.3 + Math.random(), a.z + (Math.random() - 0.5), 1, { colors: [RARITY_C[r], "#ffffff"], speed: 0.6, up: 1.4, life: 0.7, grav: -1, size: 0.12 }); }
+  stepTimers(); stepGates(t);
+}
+// (owner, 2026-11-11) areas you haven't opened: there to see, behind a shimmering wall across the town at their start (a
+// bubble over the Sky Cannon for the Floating Islands), with a padlock on it; gone once your mounts open the area
+const gates = [];
+function buildGates() {
+  const lock = (g, y) => { const L = new THREE.Group(); L.position.y = y; g.add(L); box(1.6, 1.3, 0.5, "#f2b01e", 0, 0, 0, L); const sh = new THREE.Mesh(new THREE.TorusGeometry(0.5, 0.14, 8, 18, Math.PI), mat("#c9ced6")); sh.position.y = 0.65; L.add(sh); box(0.22, 0.42, 0.55, "#23303b", 0, -0.05, 0, L); return L; };
+  World.GATES.forEach((x, n) => { const g = new THREE.Group(); g.position.set(x, 0, 0); scene.add(g); const top = n === 2 ? 14 : 9;
+    const w = new THREE.Mesh(new THREE.PlaneGeometry(60, top).rotateY(Math.PI / 2), new THREE.MeshBasicMaterial({ color: "#7c8cff", transparent: true, opacity: 0.4, side: THREE.DoubleSide, depthWrite: false })); w.position.y = top / 2 - 1; g.add(w);
+    for (let k = 0; k < 6; k++) { const b = new THREE.Mesh(new THREE.PlaneGeometry(60, 0.18).rotateY(Math.PI / 2), basic("#ffffff", 0.5)); b.position.y = k * (top / 6) + 0.6; g.add(b); }
+    for (const z of [-30, 30]) box(0.8, top, 0.8, "#6f7d8a", 0, top / 2 - 1, z, g); box(0.6, 0.6, 60, "#6f7d8a", 0, top - 1, 0, g);
+    const L = lock(g, 4.2); L.scale.setScalar(1.8); gates.push({ g, w, L, d: n + 1 }); });
+  const C = World.CANNON, g = new THREE.Group(); g.position.set(C.x, C.y, C.z); scene.add(g);
+  const w = new THREE.Mesh(new THREE.SphereGeometry(C.r + 1.6, 24, 14, 0, TAU, 0, Math.PI / 2), new THREE.MeshBasicMaterial({ color: "#9aa8ff", transparent: true, opacity: 0.28, side: THREE.DoubleSide, depthWrite: false })); g.add(w);
+  gates.push({ g, w, L: lock(g, C.r + 2.6), d: 4 });
+}
+function stepGates(t) { const open = World.openFor(save); for (const q of gates) { q.g.visible = q.d >= open; if (q.g.visible) { q.w.material.opacity = 0.34 + Math.sin(t * 2 + q.d) * 0.08; q.L.rotation.y = Math.sin(t * 0.8 + q.d) * 0.4; } } }
+// (owner, 2026-11-11) a stolen parcel's time to get it back, over the goose; a dropped one's, over the parcel
+const timerTags = new Map();   // pid -> { s: sprite, n: the number shown }
+function stepTimers() {
+  const tn = performance.now() / 1000, want = new Map();
+  for (const q of stolen) { const g = gooseMesh[q.goose]; if (g) want.set(q.pid, { x: g.x, y: g.y + 2.4, z: g.z, left: q.endAt - tn }); }
+  for (const q of dropped) want.set(q.pid, { x: q.x, y: q.y + 2.2, z: q.z, left: q.endAt - tn });
+  for (const [pid, o] of timerTags) if (!want.has(pid)) { scene.remove(o.s); o.s.material.map.dispose(); o.s.material.dispose(); timerTags.delete(pid); }
+  for (const [pid, w] of want) { const n = Math.max(0, Math.ceil(w.left)); let o = timerTags.get(pid);
+    if (!o || o.n !== n) { if (o) { scene.remove(o.s); o.s.material.map.dispose(); o.s.material.dispose(); } const sp = textSprite(String(n), { size: 56, color: "#ffffff", bg: n <= 5 ? "#e5534b" : "#23303b" }); sp.scale.multiplyScalar(0.9); scene.add(sp); o = { s: sp, n }; timerTags.set(pid, o); }
+    o.s.position.set(w.x, w.y, w.z); }
 }
 let windOn = false;
 
@@ -1156,7 +1217,7 @@ function frame(tms) {
   renderer.render(scene, camera);
   if (loggedIn) { hud(dt); stepGifts(dt); } stepPops(dt);
 }
-buildTown(); buildAnimals(); beltShow(); stepCamera(0.016);
+buildTown(); buildAnimals(); buildGates(); beltShow(); stepCamera(0.016);
 // for the tests and the console
 window.Pets = { World, me, cam, others, get save() { return save; }, get parcel() { return bag[0] || null; }, get bag() { return bag; }, get cap() { return cap; }, get belt() { return belt; }, get stolen() { return stolen; }, get dropped() { return dropped; }, get loggedIn() { return loggedIn; }, get panel() { return panel; }, dogMesh, gooseMesh, goatMesh, get arrow() { return wayArrow; }, readyAt, onNet, teleport(x, z, y = 0) { me.x = x; me.z = z; me.y = y; me.vx = me.vz = me.vy = 0; me.transit = null; me.ground = false; sendPos(true); }, netSend, openPanel };
 $("lgo").disabled = $("lnew").disabled = true;

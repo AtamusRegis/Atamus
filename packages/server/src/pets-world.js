@@ -100,7 +100,12 @@ export const ABILITY_CD = { bark: [0, 12, 9, 6], dash: [0, 8, 6, 4], jump2: [0, 
 export const EGGS = { basic: { name: "Basic Egg", c: "#f4ead8", odds: [0.7, 0.25, 0.05, 0, 0] }, rare: { name: "Rare Egg", c: "#7fb4f0", odds: [0, 0.5, 0.38, 0.1, 0.02] }, legendary: { name: "Legendary Egg", c: "#f2c84a", odds: [0, 0, 0.5, 0.38, 0.12] } };
 export const MOUNT_CAP = 60;
 // kicks, dogs, geese (m and seconds)
-export const KICK = { range: 3.6, half: 1.0, cd: 4, stun: 1, grace: 5, farm: 30 };
+export const KICK = { range: 3.6, half: 1.0, cd: 4, stun: 1, grace: 5, farm: 30, aoe: 4.5 };   // aoe: (owner, 2026-11-11) a kick hits every animal this near, whichever way you face
+// (owner, 2026-11-11) the attack queue: a courier can be chased by at most `slots` animals at once (any kinds); after any
+// animal attacks, none can for `calm` s, counted from when the parcel is back or lost (a stolen or dropped one holds it)
+export const ATTACK = { slots: 2, calm: 3 };
+// (owner, 2026-11-11) a dropped parcel has 15 s on the ground; picked up, its time stops; dropped again, it carries on
+export const DROP_S = 15;
 export const DOG = { trigger: 10, telegraph: 0.5, chase: 6, speed: 11.5, bite: 1.3, stun: 1.5, cool: 8, leash: 38, roam: 3.2, range: 45 };
 export const GOOSE = { see: 7, telegraph: 1, lunge: 13, lungeFor: 2.2, touch: 1.4, carry: 7.2, dunk: 3, wander: 2.6, roam: 34, bonus: 15, cool: 6 };
 export const GRAB_R = 3.4, DELIVER_R = 3, PICKUP_R = 2.2, SAFE_R = 20, EXPRESS_PER_M = 0.16, EXPRESS_MIN = 14;
@@ -314,16 +319,34 @@ export const DOG_D = [{ trigger: 8, speed: 10.5, telegraph: 0.7, chase: 4 }, { t
 export const GOOSE_D = [{ see: 6, telegraph: 1.2, lunge: 11.5 }, { see: 7, telegraph: 1, lunge: 13 }, { see: 8, telegraph: 0.8, lunge: 14.5 }, { see: 9, telegraph: 0.65, lunge: 15.5 }, { see: 9, telegraph: 0.6, lunge: 16 }];
 // (owner, 2026-11-11) a mount outgrows the easier areas' animals: its chance to shake off a bite or a goose's grab
 // (no stun, no hit, the parcel kept) grows with its level, 8% a level past 4 x the area's number, up to 85%
-export const shakeOff = (lv, d) => clamp((lv - 1 - 4 * d) * 0.08, 0, 0.85);
+export const shakeOff = (lv, d, r = 0) => clamp((lv - 1 - 4 * d - 2 * r) * 0.08, 0, 0.85);   // r: the animal's rarity (each rank counts as half an area)
+// (owner, 2026-11-11) each area has its own chasers, each one Common to Legendary: Main Street dogs, Maple Suburbs cats,
+// Goose Marsh gators, Cliffside bears, the Floating Islands wolves. (They're all in `dogs`; geese and goats get rarities too.)
+export const CHASERS = ["dog", "cat", "gator", "bear", "wolf"], CHASER_NAME = { dog: "Dog", cat: "Cat", gator: "Gator", bear: "Bear", wolf: "Wolf" };
+export const ANIMAL_RW = [50, 25, 14, 8, 3];   // how often each rarity turns up
+// a rarer animal is quicker, notices you sooner, wastes less time and keeps after you longer
+export function chaserStats(q) { const D = DOG_D[q.d], r = q.r || 0; return { trigger: D.trigger + 0.8 * r, speed: D.speed * (1 + 0.06 * r), telegraph: D.telegraph * (1 - 0.1 * r), chase: D.chase + 0.5 * r }; }
+export function gooseStats(g) { const D = GOOSE_D[g.d], r = g.r || 0; return { see: D.see + 0.6 * r, telegraph: D.telegraph * (1 - 0.1 * r), lunge: D.lunge * (1 + 0.06 * r) }; }
+export const goatSpeed = (g) => GOAT.speed * (1 + 0.05 * (g.r || 0));
+// (owner, 2026-11-11) areas you haven't opened are there to see but closed off: the road's gate at each one's start (the
+// Floating Islands: the Sky Cannon). A courier can always head back west.
+export const GATES = [SUBURBS_X, MARSH.x0, CLIFF.x0];
+export const gateX = (open) => (open - 1 < GATES.length ? GATES[open - 1] : Infinity);   // the first closed gate's x
+export const zoneOpen = (open, d) => d < open;
 export function roamOk(x, z, y, d) { return Math.abs(surfaceAt(x, z, y + 0.5) - y) < 0.55 && !blocked(x, z, y, 0.6) && !inSafeZone(x, z, y) && hyp(x - PO.x, z - PO.z) > SAFE_R + 4 && districtAt(x, z, y) === d && !inPond(x, z, y); }
 // (owner, 2026-11-11: geese are stopped by houses and trees too) a goose that would start inside something moves round its pond to a clear spot
 for (const g of geese) if (blocked(g.x, g.z, g.y, 0.6)) { const P = ponds[g.pond], a0 = Math.atan2(g.z - P.z, g.x - P.x);
   for (let k = 1; k < 48; k++) { const a = a0 + (k % 2 ? 1 : -1) * Math.ceil(k / 2) * (TAU / 48), x = P.x + Math.cos(a) * (P.r + 3), z = P.z + Math.sin(a) * (P.r + 3); if (!blocked(x, z, g.y, 0.6) && surfaceAt(x, z, g.y + 0.5) > -1e9) { g.x = x; g.z = z; break; } } }
 (function populate() {   // dogs, more of them the farther out
-  const rnd = rng(77123), put = (n, d, pt) => { for (let k = 0, tries = 0; k < n && tries < 6000; tries++) { const [x, z, y] = pt(); if (!roamOk(x, z, y, d) || dogs.some((q) => hyp(q.hx - x, q.hz - z) < 10)) continue; dogs.push({ id: dogs.length, hx: x, hz: z, y, d, look: Math.floor(rnd() * 3) }); k++; } };
+  const rnd = rng(77123), put = (n, d, pt) => { for (let k = 0, tries = 0; k < n && tries < 6000; tries++) { const [x, z, y] = pt(); if (!roamOk(x, z, y, d) || dogs.some((q) => hyp(q.hx - x, q.hz - z) < 10)) continue; dogs.push({ id: dogs.length, hx: x, hz: z, y, d, look: Math.floor(rnd() * 3), sp: CHASERS[d], r: 0 }); k++; } };
   put(2, 0, () => [40 + rnd() * 65, (rnd() - 0.5) * 50, 0]);
   put(4, 1, () => [112 + rnd() * 75, (rnd() - 0.5) * 50, 0]);
   put(5, 2, () => rnd() < 0.6 ? [MARSH.x0 + 4 + rnd() * 92, (rnd() - 0.5) * 5, 0.12] : [MARSH_X[1] + (rnd() - 0.5) * 3.5, (rnd() - 0.5) * 50, 0.12]);
   put(6, 3, () => { const t = TERRACE(1 + Math.floor(rnd() * 3)); return [t.x0 + 2 + rnd() * (t.x1 - t.x0 - 4), t.z0 + 2 + rnd() * (t.z1 - t.z0 - 4), t.y]; });
   put(3, 4, () => { const I = ISLES[1 + Math.floor(rnd() * 2)], a = rnd() * TAU, r = rnd() * I.r * 0.7; return [I.x + Math.cos(a) * r, I.z + Math.sin(a) * r, I.y]; });
+  // every animal's rarity: fixed for the town (the same for everyone), rarer ones farther out a little more often
+  const roll = (d) => { const w = ANIMAL_RW.map((v, n) => v * Math.pow(1 + 0.12 * d, n)), s = w.reduce((a, b) => a + b, 0); let x = rnd() * s; for (let n = 0; n < w.length; n++) { if (x < w[n]) return n; x -= w[n]; } return 0; };
+  for (const q of dogs) q.r = roll(q.d);
+  for (const g of geese) g.r = roll(g.d);
+  for (const g of goats) { g.d = 3; g.r = roll(3); }
 })();
