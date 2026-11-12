@@ -40,7 +40,7 @@ page.on("console", (m) => { if (m.type() === "error" && !m.text().startsWith("Fa
 page.on("response", (r) => { if (r.status() >= 400 && !new URL(r.url()).pathname.endsWith("/version.json")) problems.push(`HTTP ${r.status()} ${r.url()}`); });
 const until = async (pg, fn, what, arg, ms = 12000) => {
   for (let i = 0; i < ms / 100; i++) { if (await pg.evaluate(fn, arg)) return; await pg.waitForTimeout(100); }
-  const state = await pg.evaluate(() => { const P = window.Pets, s = P.save; return JSON.stringify({ in: P.loggedIn, coins: s.coins, eggs: s.eggs, mounts: s.mounts.map((m) => m.sp + m.lv), up: s.up, del: s.stats.del, parcel: !!P.parcel, at: [Math.round(P.me.x), Math.round(P.me.z)] }); }).catch(() => "");
+  const state = await pg.evaluate(() => { const P = window.Pets, s = P.save; return JSON.stringify({ in: P.loggedIn, coins: s.coins, mounts: s.mounts.map((m) => m.sp + m.r + "/" + m.lv), up: s.up, del: s.stats.del, parcel: !!P.parcel, at: [Math.round(P.me.x), Math.round(P.me.z)] }); }).catch(() => "");
   throw new Error(what + " " + state);
 };
 const join = async (pg, name) => {
@@ -84,13 +84,12 @@ try {
     if (!(await page.evaluate(() => document.getElementById("pbody").children.length))) problems.push(title + " is empty");
     await page.click("#pclose");
   }
-  step = "level the mount and hatch an egg";
-  const had = await page.evaluate(() => { const s = window.Pets.save; return { eggs: s.eggs.basic, mounts: s.mounts.length }; });   // (the roll may have given an egg)
-  await page.evaluate(() => { window.Pets.netSend({ t: "admin", op: "quick", cmd: "coins", n: 5000, name: "Nyssary" }); window.Pets.netSend({ t: "admin", op: "give", what: "egg:basic", n: 1, name: "Nyssary" }); });
-  await until(page, (h) => window.Pets.save.coins >= 5000 && window.Pets.save.eggs.basic === h.eggs + 1, "the admin's gifts didn't arrive", had);
+  step = "level the mount; a new mount shows in the Stable";
+  const had = await page.evaluate(() => ({ mounts: window.Pets.save.mounts.length }));   // (the roll may have brought a mount)
+  await page.evaluate(() => { window.Pets.netSend({ t: "admin", op: "quick", cmd: "coins", n: 5000, name: "Nyssary" }); window.Pets.netSend({ t: "admin", op: "give", what: "mount:bear", n: 1, r: 3, name: "Nyssary" }); });
+  await until(page, (h) => window.Pets.save.coins >= 5000 && window.Pets.save.mounts.length === h.mounts + 1 && window.Pets.save.mounts.some((m) => m.sp === "bear" && m.r === 3), "the admin's gifts didn't arrive", had);
   await page.click("#mstable"); await page.click(".btn.buy"); await until(page, () => window.Pets.save.mounts[0].lv === 2, "the level wasn't bought");
-  await page.click(".eggc .btn.go"); await until(page, (h) => window.Pets.save.mounts.length === h.mounts + 1 && getComputedStyle(document.getElementById("hatch")).display !== "none", "the egg didn't hatch", had);
-  await page.waitForTimeout(2100); await page.click("#hatch"); await page.click("#pclose");
+  await until(page, (h) => document.querySelectorAll(".mtile").length === h.mounts + 1, "the new mount isn't in the Stable", had); await page.click("#pclose");
   await page.click("#mup"); await page.click(".uprow .btn.buy"); await until(page, () => window.Pets.save.up.payout === 1, "the upgrade wasn't bought"); await page.click("#pclose");
   // a second player joins: the first must see them move, and take their kick (out of the post office's safe zone)
   step = "see a second player move";

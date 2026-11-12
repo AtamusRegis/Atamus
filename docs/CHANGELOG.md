@@ -6,6 +6,11 @@ and any rule decided. Use `git log` for the code detail (and for the older Atamu
 
 ## 2026-11-11
 
+- **The areas' animals are the mounts; fixes (owner).** Mounts are now Dog, Cat, Gator, Bear and Wolf, each Common to
+  Legendary; an area's parcels drop its animal at the parcel's rarity (no more eggs; old mounts and eggs became the
+  animal of their rarity). The balloon is bigger and takes you from anywhere in its ring. Whistle is instant. One big
+  parcel on the conveyor and one big box on the mount. Reset to new player wipes everything (and a parcel for an area
+  that isn't open is never handed out).
 - **Stage 3: presentation and rewards (owner).** The post office is a building with a conveyor belt out of its door
   pushing your (bigger) parcel to the end. Rarer parcels open with more punch (rays, heartbeat, shake, confetti,
   fanfare). New mounts drop in with their own animation (NEW! for a first); level ups show the mount on screen with a

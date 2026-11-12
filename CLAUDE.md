@@ -1,7 +1,7 @@
 # Critter Courier: working notes for Claude
 
 Critter Courier is a phone-first 3D browser game (Three.js, 1 unit = 1 m): grab a parcel off the post office conveyor,
-ride your mount to its address past dogs, geese and other couriers' kicks, deliver it and roll for rewards; hatch and
+ride your mount to its address past dogs, geese and other couriers' kicks, deliver it and roll for rewards; find and
 level mounts, buy courier upgrades, play alongside up to 100 others. (owner, 2026-11-11) It replaced Pet Delivery Co.,
 remade from the Critter Courier design document; the file names (`pets.*`, `/pets`) stayed. The website is on GitHub
 Pages (atamus.io); the game server is Node behind Caddy (play.atamus.io, WebSocket `/pets`). Claude writes the code and
@@ -47,7 +47,7 @@ website/              GitHub Pages site (atamus.io)
   pets.js             the whole client: drawing the town, riding, the conveyor and parcels, the HUD and menus (Stable,
                       Upgrades, Odds, Settings, Admin), effects and sounds, the server connection
   pets-world.js       the town and the rules, shared with the server: the fixed town (buildTown), tiers, modifiers,
-                      roll odds, mounts, eggs, upgrades, dogs / geese / hazard numbers, the courier-data rules
+                      roll odds, mounts, upgrades, dogs / geese / hazard numbers, the courier-data rules
                       (cleanData). packages/server/src/pets-world.js must be an identical copy (scripts/check.sh
                       compares them)
   vendor/             Three.js (self-hosted); fonts/, assets/ (logo), favicon, CNAME
@@ -58,7 +58,7 @@ packages/server/src/
   index.js            Express bootstrap: /healthz {build}, the deploy workflows' /game routes, the /pets socket; in the
                       PTR it also serves website/
   pets.js             the game server: WebSocket /pets, accounts, rooms of 100, positions, the conveyor, deliveries
-                      and reward rolls, parcel damage, kicks, dogs, geese, goats, rocks, sky geese, mounts, eggs,
+                      and reward rolls, parcel damage, kicks, dogs, geese, goats, rocks, sky geese, mounts,
                       upgrades, chat, parties, staff (admin panel)
   petstore.js         accounts in Postgres (pet_accounts with couriers' data in its courier column, pet_tokens,
                       pet_admin_log) or in memory
@@ -170,9 +170,9 @@ integrate / check / merge loop above is the workflow (`check.yml` already runs o
 the current `main`): `scripts/task.sh checks`, which is `bash scripts/check.sh` (every JS file parses, the two
 `pets-world.js` copies match) and `cd packages/server && npm run smoke` (the world's rules, and the real `/pets` server in
 memory with players: register, the conveyor, a grab, kicks, a goose, a delivery and its roll, a dog, chat, a party,
-staff commands, upgrades, levels, eggs, logging in again) and `npm run smoke:browser` (the same in-memory server
+staff commands, upgrades, levels, mounts, logging in again) and `npm run smoke:browser` (the same in-memory server
 serving `website/`; `pets.html` in headless Chrome loads, creates an account, rides, grabs, delivers and rolls, opens
-the menus, buys and hatches, and a second player who joins is seen moving and lands a kick, with no page or console errors or failed requests: the only check that runs
+the menus, buys a level and sees a new mount, and a second player who joins is seen moving and lands a kick, with no page or console errors or failed requests: the only check that runs
 `website/pets.js`; set `CHROME` if it can't find Chrome, it skips locally without one but never in CI). Seconds. For gameplay changes also look at the game itself when it's worth it (`scripts/ptr.sh start`).
 
 **GitHub settings this relies on** (set once by an owner with admin rights: `scripts/protect-main.sh`; a Claude session

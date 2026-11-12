@@ -23,13 +23,14 @@ export const DISTRICTS = ["Main Street", "Maple Suburbs", "Goose Marsh", "Cliffs
 // Fragile, Heavy and Golden went
 export const MODS = { express: { name: "Express", bonus: 1.5 } };
 export const MOD_CHANCE = 0.2, EMPTY_FAST = 2, BASE_DUR = 3, BASE_COINS = 10, HIT_CUT = 0.2, MUD_SLOW = 0.75;   // (owner, 2026-11-11) empty, a mount goes twice as fast
-// reward rolls: chance, coins, Training XP, Level Coupons (and the chance of one), eggs (chance, and which)
+// reward rolls: chance, coins, Training XP, Level Coupons (and the chance of one), and the chance of a mount: (owner,
+// 2026-11-11) the parcel's area's animal, at the parcel's rarity (a Rare parcel from the Marsh: a Rare Gator)
 export const ROLLS = [
-  { chance: 0.6, coins: [4, 10], xp: 6, coupons: 0, couponChance: 0, egg: 0, eggs: [] },
-  { chance: 0.25, coins: [15, 30], xp: 14, coupons: 0, couponChance: 0, egg: 0, eggs: [] },
-  { chance: 0.1, coins: [50, 100], xp: 0, coupons: 0, couponChance: 0.3, egg: 0.1, eggs: ["basic"] },
-  { chance: 0.04, coins: [220, 420], xp: 0, coupons: 1, couponChance: 0, egg: 0.35, eggs: ["basic", "rare"] },
-  { chance: 0.01, coins: [1500, 2600], xp: 0, coupons: 2, couponChance: 0, egg: 0.75, eggs: ["rare", "rare", "legendary"] },
+  { chance: 0.6, coins: [4, 10], xp: 6, coupons: 0, couponChance: 0, pet: 0.05 },
+  { chance: 0.25, coins: [15, 30], xp: 14, coupons: 0, couponChance: 0, pet: 0.1 },
+  { chance: 0.1, coins: [50, 100], xp: 0, coupons: 0, couponChance: 0.3, pet: 0.2 },
+  { chance: 0.04, coins: [220, 420], xp: 0, coupons: 1, couponChance: 0, pet: 0.4 },
+  { chance: 0.01, coins: [1500, 2600], xp: 0, coupons: 2, couponChance: 0, pet: 0.75 },
 ];
 // luck moves the odds toward the rarer tiers: tier n's chance is weighted by (1 + luck)^n
 export function rollOdds(luck) { const w = ROLLS.map((r, n) => r.chance * Math.pow(1 + luck, n)), s = w.reduce((a, b) => a + b, 0); return w.map((v) => v / s); }
@@ -58,31 +59,28 @@ export const stampLuck = (lv) => 0.0405 * lv, payoutMult = (lv) => 1 + 0.1 * lv,
 export const upTotal = (up) => Object.keys(UPGRADES).reduce((a, k) => a + (up[k] || 0), 0);
 export const RANKS = ["", "Bronze", "Silver", "Gold", "Platinum"], RANK_C = ["", "#b9763c", "#b8c2cc", "#f2b01e", "#bfe9ff"];
 export const rankOf = (total) => (total >= 30 ? 4 : total >= 20 ? 3 : total >= 10 ? 2 : total >= 1 ? 1 : 0);   // of 40 levels
-// mounts: a rarity (0-4), an ability (from level 5; stronger at 10 and 20), colors and a size
+// (owner, 2026-11-11) the mounts are the areas' animals: each area has one kind (Main Street dogs, Maple Suburbs cats,
+// Goose Marsh gators, Cliffside bears, the Floating Islands wolves), and each comes Common to Legendary. A mount is a kind
+// and a rarity (m.r): the rarity sets its coat, its stats and how it shows; the kind sets its ability. An area's parcels
+// drop its kind, at the parcel's rarity. The town's animals wear the same coats.
 export const MOUNTS = {
-  pup: { name: "Pup", r: 0, ab: "bark", c: "#c98a4b", a: "#f3dcc0", size: 1 },
-  piglet: { name: "Piglet", r: 0, ab: "dash", c: "#f4a7b5", a: "#ffd3da", size: 0.95 },
-  bunny: { name: "Bunny", r: 0, ab: "jump2", c: "#e9e4dc", a: "#ffc7d0", size: 0.9 },
-  cat: { name: "Cat", r: 1, ab: "dash", c: "#f0a04b", a: "#fff1dc", size: 0.95 },
-  fox: { name: "Fox", r: 1, ab: "dash", c: "#e06a2a", a: "#fff4e6", size: 1 },
-  deer: { name: "Deer", r: 1, ab: "jump2", c: "#b9824f", a: "#f3e3cc", size: 1 },
-  raptor: { name: "Raptor", r: 2, ab: "dash", c: "#6f9a3a", a: "#d9d27a", size: 1 },
-  stego: { name: "Stegosaurus", r: 2, ab: "bark", c: "#5f9a8a", a: "#e08a3a", size: 0.95 },
-  pony: { name: "Pony", r: 2, ab: "jump2", c: "#a9713f", a: "#3b2a1c", size: 1.05 },
-  trex: { name: "T-Rex", r: 3, ab: "bark", c: "#5f8f3a", a: "#cfd98a", size: 1 },
-  trike: { name: "Triceratops", r: 3, ab: "dash", c: "#b98a5a", a: "#f0d9a8", size: 0.95 },
-  unicorn: { name: "Unicorn", r: 4, ab: "jump2", c: "#fbf7ff", a: "#ffd1f0", size: 1.05 },
+  dog: { name: "Dog", ab: "bark", look: "pup", size: 1, coats: [["#c98a4b", "#f3dcc0"], ["#8a5a34", "#e9d6b8"], ["#3d4650", "#cfd6dd"], ["#e8e2d8", "#c9a27e"], ["#2b2f36", "#f2b01e"]] },
+  cat: { name: "Cat", ab: "jump2", look: "cat", size: 0.95, coats: [["#f0a04b", "#fff1dc"], ["#b9b2a8", "#ffffff"], ["#3d4650", "#e9eef2"], ["#f4f1ea", "#9aa8ff"], ["#1d232a", "#a45be0"]] },
+  gator: { name: "Gator", ab: "dash", look: "gator", size: 1, coats: [["#4f7a3a", "#c9d48a"], ["#3f6a4a", "#b9c98a"], ["#2f5f6a", "#9fd8c8"], ["#5a3f7a", "#d9b9f0"], ["#c9a23a", "#fff3b8"]] },
+  bear: { name: "Bear", ab: "bark", look: "bear", size: 1.05, coats: [["#7a5236", "#c9a27e"], ["#3a2c22", "#8a6a4e"], ["#c9a27e", "#f3e3cc"], ["#f4f6f8", "#c9d6e2"], ["#2b2f36", "#f2b01e"]] },
+  wolf: { name: "Wolf", ab: "dash", look: "wolf", size: 1, coats: [["#8a96a2", "#e9eef2"], ["#5a6470", "#cfd6dd"], ["#d9dde2", "#ffffff"], ["#3a4a6a", "#9ad8ff"], ["#f4f6f8", "#f2b01e"]] },
 };
-// (owner, 2026-11-11) no flying pets: the Parrot, Owl and Dragon (and gliding) went; anyone who had one has the mount that took its place
-export const MOUNT_MOVED = { parrot: "deer", owl: "stego", dragon: "unicorn" };
+export const coat = (sp, r) => (MOUNTS[sp] || MOUNTS.dog).coats[clamp(r | 0, 0, 4)];
+// the mounts from before (and their rarity): each became the area animal of that rarity, keeping its level and skin
+export const MOUNT_MOVED = { pup: ["dog", 0], piglet: ["dog", 0], bunny: ["dog", 0], fox: ["cat", 1], deer: ["cat", 1], parrot: ["cat", 1], raptor: ["gator", 2], stego: ["gator", 2], pony: ["gator", 2], owl: ["gator", 2], trex: ["bear", 3], trike: ["bear", 3], unicorn: ["wolf", 4], dragon: ["wolf", 4] };
 export const ABILITY = { bark: "Bark", dash: "Dash", jump2: "Double Jump" };
 export const MAX_LV = 20, VARIANTS = ["", "Shiny", "Golden", "Rainbow"], SHINY = 0.01, GOLDEN = 0.001;
-// (owner, 2026-11-11) two of the same mount with the same skin merge into the better of them (the higher level), which
+// (owner, 2026-11-11) two of the same mount (kind and rarity) with the same skin merge into the better of them (the higher level), which
 // gets the next skin: normal, Shiny, Golden, Rainbow (Rainbow only by merging)
 export const FUSE_N = 2;
 export function fuseSet(mounts, id) {   // the ones a merge would take (the chosen one and the lowest-level other), or null
   const m = mounts.find((k) => k.id === id); if (!m || m.va >= VARIANTS.length - 1) return null;
-  const same = mounts.filter((k) => k.sp === m.sp && k.va === m.va && k.id !== id).sort((a, b) => a.lv - b.lv || a.id - b.id);
+  const same = mounts.filter((k) => k.sp === m.sp && k.r === m.r && k.va === m.va && k.id !== id).sort((a, b) => a.lv - b.lv || a.id - b.id);
   return same.length >= FUSE_N - 1 ? [m, ...same.slice(0, FUSE_N - 1)] : null;
 }
 export const levelCost = (lv) => Math.round(100 * Math.pow(1.6, lv - 1));   // coins to go from lv to lv + 1
@@ -90,8 +88,8 @@ export const xpNeed = (lv) => Math.round(30 * Math.pow(1.42, lv - 1));     // Tr
 export const bagSize = (lv) => 1 + Math.floor(lv / 5);                      // parcels a mount carries at once (owner, 2026-11-11): 1, then +1 at levels 5, 10, 15 and 20
 export const mountScale = (lv) => 1 + 0.079 * (lv - 1);                     // 1x at level 1, 2.5x at 20
 export const abilityTier = (lv) => (lv >= 20 ? 3 : lv >= 10 ? 2 : lv >= 5 ? 1 : 0);
-export function mountStats(sp, lv) {
-  const r = MOUNTS[sp].r, n = lv - 1;
+export function mountStats(m) {   // m: { r (rarity), lv }
+  const r = clamp(m.r | 0, 0, 4), n = m.lv - 1;
   // (owner, 2026-11-11) faster as it levels: about 16 to 20 m/s at level 20
   return { speed: 10 + 0.6 * r + (0.3 + 0.03 * r) * n, jump: 8 + 0.25 * r + (0.08 + 0.01 * r) * n, grip: Math.min(0.6, 0.05 * r + 0.02 * n) };
 }
@@ -100,8 +98,9 @@ export function mountStats(sp, lv) {
 export const TRAILS = [{ k: "cloud", name: "Cloud Trail", zones: 5 }];
 export const trailsFor = (d) => TRAILS.filter((t) => openFor(d) >= t.zones).map((t) => t.k);
 export const ABILITY_CD = { bark: [0, 12, 9, 6], dash: [0, 8, 6, 4], jump2: [0, 0, 0, 0] };
-// eggs: what hatches from each (by rarity), then a mount of that rarity at random
-export const EGGS = { basic: { name: "Basic Egg", c: "#f4ead8", odds: [0.7, 0.25, 0.05, 0, 0] }, rare: { name: "Rare Egg", c: "#7fb4f0", odds: [0, 0.5, 0.38, 0.1, 0.02] }, legendary: { name: "Legendary Egg", c: "#f2c84a", odds: [0, 0, 0.5, 0.38, 0.12] } };
+// (owner, 2026-11-11) no eggs any more: parcels drop mounts. Eggs someone still had became a mount each (a Basic Egg a
+// Common Dog, a Rare Egg a Rare Gator, a Legendary Egg a Legendary Wolf)
+const EGG_TO = { basic: ["dog", 0], rare: ["gator", 2], legendary: ["wolf", 4] };
 export const MOUNT_CAP = 60;
 // kicks, dogs, geese (m and seconds)
 export const KICK = { range: 3.6, half: 1.0, cd: 4, stun: 1, grace: 5, farm: 30, aoe: 4.5 };   // aoe: (owner, 2026-11-11) a kick hits every animal this near, whichever way you face
@@ -118,12 +117,16 @@ export const GRAB_R = 3.4, DELIVER_R = 3, PICKUP_R = 2.2, SAFE_R = 20, EXPRESS_P
 export function cleanData(d) {
   d = d && typeof d === "object" ? d : {};
   const int = (v, lo, hi, def) => (Number.isFinite(+v) ? clamp(Math.floor(+v), lo, hi) : def);
-  const out = { v: 1, coins: int(d.coins, 0, 1e12, 0), coupons: int(d.coupons, 0, 1e6, 0), nextId: int(d.nextId, 1, 1e9, 1), mounts: [], ride: 0, eggs: {}, up: {}, stats: {}, set: {}, fails: int(d.fails, 0, 99, 0) };
-  for (const m of Array.isArray(d.mounts) ? d.mounts.slice(0, MOUNT_CAP) : []) if (m && MOUNTS[MOUNT_MOVED[m.sp] || m.sp]) out.mounts.push({ id: int(m.id, 1, 1e9, 0) || out.nextId++, sp: MOUNT_MOVED[m.sp] || m.sp, va: int(m.va, 0, 3, 0), lv: int(m.lv, 1, MAX_LV, 1), xp: int(m.xp, 0, 1e9, 0), ...(TRAILS.some((t) => t.k === m.tr) ? { tr: m.tr } : {}) });
-  if (!out.mounts.length) out.mounts.push({ id: out.nextId++, sp: "pup", va: 0, lv: 1, xp: 0 });
+  const out = { v: 1, coins: int(d.coins, 0, 1e12, 0), coupons: int(d.coupons, 0, 1e6, 0), nextId: int(d.nextId, 1, 1e9, 1), mounts: [], ride: 0, up: {}, stats: {}, set: {}, fails: int(d.fails, 0, 99, 0) };
+  for (const m of Array.isArray(d.mounts) ? d.mounts.slice(0, MOUNT_CAP) : []) {
+    if (!m) continue; const now = MOUNTS[m.sp] && Number.isFinite(+m.r), old = MOUNT_MOVED[m.sp] || (m.sp === "cat" ? ["cat", 1] : null); if (!now && !old) continue;
+    out.mounts.push({ id: int(m.id, 1, 1e9, 0) || out.nextId++, sp: now ? m.sp : old[0], r: now ? int(m.r, 0, 4, 0) : old[1], va: int(m.va, 0, 3, 0), lv: int(m.lv, 1, MAX_LV, 1), xp: int(m.xp, 0, 1e9, 0), ...(TRAILS.some((t) => t.k === m.tr) ? { tr: m.tr } : {}) });
+  }
+  out.nextId = Math.max(out.nextId, ...out.mounts.map((m) => m.id + 1));
+  for (const k of Object.keys(EGG_TO)) for (let n = int(d.eggs && d.eggs[k], 0, MOUNT_CAP, 0); n > 0 && out.mounts.length < MOUNT_CAP; n--) out.mounts.push({ id: out.nextId++, sp: EGG_TO[k][0], r: EGG_TO[k][1], va: 0, lv: 1, xp: 0 });
+  if (!out.mounts.length) out.mounts.push({ id: out.nextId++, sp: "dog", r: 0, va: 0, lv: 1, xp: 0 });
   out.nextId = Math.max(out.nextId, ...out.mounts.map((m) => m.id + 1));
   out.ride = out.mounts.some((m) => m.id === d.ride) ? d.ride : out.mounts[0].id;
-  for (const k of Object.keys(EGGS)) out.eggs[k] = int(d.eggs && d.eggs[k], 0, 9999, 0);
   for (const k of Object.keys(UPGRADES)) out.up[k] = int(d.up && d.up[k], 0, UP_MAX, 0);
   const permits = int(d.up && d.up.routes, 0, UP_MAX, 0); for (let l = 0; l < permits; l++) out.coins += Math.round(250 * Math.pow(1.8, l));   // (owner, 2026-11-11) Route Permits went: their coins back, once (they're not saved again)
   out.gifts = (Array.isArray(d.gifts) ? d.gifts : []).slice(0, GIFT_CAP).filter((g) => g && Number.isFinite(+g.gid)).map((g) => ({ gid: int(g.gid, 1, 1e9, 1), r: int(g.r, 0, 4, 0), pt: int(g.pt, 0, 4, 0), ...(Number.isFinite(+g.m) ? { m: int(g.m, 1, 1e9, 1) } : {}) }));
@@ -153,9 +156,9 @@ export function rewardRoll(tier, up, rnd = Math.random) {
 // what's inside a gift of rarity t from a parcel of tier pt (decided when it's opened, owner 2026-11-11)
 export function giftContents(t, pt, up, rnd = Math.random) {
   const R = ROLLS[t], coins = Math.round((R.coins[0] + rnd() * (R.coins[1] - R.coins[0])) * Math.sqrt(TIERS[pt].mult));
-  let coupons = R.coupons + (rnd() < R.couponChance ? 1 : 0) + (rnd() < pressChance(up.press) ? 1 : 0), egg = "";
-  if (rnd() < R.egg) egg = R.eggs[Math.floor(rnd() * R.eggs.length)];
-  return { coins, xp: R.xp, coupons, egg };
+  const coupons = R.coupons + (rnd() < R.couponChance ? 1 : 0) + (rnd() < pressChance(up.press) ? 1 : 0);
+  const pet = rnd() < R.pet ? { sp: CHASERS[pt], r: t, va: skinRoll(rnd) } : null;
+  return { coins, xp: R.xp, coupons, pet };
 }
 // (owner, 2026-11-11) four unopened gifts of one rarity merge into one of the next (its parcel tier: the best of the four)
 export const MERGE_N = 4, GIFT_CAP = 60;
@@ -168,11 +171,7 @@ export function mergeGifts(gifts, nextGid) {   // merges in place; returns the m
   }
   return out;
 }
-export function hatchEgg(kind, rnd = Math.random) {
-  const odds = EGGS[kind].odds; let r = rnd(), rar = 0; for (let n = 0; n < odds.length; n++) { if (r < odds[n]) { rar = n; break; } r -= odds[n]; rar = n; }
-  const pool = Object.keys(MOUNTS).filter((k) => MOUNTS[k].r === rar), v = rnd();
-  return { sp: pool[Math.floor(rnd() * pool.length)], va: v < GOLDEN ? 2 : v < GOLDEN + SHINY ? 1 : 0 };
-}
+export const skinRoll = (rnd = Math.random) => { const v = rnd(); return v < GOLDEN ? 2 : v < GOLDEN + SHINY ? 1 : 0; };   // 1 in 100 Shiny, 1 in 1,000 Golden
 // Training XP: added to a mount; it levels up as far as the XP takes it. Returns the levels gained.
 export function addXp(m, xp) { let up = 0; m.xp += xp; while (m.lv < MAX_LV && m.xp >= xpNeed(m.lv)) { m.xp -= xpNeed(m.lv); m.lv++; up++; } if (m.lv >= MAX_LV) m.xp = 0; return up; }
 

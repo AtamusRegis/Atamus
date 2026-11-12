@@ -30,7 +30,8 @@ Every rule below is in `website/pets-world.js` (shared with the server, an ident
    the next opening or you close it. Up to 60 can wait; past that the oldest open by themselves.
 
 (owner, 2026-11-11) **A stack of parcels:** a mount carries 1 parcel, one more at levels 5, 10, 15 and 20 (5 at level
-20); ride back into the conveyor to load up. Each has its own address (the same neighborhood as another or a
+20); ride back into the conveyor to load up. (owner, 2026-11-11) However many it carries, the mount shows **one big
+box** (the best tier's color, taped blue if any is Express), a little bigger for each extra parcel. Each has its own address (the same neighborhood as another or a
 different one), its own marker, and its own row on the parcel card (with its distance; the card shows how many of how
 many). The ground arrow points to the nearest. Each delivers at its own mailbox and rolls; several rolls take turns.
 A parcel that breaks or is lost is gone; the conveyor always has the next one. **Empty-handed you ride twice as fast**
@@ -40,9 +41,9 @@ A parcel that breaks or is lost is gone; the conveyor always has the next one. *
 
 - (owner, 2026-11-11) **The post office is a building** (16 x 10 m, a red gabled roof, its sign over the door) on the
   north side of the square, with a **conveyor belt** coming out of its door 9 m toward the square. Each courier sees
-  only their own two parcels on it, **big** (1.7x): **Ready** waits at the belt's end, **Next** (faded) just outside the
-  door. Grabbing: the belt runs and a pusher pushes Next out to the end (1.6 s), and a new Next drops in with a pop. The
-  building and the belt are solid; the server allows a grab within 1.8 + 4.6 m of the end.
+  only their own **one big parcel** on it (1.7x; owner, 2026-11-11: one per courier), waiting at the belt's end.
+  Grabbing: the belt runs and a pusher pushes the next one out of the door to the end (1.6 s) with a pop. A parcel
+  rolled for an area that isn't open (after a reset) is rolled again. The building and the belt are solid; the server allows a grab within 1.8 + 4.6 m of the end.
 - The address is picked when you grab. Nobody else sees your target; two couriers can have the same house.
 
 ## Parcels
@@ -75,15 +76,20 @@ A parcel that breaks or is lost is gone; the conveyor always has the next one. *
 | --- | --- | --- | --- |
 | Common | 60% | 4-10 | 6 XP |
 | Uncommon | 25% | 15-30 | 14 XP |
-| Rare | 10% | 50-100 | 30% a Level Coupon; 10% a Basic Egg |
-| Epic | 4% | 220-420 | a Level Coupon; 35% a Basic or Rare Egg |
-| Legendary | 1% | 1,500-2,600 | 2 Level Coupons; 75% a Rare or Legendary Egg (Rare twice as likely) |
+| Rare | 10% | 50-100 | 30% a Level Coupon |
+| Epic | 4% | 220-420 | a Level Coupon |
+| Legendary | 1% | 1,500-2,600 | 2 Level Coupons |
+
+- (owner, 2026-11-11) **Mounts drop from parcels:** a parcel can bring its area's animal at the parcel's rarity (a Rare
+  parcel from Goose Marsh: a Rare Gator): Common 5%, Uncommon 10%, Rare 20%, Epic 40%, Legendary 75% (1 in 100 Shiny,
+  1 in 1,000 Golden). Delivering in the same area again is how you chase a rarer one. Each new mount gets the unboxing
+  (several after Open all, one after another); an Epic, Legendary, Shiny or Golden one is announced to the server.
 
 - Every delivery also gives the mount 5 + 3 per tier Training XP.
 - **Luck** (the tier's, plus Lucky Stamps) weights each roll by (1 + luck) to the power of its rank, then the odds are
   scaled back to 100%. Lucky Stamps at level 10 takes Legendary from 1% to 3% on a Bronze parcel.
 - A roll that just missed Legendary hangs on it for a moment before landing (near miss).
-- The Odds menu always shows the current odds for every tier, the Express bonus and the eggs.
+- The Odds menu always shows the current odds for every tier, the Express bonus and the mount chance for each rarity.
 
 ## Mounts
 
@@ -91,14 +97,16 @@ A parcel that breaks or is lost is gone; the conveyor always has the next one. *
   white puffs behind) once the Floating Islands are open. Any mount can wear any unlocked trail (its button in the
   Stable, on or off); everyone sees it.
 
-- (owner, 2026-11-11) **A gift on the second delivery:** a random Uncommon mount (Cat, Fox or Deer), shown in a pink
-  box after you close the roll's card.
+- (owner, 2026-11-11) **A gift on the second delivery:** a mount, that parcel's area's animal at the gift's rarity when
+  it's opened, shown in a pink box after you close the roll's card.
 - One equipped mount, seen by everyone; the rest wait in the Stable menu. Levels 1 to 20; a mount's size is 1 + 0.079 x
   (level - 1), so 2.5x at level 20. The rider stays the same size.
-- **Twelve mounts, all on the ground** (owner, 2026-11-11: no flying pets): Common Pup (Bark), Piglet (Dash), Bunny
-  (Double Jump); Uncommon Cat (Dash), Fox (Dash), Deer (Double Jump); Rare Raptor (Dash), Stegosaurus (Bark), Pony
-  (Double Jump); Epic T-Rex (Bark), Triceratops (Dash); Legendary Unicorn (Double Jump). A new courier starts with a
-  Pup. A Parrot, Owl or Dragon someone already had became a Deer, Stegosaurus or Unicorn, keeping its level.
+- (owner, 2026-11-11) **The mounts are the areas' animals:** Dog (Main Street, Bark), Cat (Maple Suburbs, Double
+  Jump), Gator (Goose Marsh, Dash), Bear (Cliffside, Bark), Wolf (Floating Islands, Dash), each **Common to Legendary**
+  (the rarity is the mount's own: its coat, its stats and its name, e.g. "Rare Gator"; the town's animals of that kind
+  and rarity wear the same coat). A new courier starts with a Common Dog. Mounts from before became the animal of
+  their old rarity, keeping level and skin (Pup, Piglet, Bunny: Dog; Cat, Fox, Deer, Parrot: Cat; Raptor,
+  Stegosaurus, Pony, Owl: Gator; T-Rex, Triceratops: Bear; Unicorn, Dragon: Wolf).
 - **Stats** (rarity 0-4, n = level - 1): Speed 10 + 0.6 x rarity + (0.3 + 0.03 x rarity) x n m/s (owner, 2026-11-11:
   faster as it levels; about 16 to 20 m/s at level 20); Jump 8 + 0.25 x rarity
   + (0.08 + 0.01 x rarity) x n; Grip (shortens stuns) 5% x rarity + 2% x n, up to 60%.
@@ -108,15 +116,12 @@ A parcel that breaks or is lost is gone; the conveyor always has the next one. *
   level 2, 655 for 6, about 472,000 for 20; about 1.26 million in all), or a Level Coupon (one whole level).
 - Level 20: a glowing name tag and sparkling footsteps.
 - **Whistle** calls your mount. A stun knocks you off; you get up on foot (5.5 m/s) and the mount comes back when you
-  whistle, when you reach it, or by itself after about 2 s.
-- Every mount fits every shortcut. Species differ only by rarity and ability.
+  whistle (owner, 2026-11-11: instantly, even while still stunned), when you reach it, or by itself after about 2 s.
+- Every mount fits every shortcut. Kinds differ only by ability; rarity sets the stats.
 
-## Eggs
+## Merging and skins
 
-- Only from reward rolls. Basic: Common 70%, Uncommon 25%, Rare 5%. Rare: Uncommon 50%, Rare 38%, Epic 10%, Legendary
-  2%. Legendary: Rare 50%, Epic 38%, Legendary 12%. The odds are on each egg in the Stable before you hatch.
-- Hatch from the Stable, no timer: the egg wobbles three times and opens. Any mount of the rolled rarity.
-- (owner, 2026-11-11) **Merging mounts:** two of the same mount with the same skin merge (the Stable's Merge button,
+- (owner, 2026-11-11) **Merging mounts:** two of the same mount (kind and rarity) with the same skin merge (the Stable's Merge button,
   on either) into the better of the two (the higher level), which gets the next skin: normal, Shiny, Golden,
   **Rainbow** (violet with a sea-green trim and a rainbow trail; only by merging). The other goes. A Golden or
   Rainbow merge is announced to the server.
@@ -160,7 +165,8 @@ animals:** its chance to shake off a bite or a goose's grab (no stun, no hit, "S
 - **Cliffside** (Diamond, x 290-415): three steps up the road, 6 m each, a ramp up the road onto each; a house each side
   on each step; boulders on each step to ride round; 6 dogs; 4 goats; falling rocks. The **Sky Cannon** at the top.
 - (owner, 2026-11-11) The sewer pipe's mouth and the balloon take you from farther off: the pipe from 3.5 m round its
-  middle (it was 1.7), the balloon from 5.5 m (it was 3).
+  middle (it was 1.7). (owner, 2026-11-11: no threading a needle) The balloon is 1.8x bigger and takes you from
+  anywhere inside the red ring round it, 9 m (it was 3).
 - **Floating Islands** (Sky): three islands 32 to 44 m up off Cliffside's far side, two houses each, joined by jump
   pads; 3 dogs, wind and sky geese (every 8 to 14 s). Each island's houses stand as far as they can from its pads,
   landing spots, balloon and middle; anyone who somehow ends up inside something solid is moved out to the nearest
@@ -308,8 +314,10 @@ deliveries for 2 s).
 
 Nyssary is always admin and the only one who makes or removes admins; admins make moderators; moderators (and up)
 mute, kick and ban those below them. The Admin panel (Settings): find a courier, mute / kick / ban, role, give (coins,
-Level Coupons, eggs, a mount at a level and variant), quick commands (coins, all mounts, max levels, eggs, coupons,
-upgrades, everything, reset), and edit coins and coupons. Everything is logged (`pet_admin_log`).
+Level Coupons, a mount of a kind and rarity at a level and variant), quick commands (coins, all mounts, max levels,
+coupons, upgrades, everything, **Reset to new player**: owner, 2026-11-11, a brand new courier in every way: coins,
+mounts, levels, upgrades, unopened parcels, the parcels being carried and on the conveyor, stats, settings and the
+tutorial; their page reloads as a new courier), and edit coins and coupons. Everything is logged (`pet_admin_log`).
 
 ## Pet Delivery Co. at /pokemon
 
@@ -318,6 +326,10 @@ its own fresh saves, with the same logins. It is described in `docs/POKEMON.md`;
 Courier's rules.
 
 ## Rejected / removed
+
+- (owner, 2026-11-11) **Eggs** (and hatching): parcels drop mounts directly. The twelve old species (Pup, Piglet,
+  Bunny, Fox, Deer, Raptor, Stegosaurus, Pony, T-Rex, Triceratops, Unicorn, and before them Parrot, Owl, Dragon): the
+  mounts are the areas' animals. The faded Next parcel on the conveyor, and the stack of small boxes on the saddle.
 
 - (owner, 2026-11-11) The **Stamp Meter** (pity: Rare at every 25 rolls below Rare, Epic at 100), its bar on the HUD
   and its tutorial card; **Route Permits** (districts open with mount levels now; their coins refunded); the **Fragile,
