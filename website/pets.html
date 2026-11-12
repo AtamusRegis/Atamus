@@ -20,8 +20,11 @@
     .disp { font-family: "Big Shoulders Display", system-ui, sans-serif; font-weight: 800; letter-spacing: .02em; }
     #hud { display: none; }
     .pill { display: inline-flex; align-items: center; gap: 6px; padding: 6px 12px; border-radius: 999px; background: var(--card); box-shadow: 0 3px 0 rgba(0,0,0,.14); }
-    .coin { display: inline-block; width: 18px; height: 18px; border-radius: 50%; background: radial-gradient(circle at 35% 30%, #fff3b8, #f2b01e 60%, #c98500); border: 2px solid #b87400; flex: none; }
-    /* coins, top left; the Stamp Meter down the left edge */
+    /* (owner, 2026-11-12) Aura: a shiny purple orb that shimmers */
+    .coin { display: inline-block; width: 18px; height: 18px; border-radius: 50%; background: radial-gradient(circle at 35% 30%, #ffffff, #e2b8ff 25%, #a45be0 60%, #5a1f9a); border: 2px solid #4a1680; box-shadow: 0 0 8px #c77dff; flex: none; position: relative; overflow: hidden; }
+    .coin::after { content: ""; position: absolute; inset: -40%; background: linear-gradient(115deg, transparent 40%, rgba(255,255,255,.85) 50%, transparent 60%); animation: aurashine 2.4s ease-in-out infinite; }
+    @keyframes aurashine { 0%, 55% { transform: translateX(-70%); } 100% { transform: translateX(70%); } }
+    /* Aura, top left */
     #coins { position: fixed; left: calc(10px + var(--sl)); top: calc(10px + var(--st)); font-size: 20px; font-family: "Big Shoulders Display", system-ui, sans-serif; }
     #coins.bump { animation: bump .25s; }
     @keyframes bump { 40% { transform: scale(1.18); } }
@@ -66,7 +69,7 @@
     .pips { display: flex; gap: 3px; } .pips i { min-width: 12px; height: 12px; border-radius: 4px; background: #d7e1ea; font-style: normal; font-size: 10px; line-height: 12px; text-align: center; padding: 0 3px; color: #7f8b97; } .pips i.on { background: var(--gold); color: #fff; }
     .mdetail { display: flex; gap: 12px; align-items: center; } .mdetail img.big { width: 120px; height: 120px; flex: none; border-radius: 16px; background: #eaf6ff; }
     .minfo { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 5px; } .minfo h3 { margin: 0; font-size: 22px; font-family: "Big Shoulders Display", system-ui, sans-serif; } .rar { font-size: 13px; }
-    .lvrow, .stat { display: flex; align-items: center; gap: 8px; } .stat span { width: 56px; } .stat em { font-style: normal; width: 40px; text-align: right; } .stat.ab span { width: auto; } .stat.ab.off { opacity: .5; }
+    .lvrow, .stat { display: flex; align-items: center; gap: 8px; } .stat span { width: 56px; } .stat em { font-style: normal; width: 40px; text-align: right; } .stat.ab span { width: auto; } .stat.ab.off { opacity: .5; } .stat.pup em { text-align: left; } .stat.pup .btn, .stat.pup .max { margin-left: auto; } .stat.pup .max { color: var(--gold); }
     .eggs { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; } .eggc { display: flex; flex-direction: column; align-items: center; gap: 4px; padding: 8px 4px; border-radius: 14px; background: #f3f7fa; text-align: center; font-size: 12px; }
     .egg { display: block; width: 34px; height: 44px; border-radius: 50% 50% 48% 48% / 60% 60% 40% 40%; box-shadow: inset -5px -6px 0 rgba(0,0,0,.12); }
     .odds { display: flex; gap: 6px; flex-wrap: wrap; justify-content: center; font-size: 12px; }
@@ -135,7 +138,7 @@
     /* things that pop up */
     #pops { position: fixed; inset: 0; pointer-events: none; overflow: hidden; }
     .pop { position: absolute; left: 0; top: 0; font: 800 24px "Big Shoulders Display", system-ui, sans-serif; text-shadow: 0 2px 0 rgba(0,0,0,.55), 0 0 8px rgba(0,0,0,.35); white-space: nowrap; will-change: transform, opacity; } .pop.big { font-size: 36px; }
-    .flycoin { position: absolute; width: 20px; height: 20px; border-radius: 50%; background: radial-gradient(circle at 35% 30%, #fff3b8, #f2b01e 60%, #c98500); border: 2px solid #b87400; transform: translate(-50%, -50%); }
+    .flycoin { position: absolute; width: 20px; height: 20px; border-radius: 50%; background: radial-gradient(circle at 35% 30%, #ffffff, #e2b8ff 25%, #a45be0 60%, #5a1f9a); border: 2px solid #4a1680; box-shadow: 0 0 10px #c77dff; transform: translate(-50%, -50%); }
     /* delivered parcels, on the left: the waiting ones (a sparkle in their rarity's color), the one opening, what came out */
     #gifts { position: fixed; left: calc(12px + var(--sl)); top: calc(178px + var(--st)); width: 176px; display: none; flex-direction: column; align-items: stretch; gap: 6px; z-index: 6; }
     #gq { display: flex; flex-wrap: wrap; gap: 4px; align-items: center; min-height: 0; } #gq b { font-size: 14px; color: #fff; text-shadow: 0 1px 0 rgba(0,0,0,.5); }
@@ -229,6 +232,6 @@
     <button id="lgo" class="btn go" type="submit">Log in</button>
     <button id="lnew" class="btn" type="button">Create account</button>
   </form>
-  <script type="module" src="pets.js?v=1794466362"></script>
+  <script type="module" src="pets.js?v=1794468246"></script>
 </body>
 </html>

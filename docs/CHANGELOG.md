@@ -4,6 +4,14 @@ Critter Courier (Pet Delivery Co. until 2026-11-11). Newest first. Add one entry
 and any rule decided. Use `git log` for the code detail (and for the older Atamus prototypes, removed from the tree on
 2026-11-08).
 
+## 2026-11-12
+
+- **Aura and podiums (owner).** Coins became Aura (one for one), a shiny purple currency. The server's three best
+  mounts stand on three podiums by the post office and earn their couriers Aura. Every mount starts carrying one
+  parcel; Aura buys carry levels (up to 5) and Boost levels (+5% speed each) per mount, and four new trails. Rarity
+  gives +20% speed and shorter cooldowns per step; a mount is faster short of its own area and slower past it. Bark
+  now hits every animal (geese and goats too).
+
 ## 2026-11-11
 
 - **Every animal its own coats; merging raises the coat (owner).** Each animal has five coats of its own, one per
