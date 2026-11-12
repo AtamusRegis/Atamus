@@ -1,6 +1,6 @@
 // Smoke test (required check on every pull request): the shared world loads and its rules hold, and the real /pets
 // server (in memory, no database) serves couriers end to end: accounts, the conveyor, a delivery and its reward roll,
-// kicks, a goose, a dog, upgrades, levels, eggs, chat, parties and staff. Run: cd packages/server && npm run smoke
+// kicks, a goose, a dog, upgrades, levels, mounts, chat, parties and staff. Run: cd packages/server && npm run smoke
 // Exits 0 when everything passed, 1 (with what failed) otherwise. Takes a few seconds.
 process.env.ATAMUS_PTR = "1";   // no live website to watch
 import http from "node:http";
@@ -13,10 +13,10 @@ setTimeout(() => fail("timed out"), 30000).unref();
 // ---- the world and the rules ----
 const W = await import("./src/pets-world.js");
 const fresh = W.cleanData({});
-ok(fresh.mounts.length === 1 && fresh.mounts[0].sp === "pup" && fresh.coins === 0 && fresh.ride === fresh.mounts[0].id, "a new courier has a Pup and no coins");
+ok(fresh.mounts.length === 1 && fresh.mounts[0].sp === "dog" && fresh.mounts[0].r === 0 && fresh.coins === 0 && fresh.ride === fresh.mounts[0].id, "a new courier has a Common Dog and no coins");
 ok(JSON.stringify(W.cleanData(fresh)) === JSON.stringify(fresh), "cleanData is stable");
-ok(W.cleanData({ pets: [{ id: 1, sp: "dragon", lv: 20 }], coins: 5e6, home: {} }).mounts[0].sp === "pup", "the old game's data starts a fresh courier");
-ok(W.cleanData({ mounts: [{ id: 1, sp: "dragon", lv: 9 }, { id: 2, sp: "owl", lv: 2 }] }).mounts.map((m) => m.sp + m.lv).join() === "unicorn9,stego2" && !Object.values(W.MOUNTS).some((m) => m.ab === "glide"), "no flying mounts: a Dragon became a Unicorn, an Owl a Stegosaurus");
+ok(W.cleanData({ pets: [{ id: 1, sp: "dragon", lv: 20 }], coins: 5e6, home: {} }).mounts[0].sp === "dog", "the old game's data starts a fresh courier");
+ok(W.cleanData({ mounts: [{ id: 1, sp: "dragon", lv: 9 }, { id: 2, sp: "owl", lv: 2 }] }).mounts.map((m) => m.sp + m.r + "/" + m.lv).join() === "wolf4/9,gator2/2" && !Object.values(W.MOUNTS).some((m) => m.ab === "glide"), "no flying mounts: a Dragon became a Legendary Wolf, an Owl a Rare Gator");
 for (const q of [...W.pads.flatMap((p) => [[p.x, p.z, p.y], [p.tx, p.tz, p.ty]]), ...W.balloons.map((b) => [b.x, b.z, b.y]), ...W.ISLES.map((s) => [s.x, s.z, s.y])]) ok(!W.blocked(q[0], q[1], q[2], 0.9), "nothing stands on an island's pads, landings, balloon or middle");
 { const gs = [0, 0, 0, 0, 1, 1, 1].map((r, n) => ({ gid: n + 1, r, pt: n % 3 })); let id = 100; const mg = W.mergeGifts(gs, () => id++); ok(mg.length === 2 && gs.length === 1 && gs[0].r === 2 && gs[0].pt === 2, "four gifts of a rarity merge into the next, and on up"); }
 ok(W.spawnWeights(5, 1)[4] >= 0.3 - 1e-9 && W.spawnWeights(3, 1)[2] >= 0.3 - 1e-9 && W.spawnWeights(3, 1)[0] > 0 && W.spawnWeights(3, 1)[1] > 0, "at least 30% of parcels go to the farthest open area, the rest in between");
@@ -40,11 +40,14 @@ ok(W.dogs.every((q) => q.sp === W.CHASERS[q.d] && q.r >= 0 && q.r <= 4) && W.gee
   ok(!W.trailsFor(lo).length && W.trailsFor(hi).join() === "cloud" && W.cleanData(hi).mounts[0].tr === "cloud" && !("tr" in W.cleanData(hi).mounts[1]), "a trail unlocks every five areas; any mount can wear one"); }
 ok(W.gateX(1) === W.SUBURBS_X && W.gateX(3) === W.CLIFF.x0 && W.gateX(4) === Infinity && W.ATTACK.slots === 2 && W.ATTACK.calm === 3 && W.DROP_S === 15, "closed areas' gates; two slots and a 3 s calm; 15 s on the ground");
 ok(Object.keys(W.MODS).join() === "express" && Array.from({ length: 400 }, (_, k) => W.rollParcel(5, 1, () => (k * 0.618) % 1).mod).every((m) => m === "" || m === "express"), "only timed (Express) parcels as modifiers");
-ok(W.mountStats("pup", 20).speed > W.mountStats("pup", 1).speed * 1.5 && W.EMPTY_FAST >= 2 && W.GOAT.speed >= 18, "mounts get faster with level, much faster empty; goats charge fast");
+ok(W.mountStats({ r: 0, lv: 20 }).speed > W.mountStats({ r: 0, lv: 1 }).speed * 1.5 && W.mountStats({ r: 4, lv: 1 }).speed > W.mountStats({ r: 0, lv: 1 }).speed && W.EMPTY_FAST >= 2 && W.GOAT.speed >= 18, "mounts get faster with level, much faster empty; goats charge fast");
 ok(W.deliveryCoins(0, "", 0, 0, false) === 10 && W.deliveryCoins(4, "", 0, 1, false) === 120 && W.deliveryCoins(1, "express", 0, 0, true) === 20 && W.deliveryCoins(1, "express", 10, 0, false) === 100, "delivery coins");
 { const lo = () => 0.3, up = fresh.up;   // 0.3: a Common roll
   ok(W.rewardRoll(0, up, lo).tier === 0 && W.rewardRoll(0, up, () => 0.999).tier === 4, "a roll is its own (no pity)");
-  const h = W.hatchEgg("legendary", () => 0.999); ok(W.MOUNTS[h.sp].r === 4 && h.va === 0 && W.hatchEgg("basic", () => 0.0005).va === 2, "eggs hatch by their odds; one in a thousand is Golden");
+  { const seq = (...v) => { let n = 0; return () => v[Math.min(n++, v.length - 1)]; }, c = W.giftContents(3, 2, up, seq(0.5, 0.9, 0.9, 0.0, 0.5)); ok(c.pet && c.pet.sp === "gator" && c.pet.r === 3, "an Epic parcel from Goose Marsh can bring an Epic Gator (the area's animal, the parcel's rarity)"); }
+  ok(Object.keys(W.MOUNTS).join() === "dog,cat,gator,bear,wolf" && W.CHASERS.join() === Object.keys(W.MOUNTS).join() && W.skinRoll(() => 0.0005) === 2, "the mounts are the areas' animals; one in a thousand is Golden");
+  { const old = W.cleanData({ mounts: [{ id: 1, sp: "trex", lv: 7, va: 1 }, { id: 2, sp: "cat", lv: 3 }, { id: 3, sp: "unicorn", lv: 2 }], eggs: { basic: 1, rare: 1, legendary: 1 } });
+    ok(old.mounts.map((m) => m.sp + m.r + "/" + m.lv).join() === "bear3/7,cat1/3,wolf4/2,dog0/1,gator2/1,wolf4/1" && old.mounts[0].va === 1 && !("eggs" in old) && W.cleanData(old).mounts.length === 6, "old mounts become the area animal of their rarity (level and skin kept); old eggs became mounts, once"); }
   const m = { sp: "pup", lv: 1, xp: 0 }; ok(W.addXp(m, W.xpNeed(1) + W.xpNeed(2) + 3) === 2 && m.lv === 3 && m.xp === 3, "Training XP levels a mount"); }
 
 // ---- the server ----
@@ -75,7 +78,7 @@ try {
   const belt = await a.wait((m) => m.t === "belt", "the conveyor"); ok(belt.ready.tier === 0 && belt.next.tier === 0, "a new courier's conveyor has Bronze parcels");
   b.send({ t: "register", user: "smokeB", pass: "pass1234" });
   const wb = await b.wait((m) => m.t === "welcome", "welcome");
-  ok(wb.players.some((p) => p.name === "smokeA" && p.sp === "pup"), "B sees A");
+  ok(wb.players.some((p) => p.name === "smokeA" && p.sp === "dog"), "B sees A");
   await a.wait((m) => m.t === "join" && m.p.name === "smokeB", "join");
   await sleep(300); who("smokeA").tpAt = 0; who("smokeB").tpAt = 0;
   // positions reach the other player
@@ -118,7 +121,7 @@ try {
   { const pa = who("smokeA"), D = W.dogs[0], q = pa.room.dogs[0]; q.cool = 0; pa.stunUntil = 0; pa.graceUntil = 0; await put(a, "smokeA", 0, 7.5); pa.ready = { tier: 0, mod: "" }; a.send({ t: "grab" }); await a.wait((m) => m.t === "bag" && m.ev.k === "grab", "another parcel");
     await put(a, "smokeA", q.x + 0.6, q.z + 0.6, q.y); const bite = await a.wait((m) => m.t === "stun" && m.why === "dog", "the dog's bite"); ok(bite.s > 1 && pa.bag[0].hits === 1, "a dog's bite stuns and cracks the parcel");
     for (const d of pa.room.dogs) d.cool = Date.now() + 60000; await sleep(1200); const h = W.houses[pa.bag[0].house]; pa.stunUntil = 0; await put(a, "smokeA", h.mx, h.mz, h.my);
-    const d2 = await a.wait((m) => m.t === "delivered", "the second delivery"); ok(d2.gift.m && W.MOUNTS[d2.data.mounts.find((m) => m.id === d2.gift.m).sp].r === 1 && d2.data.mounts.length === 2, "the second delivery brings a new Uncommon mount (in its gift)");
+    const d2 = await a.wait((m) => m.t === "delivered", "the second delivery"); { const nm = d2.data.mounts.find((m) => m.id === d2.gift.m); ok(d2.gift.m && nm.sp === "dog" && nm.r === d2.gift.r && d2.data.mounts.length === 2, "the second delivery brings a new mount: the parcel's area's animal, at the gift's rarity"); }
     pa.acct.data.mounts.find((m) => m.id === pa.acct.data.ride).lv = 10; await put(a, "smokeA", 0, 7.5);
     for (let k = 0; k < 3; k++) { pa.ready = { tier: 0, mod: "" }; a.send({ t: "grab" }); await a.wait((m) => m.t === "bag" && m.ev.k === "grab" && m.bag.length === k + 1, "grab " + (k + 1)); await sleep(850); }
     pa.ready = { tier: 0, mod: "" }; a.send({ t: "grab" }); await sleep(300); ok(pa.bag.length === 3, "a level 10 mount carries three parcels, each to its own address");
@@ -144,23 +147,22 @@ try {
   b.send({ t: "admin", op: "quick", cmd: "coins", n: 5000, name: "smokeB" });   // a player: nothing happens
   n.send({ t: "admin", op: "quick", cmd: "coins", n: 5000, name: "smokeB" });
   ok((await b.wait((m) => m.t === "data", "B's coins")).data.coins === 5000, "an admin gives coins once; a player's command is ignored");
-  n.send({ t: "admin", op: "give", what: "egg:basic", n: 2, name: "smokeB" }); n.send({ t: "admin", op: "give", what: "coupons", n: 1, name: "smokeB" });
-  await b.wait((m) => m.t === "data" && m.data.eggs.basic === 2, "B's eggs"); await b.wait((m) => m.t === "data" && m.data.coupons === 1, "B's coupon");
-  // upgrades, levels, coupons, eggs: the server takes the coins and saves
+  n.send({ t: "admin", op: "give", what: "mount:gator", n: 1, r: 2, name: "smokeB" }); n.send({ t: "admin", op: "give", what: "coupons", n: 1, name: "smokeB" });
+  const gg = await b.wait((m) => m.t === "data" && m.data.mounts.some((k) => k.sp === "gator" && k.r === 2), "B's Rare Gator"); await b.wait((m) => m.t === "data" && m.data.coupons === 1, "B's coupon");
+  // upgrades, levels, coupons, mounts: the server takes the coins and saves
   b.send({ t: "upgrade", k: "payout" }); const u1 = await b.wait((m) => m.t === "upgraded", "the upgrade"); ok(u1.lv === 1 && u1.data.coins === 4700, "an upgrade costs its price");
   await a.wait((m) => m.t === "rank" && m.id === wb.id && m.rank === 1, "the rank badge");
   const mid = wb.data.mounts[0].id;
   b.send({ t: "level", id: mid }); ok((await b.wait((m) => m.t === "leveled", "the level")).data.coins === 4600, "a level costs 100 coins at level 1");
   await a.wait((m) => m.t === "mount" && m.id === wb.id && m.lv === 2, "others see the mount grow");
   b.send({ t: "coupon", id: mid }); const lc = await b.wait((m) => m.t === "leveled", "the coupon's level"); ok(lc.lv === 3 && lc.data.coupons === 0, "a Level Coupon is one level");
-  b.send({ t: "coupon", id: mid }); b.send({ t: "hatch", kind: "rare" }); b.send({ t: "hatch", kind: "basic" });
-  const ha = await b.wait((m) => m.t === "hatched", "the hatch"); ok(ha.kind === "basic" && ha.data.mounts.length === 2 && ha.data.eggs.basic === 1 && W.MOUNTS[ha.m.sp].r <= 2, "an egg hatches a mount; no egg, no hatch");
-  b.send({ t: "equip", id: ha.m.id }); await a.wait((m) => m.t === "mount" && m.id === wb.id && m.sp === ha.m.sp, "others see the new mount");
+  const ha = { m: gg.data.mounts.find((k) => k.sp === "gator") };
+  b.send({ t: "equip", id: ha.m.id }); await a.wait((m) => m.t === "mount" && m.id === wb.id && m.sp === "gator" && m.r === 2, "others see the new mount (and its rarity)");
   // two of the same mount and skin merge into the better one, with the next skin
-  n.send({ t: "admin", op: "give", what: "mount:fox", n: 2, lv: 3, name: "smokeB" }); const gv = await b.wait((m) => m.t === "data" && m.data.mounts.filter((k) => k.sp === "fox" && k.va === 0 && k.lv === 3).length >= 2, "two foxes");   // (a Fox may have hatched already)
-  const foxes = gv.data.mounts.filter((k) => k.sp === "fox" && k.va === 0 && k.lv === 3), nFox = gv.data.mounts.filter((k) => k.sp === "fox").length; b.send({ t: "fuse", id: foxes[0].id }); const fu = await b.wait((m) => m.t === "fused", "the merge");
-  ok(fu.m.va === 1 && fu.m.sp === "fox" && fu.data.mounts.filter((k) => k.sp === "fox").length === nFox - 1 && fu.data.mounts.length === gv.data.mounts.length - 1, "two Foxes merge into one Shiny Fox");
-  ok(W.fuseSet([1, 2, 3].map((id) => ({ id, sp: "pup", va: 2, lv: id })), 1).length === 2 && !W.fuseSet([{ id: 1, sp: "pup", va: 1, lv: 1 }, { id: 2, sp: "pup", va: 0, lv: 1 }], 1) && !W.fuseSet([1, 2].map((id) => ({ id, sp: "pup", va: 3, lv: id })), 1), "a merge needs two the same; Rainbow is the last skin");
+  n.send({ t: "admin", op: "give", what: "mount:cat", n: 2, lv: 3, r: 1, name: "smokeB" }); const gv = await b.wait((m) => m.t === "data" && m.data.mounts.filter((k) => k.sp === "cat" && k.r === 1 && k.va === 0 && k.lv === 3).length >= 2, "two cats");
+  const foxes = gv.data.mounts.filter((k) => k.sp === "cat" && k.r === 1 && k.va === 0 && k.lv === 3), nFox = gv.data.mounts.filter((k) => k.sp === "cat").length; b.send({ t: "fuse", id: foxes[0].id }); const fu = await b.wait((m) => m.t === "fused", "the merge");
+  ok(fu.m.va === 1 && fu.m.sp === "cat" && fu.data.mounts.filter((k) => k.sp === "cat").length === nFox - 1 && fu.data.mounts.length === gv.data.mounts.length - 1, "two Uncommon Cats merge into one Shiny Uncommon Cat");
+  ok(W.fuseSet([1, 2, 3].map((id) => ({ id, sp: "dog", r: 0, va: 2, lv: id })), 1).length === 2 && !W.fuseSet([{ id: 1, sp: "dog", r: 0, va: 1, lv: 1 }, { id: 2, sp: "dog", r: 0, va: 0, lv: 1 }], 1) && !W.fuseSet([{ id: 1, sp: "dog", r: 0, va: 0, lv: 1 }, { id: 2, sp: "dog", r: 1, va: 0, lv: 1 }], 1) && !W.fuseSet([1, 2].map((id) => ({ id, sp: "pup", va: 3, lv: id })), 1), "a merge needs two the same; Rainbow is the last skin");
   b.send({ t: "trail", id: mid, k: "cloud" }); await sleep(150); ok(!who("smokeB").acct.data.mounts.find((k) => k.id === mid).tr, "a trail that isn't unlocked can't be worn");
   who("smokeB").acct.data.mounts.find((k) => k.id === mid).lv = 12; b.send({ t: "trail", id: mid, k: "cloud" }); const tw = await b.wait((m) => m.t === "data" && m.data.mounts.some((k) => k.id === mid && k.tr === "cloud"), "the trail on");
   ok(!!tw, "an unlocked trail goes on a mount");
@@ -170,7 +172,7 @@ try {
   // logging in again replaces the old connection and keeps everything
   const b2 = client("B2"); await b2.open; b2.send({ t: "login", user: "smokeB", pass: "pass1234" });
   const wb2 = await b2.wait((m) => m.t === "welcome" && m.name === "smokeB", "login");
-  ok(wb2.data.coins === 4600 && wb2.data.mounts.length === fu.data.mounts.length && wb2.data.mounts.some((k) => k.sp === "fox" && k.va === 1) && wb2.data.up.payout === 1 && wb2.data.set.friendly, "a courier's data is kept");
+  ok(wb2.data.coins === 4600 && wb2.data.mounts.length === fu.data.mounts.length && wb2.data.mounts.some((k) => k.sp === "cat" && k.va === 1) && wb2.data.up.payout === 1 && wb2.data.set.friendly, "a courier's data is kept");
   await b.wait((m) => m.t === "kicked", "old connection kicked");
   for (const c of [a, b2]) c.ws.close();
 } catch (e) { fail(e.message); }

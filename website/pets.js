@@ -4,10 +4,10 @@
 // deliveries, rolls, damage, coins, mounts; this page shows the town (pets-world.js, shared with the server), moves you
 // and asks. Phone first: a thumb joystick, drag to look, pinch to zoom, big buttons.
 import * as THREE from "./vendor/three.module.min.js";
-import * as World from "./pets-world.js?v=1794458221";
+import * as World from "./pets-world.js?v=1794459567";
 
 const $ = (id) => document.getElementById(id);
-const { TAU, clamp, hyp, MOUNTS, TIERS, RARITY, RARITY_C, MODS, EGGS, UPGRADES } = World;
+const { TAU, clamp, hyp, MOUNTS, TIERS, RARITY, RARITY_C, MODS, UPGRADES } = World;
 const lerp = (a, b, t) => a + (b - a) * t, pick = (a) => a[Math.floor(Math.random() * a.length)];
 const angDiff = (a, b) => { let d = (a - b) % TAU; if (d > Math.PI) d -= TAU; if (d < -Math.PI) d += TAU; return d; };
 const touchy = matchMedia("(pointer: coarse)").matches;
@@ -129,7 +129,8 @@ function buildTown() {
     for (const b of World.boosts) { const m = new THREE.Mesh(new THREE.PlaneGeometry(3.2, 3.2).rotateX(-Math.PI / 2), bm); m.position.set(b.x, b.y + 0.09, b.z); m.rotation.y = b.yaw + Math.PI; m.receiveShadow = true; scene.add(m); } }
   for (const b of World.balloons) { const g = new THREE.Group(); g.position.set(b.x, b.y, b.z); scene.add(g); box(1.6, 1.0, 1.6, "#b9824f", 0, 0.9, 0, g);
     const top = new THREE.Mesh(new THREE.SphereGeometry(2.6, 16, 12), mat("#ff6b6b")); top.position.y = 6; top.scale.y = 1.15; g.add(top); const band = new THREE.Mesh(new THREE.SphereGeometry(2.64, 16, 6, 0, TAU, 1.2, 0.7), mat("#ffffff")); band.position.y = 6; band.scale.y = 1.15; g.add(band);
-    for (const [x, z] of [[-0.7, -0.7], [0.7, -0.7], [-0.7, 0.7], [0.7, 0.7]]) box(0.05, 3.2, 0.05, "#5a4632", x, 2.8, z, g, false); b.g = g; }
+    for (const [x, z] of [[-0.7, -0.7], [0.7, -0.7], [-0.7, 0.7], [0.7, 0.7]]) box(0.05, 3.2, 0.05, "#5a4632", x, 2.8, z, g, false); b.g = g; g.scale.setScalar(1.8);   // (owner, 2026-11-11) big, and it takes you from anywhere in its ring
+    const ring = new THREE.Mesh(new THREE.RingGeometry(BALLOON_R - 0.5, BALLOON_R, 48).rotateX(-Math.PI / 2), basic("#ff6b6b", 0.55)), fill = new THREE.Mesh(new THREE.CircleGeometry(BALLOON_R - 0.5, 48).rotateX(-Math.PI / 2), basic("#ff6b6b", 0.14)); ring.position.set(b.x, b.y + 0.08, b.z); fill.position.set(b.x, b.y + 0.07, b.z); scene.add(ring, fill); }
   for (const s of World.sprinklers) { box(0.2, 0.5, 0.2, "#7a828c", s.x, s.y + 0.25, s.z); sprinklerMesh.push(s); }
   // clouds, for somewhere to float
   for (let n = 0; n < 34; n++) { const g = new THREE.Group(), a = n * 2.39, r = 150 + (n * 97) % 620; g.position.set(250 + Math.cos(a) * r, 60 + (n * 37) % 90, Math.sin(a) * r * 0.8);
@@ -234,9 +235,10 @@ const shiny = (c) => "#" + new THREE.Color(c).lerp(new THREE.Color("#ffffff"), 0
 const RAINBOW = ["#ff6b6b", "#ffb84d", "#ffe66b", "#7ee08a", "#6bb8ff", "#b48cff"];
 // (owner, 2026-11-09) a pet grows with its level but its rider stays the same size, so a big pet feels big
 function sizePet(m, sc) { m.g.scale.setScalar(sc); if (m.rider) { m.rider.scale.setScalar(0.8 / sc); m.rider.position.y = m.seat - 0.52 / sc; m.top = m.seat * sc + 1.4; } else m.top *= sc; }
-function petModel(sp, rider, va) {   // sp: a mount's kind, or { look, c, a, size } for the town's animals; va: 1 Shiny, 2 Golden
+function petModel(sp, rider, va, r = 0) {   // sp: a mount's kind (r: its rarity, for its coat), or { look, c, a, size }; va: 1 Shiny, 2 Golden, 3 Rainbow
   let riderG = null;
-  const s = typeof sp === "object" ? sp : World.MOUNTS[sp], L = LOOK[s.look || sp] || LOOK.pup, k = s.size, g = new THREE.Group(), body = new THREE.Group(); g.add(body);
+  if (typeof sp !== "object") { const M = World.MOUNTS[sp] || World.MOUNTS.dog, [c, a] = World.coat(sp, r); sp = { look: M.look, c, a, size: M.size }; }
+  const s = sp, L = LOOK[s.look] || LOOK.pup, k = s.size, g = new THREE.Group(), body = new THREE.Group(); g.add(body);
   const legs = [], wings = [], tails = [], head = new THREE.Group();
   const C = va === 3 ? "#b06bff" : va === 2 ? "#f6c53a" : va === 1 ? shiny(s.c) : s.c, A = va === 3 ? "#5ff2d8" : va === 2 ? "#fff3b8" : va === 1 ? shiny(s.a) : s.a;   // Rainbow: violet with a sea-green trim, and a rainbow trail
   let seat = 1, seatZ = -0.1 * k;
@@ -391,10 +393,10 @@ const portraitR = new THREE.WebGLRenderer({ antialias: true, alpha: true, preser
 const pScene = new THREE.Scene(); pScene.add(new THREE.HemisphereLight("#ffffff", "#9a8f80", 1.3)); const pl = new THREE.DirectionalLight("#ffffff", 1); pl.position.set(3, 5, 4); pScene.add(pl);
 const pCam = new THREE.PerspectiveCamera(32, 1, 0.1, 60);
 const PORTRAITS = {};
-function portrait(sp, va = 0) {
-  const key = sp + va; if (PORTRAITS[key]) return PORTRAITS[key];
-  const m = petModel(sp, null, va); m.g.rotation.y = 0.7; pScene.add(m.g);
-  const L = LOOK[sp] || {}, k = World.MOUNTS[sp].size, wide = L.wings === "bat" || L.wings === "feather" && L.plan === "quad" || L.plan === "butterfly" ? 1.35 : 1, tall = (L.neck || 0) + (L.leg || 0.5) > 1.5 ? 1.3 : 1;
+function portrait(sp, va = 0, r = 0) {
+  const key = sp + va + "/" + r; if (PORTRAITS[key]) return PORTRAITS[key];
+  const m = petModel(sp, null, va, r); m.g.rotation.y = 0.7; pScene.add(m.g);
+  const L = LOOK[(World.MOUNTS[sp] || World.MOUNTS.dog).look] || {}, k = (World.MOUNTS[sp] || World.MOUNTS.dog).size, wide = L.wings === "bat" || L.wings === "feather" && L.plan === "quad" || L.plan === "butterfly" ? 1.35 : 1, tall = (L.neck || 0) + (L.leg || 0.5) > 1.5 ? 1.3 : 1;
   pCam.position.set(0, 2.4 * k * wide * tall, 5.6 * k * wide * tall); pCam.lookAt(0, 1.0 * k * tall, 0);
   portraitR.render(pScene, pCam); pScene.remove(m.g);
   return (PORTRAITS[key] = portraitR.domElement.toDataURL());
@@ -413,18 +415,18 @@ function gooseModel(sky) {
   const slot = new THREE.Group(); slot.position.set(0, -0.05, 0.5); head.add(slot);
   return { g, body, head, wings, legs, slot };
 }
-// (owner, 2026-11-11) each area's chasers, and every animal's rarity: a bit bigger for each rank, and a ring of its rarity's
+// (owner, 2026-11-11) each area's chasers (in the coat of the mount of their kind and rarity), and every animal's rarity: a bit bigger for each rank, and a ring of its rarity's
 // color at its feet (none for Common); Epic and Legendary ones sparkle
 const KIND = {
-  dog: { look: "pup", size: 0.8, c: [["#8a5a34", "#e9d6b8"], ["#3d4650", "#cfd6dd"], ["#d9a55a", "#fff4e0"]] },
-  cat: { look: "cat", size: 0.78, c: [["#f0a04b", "#fff1dc"], ["#3d4650", "#e9eef2"], ["#b9b2a8", "#ffffff"]] },
-  gator: { look: "gator", size: 0.9, c: [["#4f7a3a", "#c9d48a"], ["#3f6a4a", "#b9c98a"], ["#5a6b3a", "#d9d29a"]] },
-  bear: { look: "bear", size: 1.05, c: [["#7a5236", "#c9a27e"], ["#3a2c22", "#8a6a4e"], ["#c9a27e", "#f3e3cc"]] },
-  wolf: { look: "wolf", size: 0.9, c: [["#8a96a2", "#e9eef2"], ["#5a6470", "#cfd6dd"], ["#d9dde2", "#ffffff"]] },
+  dog: { look: "pup", size: 0.8 },
+  cat: { look: "cat", size: 0.78 },
+  gator: { look: "gator", size: 0.9 },
+  bear: { look: "bear", size: 1.05 },
+  wolf: { look: "wolf", size: 0.9 },
 };
 function rarityRing(g, r, rad) { if (!r) return; const m = new THREE.Mesh(new THREE.RingGeometry(rad * 0.8, rad, 32).rotateX(-Math.PI / 2), basic(RARITY_C[r], 0.75)); m.position.y = 0.06; g.add(m); g.userData.rar = r; }
 function buildAnimals() {
-  for (const d of World.dogs) { const K = KIND[d.sp], [c, a] = K.c[d.look], m = petModel({ look: K.look, c, a, size: K.size * (1 + 0.08 * d.r) }); m.g.position.set(d.hx, d.y, d.hz); scene.add(m.g); blobUnder(m.g, 1.6 * K.size); rarityRing(m.g, d.r, 1.1 * K.size);
+  for (const d of World.dogs) { const K = KIND[d.sp], [c, a] = World.coat(d.sp, d.r), m = petModel({ look: K.look, c, a, size: K.size * (1 + 0.08 * d.r) });   // (owner, 2026-11-11) the same coat as the mount of that kind and rarity m.g.position.set(d.hx, d.y, d.hz); scene.add(m.g); blobUnder(m.g, 1.6 * K.size); rarityRing(m.g, d.r, 1.1 * K.size);
     const bang = textSprite("!", { size: 64, color: "#ffffff", bg: "#e5534b" }); bang.position.y = 2.3; bang.visible = false; m.g.add(bang); dogMesh.push({ m, bang, x: d.hx, z: d.hz, yaw: 0, tx: d.hx, tz: d.hz, tyaw: 0, mode: 0, y: d.y, ty: d.y }); }
   for (const q of World.geese) { const m = gooseModel(); m.g.scale.setScalar(1 + 0.08 * q.r); m.g.position.set(q.x, q.y, q.z); scene.add(m.g); blobUnder(m.g, 1.2); rarityRing(m.g, q.r, 0.8); gooseMesh.push({ m, x: q.x, y: q.y, z: q.z, yaw: 0, tx: q.x, ty: q.y, tz: q.z, tyaw: 0, mode: 0, carry: -1, box: null }); }
   for (const q of World.goats) { const m = petModel({ look: "goat", c: "#e9e4dc", a: "#8a7a66", size: 0.95 * (1 + 0.08 * q.r) }); m.g.position.set(q.hx, q.y, q.hz); scene.add(m.g); blobUnder(m.g, 1.7); rarityRing(m.g, q.r, 1.0); goatMesh.push({ m, x: q.hx, z: q.hz, yaw: Math.PI / 2, tx: q.hx, tz: q.hz, tyaw: Math.PI / 2, mode: 0, y: q.y }); }
@@ -520,20 +522,22 @@ addEventListener("keydown", () => { const a = audio(); if (a && a.state === "sus
 // ---- the courier's data (the server's copy; this page only shows it) and me ----
 let save = World.cleanData({});
 const riding = () => save.mounts.find((m) => m.id === save.ride) || save.mounts[0];
-const myStats = () => { const m = riding(); return World.mountStats(m.sp, m.lv); };
+const myStats = () => World.mountStats(riding());
 const me = { x: World.SPAWN.x, y: 0, z: World.SPAWN.z, yaw: Math.PI / 2, vx: 0, vz: 0, vy: 0, px: 0, pz: 0, ground: true, moving: false, foot: false, footT: 0, stun: 0, grace: 0, jumps: 0, boost: 0, dash: 0, abilityAt: -99, kickAt: -99, kickT: 0, transit: null, armed: true, mx: 0, my: 0, mz: 0, myaw: 0, hidden: false, glide: false, stepT: 0 };
 let mine = null, walker = null, myTag = null, bag = [], stolen = [], dropped = [], cap = 1, belt = { ready: null, next: null };   // my parcels: on the saddle, with geese, on the ground
 function makeTag(name, rank, lv) { return textSprite(String(name || "Courier").slice(0, 18), { size: 34, badge: rank ? World.RANK_C[rank] : "", glow: lv >= World.MAX_LV ? "#ffd84a" : "" }); }
-function rigMount(sp, lv, va, shirt, name, rank) {   // a mount with its rider, name tag and (hidden) walking courier
-  const m = petModel(MOUNTS[sp] ? sp : "pup", shirt, va); sizePet(m, World.mountScale(lv)); const tag = makeTag(name, rank, lv); tag.position.y = (m.top + 0.9) / m.g.scale.x; tag.scale.multiplyScalar(1 / m.g.scale.x); m.g.add(tag);
+function rigMount(sp, lv, va, r, shirt, name, rank) {   // a mount with its rider, name tag and (hidden) walking courier
+  const m = petModel(MOUNTS[sp] ? sp : "dog", shirt, va, r); sizePet(m, World.mountScale(lv)); const tag = makeTag(name, rank, lv); tag.position.y = (m.top + 0.9) / m.g.scale.x; tag.scale.multiplyScalar(1 / m.g.scale.x); m.g.add(tag);
   const w = courierModel(shirt); w.g.visible = false; scene.add(w.g); scene.add(m.g); blobUnder(m.g, 2.2 * (m.k || 1)); blobUnder(w.g, 1.1);
   const slot = new THREE.Group(); slot.position.set(0, m.seat + 0.02, -0.75 * m.k); slot.scale.setScalar(1 / m.g.scale.x); m.body.add(slot);
   return { m, tag, w, slot, sc: m.g.scale.x, va, lv };
 }
 function unrig(r) { if (!r) return; scene.remove(r.m.g, r.w.g); }
-function setCarry(r, c) { r.slot.clear(); let y = 0; for (const [tier, mod] of c || []) { const b = parcelMesh(tier, mod); b.position.y = y; b.rotation.y = (y * 1.7) % 0.6 - 0.3; y += b.userData.s; r.slot.add(b); } }   // the parcels stacked up on the saddle
+// (owner, 2026-11-11) one big box on the saddle, however many parcels: the best tier's color (Express taped if any is),
+// a little bigger for each extra parcel
+function setCarry(r, c) { r.slot.clear(); if (!c || !c.length) return; const best = c.reduce((a, q) => (q[0] > a[0] ? q : a)), b = parcelMesh(best[0], c.some((q) => q[1] === "express") ? "express" : ""); b.scale.setScalar(1.7 * (1 + 0.15 * (c.length - 1))); r.slot.add(b); }
 const bagCarry = () => bag.map((q) => [q.tier, q.mod]);
-function remount() { unrig(mine); const q = riding(); mine = rigMount(q.sp, q.lv, q.va, save.set.shirt, myName, World.rankOf(World.upTotal(save.up))); setCarry(mine, bagCarry()); }
+function remount() { unrig(mine); const q = riding(); mine = rigMount(q.sp, q.lv, q.va, q.r, save.set.shirt, myName, World.rankOf(World.upTotal(save.up))); setCarry(mine, bagCarry()); }
 
 // ---- moving ----
 const keys = new Set(), joy = { id: null, x: 0, y: 0, ox: 0, oy: 0 }, cam = { yaw: -Math.PI / 2, pitch: 0.42, dist: 12, shake: 0 };
@@ -553,8 +557,8 @@ function useAbility() {
   else { netSend({ t: "ability" }); sfx("bark"); }
 }
 function doKick() { const t = now(); if (me.stun > 0 || me.transit || t < me.kickAt + World.KICK.cd) return; me.kickAt = t; me.kickT = 0.28; netSend({ t: "kick" }); sfx("swish"); }
-function doWhistle() {
-  sfx("whistle"); if (me.stun > 0 || me.transit) return;
+function doWhistle() {   // (owner, 2026-11-11) instant: back on your mount at once, even while stunned
+  sfx("whistle"); if (me.transit) return;
   if (me.foot) { me.foot = false; me.footT = 0; mine.m.g.visible = true; emit(me.x, me.y + 0.3, me.z, 14, { colors: ["#e9e2d2", "#ffffff"], speed: 4, up: 1.5, life: 0.5, grav: 3 }); me.vy = 4; me.ground = false; }
   else me.hop = 0.3;
 }
@@ -642,8 +646,8 @@ function trail(x, y, z, q, kind) {
 const BELT_SC = 1.7, BELT_SLIDE = 1.6; let beltSlide = 0;
 const readyAt = () => World.PO.end;
 const near = (o, r, dy = 1.6) => hyp(me.x - o.x, me.z - o.z) < r && Math.abs(me.y - o.y) < dy;
-function nearTrigger() { return World.zips.some((z) => near(z, 2.6) || near({ x: z.tx, z: z.tz, y: z.ty }, 2.6)) || near(World.PIPE.a, World.PIPE.r + 3.5) || near(World.PIPE.b, World.PIPE.r + 3.5) || World.pads.some((p) => near(p, 2.4) || near({ x: p.tx, z: p.tz, y: p.ty }, 2.4)) || World.balloons.some((b) => near(b, 7, 3)); }
-let askAt = 0, shakeAt = 0;
+function nearTrigger() { return World.zips.some((z) => near(z, 2.6) || near({ x: z.tx, z: z.tz, y: z.ty }, 2.6)) || near(World.PIPE.a, World.PIPE.r + 3.5) || near(World.PIPE.b, World.PIPE.r + 3.5) || World.pads.some((p) => near(p, 2.4) || near({ x: p.tx, z: p.tz, y: p.ty }, 2.4)) || World.balloons.some((b) => near(b, BALLOON_R + 2, 6)); }
+let askAt = 0, shakeAt = 0; const BALLOON_R = 9;   // (owner, 2026-11-11: no threading a needle) anywhere within 9 m of the balloon
 function triggers(t) {
   if (belt.ready && bag.length + stolen.length + dropped.length < cap && hyp(me.x - readyAt().x, me.z - readyAt().z) < 3.3 && Math.abs(me.y) < 2 && t > askAt) { askAt = t + 0.4; netSend({ t: "grab" }); }
   for (const b of World.boosts) if (near(b, 2) && me.boost < 2) { if (me.boost <= 0) { sfx("boost"); cam.shake = Math.max(cam.shake, 0.12); } me.boost = 2.5; }
@@ -656,7 +660,7 @@ function triggers(t) {
   for (const p of World.pads) if (near(p, 1.7)) { arc(p.tx, p.ty, p.tz, 1.1 + hyp(p.tx - p.x, p.tz - p.z) / 70, 9, "pad"); sfx("pad"); return; }
   // (owner, 2026-11-11) the pipe's mouth and the balloon take you from farther off
   if (((near(World.PIPE.a, World.PIPE.r + 1.5) && openNow >= 4) || near(World.PIPE.b, World.PIPE.r + 1.5)) && t > askAt) { askAt = t + 1; netSend({ t: "pipe" }); return; }
-  if (World.balloons.some((b) => near(b, 5.5, 3)) && t > askAt) { askAt = t + 1.5; netSend({ t: "balloon" }); }
+  if (World.balloons.some((b) => near(b, BALLOON_R, 6)) && t > askAt) { askAt = t + 1; netSend({ t: "balloon" }); }
 }
 
 // ---- the camera: behind and above; drag to look round, pinch or wheel to zoom ----
@@ -767,25 +771,24 @@ function openGift(gid) {   // one parcel: it shakes, its sparkle growing, then s
   const slot = $("gbig"); slot.innerHTML = ""; slot.appendChild(parcelTile(g, true)); $("glabel").textContent = RARITY[g.r]; $("glabel").style.color = sparkC(g.r); $("gres").style.display = "none"; giftsUi();
 }
 function openAll() { if (opening || merging) return; const gids = save.gifts.map((g) => g.gid); if (!gids.length) return; opening = { gids, all: true, t: 0, res: null }; netSend({ t: "open", gids }); giftsUi(); }
-function resultRows(list, R) {   // what came out of a gift (or several): coins, XP, Level Coupons, eggs, a mount
+function resultRows(list, R) {   // what came out of a gift (or several): coins, XP, Level Coupons, mounts
   const row = (icon, text) => { const d = el("div", "grow"); d.appendChild(icon); d.appendChild(el("b", "disp", text)); d.style.animationDelay = list.children.length * 120 + "ms"; list.appendChild(d); };
   row(el("i", "coin"), "+" + fmt(R.coins)); if (R.xp) row(el("i", "ixp", "XP"), "+" + R.xp); if (R.coupons) row(el("i", "icoupon"), "+" + R.coupons);
-  for (const e of R.eggs) { const i = el("i", "egg"); i.style.background = EGGS[e].c; row(i, EGGS[e].name); }
-  for (const m of R.mounts) { const i = el("img", "gmount"); i.src = portrait(m.sp, m.va); row(i, mountName(m)); }
+  for (const m of R.mounts) { const i = el("img", "gmount"); i.src = portrait(m.sp, m.va, m.r); row(i, mountName(m)); }
 }
 function landGifts(list, lvUp) {   // what the server says came out: totals under the parcels
-  const best = Math.max(...list.map((g) => g.r)), c = RARITY_C[best], tot = { coins: 0, xp: 0, coupons: 0, eggs: [], mounts: [] };
-  for (const g of list) { tot.coins += g.coins; tot.xp += g.xp; tot.coupons += g.coupons; if (g.egg) tot.eggs.push(g.egg); if (g.mount) tot.mounts.push(g.mount); }
+  const best = Math.max(...list.map((g) => g.r)), c = RARITY_C[best], tot = { coins: 0, xp: 0, coupons: 0, mounts: [] };
+  for (const g of list) { tot.coins += g.coins; tot.xp += g.xp; tot.coupons += g.coupons; if (g.mount) tot.mounts.push(g.mount); }
   $("gopen").style.display = "none"; $("gopen").style.setProperty("--ray", 0); opening = null;
   sfx("win", best); if (best >= 3) sfx("fanfare", best); confetti(best); if (best >= 2) banner(RARITY[best].toUpperCase() + "!", c); emit(me.x, me.y + 2.4, me.z, 8 + best * 10, { colors: [c, "#ffffff"], speed: 3 + best, up: 5, life: 1, size: 0.16 }); if (best >= 1) { flash(c); cam.shake = Math.max(cam.shake, 0.15 * best); }
-  flyCoins(me.x, me.y + 2, me.z, 2 + best * 2); setTimeout(() => sfx("coin"), 200); if (tot.eggs.length) setTimeout(() => sfx("egg"), 350);
+  flyCoins(me.x, me.y + 2, me.z, 2 + best * 2); setTimeout(() => sfx("coin"), 200); if (tot.mounts.length) setTimeout(() => sfx("egg"), 350);
   const res = $("gres"), lst = $("glist"); res.style.display = "flex"; res.style.setProperty("--gc", c); lst.innerHTML = "";
   const head = $("gtitle"); head.innerHTML = ""; if (list.length > 1) for (const g of list) { const d = el("i", "gchip"); d.style.background = RARITY_C[g.r]; d.title = RARITY[g.r]; head.appendChild(d); }
   else { const t = el("b", "disp", RARITY[best]); t.style.color = c === "#ffffff" ? "#6f7d8a" : c; head.appendChild(t); }
   resultRows(lst, tot);
-  if (tot.eggs.length) { $("mstable").classList.remove("bump"); void $("mstable").offsetWidth; $("mstable").classList.add("bump"); }
+  if (tot.mounts.length) { $("mstable").classList.remove("bump"); void $("mstable").offsetWidth; $("mstable").classList.add("bump"); }
   if (lvUp) setTimeout(levelFx, 500);
-  const m = list.find((g) => g.mount); if (m) setTimeout(() => { selMount = m.mount.id; hatchShow("gift", m.mount); }, 900);
+  if (tot.mounts.length) setTimeout(() => { selMount = tot.mounts[0].id; for (const mm of tot.mounts) hatchShow("gift", mm); }, 900);   // (owner, 2026-11-11) each mount a parcel dropped, one after another
   hudDirty = true; giftsUi(); if (panel === "stable" || panel === "odds") renderPanel();
 }
 // (owner, 2026-11-11) confetti from the parcels on a reveal: more, and in the rarity's colors, the rarer it is
@@ -805,7 +808,7 @@ const TUT = [
   { t: "Pick up parcels", p: "Ride up to your parcel at the end of the post office conveyor. The pink arrow shows the way.", on: "grab" },
   { t: "Drop them off", p: "Follow the pink arrow to the pink beam and ride into the ring by the mailbox.", on: "deliver" },
   { t: "Open your parcels", p: "Delivered parcels wait on the left. Tap one to open it (tap again to hurry it), or Open all. Four of one rarity merge into a better one.", on: "open", hi: "gifts" },
-  { t: "Stable", p: "Your mounts: ride one, level it up with coins or Level Coupons, hatch eggs, and merge two of the same into a cooler skin.", hi: "mstable" },
+  { t: "Stable", p: "Your mounts: ride one, level it up with coins or Level Coupons, and merge two of the same into a cooler skin. Each neighborhood's parcels can bring its animal.", hi: "mstable" },
   { t: "Upgrades", p: "Spend coins on better pay, luck, Level Coupons and sturdier boxes. Farther neighborhoods open as your mounts level up.", hi: "mup" },
 ];
 let tut = -1;
@@ -819,7 +822,7 @@ function tutDid(what) { if (tut >= 0 && TUT[tut].on === what) setTimeout(() => t
 $("tutnext").onclick = () => tutShow(tut + 1); $("tutskip").onclick = () => tutShow(-2);
 for (const id of ["tutnext", "tutskip"]) $(id).addEventListener("pointerdown", (e) => e.stopPropagation());
 // (owner, 2026-11-11) a level up also shows the mount on screen: it pops in over golden rays, hops, a shine sweeps across it
-function levelFx() { const q = riding(), L = $("lvup"), src = portrait(q.sp, q.va); $("lvimg").src = src; L.style.setProperty("--lvm", `url(${src})`); $("lvt").textContent = "LEVEL " + q.lv; L.classList.remove("go"); void L.offsetWidth; L.classList.add("go"); clearTimeout(levelFx.t); levelFx.t = setTimeout(() => L.classList.remove("go"), 2300);
+function levelFx() { const q = riding(), L = $("lvup"), src = portrait(q.sp, q.va, q.r); $("lvimg").src = src; L.style.setProperty("--lvm", `url(${src})`); $("lvt").textContent = "LEVEL " + q.lv; L.classList.remove("go"); void L.offsetWidth; L.classList.add("go"); clearTimeout(levelFx.t); levelFx.t = setTimeout(() => L.classList.remove("go"), 2300);
   if (mine) mine.spin = 0.7; for (let k = 0; k < 16; k++) setTimeout(() => emit(me.x + (Math.random() - 0.5) * 2, me.y + 0.5 + Math.random() * 2.5, me.z + (Math.random() - 0.5) * 2, 3, { colors: ["#ffd84a", "#ffffff", "#fff3b8"], speed: 1.5, up: 2.5, life: 0.9, grav: -0.5, size: 0.16 }), k * 60);
   sfx("level"); popup("LEVEL UP!", "#ffd84a", me.x, me.y + 3.2, me.z, true); for (let k = 0; k < 28; k++) { const a = (k / 28) * TAU; parts.length < PN && parts.push({ x: me.x, y: me.y + 0.3, z: me.z, vx: Math.cos(a) * 6, vy: 2.5, vz: Math.sin(a) * 6, t: 0, life: 0.8, size: 0.2, grav: 3, c: k % 2 ? "#ffd84a" : "#ffffff", r: k }); } }
 function stepGifts(dt) {   // the build-up: three shakes, each bigger, the sparkle growing, then the prize (once the server's said)
@@ -872,18 +875,18 @@ function openPanel(k) { panel = panel === k ? "" : k; $("panel").style.display =
 function closePanel() { panel = ""; $("panel").style.display = "none"; }
 const btn = (text, fn, cls) => { const b = el("button", "btn " + (cls || ""), text); b.onclick = fn; return b; };
 const coinBtn = (cost, fn, ok) => { const b = el("button", "btn buy"); b.appendChild(el("i", "coin")); b.appendChild(document.createTextNode(fmt(cost))); b.disabled = !ok; b.onclick = fn; return b; };
-const mountName = (m) => (World.VARIANTS[m.va] ? World.VARIANTS[m.va] + " " : "") + MOUNTS[m.sp].name;
+const mountName = (m) => (World.VARIANTS[m.va] ? World.VARIANTS[m.va] + " " : "") + RARITY[m.r | 0] + " " + MOUNTS[m.sp].name;
 const pct = (v) => (v >= 0.1 ? (v * 100).toFixed(0) : v >= 0.01 ? (v * 100).toFixed(1) : (v * 100).toFixed(2)) + "%";
 function oddsRow(odds) { const r = el("div", "odds"); odds.forEach((v, n) => { if (v > 0) { const s = el("span", "", pct(v)); s.style.color = RARITY_C[n] === "#ffffff" ? "#6f7d8a" : RARITY_C[n]; s.title = RARITY[n]; r.appendChild(s); } }); return r; }
 function renderPanel() {
   const body = $("pbody"); body.innerHTML = ""; body.className = "p-" + panel; $("ptitle").textContent = { stable: "Stable", up: "Upgrades", odds: "Odds", set: "Settings", admin: "Admin" }[panel] || "";
   if (panel === "stable") {
-    const grid = el("div", "mgrid"), list = [...save.mounts].sort((a, b) => MOUNTS[b.sp].r - MOUNTS[a.sp].r || b.lv - a.lv || a.id - b.id);
-    for (const m of list) { const t = el("button", "mtile" + (m.id === selMount ? " sel" : "") + (m.id === save.ride ? " ride" : "") + (m.va ? " va" + m.va : "")); t.style.borderColor = RARITY_C[MOUNTS[m.sp].r] === "#ffffff" ? "#d7e1ea" : RARITY_C[MOUNTS[m.sp].r]; t.title = mountName(m);
-      const im = el("img"); im.src = portrait(m.sp, m.va); im.alt = ""; t.appendChild(im); t.appendChild(el("b", "", m.lv)); t.onclick = () => { selMount = m.id; renderPanel(); }; grid.appendChild(t); }
-    const m = save.mounts.find((k) => k.id === selMount) || riding(), S = World.mountStats(m.sp, m.lv), M = MOUNTS[m.sp], tier = World.abilityTier(m.lv), d = el("div", "mdetail");
-    const im = el("img", "big"); im.src = portrait(m.sp, m.va); im.alt = ""; d.appendChild(im);
-    const info = el("div", "minfo"); info.appendChild(el("h3", "", mountName(m))); const rr = el("div", "rar", RARITY[M.r]); rr.style.color = RARITY_C[M.r] === "#ffffff" ? "#6f7d8a" : RARITY_C[M.r]; info.appendChild(rr);
+    const grid = el("div", "mgrid"), list = [...save.mounts].sort((a, b) => b.r - a.r || b.lv - a.lv || a.id - b.id);
+    for (const m of list) { const t = el("button", "mtile" + (m.id === selMount ? " sel" : "") + (m.id === save.ride ? " ride" : "") + (m.va ? " va" + m.va : "")); t.style.borderColor = RARITY_C[m.r] === "#ffffff" ? "#d7e1ea" : RARITY_C[m.r]; t.title = mountName(m);
+      const im = el("img"); im.src = portrait(m.sp, m.va, m.r); im.alt = ""; t.appendChild(im); t.appendChild(el("b", "", m.lv)); t.onclick = () => { selMount = m.id; renderPanel(); }; grid.appendChild(t); }
+    const m = save.mounts.find((k) => k.id === selMount) || riding(), S = World.mountStats(m), M = MOUNTS[m.sp], tier = World.abilityTier(m.lv), d = el("div", "mdetail");
+    const im = el("img", "big"); im.src = portrait(m.sp, m.va, m.r); im.alt = ""; d.appendChild(im);
+    const info = el("div", "minfo"); info.appendChild(el("h3", "", mountName(m))); const rr = el("div", "rar", RARITY[m.r]); rr.style.color = RARITY_C[m.r] === "#ffffff" ? "#6f7d8a" : RARITY_C[m.r]; info.appendChild(rr);
     const lv = el("div", "lvrow"); lv.appendChild(el("span", "", "Level " + m.lv)); const bar = el("div", "bar"), fill = el("i"); fill.style.width = (m.lv >= World.MAX_LV ? 100 : (m.xp / World.xpNeed(m.lv)) * 100) + "%"; bar.appendChild(fill); lv.appendChild(bar); info.appendChild(lv);
     for (const [name, v, max] of [["Speed", S.speed, 16], ["Jump", S.jump, 11], ["Grip", S.grip * 100, 60]]) { const r = el("div", "stat"); r.appendChild(el("span", "", name)); const b = el("div", "bar"), f = el("i"); f.style.width = clamp((v / max) * 100, 4, 100) + "%"; b.appendChild(f); r.appendChild(b); r.appendChild(el("em", "", name === "Grip" ? Math.round(v) + "%" : v.toFixed(1))); info.appendChild(r); }
     const ar = el("div", "stat ab" + (tier ? "" : " off")); ar.appendChild(el("span", "", World.ABILITY[M.ab])); const pp = el("div", "pips"); for (const need of [5, 10, 20]) pp.appendChild(el("i", m.lv >= need ? "on" : "", need)); ar.appendChild(pp); info.appendChild(ar);
@@ -892,8 +895,7 @@ function renderPanel() {
     if (World.fuseSet(save.mounts, m.id)) acts.appendChild(btn("Merge", () => netSend({ t: "fuse", id: m.id }), "fuse"));   // two the same: the next skin
     for (const k of World.trailsFor(save)) { const T = World.TRAILS.find((q) => q.k === k), on = m.tr === k, b = btn(T.name, () => netSend({ t: "trail", id: m.id, k: on ? "" : k }), "trail" + (on ? " on" : "")); acts.appendChild(b); }   // (owner, 2026-11-11) unlocked trails, on any mount
     info.appendChild(acts); d.appendChild(info);
-    const eggs = el("div", "eggs"); for (const k of Object.keys(EGGS)) { const E = EGGS[k], c = el("div", "eggc"), e = el("i", "egg"); e.style.background = E.c; c.appendChild(e); c.appendChild(el("b", "", E.name)); c.appendChild(oddsRow(E.odds)); const hb = btn("Hatch " + save.eggs[k], () => netSend({ t: "hatch", kind: k }), "go"); hb.disabled = save.eggs[k] < 1 || save.mounts.length >= World.MOUNT_CAP; c.appendChild(hb); eggs.appendChild(c); }
-    body.appendChild(d); body.appendChild(eggs); body.appendChild(grid);
+    body.appendChild(d); body.appendChild(grid);
   } else if (panel === "up") {
     const total = World.upTotal(save.up), rk = World.rankOf(total), head = el("div", "rank"); const bd = el("i", "badge"); bd.style.background = rk ? World.RANK_C[rk] : "#d7e1ea"; head.appendChild(bd); head.appendChild(el("b", "", rk ? World.RANKS[rk] + " Postmaster" : "Postmaster")); head.appendChild(el("span", "", total + " / " + World.UP_MAX * Object.keys(UPGRADES).length)); body.appendChild(head);
     const val = { payout: (l) => "+" + l * 10 + "%", stamps: (l) => pct(World.rollOdds(World.stampLuck(l))[4]), press: (l) => "+" + l + "%", boxes: (l) => World.boxDur(l) + " durability" };
@@ -904,7 +906,7 @@ function renderPanel() {
     const open = World.openFor(save), sw = World.spawnWeights(open, riding().lv);
     TIERS.forEach((T, n) => { const r = el("div", "orow" + (n < open ? "" : " off")); const b = el("b", "", T.name); b.style.color = T.c; r.appendChild(b); const full = el("div", "odds"); World.rollOdds(T.luck + World.stampLuck(save.up.stamps)).forEach((v, i) => { const s = el("span", "", pct(v)); s.style.color = RARITY_C[i] === "#ffffff" ? "#6f7d8a" : RARITY_C[i]; full.appendChild(s); }); r.appendChild(full); r.appendChild(el("em", "", "x" + T.mult + " · " + pct(sw[n]))); body.appendChild(r); });
     for (const k of Object.keys(MODS)) { const r = el("div", "orow"); r.appendChild(el("span", "mod " + k, MODS[k].name)); r.appendChild(el("em", "", "+" + MODS[k].bonus * 100 + "%")); body.appendChild(r); }
-    for (const k of Object.keys(EGGS)) { const r = el("div", "orow"); r.appendChild(el("b", "", EGGS[k].name)); const full = el("div", "odds"); EGGS[k].odds.forEach((v, i) => { const s = el("span", "", v ? pct(v) : "–"); s.style.color = RARITY_C[i] === "#ffffff" ? "#6f7d8a" : RARITY_C[i]; full.appendChild(s); }); r.appendChild(full); body.appendChild(r); }
+    { const r = el("div", "orow"); r.appendChild(el("b", "", "Mount")); const full = el("div", "odds"); World.ROLLS.forEach((R, i) => { const s = el("span", "", pct(R.pet)); s.style.color = RARITY_C[i] === "#ffffff" ? "#6f7d8a" : RARITY_C[i]; full.appendChild(s); }); r.appendChild(full); body.appendChild(r); }   // (owner, 2026-11-11) the chance a parcel of each rarity brings its area's animal, at that rarity
     const vr = el("div", "orow"); vr.appendChild(el("b", "", "Shiny")); vr.appendChild(el("em", "", "1 / 100")); body.appendChild(vr); const gr = el("div", "orow"); gr.appendChild(el("b", "", "Golden")); gr.appendChild(el("em", "", "1 / 1,000")); body.appendChild(gr);
   } else if (panel === "set") {
     const row = (name, node) => { const r = el("label", "setrow"); r.appendChild(el("span", "", name)); r.appendChild(node); body.appendChild(r); };
@@ -924,10 +926,10 @@ function renderAdmin(body) {
   acts.appendChild(btn("Mute", () => op({ op: "mute", mins: mins.value }))); acts.appendChild(btn("Kick", () => op({ op: "kick" }))); acts.appendChild(btn("Ban", () => op({ op: "ban", mins: mins.value })));
   if (myRole === "admin") {
     const role = el("select"); for (const r of ["player", "moderator", "admin"]) { const o = el("option", "", r); o.value = r; if (a.role === r) o.selected = true; role.appendChild(o); } role.onchange = () => op({ op: "role", role: role.value }); acts.appendChild(role);
-    const what = el("select"); for (const [v, n] of [["coins", "Coins"], ["coupons", "Level Coupons"], ...Object.keys(EGGS).map((k) => ["egg:" + k, EGGS[k].name]), ...Object.keys(MOUNTS).map((k) => ["mount:" + k, MOUNTS[k].name])]) { const o = el("option", "", n); o.value = v; what.appendChild(o); }
-    const n = el("input"); n.type = "number"; n.value = 1; n.min = 1; const lv = el("input"); lv.type = "number"; lv.value = 1; lv.min = 1; lv.max = 20; lv.title = "Level"; const va = el("select"); World.VARIANTS.forEach((v, i) => { const o = el("option", "", v || "Normal"); o.value = i; va.appendChild(o); });
-    const give = el("div", "acts wrap"); give.appendChild(what); give.appendChild(n); give.appendChild(lv); give.appendChild(va); give.appendChild(btn("Give", () => op({ op: "give", what: what.value, n: +n.value, lv: +lv.value, va: +va.value }), "go"));
-    const quick = el("div", "acts wrap"); for (const [c, name] of [["coins", "+100,000"], ["allmounts", "All mounts"], ["maxlv", "Max levels"], ["eggs", "Eggs"], ["coupons", "Coupons"], ["upgrades", "Upgrades"], ["everything", "Everything"], ["reset", "Reset"]]) quick.appendChild(btn(name, () => op({ op: "quick", cmd: c, n: 100000 })));
+    const what = el("select"); for (const [v, n] of [["coins", "Coins"], ["coupons", "Level Coupons"], ...Object.keys(MOUNTS).map((k) => ["mount:" + k, MOUNTS[k].name])]) { const o = el("option", "", n); o.value = v; what.appendChild(o); }
+    const n = el("input"); n.type = "number"; n.value = 1; n.min = 1; const lv = el("input"); lv.type = "number"; lv.value = 1; lv.min = 1; lv.max = 20; lv.title = "Level"; const va = el("select"); World.VARIANTS.forEach((v, i) => { const o = el("option", "", v || "Normal"); o.value = i; va.appendChild(o); }); const rar = el("select"); RARITY.forEach((v, i) => { const o = el("option", "", v); o.value = i; rar.appendChild(o); });
+    const give = el("div", "acts wrap"); give.appendChild(what); give.appendChild(n); give.appendChild(lv); give.appendChild(rar); give.appendChild(va); give.appendChild(btn("Give", () => op({ op: "give", what: what.value, n: +n.value, lv: +lv.value, va: +va.value, r: +rar.value }), "go"));
+    const quick = el("div", "acts wrap"); for (const [c, name] of [["coins", "+100,000"], ["allmounts", "All mounts"], ["maxlv", "Max levels"], ["coupons", "Coupons"], ["upgrades", "Upgrades"], ["everything", "Everything"], ["reset", "Reset to new player"]]) quick.appendChild(btn(name, () => op({ op: "quick", cmd: c, n: 100000 })));
     body.appendChild(acts); body.appendChild(give); body.appendChild(quick);
     if (adminData) { const ed = el("div", "acts wrap"); const f = {}; for (const k of ["coins", "coupons"]) { const i = el("input"); i.type = "number"; i.value = adminData[k]; i.title = k; f[k] = i; const l = el("label", "", k === "coins" ? "Coins " : "Coupons "); l.appendChild(i); ed.appendChild(l); }
       ed.appendChild(btn("Save", () => op({ op: "edit", coins: +f.coins.value, coupons: +f.coupons.value }), "go")); ed.appendChild(el("span", "", adminData.mounts.length + " mounts")); body.appendChild(ed); }
@@ -936,14 +938,16 @@ function renderAdmin(body) {
 $("pclose").onclick = closePanel; $("panel").addEventListener("pointerdown", (e) => { if (e.target === $("panel")) closePanel(); });
 for (const [id, k] of [["mstable", "stable"], ["mup", "up"], ["modds", "odds"], ["mset", "set"]]) $(id).onclick = () => openPanel(k);
 
-// ---- hatching: the egg wobbles three times, cracks, and there's your mount ----
+// ---- a new mount: its box (or the merge's orb) wobbles three times, opens, and there's your mount; several wait their turn ----
+const hatchQ = [];
 function hatchShow(kind, m) {
-  const o = $("hatch"), egg = $("hegg"), im = $("himg"), nm = $("hname"), rr = $("hrar"), M = MOUNTS[m.sp], c = RARITY_C[M.r]; o.classList.remove("won", "first"); o.style.display = "flex"; egg.style.display = "block"; egg.style.background = EGGS[kind] ? EGGS[kind].c : ""; im.style.display = nm.style.display = rr.style.display = "none"; egg.className = kind === "gift" ? "egg gift wob" : kind === "fuse" ? "egg fuse wob" : "egg wob";   // a new mount as a gift comes in a box
+  if ($("hatch").style.display === "flex") { hatchQ.push([kind, m]); return; }
+  const o = $("hatch"), egg = $("hegg"), im = $("himg"), nm = $("hname"), rr = $("hrar"), M = { ...MOUNTS[m.sp], r: m.r | 0 }, c = RARITY_C[M.r]; o.classList.remove("won", "first"); o.style.display = "flex"; egg.style.display = "block"; egg.style.background = ""; im.style.display = nm.style.display = rr.style.display = "none"; egg.className = kind === "gift" ? "egg gift wob" : kind === "fuse" ? "egg fuse wob" : "egg wob";   // a new mount as a gift comes in a box
   for (const k of [0, 1, 2]) setTimeout(() => sfx("wobble"), 150 + k * 420);
-  setTimeout(() => { egg.style.display = "none"; im.src = portrait(m.sp, m.va); im.style.display = nm.style.display = rr.style.display = "block"; nm.textContent = mountName(m); rr.textContent = RARITY[M.r]; rr.style.color = c; o.style.setProperty("--glow", m.va === 3 ? "#b06bff" : m.va === 2 ? "#ffd84a" : m.va === 1 ? "#bfe6ff" : c); sfx("hatch"); if (m.va) sfx("shiny"); flash(c);
+  setTimeout(() => { egg.style.display = "none"; im.src = portrait(m.sp, m.va, m.r); im.style.display = nm.style.display = rr.style.display = "block"; nm.textContent = mountName(m); rr.textContent = RARITY[M.r]; rr.style.color = c; o.style.setProperty("--glow", m.va === 3 ? "#b06bff" : m.va === 2 ? "#ffd84a" : m.va === 1 ? "#bfe6ff" : c); sfx("hatch"); if (m.va) sfx("shiny"); flash(c);
     // (owner, 2026-11-11) a new mount gets its own moment on top: it drops in spinning over rays, with confetti; the first of its kind says NEW!
-    o.classList.add("won"); if (save.mounts.filter((k) => k.sp === m.sp).length <= 1) o.classList.add("first"); setTimeout(() => { confetti(Math.max(1, M.r + (m.va ? 1 : 0)), innerWidth / 2, innerHeight / 2); if (M.r >= 3 || m.va) sfx("fanfare", Math.max(3, M.r)); }, 450); }, 1500);
-  setTimeout(() => { o.onclick = () => { o.style.display = "none"; o.onclick = null; }; }, 1900);
+    o.classList.add("won"); if (save.mounts.filter((k) => k.sp === m.sp && k.r === m.r).length <= 1) o.classList.add("first"); setTimeout(() => { confetti(Math.max(1, M.r + (m.va ? 1 : 0)), innerWidth / 2, innerHeight / 2); if (M.r >= 3 || m.va) sfx("fanfare", Math.max(3, M.r)); }, 450); }, 1500);
+  setTimeout(() => { o.onclick = () => { o.style.display = "none"; o.onclick = null; const nx = hatchQ.shift(); if (nx) hatchShow(...nx); }; }, 1900);
 }
 
 // ---- chat ----
@@ -960,8 +964,8 @@ function bubble(rig, text) { if (!rig) return; if (rig.bub) { rig.m.g.remove(rig
 const others = new Map(); let party = [], invites = [];
 function addOther(p) {
   if (p.id === myId) return; const old = others.get(p.id); if (old) unrig(old.rig);
-  const rig = rigMount(p.sp, clamp(p.lv | 0, 1, World.MAX_LV), p.va | 0, p.shirt || "#3a8ee6", p.name, p.rank | 0); rig.m.g.position.set(p.x, p.y || 0, p.z); setCarry(rig, p.carry);
-  others.set(p.id, Object.assign(old || { buf: [], x: p.x, y: p.y || 0, z: p.z, yaw: p.yaw || 0, mv: 0, stunT: 0, graceT: 0, kickT: 0, hideT: 0, stepT: 0, mx: p.x, my: p.y || 0, mz: p.z, myaw: 0, wasFoot: false }, { id: p.id, name: p.name, sp: p.sp, lv: p.lv, va: p.va | 0, tr: p.tr || "", shirt: p.shirt, rank: p.rank | 0, friendly: !!p.friendly, carry: p.carry || null, rig }));
+  const rig = rigMount(p.sp, clamp(p.lv | 0, 1, World.MAX_LV), p.va | 0, p.r | 0, p.shirt || "#3a8ee6", p.name, p.rank | 0); rig.m.g.position.set(p.x, p.y || 0, p.z); setCarry(rig, p.carry);
+  others.set(p.id, Object.assign(old || { buf: [], x: p.x, y: p.y || 0, z: p.z, yaw: p.yaw || 0, mv: 0, stunT: 0, graceT: 0, kickT: 0, hideT: 0, stepT: 0, mx: p.x, my: p.y || 0, mz: p.z, myaw: 0, wasFoot: false }, { id: p.id, name: p.name, sp: p.sp, r: p.r | 0, lv: p.lv, va: p.va | 0, tr: p.tr || "", shirt: p.shirt, rank: p.rank | 0, friendly: !!p.friendly, carry: p.carry || null, rig }));
 }
 function dropOther(id) { const o = others.get(id); if (!o) return; unrig(o.rig); others.delete(id); }
 function renderParty() { const d = $("party"); d.innerHTML = ""; d.style.display = party.length ? "flex" : "none"; for (const q of party) d.appendChild(el("span", q.id === myId ? "me" : "", q.name)); if (party.length) { const x = el("button", "", "✕"); x.title = "Leave"; x.onclick = () => netSend({ t: "party_leave" }); d.appendChild(x); } }
@@ -1057,7 +1061,7 @@ function onNet(m) {
       for (const [id, x, z, yaw, mv, y] of m.ps || []) { const o = others.get(id); if (!o) continue; o.buf.push({ t: m.ts, x, y, z, yaw, mv }); if (o.buf.length > 12) o.buf.shift(); }
       setNpc(m); break;
     }
-    case "mount": { const o = others.get(m.id); if (o) addOther(Object.assign({}, o, { sp: m.sp, lv: m.lv, va: m.va, tr: m.tr || "" })); break; }
+    case "mount": { const o = others.get(m.id); if (o) addOther(Object.assign({}, o, { sp: m.sp, r: m.r | 0, lv: m.lv, va: m.va, tr: m.tr || "" })); break; }
     case "rank": { const o = others.get(m.id); if (o) addOther(Object.assign({}, o, { rank: m.rank })); else if (m.id === myId) remount(); break; }
     case "look": { const o = others.get(m.id); if (o) addOther(Object.assign({}, o, { friendly: m.friendly, shirt: m.shirt })); break; }
     case "carry": { const o = others.get(m.id); if (o) { o.carry = m.c; setCarry(o.rig, m.c); } break; }
@@ -1091,9 +1095,9 @@ function onNet(m) {
     case "fx": onFx(m); break;
     case "leveled": { adopt(m.data); if (m.id === save.ride) { remount(); levelFx(); } else sfx("level"); break; }
     case "fused": adopt(m.data); selMount = m.m.id; if (panel === "stable") renderPanel(); hatchShow("fuse", m.m); break;
-    case "hatched": adopt(m.data); selMount = m.m.id; if (panel === "stable") renderPanel(); hatchShow(m.kind, m.m); break;
+    case "reset": location.reload(); break;   // (owner, 2026-11-11) staff made this a brand new courier
     case "upgraded": adopt(m.data); remount(); sfx("buy"); emit(me.x, me.y + 2, me.z, 30, { colors: ["#ffd84a", "#ffffff", "#7ee08a"], speed: 4, up: 5, life: 1 }); break;
-    case "announce": { const a = $("announce"); a.textContent = m.name + (m.fused ? " merged a " : " hatched a ") + World.VARIANTS[m.va] + " " + MOUNTS[m.sp].name + "!"; a.style.color = m.va === 3 ? "#d9a6ff" : m.va === 2 ? "#ffd84a" : "#bfe6ff"; a.classList.remove("go"); void a.offsetWidth; a.classList.add("go"); sfx("shiny"); break; }
+    case "announce": { const a = $("announce"); a.textContent = m.name + (m.fused ? " merged a " : " found a ") + mountName(m) + "!"; a.style.color = m.va === 3 ? "#d9a6ff" : m.va === 2 ? "#ffd84a" : m.va === 1 ? "#bfe6ff" : RARITY_C[m.r | 0]; a.classList.remove("go"); void a.offsetWidth; a.classList.add("go"); sfx("shiny"); break; }
     case "chat": { const o = others.get(m.id); chatLine(o ? o.name : m.name, m.text); if (o) bubble(o.rig, m.text); break; }
     case "invited": invites.push({ from: m.from, name: m.name, until: performance.now() + 28000 }); renderInvite(); break;
     case "declined": toast(m.name + " ✕"); break;
@@ -1128,7 +1132,8 @@ let readyMesh = null, nextMesh = null, pusher = null; const beltStripes = [], ta
 function beltShow(slide, pop) {
   if (readyMesh) scene.remove(readyMesh); if (nextMesh) scene.remove(nextMesh); readyMesh = nextMesh = null;
   if (belt.ready) { readyMesh = parcelMesh(belt.ready.tier, belt.ready.mod); readyMesh.scale.setScalar(BELT_SC); scene.add(readyMesh); beltSlide = slide || pop ? BELT_SLIDE : 0; }
-  if (belt.next) { nextMesh = parcelMesh(belt.next.tier, belt.next.mod); nextMesh.scale.setScalar(BELT_SC); nextMesh.position.y = pop ? 4 : World.PO.belt.top; nextMesh.traverse((o) => { if (o.isMesh) { o.material = o.material.clone(); o.material.transparent = true; o.material.opacity = 0.45; } }); scene.add(nextMesh); if (pop && loggedIn) setTimeout(() => { if (hyp(me.x, me.z) < 40) sfx("pop"); }, 220); }
+  // (owner, 2026-11-11) one big parcel on the belt: only your Ready one shows (pushed out of the door each time)
+  if (belt.ready && (slide || pop) && loggedIn) setTimeout(() => { if (hyp(me.x, me.z) < 40) sfx("pop"); }, 220);
 }
 function setTargets() {   // a marker over every address I'm carrying a parcel to
   const want = new Set(bag.map((q) => q.house)); for (const [id, g] of targetFx) if (!want.has(id)) { scene.remove(g); targetFx.delete(id); }
