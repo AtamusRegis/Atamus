@@ -46,7 +46,7 @@ const send = (ws, o) => { if (ws && ws.readyState === 1) ws.send(JSON.stringify(
 const all = (r, o, skip) => { const s = JSON.stringify(o); for (const p of r.players.values()) if (p !== skip && p.ws.readyState === 1) p.ws.send(s); };
 const mountOf = (p) => { const d = p.acct.data; return d.mounts.find((m) => m.id === d.ride) || d.mounts[0]; };
 const statsOf = (p) => { const m = mountOf(p); return W.mountStats(m.sp, m.lv); };
-const pub = (p) => { const m = mountOf(p), d = p.acct.data; return { id: p.id, name: p.name, sp: m.sp, lv: m.lv, va: m.va, shirt: d.set.shirt, rank: W.rankOf(W.upTotal(d.up)), friendly: d.set.friendly, x: p.x, y: p.y, z: p.z, yaw: p.yaw, carry: p.bag.map((q) => [q.tier, q.mod]) }; };
+const pub = (p) => { const m = mountOf(p), d = p.acct.data; return { id: p.id, name: p.name, sp: m.sp, lv: m.lv, va: m.va, tr: m.tr || "", shirt: d.set.shirt, rank: W.rankOf(W.upTotal(d.up)), friendly: d.set.friendly, x: p.x, y: p.y, z: p.z, yaw: p.yaw, carry: p.bag.map((q) => [q.tier, q.mod]) }; };
 const parcelView = (q) => (q ? { pid: q.pid, tier: q.tier, mod: q.mod, dur: q.dur, max: q.max, hits: q.hits, house: q.house, due: q.due } : null);
 const dogView = (d) => [d.id, r1(d.x), r1(d.z), r2(d.yaw), d.mode, r1(d.y)], gooseView = (g) => [g.id, r1(g.x), r1(g.z), r1(g.y), r2(g.yaw), g.mode, g.carry ? g.carry.parcel.tier : -1], goatView = (g) => [g.id, r1(g.x), r1(g.z), r2(g.yaw), g.mode];
 
@@ -57,7 +57,7 @@ export function attachPets(server, { origins = [], allowLocal = false, store = m
   setInterval(() => { for (const a of [...dirty]) flush(a); }, SAVE_MS).unref();
   const changed = (p) => { p.acct.rev++; dirty.add(p.acct); };
   const pushData = (p) => send(p.ws, { t: "data", data: p.acct.data });
-  const showMount = (p) => { const m = mountOf(p); all(p.room, { t: "mount", id: p.id, sp: m.sp, lv: m.lv, va: m.va }, p); };
+  const showMount = (p) => { const m = mountOf(p); all(p.room, { t: "mount", id: p.id, sp: m.sp, lv: m.lv, va: m.va, tr: m.tr || "" }, p); };
 
   // ---- parcels ----
   const fillBelt = (p) => { const open = W.openFor(p.acct.data), lv = mountOf(p).lv; if (!p.ready) { p.ready = p.next || W.rollParcel(open, lv); p.next = null; } if (!p.next) p.next = W.rollParcel(open, lv); send(p.ws, { t: "belt", ready: p.ready, next: p.next }); };
@@ -330,6 +330,10 @@ export function attachPets(server, { origins = [], allowLocal = false, store = m
         case "open": if (Array.isArray(m.gids)) openGifts(me, m.gids.slice(0, W.GIFT_CAP).map((g) => +g)); break;
         case "kick": kick(me); break;
         case "ability": bark(me); break;
+        case "trail": {   // (owner, 2026-11-11) put an unlocked trail on a mount (or take it off)
+          const q = d.mounts.find((k) => k.id === m.id), k = String(m.k || ""); if (!q || (k && !W.trailsFor(d).includes(k))) break;
+          if (k) q.tr = k; else delete q.tr; changed(me); pushData(me); if (q.id === d.ride) showMount(me); break;
+        }
         case "equip": { const q = d.mounts.find((k) => k.id === m.id); if (q && d.ride !== q.id) { d.ride = q.id; changed(me); pushData(me); showMount(me); sendBag(me, { k: "mount" }); } break; }
         case "level": {   // pay coins for a level
           const q = d.mounts.find((k) => k.id === m.id); if (!q || q.lv >= W.MAX_LV || d.coins < W.levelCost(q.lv)) break;

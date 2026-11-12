@@ -6,6 +6,11 @@ and any rule decided. Use `git log` for the code detail (and for the older Atamu
 
 ## 2026-11-11
 
+- **Stage 3: presentation and rewards (owner).** The post office is a building with a conveyor belt out of its door
+  pushing your (bigger) parcel to the end. Rarer parcels open with more punch (rays, heartbeat, shake, confetti,
+  fanfare). New mounts drop in with their own animation (NEW! for a first); level ups show the mount on screen with a
+  shine. A newly opened area gets a short showing of its gate, chasers and dangers. Trails: the Cloud Trail unlocks
+  with the fifth area, for any mount.
 - **Stage 2: the danger rework, zone melodies (owner).** Each area has its own chasers (dogs, cats, gators, bears,
   wolves), and every animal a rarity from Common to Legendary. Two attack slots per courier and a shared 3 s calm
   after any attack. Stolen and dropped parcels show their countdowns; a dropped parcel's 15 s carries over. Kicks hit

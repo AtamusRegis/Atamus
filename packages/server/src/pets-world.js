@@ -95,6 +95,10 @@ export function mountStats(sp, lv) {
   // (owner, 2026-11-11) faster as it levels: about 16 to 20 m/s at level 20
   return { speed: 10 + 0.6 * r + (0.3 + 0.03 * r) * n, jump: 8 + 0.25 * r + (0.08 + 0.01 * r) * n, grip: Math.min(0.6, 0.05 * r + 0.02 * n) };
 }
+// (owner, 2026-11-11) trails: one more to unlock every five areas opened (with five areas, the first at the Floating
+// Islands); any mount can wear any trail you've unlocked
+export const TRAILS = [{ k: "cloud", name: "Cloud Trail", zones: 5 }];
+export const trailsFor = (d) => TRAILS.filter((t) => openFor(d) >= t.zones).map((t) => t.k);
 export const ABILITY_CD = { bark: [0, 12, 9, 6], dash: [0, 8, 6, 4], jump2: [0, 0, 0, 0] };
 // eggs: what hatches from each (by rarity), then a mount of that rarity at random
 export const EGGS = { basic: { name: "Basic Egg", c: "#f4ead8", odds: [0.7, 0.25, 0.05, 0, 0] }, rare: { name: "Rare Egg", c: "#7fb4f0", odds: [0, 0.5, 0.38, 0.1, 0.02] }, legendary: { name: "Legendary Egg", c: "#f2c84a", odds: [0, 0, 0.5, 0.38, 0.12] } };
@@ -115,7 +119,7 @@ export function cleanData(d) {
   d = d && typeof d === "object" ? d : {};
   const int = (v, lo, hi, def) => (Number.isFinite(+v) ? clamp(Math.floor(+v), lo, hi) : def);
   const out = { v: 1, coins: int(d.coins, 0, 1e12, 0), coupons: int(d.coupons, 0, 1e6, 0), nextId: int(d.nextId, 1, 1e9, 1), mounts: [], ride: 0, eggs: {}, up: {}, stats: {}, set: {}, fails: int(d.fails, 0, 99, 0) };
-  for (const m of Array.isArray(d.mounts) ? d.mounts.slice(0, MOUNT_CAP) : []) if (m && MOUNTS[MOUNT_MOVED[m.sp] || m.sp]) out.mounts.push({ id: int(m.id, 1, 1e9, 0) || out.nextId++, sp: MOUNT_MOVED[m.sp] || m.sp, va: int(m.va, 0, 3, 0), lv: int(m.lv, 1, MAX_LV, 1), xp: int(m.xp, 0, 1e9, 0) });
+  for (const m of Array.isArray(d.mounts) ? d.mounts.slice(0, MOUNT_CAP) : []) if (m && MOUNTS[MOUNT_MOVED[m.sp] || m.sp]) out.mounts.push({ id: int(m.id, 1, 1e9, 0) || out.nextId++, sp: MOUNT_MOVED[m.sp] || m.sp, va: int(m.va, 0, 3, 0), lv: int(m.lv, 1, MAX_LV, 1), xp: int(m.xp, 0, 1e9, 0), ...(TRAILS.some((t) => t.k === m.tr) ? { tr: m.tr } : {}) });
   if (!out.mounts.length) out.mounts.push({ id: out.nextId++, sp: "pup", va: 0, lv: 1, xp: 0 });
   out.nextId = Math.max(out.nextId, ...out.mounts.map((m) => m.id + 1));
   out.ride = out.mounts.some((m) => m.id === d.ride) ? d.ride : out.mounts[0].id;
@@ -180,7 +184,9 @@ export function addXp(m, xp) { let up = 0; m.xp += xp; while (m.lv < MAX_LV && m
 // ---------------------------------------------------------------------------------------------------------------------
 export const sprinklers = [], goats = [], zips = [];
 export const slabs = [], solids = [], houses = [], dogs = [], ponds = [], geese = [], trees = [], roads = [], pads = [], boosts = [], balloons = [], fences = [];
-export const PO = { x: 0, z: 0, counter: 5, roof: 13 };   // the counter: a square 10 m across with the conveyor round it; the roof stands on four posts
+// (owner, 2026-11-11) the post office is a building with a conveyor belt coming out of its door, pushing your parcel to
+// the end, where you grab it. (x, z: the middle of its square; b: the building; belt: the conveyor; end: where your parcel waits)
+export const PO = { x: 0, z: 0, b: { x: 0, z: -9, hw: 8, hd: 5, h: 6.5 }, belt: { z0: -4, z1: 5.2, hw: 1.3, top: 1.1 }, end: { x: 0, z: 3.9 } };
 // (owner, 2026-11-11: neighborhoods three houses long) every district is short: three houses down each side of the road
 export const SPAWN = { x: 0, z: 17 }, SUBURBS_X = 110, TOWN = { x0: -45, x1: 190, z0: -30, z1: 30 }, MARSH = { x0: 190, x1: 290, z0: -30, z1: 30 }, CLIFF = { x0: 290, x1: 415, z0: -30, z1: 30 };   // (owner, 2026-11-11) narrow: the road down the middle, houses both sides
 export const TERRACE = (n) => ({ x0: 300 + 38 * (n - 1), x1: n === 3 ? 414 : 300 + 38 * n, z0: -27, z1: 27, y: 6 * n });   // n = 1..3: Cliffside's three steps, each with a ramp up the road onto it
@@ -238,9 +244,9 @@ function buildTown() {
   wall(MARSH.x0, MARSH.x1, MARSH.z0, MARSH.z0, 6); wall(MARSH.x0, MARSH.x1, MARSH.z1, MARSH.z1, 6);
   wall(CLIFF.x0, CLIFF.x1, CLIFF.z0, CLIFF.z0, 6); wall(CLIFF.x0, CLIFF.x1, CLIFF.z1, CLIFF.z1, 6); wall(CLIFF.x1, CLIFF.x1, CLIFF.z0, CLIFF.z1, 40);
   wall(MARSH.x1, MARSH.x1, MARSH.z0, -6, 6); wall(MARSH.x1, MARSH.x1, 6, MARSH.z1, 6); wall(MARSH.x0, MARSH.x0, MARSH.z0, -6, 6); wall(MARSH.x0, MARSH.x0, 6, MARSH.z1, 6);
-  // ---- the post office: the counter, and four posts for its roof ----
-  solid(PO.x, PO.z, PO.counter, PO.counter, -1, 1.3);
-  for (const [sx, sz] of [[-1, -1], [1, -1], [-1, 1], [1, 1]]) solid(PO.x + sx * PO.roof, PO.z + sz * PO.roof, 0.5, 0.5, -1, 7);
+  // ---- the post office: the building, and the conveyor out of its door ----
+  solid(PO.b.x, PO.b.z, PO.b.hw, PO.b.hd, -1, PO.b.h + 3);
+  solid(PO.x, (PO.belt.z0 + PO.belt.z1) / 2, PO.belt.hw, (PO.belt.z1 - PO.belt.z0) / 2, -1, PO.belt.top + 0.05);
   // ---- the road: the post office's square, then one road east down the middle ----
   road(-24, 0, 24, 0, 44); road(24, 0, TOWN.x1 + 2, 0, 8);
   for (const x of [30, 100]) boosts.push({ x, z: 0, y: 0, yaw: Math.PI / 2 });
@@ -305,8 +311,8 @@ export function blocked(x, z, y, r = 0.55) {
   if (wallAt(x, z, y) || wallAt(x + r, z, y) || wallAt(x - r, z, y) || wallAt(x, z + r, y) || wallAt(x, z - r, y)) return true;
   const k = r * 0.7; return r > 0.6 && (wallAt(x + k, z + k, y) || wallAt(x - k, z + k, y) || wallAt(x + k, z - k, y) || wallAt(x - k, z - k, y));   // a wide body: its corners too, so a tree can't slip between
 }
-// how far (x, z) is from the conveyor (the counter's edge)
-export const counterDist = (x, z) => { const dx = Math.max(Math.abs(x - PO.x) - PO.counter, 0), dz = Math.max(Math.abs(z - PO.z) - PO.counter, 0); return hyp(dx, dz); };
+// how far (x, z) is from your parcel at the conveyor's end
+export const counterDist = (x, z) => Math.max(0, hyp(x - PO.end.x, z - PO.end.z) - 1.8);
 export const inSafeZone = (x, z, y = 0) => y < 8 && hyp(x - PO.x, z - PO.z) < SAFE_R;
 export const housesIn = (d) => houses.filter((h) => h.d === d);
 // which island (x, z) is over (or -1)
