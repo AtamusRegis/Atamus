@@ -119,8 +119,8 @@ A parcel that breaks or is lost is gone; the conveyor always has the next one. *
 - One equipped mount, seen by everyone; the rest wait in the Stable menu. (owner, 2026-11-11) **No mount levels: the
   rarity decides.** A mount's size is 1 + 0.25 x rarity (Common 1x, Legendary 2x); the rider stays the same size.
 - (owner, 2026-11-11) **The mounts are the areas' animals:** Dog (Main Street, Bark), Cat (Maple Suburbs, Double
-  Jump), Gator (Goose Marsh, Dash), Bear (Cliffside, Bark), Wolf (Floating Islands, Dash), (owner, 2026-11-12) Fox (Frostbite Fields, Double Jump), Raptor (Sunscorch Dunes,
-  Dash), Trike (Jungle Ruins, Bark), T-Rex (Lava Flats, Bark), Unicorn (Moon Garden, Double Jump), each **Common to Legendary**
+  Jump), Gator (Goose Marsh, Dash), Bear (Cliffside, Tough Hide), Wolf (Floating Islands, Howl), (owner, 2026-11-12) Fox (Frostbite Fields, Vanish),
+  Raptor (Sunscorch Dunes, Pounce), Trike (Jungle Ruins, Charge), T-Rex (Lava Flats, Roar), Unicorn (Moon Garden, Blink), each **Common to Legendary**
   (the rarity is the mount's own: its coat, its stats and its name; the town's animals of that kind and rarity wear the
   same coat). (owner, 2026-11-11) **Each animal has its own five coats**, one per rarity, chosen to suit it (`MOUNTS[..].coats`),
   Common to Legendary: Dog Tan, Chocolate, Blue Merle, Ember, Starlight; Cat Tabby, Ginger, Siamese, Lilac, Cosmic; Gator
@@ -139,10 +139,16 @@ A parcel that breaks or is lost is gone; the conveyor always has the next one. *
   Main Street, a Dog 80% on the Floating Islands) x (1 + 5% per Aura **Boost** level, up to 10: the Stable's Boost row,
   100 Aura x 1.7^level x (1 + 0.5 x rarity) x (1 + 0.5 x a)); Jump 8 + 0.5 x rarity + 0.25 x a; Grip (shortens stuns) 10%
   x rarity + 3% x a.
-- **Ability:** (owner, 2026-11-11) every mount has its animal's ability, whatever its rarity; rarity only makes it
-  stronger: Common and Uncommon tier 1, Rare and Epic tier 2, Legendary tier 3. Dash (a burst of speed), Double Jump (a second jump, higher at tier 2, a third at tier 3), Bark (within 10.5 / 14 /
-  17.5 m: (owner, 2026-11-12) it hits every animal: chasers run home, geese let go of a parcel and back off, goats too).
-  (owner, 2026-11-12) Cooldowns: Dash 8 s and Bark 12 s, divided by 1 + 20% per rarity step.
+- **Ability:** (owner, 2026-11-12) every animal its own (the button by Kick), stronger at Rare and Legendary (tier 1 /
+  2 / 3: Common and Uncommon, Rare and Epic, Legendary): Dog **Bark** (animals within 10.5 / 14 / 17.5 m run home,
+  geese let go of a parcel and goats back off); Cat **Double Jump** (higher at tier 2, a third at tier 3); Gator
+  **Dash** (a burst of speed); Bear **Tough Hide** (3.25 / 4 / 4.75 s: nothing hits or stuns you, geese can't grab);
+  Wolf **Howl** (4 / 5 / 6 s of 1.5x speed); Fox **Vanish** (3.25 / 4 / 4.75 s: animals can't see you; the ones
+  after you give up); Raptor **Pounce** (a long, fast leap); Trike **Charge** (1.5 / 1.8 / 2.1 s at 1.6x: animals
+  within 3 m are knocked aside, and no hits or stuns but falls); T-Rex **Roar** (animals within 15 / 18 / 21 m freeze
+  for 2.5 / 3 / 3.5 s, geese drop what they hold); Unicorn **Blink** (to the farthest clear ground 13 / 16 / 19 m
+  ahead). Cooldowns: Bark 12, Dash 8, Tough Hide 16, Howl 14, Vanish 14, Pounce 6, Charge 10, Roar 18, Blink 6 s,
+  divided by 1 + 20% per rarity step.
 - Legendary: a glowing name tag and sparkling footsteps.
 - **Whistle** calls your mount. A stun knocks you off; you get up on foot (5.5 m/s) and the mount comes back when you
   whistle (owner, 2026-11-11: instantly, even while still stunned), when you reach it, or by itself after about 2 s.
