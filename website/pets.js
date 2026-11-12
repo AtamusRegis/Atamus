@@ -4,7 +4,7 @@
 // deliveries, rolls, damage, coins, mounts; this page shows the town (pets-world.js, shared with the server), moves you
 // and asks. Phone first: a thumb joystick, drag to look, pinch to zoom, big buttons.
 import * as THREE from "./vendor/three.module.min.js";
-import * as World from "./pets-world.js?v=1794470527";
+import * as World from "./pets-world.js?v=1794471281";
 
 const $ = (id) => document.getElementById(id);
 const { TAU, clamp, hyp, MOUNTS, TIERS, RARITY, RARITY_C, MODS, UPGRADES } = World;
@@ -127,6 +127,10 @@ function buildTown() {
     for (const y of [92, 58, 24]) { g.beginPath(); g.moveTo(30, y + 18); g.lineTo(64, y - 8); g.lineTo(98, y + 18); g.stroke(); }
     const t = new THREE.CanvasTexture(cv); t.colorSpace = THREE.SRGBColorSpace; const bm = new THREE.MeshLambertMaterial({ map: t });
     for (const b of World.boosts) { const m = new THREE.Mesh(new THREE.PlaneGeometry(3.2, 3.2).rotateX(-Math.PI / 2), bm); m.position.set(b.x, b.y + 0.09, b.z); m.rotation.y = b.yaw + Math.PI; m.receiveShadow = true; scene.add(m); } }
+  { const cv = document.createElement("canvas"); cv.width = cv.height = 128; const g = cv.getContext("2d"); g.fillStyle = "#a45be0"; g.fillRect(0, 0, 128, 128); g.strokeStyle = "#f3e3ff"; g.lineWidth = 14; g.lineCap = "round"; g.lineJoin = "round";   // (owner, 2026-11-12) the purple Aura pad: chevrons east, all the way across
+    for (const x of [18, 52, 86]) { g.beginPath(); g.moveTo(x, 30); g.lineTo(x + 24, 64); g.lineTo(x, 98); g.stroke(); }
+    const t = new THREE.CanvasTexture(cv); t.colorSpace = THREE.SRGBColorSpace; t.wrapS = t.wrapT = THREE.RepeatWrapping; t.repeat.set(1, 20); const P = World.AURA_PAD;
+    const m = new THREE.Mesh(new THREE.PlaneGeometry(P.w, 60).rotateX(-Math.PI / 2), new THREE.MeshBasicMaterial({ map: t })); m.position.set(P.x + P.w / 2, 0.1, 0); scene.add(m); }
   for (const b of World.balloons) { const g = new THREE.Group(); g.position.set(b.x, b.y, b.z); scene.add(g); box(1.6, 1.0, 1.6, "#b9824f", 0, 0.9, 0, g);
     const top = new THREE.Mesh(new THREE.SphereGeometry(2.6, 16, 12), mat("#ff6b6b")); top.position.y = 6; top.scale.y = 1.15; g.add(top); const band = new THREE.Mesh(new THREE.SphereGeometry(2.64, 16, 6, 0, TAU, 1.2, 0.7), mat("#ffffff")); band.position.y = 6; band.scale.y = 1.15; g.add(band);
     for (const [x, z] of [[-0.7, -0.7], [0.7, -0.7], [-0.7, 0.7], [0.7, 0.7]]) box(0.05, 3.2, 0.05, "#5a4632", x, 2.8, z, g, false); b.g = g; g.scale.setScalar(1.8);   // (owner, 2026-11-11) big, and it takes you from anywhere in its ring
@@ -610,10 +614,11 @@ function stepMe(dt) {
   const kind = me.ground ? World.groundKind(me.x, me.z, me.y) : "", mud = kind === "mud" && !World.inPond(me.x, me.z, me.y) ? World.MUD_SLOW : kind === "mud" ? 0.6 : kind === "sand" ? World.SAND_SLOW : kind === "water" ? World.WATER_SLOW : 1;   // (owner, 2026-11-12) sand and the jungle's rivers slow you too
   const zoneNow = World.districtAt(me.x, me.z, me.y);
   if (me.boost > 0) me.boost -= dt; if (me.dash > 0) me.dash -= dt;
-  let speed = me.foot ? 5.5 : st.speed * (bag.length ? 1 : World.EMPTY_FAST) * mud   // (owner, 2026-11-11) a parcel weighs you down: empty-handed you ride back much faster
+  const real = !World.startArea(me.x, me.z, me.y); if (real && !me.real && !me.foot) { sfx("boost"); cam.shake = Math.max(cam.shake, 0.15); emit(me.x, me.y + 1, me.z, 24, { colors: ["#c77dff", "#ffffff", "#e2b8ff"], speed: 4, up: 2, life: 0.6, grav: 0, size: 0.2 }); } me.real = real;
+  let speed = me.foot ? 5.5 : (real ? st.speed : World.BASE_SPEED) * (bag.length ? 1 : World.EMPTY_FAST) * mud   // (owner, 2026-11-11) a parcel weighs you down: empty-handed you ride back much faster
     * (me.dash > 0 ? 2.4 : me.boost > 0 ? 1.6 : 1);
   if (me.dash > 0 && hyp(mx, mz) < 0.1) { mx = Math.sin(me.yaw); mz = Math.cos(me.yaw); }
-  const acc = (me.ground ? (kind === "ice" ? 70 * World.ICE_GRIP : 70) : 26) * dt,   /* (owner, 2026-11-12) ice: hard to start, turn and stop */ tvx = mx * speed, tvz = mz * speed;
+  const grip = Math.max(70, speed * 7), acc = (me.ground ? (kind === "ice" ? grip * World.ICE_GRIP : grip) : Math.max(26, speed * 2.5)) * dt,   /* (owner, 2026-11-12) no drifting: quick to speed up and stop however fast it goes */   /* (owner, 2026-11-12) ice: hard to start, turn and stop */ tvx = mx * speed, tvz = mz * speed;
   me.vx += clamp(tvx - me.vx, -acc, acc); me.vz += clamp(tvz - me.vz, -acc, acc);
   me.moving = hyp(me.vx, me.vz) > 0.6;
   if (hyp(mx, mz) > 0.08) me.yaw = angDiff(me.yaw + angDiff(Math.atan2(mx, mz), me.yaw) * Math.min(1, 12 * dt), 0);   // kept within a turn (owner, 2026-11-11: others saw you sideways)

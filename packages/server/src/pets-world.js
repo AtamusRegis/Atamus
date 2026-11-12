@@ -135,6 +135,9 @@ export const petUpCost = (m, k) => (k === "cap" ? Math.round(150 * Math.pow(4, m
 export const homeZone = (sp) => Math.max(0, ZONE_KIND.indexOf(sp));
 export const mountScale = (m) => 1 + 0.25 * clamp(m.r | 0, 0, 4);             // Common 1x to Legendary 2x
 export const abilityTier = (m) => [1, 1, 2, 2, 3][clamp(m.r | 0, 0, 4)];      // (owner, 2026-11-11) every rarity has its animal's ability: stronger at Rare and Legendary
+// (owner, 2026-11-12) around the post office every mount goes the same speed; the purple Aura pad across the way out
+// (x AURA_PAD.x, all the way across) switches on its own speed for the run
+export const AURA_PAD = { x: 25, w: 3 }, startArea = (x, z, y) => x < AURA_PAD.x && districtAt(x, z, y) === 0;
 export const BASE_SPEED = 12, RARITY_UP = 0.2, ZONE_UP = 0.05, SPD_UP = 0.05;
 // (owner, 2026-11-12) speed: 20% more per rarity step; 5% more for each zone an animal is short of its own zone, 5% less
 // for each zone past it (a Wolf, from the fifth, goes 120% on Main Street, a Dog 80% on the Floating Islands); 5% more
@@ -336,10 +339,10 @@ function buildTown() {
   for (let n = 1; n <= 2; n++) { const t = TERRACE(n); for (let k = 0; k < 3; k++) { const x = t.x1 - 3.2 * (3 - k); rect(x, x + 3.2, 20, 26, t.y + STEP_H * (k + 1), "roof", t.y); } }   // rooftop hops: up the side of each step's face to the next
   // ---- the Floating Islands: jump pads between them; a balloon home from the last ----
   for (const [a, b] of ISLE_LINKS) for (const [f, t] of [[a, b], [b, a]]) { const A = ISLES[f], B = ISLES[t], d = hyp(B.x - A.x, B.z - A.z), ux = (B.x - A.x) / d, uz = (B.z - A.z) / d; pads.push({ x: A.x + ux * (A.r - 3), z: A.z + uz * (A.r - 3), y: A.y, tx: B.x - ux * (B.r - 7), tz: B.z - uz * (B.r - 7), ty: B.y, from: f, to: t }); }
-  balloons.push({ x: ISLES[2].x + 6, z: ISLES[2].z + 9, y: ISLES[2].y });
+  zips.push({ x: ISLES[2].x + 13, z: ISLES[2].z - 6, y: ISLES[2].y, tx: FAR.x0 + 8, tz: -6, ty: 0, far: 1 });   // (owner, 2026-11-12) from the last island down to Frostbite Fields
   // each island's two houses stand where they're farthest from its pads, landing spots, balloon and middle (owner, 2026-11-11: couriers landed inside them)
   ISLES.forEach((s, n) => {
-    const keep = [{ x: s.x, z: s.z }, ...pads.filter((p) => p.from === n), ...pads.filter((p) => p.to === n).map((p) => ({ x: p.tx, z: p.tz })), ...balloons.filter((b) => hyp(b.x - s.x, b.z - s.z) < s.r)]; if (n === CANNON.to) keep.push({ x: s.x - 9, z: s.z });
+    const keep = [{ x: s.x, z: s.z }, ...pads.filter((p) => p.from === n), ...pads.filter((p) => p.to === n).map((p) => ({ x: p.tx, z: p.tz })), ...balloons.filter((b) => hyp(b.x - s.x, b.z - s.z) < s.r), ...zips.filter((q) => hyp(q.x - s.x, q.z - s.z) < s.r)];   // (owner, 2026-11-12) and clear of the zipline if (n === CANNON.to) keep.push({ x: s.x - 9, z: s.z });
     for (let k = 0; k < 2; k++) { let best = null, bs = -1;
       for (let q = 0; q < 72; q++) { const a = (q / 72) * TAU, x = s.x + Math.cos(a) * s.r * 0.62, z = s.z + Math.sin(a) * s.r * 0.62, yaw = Math.atan2(s.x - x, s.z - z), mx = x + Math.sin(yaw) * 5.5, mz = z + Math.cos(yaw) * 5.5;
         const sc = Math.min(...keep.map((o) => Math.min(hyp(o.x - x, o.z - z) - 3.6, hyp(o.x - mx, o.z - mz)))); if (sc > bs) { bs = sc; best = { x, z, yaw }; } }
@@ -356,8 +359,7 @@ function buildTown() {
   for (let k = 0; k < FAR.n; k++) { const x0 = farX(5 + k); rect(x0, x0 + FAR.len, FAR.z0, FAR.z1, 0, FK[k]); row(x0 + 18, 5 + k, 17, 0, 8, false); }
   const F1 = FAR.x0 + FAR.n * FAR.len; road(FAR.x0, 0, F1, 0, 8);
   wall(FAR.x0, F1, FAR.z0, FAR.z0, 8); wall(FAR.x0, F1, FAR.z1, FAR.z1, 8); wall(FAR.x0, FAR.x0, FAR.z0, FAR.z1, 8); wall(F1, F1, FAR.z0, FAR.z1, 8);
-  zips.push({ x: ISLES[2].x + 13, z: ISLES[2].z - 6, y: ISLES[2].y, tx: FAR.x0 + 8, tz: -6, ty: 0, far: 1 });   // from the last island down to Frostbite Fields
-  balloons.push({ x: FAR.x0 + 7, z: 14, y: 0 });   // and a balloon home at its start
+  balloons.push({ x: FAR.x0 + FAR.n * FAR.len - 9, z: 14, y: 0 });   // (owner, 2026-11-12) the one balloon home: at the very end of the last zone
   { const x0 = farX(7); for (const dx of [22, 50, 78]) rect(x0 + dx - 3, x0 + dx + 3, FAR.z0, FAR.z1, 0.02, "water", -0.5); }   // the jungle's rivers
   { const x0 = farX(8); for (const [dx, z, r] of [[14, 12, 4], [30, -3, 3], [46, -16, 5], [62, 4, 3.5], [80, -12, 4], [88, 20, 3.5]]) { lavas.push({ x: x0 + dx, z, r }); disc(x0 + dx, z, r, 0.03, "lava", -0.5); } }
   // ---- trees where there's room ----

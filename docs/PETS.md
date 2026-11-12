@@ -130,6 +130,10 @@ A parcel that breaks or is lost is gone; the conveyor always has the next one. *
   A mount is named by its coat, e.g. "Black Gator", "Shiny Spirit Wolf". A new courier starts with a Common Dog. (owner, 2026-11-11) Every mount from before (and every
   leftover egg) became a **Dog** of the same rarity and skin, once (saved data version 2), so nobody has an animal
   from an area they haven't reached.
+- (owner, 2026-11-12) **The start of the run:** around the post office (west of the purple **Aura pad**, a chevron
+  strip all the way across just east of the square) every mount goes the same 12 m/s (x2 empty, as anywhere). Over the
+  pad its own speed switches on (a whoosh and purple sparks), for as long as you're east of it. Riding speeds up and
+  stops quickly whatever the speed (grip 7x the speed, at least 70 m/s², so fast mounts don't drift; ice still slides).
 - **Stats** (rarity 0-4, area a 0-4 for Dog to Wolf): (owner, 2026-11-12) Speed 12 m/s x (1 + 20% per rarity step) x
   (1 + 5% for each area its animal's own area is ahead of where it is, - 5% for each it's behind: a Wolf goes 120% on
   Main Street, a Dog 80% on the Floating Islands) x (1 + 5% per Aura **Boost** level, up to 10: the Stable's Boost row,
@@ -212,12 +216,11 @@ power (4 x (rarity + half its area's number)) is past 4 x the animal's area numb
   anywhere inside the red ring round it, 9 m (it was 3).
 - **Floating Islands** (Sky): three islands 32 to 44 m up off Cliffside's far side, two houses each, joined by jump
   pads; 3 dogs, wind and sky geese (every 8 to 14 s). Each island's houses stand as far as they can from its pads,
-  landing spots, balloon and middle; anyone who somehow ends up inside something solid is moved out to the nearest
-  clear spot. Falling off costs a parcel 1 hit and puts you back on the last island you stood on. A **balloon** on the
-  last island takes you back to the post office.
+  landing spots and middle (owner, 2026-11-12: and the zipline down); anyone who somehow ends up inside something solid is moved out to the nearest
+  clear spot. Falling off costs a parcel 1 hit and puts you back on the last island you stood on.
 - (owner, 2026-11-12) **Zones 6 to 10**, on the ground past the islands (`FAR`: x 600 to 1100, 100 m each), reached
-  by the **zipline** from the last island (closed in a bubble until Frostbite Fields opens; a balloon home stands at
-  its foot). One road down the middle, three houses each side, five of each zone's animal, walls round it. Express
+  by the **zipline** from the last island (closed in a bubble until Frostbite Fields opens). (owner, 2026-11-12) The one
+  **balloon** home to the post office is at the very end of the Moon Garden. One road down the middle, three houses each side, five of each zone's animal, walls round it. Express
   parcels get 70 / 75 / 80 / 85 / 90 s on top. Each has its own going:
   - **Frostbite Fields** (Fox): ice everywhere: slow to start, turn and stop (12% grip).
   - **Sunscorch Dunes** (Raptor): sand (80% speed) and sandstorms: gusts like the islands' wind, 1.4x as strong.
@@ -377,6 +380,9 @@ its own fresh saves, with the same logins. It is described in `docs/POKEMON.md`;
 Courier's rules.
 
 ## Rejected / removed
+
+- (owner, 2026-11-12) The balloons on the last Floating Island and at Frostbite Fields' start: the only balloon is at
+  the end of all the zones.
 
 - (owner, 2026-11-12) **Coins** (now Aura); carrying set by rarity (now 1 for every mount, raised with Aura); each
   area's animal being faster than the last (now the same base speed, faster short of its own area and slower past it).

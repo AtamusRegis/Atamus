@@ -6,6 +6,10 @@ and any rule decided. Use `git log` for the code detail (and for the older Atamu
 
 ## 2026-11-12
 
+- **Start pad, no drift, ride through rewards (owner).** Every mount goes the same speed around the post office; the
+  purple Aura pad on the way out switches on its real speed. Fast mounts no longer drift. The reward screen no longer
+  takes the controls: you keep riding while it shows (tap a card to skip).
+  The last island's houses keep clear of the zipline; the one balloon home is at the end of the Moon Garden.
 - **Zones 6 to 10 (owner).** Past the Floating Islands, down a zipline: Frostbite Fields (foxes, ice), Sunscorch Dunes
   (raptors, sand and sandstorms), Jungle Ruins (trikes, rivers and thick trees), Lava Flats (T-Rexes, lava pools) and
   the Moon Garden (unicorns, low gravity), each with its own parcel tier, houses, animals and tune, and the Comet Trail
