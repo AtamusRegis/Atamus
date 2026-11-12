@@ -26,14 +26,16 @@ Every rule below is in `website/pets-world.js` (shared with the server, an ident
    best of the four, with a little animation (they slide together and the new one pops out); merges chain up to
    Legendary. (owner, 2026-11-11: the loop) **They open by themselves once you have no parcels left** (all delivered
    or lost): your only parcel opens straight after its delivery; with several, they wait on the left until the last is
-   delivered or lost, then open **full screen, one after another**. Each builds up (three shakes, rays and glow growing,
-   longer the rarer), bursts and shows what was inside (coins, and maybe a mount, which then gets its own
-   unboxing); a tap hurries the build-up, then moves on (it moves on by itself after a moment too). Up to 60 can wait;
+   delivered or lost, then (owner, 2026-11-11) **all open at once, full screen**, each in its own card in the middle of
+   the screen. They build up together (three shakes, rays and glow growing, longer the rarer the best one), burst and
+   each card shows what was inside (coins, and maybe a mount); then each new mount gets its own unboxing (centered), one
+   after another. A tap hurries the build-up, then closes it (it closes by itself after a few seconds too).
+   (owner, 2026-11-11) **When the run's over** (nothing left delivered, carried, with a goose or on the ground) you're
+   taken straight back to the post office. Up to 60 can wait;
    past that the oldest open by themselves.
 
 (owner, 2026-11-11) **A stack of parcels:** a mount carries one parcel per rarity rank: a Common one 1, Uncommon 2, Rare
-3, Epic 4, Legendary 5; ride back into the conveyor to load up. (owner, 2026-11-11) However many it carries, the mount shows **one big
-box** (the best tier's color, taped blue if any is Express), a little bigger for each extra parcel. Each has its own address (the same neighborhood as another or a
+3, Epic 4, Legendary 5; ride back into the conveyor to load up. (owner, 2026-11-11) The mount shows **a big box for each parcel**, stacked. Each has its own address (the same neighborhood as another or a
 different one), its own marker, and its own row on the parcel card (with its distance; the card shows how many of how
 many). The ground arrow points to the nearest. Each delivers at its own mailbox and rolls; several rolls take turns.
 A parcel that breaks or is lost is gone; the conveyor always has the next one. **Empty-handed you ride twice as fast**
@@ -85,9 +87,10 @@ A parcel that breaks or is lost is gone; the conveyor always has the next one. *
 | Legendary | 1% | 1,500-2,600 | |
 
 - (owner, 2026-11-11) **Mounts drop from parcels:** a parcel can bring its area's animal, at the parcel's rarity or
-  lower, any of them equally (a Legendary parcel from Main Street: a Common, Uncommon, Rare, Epic or Legendary Dog). The
-  chance by parcel rarity: Common 5%, Uncommon 10%, Rare 20%, Epic 40%, Legendary 75% (1 in 100 Shiny, 1 in 1,000
-  Golden). Delivering in the same area again is how you chase a rarer one. Each new mount gets the unboxing in the
+  lower (a Legendary parcel from Main Street: a Common, Uncommon, Rare, Epic or Legendary Dog). (owner, 2026-11-11)
+  Each rarity has its own chance: Common 80%, Uncommon 40%, Rare 20%, Epic 10%, Legendary 5% (`PET_CHANCE`). A parcel
+  tries its own rarity first, then each one below, and gives one mount at most: a Legendary parcel 5% Legendary, else
+  10% Epic, else 20% Rare, else 40% Uncommon, else 80% Common. 1 in 100 is Shiny, 1 in 1,000 Golden. Delivering in the same area again is how you chase a rarer one. Each new mount gets the unboxing in the
   opening sequence; an Epic, Legendary, Shiny or Golden one is announced to the server.
 
 - **Luck** (the tier's, plus Lucky Stamps) weights each roll by (1 + luck) to the power of its rank, then the odds are
@@ -327,6 +330,10 @@ its own fresh saves, with the same logins. It is described in `docs/POKEMON.md`;
 Courier's rules.
 
 ## Rejected / removed
+
+- (owner, 2026-11-11) Opening a run's parcels one after another (now all at once, each in its own card); one big box on
+  the saddle for several parcels (a box each again); mount chances by parcel rarity (5% to 75%) with the rarity picked
+  evenly (now each rarity's own chance, from the parcel's down).
 
 - (owner, 2026-11-11) **Mount levels** (levels 1-20, Training XP, buying levels with coins, Level Coupons, the Coupon
   Press, the level-up card): a mount's rarity (and its area) decides its speed, size, ability and carrying.

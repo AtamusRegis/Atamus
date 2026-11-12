@@ -26,14 +26,18 @@ export const MOD_CHANCE = 0.2, EMPTY_FAST = 2, BASE_DUR = 3, BASE_COINS = 10, HI
 // reward rolls: chance, coins, and the chance of a mount (owner, 2026-11-11: no mount levels, so no Training XP or
 // Level Coupons any more): (owner,
 // 2026-11-11) the parcel's area's animal, at the parcel's rarity or lower (a Rare parcel from the Marsh: a Common,
-// Uncommon or Rare Gator)
+// Uncommon or Rare Gator; see PET_CHANCE)
 export const ROLLS = [
-  { chance: 0.6, coins: [4, 10], pet: 0.05 },
-  { chance: 0.25, coins: [15, 30], pet: 0.1 },
-  { chance: 0.1, coins: [50, 100], pet: 0.2 },
-  { chance: 0.04, coins: [220, 420], pet: 0.4 },
-  { chance: 0.01, coins: [1500, 2600], pet: 0.75 },
+  { chance: 0.6, coins: [4, 10] },
+  { chance: 0.25, coins: [15, 30] },
+  { chance: 0.1, coins: [50, 100] },
+  { chance: 0.04, coins: [220, 420] },
+  { chance: 0.01, coins: [1500, 2600] },
 ];
+// (owner, 2026-11-11) the chance of each rarity of mount from a parcel that can give it: a parcel tries its own rarity
+// first, then each one below (a Legendary parcel: 5% Legendary, else 10% Epic, else 20% Rare, else 40% Uncommon, else
+// 80% Common); one mount at most
+export const PET_CHANCE = [0.8, 0.4, 0.2, 0.1, 0.05];
 // luck moves the odds toward the rarer tiers: tier n's chance is weighted by (1 + luck)^n
 export function rollOdds(luck) { const w = ROLLS.map((r, n) => r.chance * Math.pow(1 + luck, n)), s = w.reduce((a, b) => a + b, 0); return w.map((v) => v / s); }
 // courier upgrades: 10 levels each; a level costs base x 1.8^(level - 1). (owner, 2026-11-11) Route Permits went: the
@@ -160,7 +164,7 @@ export function rewardRoll(tier, up, rnd = Math.random) {
 // what's inside a gift of rarity t from a parcel of tier pt (decided when it's opened, owner 2026-11-11)
 export function giftContents(t, pt, up, rnd = Math.random) {
   const R = ROLLS[t], coins = Math.round((R.coins[0] + rnd() * (R.coins[1] - R.coins[0])) * Math.sqrt(TIERS[pt].mult));
-  const pet = rnd() < R.pet ? { sp: ZONE_KIND[pt], r: Math.floor(rnd() * (t + 1)), va: skinRoll(rnd) } : null;   // (owner, 2026-11-11) that rarity or lower, any of them equally
+  let pet = null; for (let r = t; r >= 0 && !pet; r--) if (rnd() < PET_CHANCE[r]) pet = { sp: ZONE_KIND[pt], r, va: skinRoll(rnd) };   // that rarity or lower
   return { coins, pet };
 }
 // (owner, 2026-11-11) four unopened gifts of one rarity merge into one of the next (its parcel tier: the best of the four)

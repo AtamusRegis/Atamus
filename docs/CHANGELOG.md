@@ -6,6 +6,10 @@ and any rule decided. Use `git log` for the code detail (and for the older Atamu
 
 ## 2026-11-11
 
+- **All at once, then home (owner).** A run's parcels open together, each in its own centered card; the new mount's
+  unboxing is centered. When the run's over you're taken back to the post office. A box for each parcel on the saddle
+  again. Mount chances per rarity: Common 80%, Uncommon 40%, Rare 20%, Epic 10%, Legendary 5%, tried from the parcel's
+  rarity down.
 - **The loop (owner).** Parcels open by themselves once you have none left to deliver: one straight away, several as a
   full-screen sequence. A parcel can bring its area's animal at its rarity or lower; an Uncommon or better of an area's
   animal opens the next area. A mount carries one parcel per rarity rank (Common 1 to Legendary 5). No mount levels:
