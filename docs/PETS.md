@@ -30,7 +30,7 @@ Every rule below is in `website/pets-world.js` (shared with the server, an ident
    middle of the screen with its rarity; they shake together (rays and glow growing, a little longer the rarer the best
    one), burst, and every card shows what was inside at once: coins, and a mount the parcel brought right there in its
    card (it drops in spinning over rays, its name and rarity under it, NEW! for the first of its kind and rarity). No
-   separate unboxing to click through. A tap hurries the shaking, then closes it (it closes by itself after a few
+   separate unboxing to click through. (owner, 2026-11-12) No riding while it's up. A tap hurries the shaking, then closes it (it closes by itself after a few
    seconds too).
    (owner, 2026-11-11) **When the run's over** (nothing left delivered, carried, with a goose or on the ground) you're
    taken straight back to the post office. Up to 60 can wait;
@@ -298,11 +298,14 @@ of about 2 m).
 - **Hidden help:** after three failed runs in a row the dogs chasing you are 20% slower until you deliver.
 - Animals sleep while nobody is near.
 
-## Kicks
+## Bonks
 
-- Every 4 s. On couriers it reaches 3.6 m in front: a 1 s stun (less with Grip), knocked off the mount, 1 hit to one
+- (owner, 2026-11-12) The kick is called a **bonk** now (the button, the banner; the code still says kick). Every 4 s. On couriers it reaches 3.6 m in front: a 1 s stun (less with Grip), knocked off the mount, 1 hit to one
   of their parcels. (owner, 2026-11-11) **On animals it hits every one within 4.5 m, all round:** geese dizzy for 3 s
-  (and they drop the parcel they stole), chasers and goats sent home. No reward.
+  (and they drop the parcel they stole), chasers and goats sent home. (owner, 2026-11-12) **A bonk pays Aura:** 3 per animal and 12 per courier,
+  times the square root of where you are's tier pay (x1 on Main Street to x9.2 in the Moon Garden); an animal pays once
+  in 8 s, a courier once in 30 s from the same bonker (when it also cracks a parcel). The Aura pops out of you: an orb
+  and the amount flung up and out, scaling in big with a bounce, and a burst of purple.
 - **Protection:** no kicks in the safe zone; 5 s of grace after being kicked (a shimmer); the same courier can crack
   your parcel only once in 30 s; party members can't kick each other; **Friendly** (Settings) means you can't be kicked
   by couriers and can't kick them (animals still apply).
