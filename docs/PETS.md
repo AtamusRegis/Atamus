@@ -91,9 +91,9 @@ A parcel that breaks or is lost is gone; the conveyor always has the next one. *
 
 - (owner, 2026-11-11) **Mounts drop from parcels:** a parcel can bring its area's animal, at the parcel's rarity or
   lower (a Legendary parcel from Main Street: a Common, Uncommon, Rare, Epic or Legendary Dog). (owner, 2026-11-11)
-  Each rarity has its own chance: Common 80%, Uncommon 40%, Rare 20%, Epic 10%, Legendary 5% (`PET_CHANCE`). A parcel
-  tries its own rarity first, then each one below, and gives one mount at most: a Legendary parcel 5% Legendary, else
-  10% Epic, else 20% Rare, else 40% Uncommon, else 80% Common. 1 in 10,000 is Shiny. Delivering in the same area again is how you chase a rarer one. Each new mount gets the unboxing in the
+  (owner, 2026-11-12) Each rarity has its own chance: Common 40%, Uncommon 20%, Rare 10%, Epic 5%, Legendary 1%
+  (`PET_CHANCE`). A parcel tries its own rarity first, then each one below, and gives one mount at most: a Legendary
+  parcel 1% Legendary, else 5% Epic, else 10% Rare, else 20% Uncommon, else 40% Common. 1 in 10,000 is Shiny. Delivering in the same area again is how you chase a rarer one. Each new mount gets the unboxing in the
   opening sequence; an Epic, Legendary or Shiny one is announced to the server.
 
 - **Luck** (the tier's, plus Lucky Stamps) weights each roll by (1 + luck) to the power of its rank, then the odds are
@@ -153,10 +153,14 @@ A parcel that breaks or is lost is gone; the conveyor always has the next one. *
 - (owner, 2026-11-11) **Two skins only: normal and Shiny.** 1 in 10,000 new mounts is **Shiny**: the same coat, but
   little stars twinkle on and around it all the time (in town, for everyone; its pictures have sparkles too). A Shiny
   drop is announced to the server.
-- **Merging mounts:** two of the same mount (kind, coat and skin) merge (the Stable's Merge button, on either) into the
-  one you chose, which goes up to the next coat (rarity) and keeps its skin: two Tan Dogs make a Chocolate Dog, two
-  Shiny Tan Dogs a Shiny Chocolate Dog. A Legendary can't merge. (owner, 2026-11-12) It keeps the better carry and
-  Boost levels of the two. An Epic, Legendary or Shiny made by merging is announced. Up to 60 mounts.
+- **Merging mounts:** the same mounts (kind, coat and skin) merge (the Stable's Merge button, on any of them) into the
+  one you chose, which goes up to the next coat (rarity) and keeps its skin. (owner, 2026-11-12) How many: 2 Commons make
+  an Uncommon, 4 Uncommons a Rare, 8 Rares an Epic, 16 Epics a Legendary (`fuseN`); two Tan Dogs make a Chocolate Dog,
+  two Shiny Tan Dogs a Shiny Chocolate Dog. A Legendary can't merge. (owner, 2026-11-12) It keeps the best carry and
+  Boost levels of the ones merged. (owner, 2026-11-12) **Merge all** (the Stable, when there's a merge to make) makes every merge
+  there is, Commons first so what they make can merge on up; in each group it keeps the ridden one if it's there, else
+  the one with the most Aura levels. **Selling:** any mount but the one you ride (and never your last) sells for Aura
+  by rarity: 15 / 60 / 250 / 1,000 / 4,000, x5 Shiny (the Stable's Sell button). An Epic, Legendary or Shiny made by merging is announced. Up to 60 mounts.
 
 ## The tutorial
 

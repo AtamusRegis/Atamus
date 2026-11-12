@@ -4,7 +4,7 @@
 // deliveries, rolls, damage, coins, mounts; this page shows the town (pets-world.js, shared with the server), moves you
 // and asks. Phone first: a thumb joystick, drag to look, pinch to zoom, big buttons.
 import * as THREE from "./vendor/three.module.min.js";
-import * as World from "./pets-world.js?v=1794468246";
+import * as World from "./pets-world.js?v=1794469665";
 
 const $ = (id) => document.getElementById(id);
 const { TAU, clamp, hyp, MOUNTS, TIERS, RARITY, RARITY_C, MODS, UPGRADES } = World;
@@ -954,7 +954,8 @@ function renderPanel() {
     for (const [name, v, max] of [["Speed", S.speed, 33], ["Jump", S.jump, 11], ["Grip", S.grip * 100, 60]]) { const r = el("div", "stat"); r.appendChild(el("span", "", name)); const b = el("div", "bar"), f = el("i"); f.style.width = clamp((v / max) * 100, 4, 100) + "%"; b.appendChild(f); r.appendChild(b); r.appendChild(el("em", "", name === "Grip" ? Math.round(v) + "%" : v.toFixed(1))); info.appendChild(r); }
     const ar = el("div", "stat ab" + (tier ? "" : " off")); ar.appendChild(el("span", "", World.ABILITY[M.ab])); const pp = el("div", "pips"); for (const need of [0, 2, 4]) pp.appendChild(el("i", m.r >= need ? "on" : "", RARITY[need][0])); ar.appendChild(pp); info.appendChild(ar);
     const acts = el("div", "acts"); if (m.id !== save.ride) acts.appendChild(btn("Ride", () => netSend({ t: "equip", id: m.id }), "go"));
-    if (World.fuseSet(save.mounts, m.id)) acts.appendChild(btn("Merge", () => netSend({ t: "fuse", id: m.id }), "fuse"));   // two the same: the next coat up
+    if (World.fuseSet(save.mounts, m.id)) acts.appendChild(btn("Merge", () => netSend({ t: "fuse", id: m.id }), "fuse"));   // the same ones: the next coat up
+    if (m.id !== save.ride && save.mounts.length > 1) { const b = coinBtn(World.sellPrice(m), () => netSend({ t: "sell", id: m.id }), true); b.insertBefore(document.createTextNode("Sell "), b.firstChild); acts.appendChild(b); }   // (owner, 2026-11-12)
     info.appendChild(acts);
     // (owner, 2026-11-12) Aura on this mount: how much it carries and how fast it goes
     for (const [k, name, lv, max, show] of [["cap", "Carry", m.cap | 0, World.CAP_MAX, World.bagSize(m)], ["spd", "Boost", m.spd | 0, World.SPD_MAX, "+" + (m.spd | 0) * 5 + "%"]]) {
@@ -967,7 +968,9 @@ function renderPanel() {
       if (have) tr.appendChild(btn(T.name, () => netSend({ t: "trail", id: m.id, k: on ? "" : T.k }), "trail" + (on ? " on" : "")));
       else if (T.cost) { const b = coinBtn(T.cost, () => netSend({ t: "buytrail", k: T.k }), save.coins >= T.cost); b.insertBefore(document.createTextNode(T.name + " "), b.firstChild); b.title = T.name; tr.appendChild(b); } }
     info.appendChild(tr); d.appendChild(info);
-    body.appendChild(d); body.appendChild(grid);
+    body.appendChild(d);
+    if (World.fuseAll(save.mounts.map((k) => ({ ...k })), save.ride).length) { const all = el("div", "acts"); all.appendChild(btn("Merge all", () => netSend({ t: "fuseall" }), "fuse")); body.appendChild(all); }   // (owner, 2026-11-12)
+    body.appendChild(grid);
   } else if (panel === "up") {
     const total = World.upTotal(save.up), rk = World.rankOf(total), head = el("div", "rank"); const bd = el("i", "badge"); bd.style.background = rk ? World.RANK_C[rk] : "#d7e1ea"; head.appendChild(bd); head.appendChild(el("b", "", rk ? World.RANKS[rk] + " Postmaster" : "Postmaster")); head.appendChild(el("span", "", total + " / " + World.UP_MAX * Object.keys(UPGRADES).length)); body.appendChild(head);
     const val = { payout: (l) => "+" + l * 10 + "%", stamps: (l) => pct(World.rollOdds(World.stampLuck(l))[4]), press: (l) => "+" + l + "%", boxes: (l) => World.boxDur(l) + " durability" };
@@ -1165,6 +1168,7 @@ function onNet(m) {
       groundMark(m.x, m.y, m.z, World.ROCK.r, m.s, "#1d232a", (k) => { if (hyp(k.x - me.x, k.z - me.z) < 60) sfx("rock"); emit(k.x, k.y + 0.3, k.z, 22, { colors: ["#8a8278", "#c9bfae"], speed: 6, up: 4, life: 0.7 }); if (hyp(k.x - me.x, k.z - me.z) < 14) cam.shake = Math.max(cam.shake, 0.4); }); break; }
     case "dive": { const g = gooseModel(true); g.g.position.set(m.x + 9, m.y + 14, m.z); g.g.scale.setScalar(1.4); scene.add(g.g); divers.push({ g, x: m.x, y: m.y, z: m.z, t: 0, s: m.s }); if (hyp(m.x - me.x, m.z - me.z) < 40) sfx("honk"); groundMark(m.x, m.y, m.z, World.SKYGOOSE.r, m.s, "#2b3a66"); break; }
     case "fx": onFx(m); break;
+    case "sold": adopt(m.data); selMount = save.ride; if (panel === "stable") renderPanel(); sfx("coin"); popup("+" + fmt(m.n), "#d9a6ff", me.x, me.y + 2.6, me.z); break;
     case "fused": adopt(m.data); selMount = m.m.id; if (panel === "stable") renderPanel(); hatchShow("fuse", m.m); break;
     case "reset": location.reload(); break;   // (owner, 2026-11-11) staff made this a brand new courier
     case "petup": adopt(m.data); remount(); sfx("buy"); if (panel === "stable") renderPanel(); emit(me.x, me.y + 2, me.z, 30, { colors: ["#c77dff", "#ffffff", "#e2b8ff"], speed: 4, up: 5, life: 1 }); break;
