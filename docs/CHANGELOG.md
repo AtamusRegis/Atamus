@@ -6,6 +6,8 @@ and any rule decided. Use `git log` for the code detail (and for the older Atamu
 
 ## 2026-11-12
 
+- **Showings wait (owner).** A newly opened area's showing waits until the parcels are all opened and every window is
+  closed.
 - **Start pad, no drift, ride through rewards (owner).** Every mount goes the same speed around the post office; the
   purple Aura pad on the way out switches on its real speed. Fast mounts no longer drift. The reward screen no longer
   takes the controls: you keep riding while it shows (tap a card to skip).

@@ -330,7 +330,8 @@ Cannon's boom. (owner, 2026-11-11: more umph, and moments for the big things)
 - **A newly opened area** gets a short showing (about 9 s, letterbox bars, the HUD hidden, a tap or a key skips): the
   camera flies to its gate as it bursts open (its name and "OPEN!"), round its rarest chaser (the kind and its
   rarity), then to its other dangers: Suburbs geese and sprinklers; Marsh geese and mud; Cliffside goats and falling
-  rocks; Islands wind and sky geese. Not when logging in. Floating numbers rise and fade in 0.8 s. Every sound is made in the page (no files); music is a small
+  rocks; Islands wind and sky geese. Not when logging in. (owner, 2026-11-12) It waits until every parcel has been opened and
+  every window is closed (the reward screen, a new mount or merge, the menus), then a moment more. Floating numbers rise and fade in 0.8 s. Every sound is made in the page (no files); music is a small
 loop. (owner, 2026-11-11) The same tune in every area, a little different in each, switching at the next loop: Main
 Street as it is; Maple Suburbs with a soft chime an octave up; Goose Marsh a touch slower and reedy with a bluesy note
 or two; Cliffside brassier over a deeper bass; the Floating Islands an octave up, airy, with an echo.

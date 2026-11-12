@@ -1329,7 +1329,7 @@ function buildGates() {
 function stepGates(t) { const open = World.openFor(save); for (const q of gates) { q.g.visible = q.d >= open || q.d === gateHold; if (q.g.visible) { q.w.material.opacity = 0.34 + Math.sin(t * 2 + q.d) * 0.08; q.L.rotation.y = Math.sin(t * 0.8 + q.d) * 0.4; } } }
 // (owner, 2026-11-11) a newly opened area gets a short showing: letterbox bars, the camera flies to its gate as it
 // bursts open, then to its chasers (the rarest one), then to its other dangers. A tap or a key skips it. Your mount stays put.
-let cine = null, gateHold = -1, lastOpen = 0, lastOpenFor = "";
+let cine = null, gateHold = -1, lastOpen = 0, lastOpenFor = "", zoneCalm = 0;
 const CINE_HAZ = [
   null,
   [{ at: () => ({ x: 136.5, y: 0, z: -22 }), t: "GEESE" }, { at: () => World.sprinklers[1], t: "SPRINKLERS" }],
@@ -1365,8 +1365,10 @@ function stepCine(dt) {
 }
 function watchZones() {   // a new area opened (not on logging in): show it
   const o = World.openFor(save); if (lastOpenFor !== myName) { lastOpenFor = myName; lastOpen = o; return; }
-  if (reveal || opening || $("hatch").style.display === "flex") return;   // after the parcels and the new mount have had their moment
-  if (o > lastOpen) { const ds = []; for (let d = lastOpen; d < o; d++) ds.push(d); lastOpen = o; setTimeout(() => playZones(ds), 1200); }   // after the level-up has had its moment
+  // (owner, 2026-11-12) only once every parcel's been opened and every window is closed (the reward screen, a new mount,
+  // a merge, the menus), and it's stayed that way for a moment
+  const t = performance.now(); if (cine || reveal || opening || merging || save.gifts.length || hatchQ.length || panel || $("hatch").style.display === "flex") { zoneCalm = t; return; }
+  if (o > lastOpen && t - zoneCalm > 1200) { const ds = []; for (let d = lastOpen; d < o; d++) ds.push(d); lastOpen = o; playZones(ds); }
 }
 addEventListener("pointerdown", () => { if (cine && (cine.i > 0 || cine.t > 0.8)) endCine(); });
 addEventListener("keydown", (e) => { if (cine && (e.code === "Escape" || e.code === "Space" || e.code === "Enter")) endCine(); });
