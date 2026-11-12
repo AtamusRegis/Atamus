@@ -335,12 +335,12 @@ export function attachPets(server, { origins = [], allowLocal = false, store = m
           if (k) q.tr = k; else delete q.tr; changed(me); pushData(me); if (q.id === d.ride) showMount(me); break;
         }
         case "equip": { const q = d.mounts.find((k) => k.id === m.id); if (q && d.ride !== q.id) { d.ride = q.id; changed(me); pushData(me); showMount(me); sendBag(me, { k: "mount" }); } break; }
-        case "fuse": {   // (owner, 2026-11-11) two of the same normal mount: the chosen one becomes Shiny, the other goes
+        case "fuse": {   // (owner, 2026-11-11) two of the same mount (coat and skin): the chosen one goes up a coat (rarity), the other goes
           const four = W.fuseSet(d.mounts, m.id); if (!four) break;
-          const best = four[0]; best.va = 1;   // the one you chose becomes Shiny
+          const best = four[0]; best.r++;   // the one you chose
           d.mounts = d.mounts.filter((k) => k === best || !four.includes(k)); if (!d.mounts.some((k) => k.id === d.ride)) d.ride = best.id;
           changed(me); flush(me.acct); send(ws, { t: "fused", m: best, data: d }); showMount(me);
-          if (best.r >= 3) announce(me, best, true);   // a Shiny Epic or Legendary by merging tells everyone
+          if (best.r >= 3 || best.va) announce(me, best, true);   // an Epic, Legendary or Shiny made by merging tells everyone
           break;
         }
         case "upgrade": {

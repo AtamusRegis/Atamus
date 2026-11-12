@@ -6,6 +6,9 @@ and any rule decided. Use `git log` for the code detail (and for the older Atamu
 
 ## 2026-11-11
 
+- **Every animal its own coats; merging raises the coat (owner).** Each animal has five coats of its own, one per
+  rarity (a Gator goes Green, Albino, Sapphire, Black, Magma). Two of the same mount merge into the next coat up, keeping
+  Shiny: two Shiny Tan Dogs make a Shiny Chocolate Dog.
 - **Five coats, and a real Shiny (owner).** Every animal has the same five coats, one per rarity: Black, Orange, Gold,
   Diamond, Void (e.g. "Shiny Void Wolf"). The only other skin is Shiny, now 1 in 10,000: the same coat with sparkles
   twinkling around it. Golden and Rainbow went (owned ones became Shiny); merging two of the same makes a Shiny.

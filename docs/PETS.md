@@ -113,9 +113,10 @@ A parcel that breaks or is lost is gone; the conveyor always has the next one. *
 - (owner, 2026-11-11) **The mounts are the areas' animals:** Dog (Main Street, Bark), Cat (Maple Suburbs, Double
   Jump), Gator (Goose Marsh, Dash), Bear (Cliffside, Bark), Wolf (Floating Islands, Dash), each **Common to Legendary**
   (the rarity is the mount's own: its coat, its stats and its name; the town's animals of that kind and rarity wear the
-  same coat). (owner, 2026-11-11) **One coat per rarity, the same five for every animal** (`COATS`): Black (Common),
-  Orange (Uncommon), Gold (Rare), Diamond (Epic), Void (Legendary); a mount is named by its coat, e.g. "Gold Gator",
-  "Shiny Void Wolf". A new courier starts with a Common Dog. (owner, 2026-11-11) Every mount from before (and every
+  same coat). (owner, 2026-11-11) **Each animal has its own five coats**, one per rarity, chosen to suit it (`MOUNTS[..].coats`),
+  Common to Legendary: Dog Tan, Chocolate, Blue Merle, Ember, Starlight; Cat Tabby, Ginger, Siamese, Lilac, Cosmic; Gator
+  Green, Albino, Sapphire, Black, Magma; Bear Brown, Black, Polar, Honey, Aurora; Wolf Gray, Timber, Arctic, Shadow, Spirit.
+  A mount is named by its coat, e.g. "Black Gator", "Shiny Spirit Wolf". A new courier starts with a Common Dog. (owner, 2026-11-11) Every mount from before (and every
   leftover egg) became a **Dog** of the same rarity and skin, once (saved data version 2), so nobody has an animal
   from an area they haven't reached.
 - **Stats** (rarity 0-4, area a 0-4 for Dog to Wolf): (owner, 2026-11-11) Speed 10 + 1.5 x a + 1 x rarity m/s: each
@@ -136,9 +137,10 @@ A parcel that breaks or is lost is gone; the conveyor always has the next one. *
 - (owner, 2026-11-11) **Two skins only: normal and Shiny.** 1 in 10,000 new mounts is **Shiny**: the same coat, but
   little stars twinkle on and around it all the time (in town, for everyone; its pictures have sparkles too). A Shiny
   drop is announced to the server.
-- **Merging mounts:** two of the same normal mount (kind and rarity) merge (the Stable's Merge button, on either) into
-  the one you chose, which becomes Shiny; the other goes. A Shiny Epic or Legendary by merging is announced. Up to 60
-  mounts.
+- **Merging mounts:** two of the same mount (kind, coat and skin) merge (the Stable's Merge button, on either) into the
+  one you chose, which goes up to the next coat (rarity) and keeps its skin: two Tan Dogs make a Chocolate Dog, two
+  Shiny Tan Dogs a Shiny Chocolate Dog. A Legendary can't merge. An Epic, Legendary or Shiny made by merging is
+  announced. Up to 60 mounts.
 
 ## The tutorial
 
@@ -358,7 +360,7 @@ Courier's rules.
   and its tutorial card; **Route Permits** (districts open with mount levels now; their coins refunded); the **Fragile,
   Heavy and Golden** parcels (only tiers and Express stay); merging **four** mounts (now two).
 - (owner, 2026-11-11) The **Golden and Rainbow** skins (owned ones became Shiny), the Shiny's lighter coat (it sparkles
-  now), the 1 in 100 Shiny chance (now 1 in 10,000), and each animal's own five coats (now the same five for all).
+  now), the 1 in 100 Shiny chance (now 1 in 10,000), the same five coats for every animal (each has its own five), and merging into a Shiny (merging raises the coat now).
 
 - (owner, 2026-11-11) Back alleys; the wide (120 m) town; rewards rolled in full on delivery (now the rarity on
   delivery, the contents on opening).

@@ -69,26 +69,27 @@ export const rankOf = (total) => (total >= 23 ? 4 : total >= 15 ? 3 : total >= 8
 // Goose Marsh gators, Cliffside bears, the Floating Islands wolves), and each comes Common to Legendary. A mount is a kind
 // and a rarity (m.r): the rarity sets its coat, its stats and how it shows; the kind sets its ability. An area's parcels
 // drop its kind, at the parcel's rarity. The town's animals wear the same coats.
-// (owner, 2026-11-11) one coat per rarity, the same five for every animal: Black (Common), Orange (Uncommon), Gold (Rare),
-// Diamond (Epic), Void (Legendary); each also comes Shiny (the same coat, sparkling)
-export const COATS = [{ name: "Black", c: ["#2b2f36", "#5a6470"] }, { name: "Orange", c: ["#e8862e", "#ffd9a8"] }, { name: "Gold", c: ["#e8b923", "#fff3b8"] }, { name: "Diamond", c: ["#a9e4ff", "#ffffff"] }, { name: "Void", c: ["#2a1446", "#a45be0"] }];
+// (owner, 2026-11-11) each animal has its own five coats, one per rarity (Common to Legendary), each suiting it: a mount
+// is named by its coat, e.g. "Black Gator", "Shiny Spirit Wolf". Each also comes Shiny (the same coat, sparkling)
 export const MOUNTS = {
-  dog: { name: "Dog", ab: "bark", look: "pup", size: 1 },
-  cat: { name: "Cat", ab: "jump2", look: "cat", size: 0.95 },
-  gator: { name: "Gator", ab: "dash", look: "gator", size: 1 },
-  bear: { name: "Bear", ab: "bark", look: "bear", size: 1.05 },
-  wolf: { name: "Wolf", ab: "dash", look: "wolf", size: 1 },
+  dog: { name: "Dog", ab: "bark", look: "pup", size: 1, coats: [["Tan", "#c98a4b", "#f3dcc0"], ["Chocolate", "#5a3a24", "#d9a77a"], ["Blue Merle", "#5a6f8a", "#c9d6e8"], ["Ember", "#b8361c", "#ffb347"], ["Starlight", "#22305a", "#f2c94c"]] },
+  cat: { name: "Cat", ab: "jump2", look: "cat", size: 0.95, coats: [["Tabby", "#b98a5a", "#f3e0c8"], ["Ginger", "#e8862e", "#ffe1bf"], ["Siamese", "#efe2cc", "#4a3426"], ["Lilac", "#b9a2d9", "#f5ecff"], ["Cosmic", "#3a1d6e", "#7fd0ff"]] },
+  gator: { name: "Gator", ab: "dash", look: "gator", size: 1, coats: [["Green", "#4f7a3a", "#c9d48a"], ["Albino", "#efe6d8", "#ff9aa8"], ["Sapphire", "#2a5fb8", "#9fe0ff"], ["Black", "#1f2329", "#4fe08a"], ["Magma", "#2a1a14", "#ff6a1f"]] },
+  bear: { name: "Bear", ab: "bark", look: "bear", size: 1.05, coats: [["Brown", "#7a5236", "#c9a27e"], ["Black", "#2b2523", "#8a6a4e"], ["Polar", "#f4f8fb", "#bfe0f0"], ["Honey", "#d99a2b", "#fff0c2"], ["Aurora", "#2c4a7a", "#7ef0c8"]] },
+  wolf: { name: "Wolf", ab: "dash", look: "wolf", size: 1, coats: [["Gray", "#8a96a2", "#e9eef2"], ["Timber", "#7a5a3a", "#d9c3a2"], ["Arctic", "#eef3f8", "#a9c9e8"], ["Shadow", "#1b1d24", "#e33a4a"], ["Spirit", "#6fc8ff", "#ffffff"]] },
 };
 export const ZONE_KIND = ["dog", "cat", "gator", "bear", "wolf"];   // each area's animal, in order (the same as CHASERS)
-export const coat = (sp, r) => COATS[clamp(r | 0, 0, 4)].c;
+export const coat = (sp, r) => (MOUNTS[sp] || MOUNTS.dog).coats[clamp(r | 0, 0, 4)].slice(1);   // [body, trim]
+export const coatName = (sp, r) => (MOUNTS[sp] || MOUNTS.dog).coats[clamp(r | 0, 0, 4)][0];
 // the mounts from before (and their rarity): (owner, 2026-11-11) each became a Dog of that rarity, keeping level and skin
 export const MOUNT_MOVED = { pup: ["dog", 0], piglet: ["dog", 0], bunny: ["dog", 0], fox: ["cat", 1], deer: ["cat", 1], parrot: ["cat", 1], raptor: ["gator", 2], stego: ["gator", 2], pony: ["gator", 2], owl: ["gator", 2], trex: ["bear", 3], trike: ["bear", 3], unicorn: ["wolf", 4], dragon: ["wolf", 4] };
 export const ABILITY = { bark: "Bark", dash: "Dash", jump2: "Double Jump" };
 export const VARIANTS = ["", "Shiny"], SHINY = 0.0001;   // (owner, 2026-11-11) 1 in 10,000; no Golden or Rainbow
-// (owner, 2026-11-11) two of the same normal mount (kind and rarity) merge into one Shiny
+// (owner, 2026-11-11) two of the same mount (kind, coat and skin) merge into one of the next coat up, keeping the skin:
+// two Tan Dogs make a Chocolate Dog, two Shiny Tan Dogs a Shiny Chocolate Dog; a Legendary is the last
 export const FUSE_N = 2;
 export function fuseSet(mounts, id) {   // the ones a merge would take (the chosen one and the lowest-level other), or null
-  const m = mounts.find((k) => k.id === id); if (!m || m.va >= VARIANTS.length - 1) return null;
+  const m = mounts.find((k) => k.id === id); if (!m || m.r >= 4) return null;
   const same = mounts.filter((k) => k.sp === m.sp && k.r === m.r && k.va === m.va && k.id !== id).sort((a, b) => a.id - b.id);
   return same.length >= FUSE_N - 1 ? [m, ...same.slice(0, FUSE_N - 1)] : null;
 }
