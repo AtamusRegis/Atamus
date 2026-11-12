@@ -4,7 +4,7 @@
 // deliveries, rolls, damage, coins, mounts; this page shows the town (pets-world.js, shared with the server), moves you
 // and asks. Phone first: a thumb joystick, drag to look, pinch to zoom, big buttons.
 import * as THREE from "./vendor/three.module.min.js";
-import * as World from "./pets-world.js?v=1794464707";
+import * as World from "./pets-world.js?v=1794465528";
 
 const $ = (id) => document.getElementById(id);
 const { TAU, clamp, hyp, MOUNTS, TIERS, RARITY, RARITY_C, MODS, UPGRADES } = World;
@@ -231,16 +231,18 @@ const LOOK = {
   wolf: { plan: "quad", body: [0.66, 0.62, 1.35], leg: 0.62, head: 0.56, snout: 0.42, ears: "point", tail: "bushy", nose: "#1d232a" },
   goat: { plan: "quad", body: [0.6, 0.62, 1.1], leg: 0.55, head: 0.5, snout: 0.3, ears: "side", horns: "curl", beard: true, tail: "stub" },
 };
-const shiny = (c) => "#" + new THREE.Color(c).lerp(new THREE.Color("#ffffff"), 0.45).offsetHSL(0.06, 0.2, 0).getHexString();   // a Shiny's lighter, shifted coat
+// (owner, 2026-11-11) a Shiny keeps its coat and sparkles: little stars twinkle on and around it all the time
+const SPARK = ["#ffffff", "#fff6c2", "#c9f0ff", "#ffd1f3"];
+function sparkle(x, y, z, sc, dt) { if (Math.random() < dt * 10) emit(x, y + 0.9 * sc, z, 1, { colors: SPARK, speed: 0.15, up: 0.3, life: 0.75, grav: 0, size: 0.24, spread: 1.7 * sc, tw: 1 }); }
 const RAINBOW = ["#ff6b6b", "#ffb84d", "#ffe66b", "#7ee08a", "#6bb8ff", "#b48cff"];
 // (owner, 2026-11-09) a pet grows with its level but its rider stays the same size, so a big pet feels big
 function sizePet(m, sc) { m.g.scale.setScalar(sc); if (m.rider) { m.rider.scale.setScalar(0.8 / sc); m.rider.position.y = m.seat - 0.52 / sc; m.top = m.seat * sc + 1.4; } else m.top *= sc; }
-function petModel(sp, rider, va, r = 0) {   // sp: a mount's kind (r: its rarity, for its coat), or { look, c, a, size }; va: 1 Shiny, 2 Golden, 3 Rainbow
+function petModel(sp, rider, va, r = 0) {   // sp: a mount's kind (r: its rarity, for its coat), or { look, c, a, size }; va: 1 Shiny (the same coat: it sparkles)
   let riderG = null;
   if (typeof sp !== "object") { const M = World.MOUNTS[sp] || World.MOUNTS.dog, [c, a] = World.coat(sp, r); sp = { look: M.look, c, a, size: M.size }; }
   const s = sp, L = LOOK[s.look] || LOOK.pup, k = s.size, g = new THREE.Group(), body = new THREE.Group(); g.add(body);
   const legs = [], wings = [], tails = [], head = new THREE.Group();
-  const C = va === 3 ? "#b06bff" : va === 2 ? "#f6c53a" : va === 1 ? shiny(s.c) : s.c, A = va === 3 ? "#5ff2d8" : va === 2 ? "#fff3b8" : va === 1 ? shiny(s.a) : s.a;   // Rainbow: violet with a sea-green trim, and a rainbow trail
+  const C = s.c, A = s.a; void va;
   let seat = 1, seatZ = -0.1 * k;
   const eyes = (hs, z, big) => { for (const ex of [-1, 1]) { if (big) { ball(hs * 0.2, "#ffffff", ex * hs * 0.24, hs * 0.08, z, head); ball(hs * 0.11, "#1d232a", ex * hs * 0.24, hs * 0.08, z + hs * 0.12, head); } else ball(hs * 0.09, "#1d232a", ex * hs * 0.26, hs * 0.12, z, head); } };
   const tail = (type, y, z) => {
@@ -399,7 +401,12 @@ function portrait(sp, va = 0, r = 0) {
   const L = LOOK[(World.MOUNTS[sp] || World.MOUNTS.dog).look] || {}, k = (World.MOUNTS[sp] || World.MOUNTS.dog).size, wide = L.wings === "bat" || L.wings === "feather" && L.plan === "quad" || L.plan === "butterfly" ? 1.35 : 1, tall = (L.neck || 0) + (L.leg || 0.5) > 1.5 ? 1.3 : 1;
   pCam.position.set(0, 2.4 * k * wide * tall, 5.6 * k * wide * tall); pCam.lookAt(0, 1.0 * k * tall, 0);
   portraitR.render(pScene, pCam); pScene.remove(m.g);
-  return (PORTRAITS[key] = portraitR.domElement.toDataURL());
+  if (!va) return (PORTRAITS[key] = portraitR.domElement.toDataURL());
+  // a Shiny's picture has its sparkles: four-pointed stars over it
+  const cv = document.createElement("canvas"), W2 = (cv.width = portraitR.domElement.width), H2 = (cv.height = portraitR.domElement.height), x = cv.getContext("2d"); x.drawImage(portraitR.domElement, 0, 0);
+  const star = (cx, cy, s, c) => { x.fillStyle = c; x.beginPath(); for (let i = 0; i < 8; i++) { const a = (i * Math.PI) / 4, d = i % 2 ? s * 0.28 : s; x.lineTo(cx + Math.sin(a) * d, cy - Math.cos(a) * d); } x.closePath(); x.fill(); };
+  for (const [u, v, s, c] of [[0.2, 0.22, 0.09, "#ffffff"], [0.8, 0.3, 0.07, "#fff6c2"], [0.7, 0.75, 0.06, "#c9f0ff"], [0.28, 0.66, 0.05, "#ffd1f3"], [0.55, 0.12, 0.045, "#ffffff"]]) { x.shadowColor = "#ffffff"; x.shadowBlur = W2 * 0.03; star(u * W2, v * H2, s * W2, c); }
+  return (PORTRAITS[key] = cv.toDataURL());
 }
 
 
@@ -443,14 +450,14 @@ function parcelMesh(tier, mod) {
 // ---- little bits that fly: confetti, sparkles, dust, splinters ----
 const PN = 900, pMesh = new THREE.InstancedMesh(new THREE.BoxGeometry(1, 1, 0.35), new THREE.MeshBasicMaterial(), PN), parts = [], pDummy = new THREE.Object3D(), pCol = new THREE.Color();
 pMesh.frustumCulled = false; pMesh.count = 0; scene.add(pMesh);
-function emit(x, y, z, n, { colors = ["#ffffff"], speed = 4, up = 4, life = 0.9, size = 0.16, grav = 12, spread = 0.3 } = {}) {
+function emit(x, y, z, n, { colors = ["#ffffff"], speed = 4, up = 4, life = 0.9, size = 0.16, grav = 12, spread = 0.3, tw = 0 } = {}) {
   for (let k = 0; k < n && parts.length < PN; k++) { const a = Math.random() * TAU, v = speed * (0.4 + Math.random() * 0.6);
-    parts.push({ x: x + (Math.random() - 0.5) * spread, y: y + (Math.random() - 0.5) * spread, z: z + (Math.random() - 0.5) * spread, vx: Math.cos(a) * v, vy: up * (0.5 + Math.random() * 0.8), vz: Math.sin(a) * v, t: 0, life: life * (0.6 + Math.random() * 0.6), size: size * (0.7 + Math.random() * 0.6), grav, c: pick(colors), r: Math.random() * 6 }); }
+    parts.push({ x: x + (Math.random() - 0.5) * spread, y: y + (Math.random() - 0.5) * spread, z: z + (Math.random() - 0.5) * spread, vx: Math.cos(a) * v, vy: up * (0.5 + Math.random() * 0.8), vz: Math.sin(a) * v, t: 0, life: life * (0.6 + Math.random() * 0.6), size: size * (0.7 + Math.random() * 0.6), grav, c: pick(colors), r: Math.random() * 6, tw }); }
 }
 function stepParts(dt) {
   let n = 0;
   for (let i = parts.length - 1; i >= 0; i--) { const p = parts[i]; p.t += dt; if (p.t >= p.life) { parts.splice(i, 1); continue; } p.vy -= p.grav * dt; p.x += p.vx * dt; p.y += p.vy * dt; p.z += p.vz * dt; }
-  for (const p of parts) { const k = 1 - p.t / p.life; pDummy.position.set(p.x, p.y, p.z); pDummy.rotation.set(p.r + p.t * 7, p.r * 2 + p.t * 5, 0); pDummy.scale.setScalar(p.size * (0.4 + 0.6 * k)); pDummy.updateMatrix(); pMesh.setMatrixAt(n, pDummy.matrix); pMesh.setColorAt(n, pCol.set(p.c)); n++; }
+  for (const p of parts) { const k = 1 - p.t / p.life; pDummy.position.set(p.x, p.y, p.z); pDummy.rotation.set(p.r + p.t * 7, p.r * 2 + p.t * 5, 0); pDummy.scale.setScalar(p.size * (p.tw ? Math.sin(Math.PI * p.t / p.life) : 0.4 + 0.6 * k));   /* a sparkle twinkles: grows, then shrinks away */ pDummy.updateMatrix(); pMesh.setMatrixAt(n, pDummy.matrix); pMesh.setColorAt(n, pCol.set(p.c)); n++; }
   pMesh.count = n; pMesh.instanceMatrix.needsUpdate = true; if (pMesh.instanceColor) pMesh.instanceColor.needsUpdate = true;
 }
 const CONFETTI = ["#ff6b6b", "#ffd84a", "#7ee08a", "#6bb8ff", "#b48cff", "#ffffff"];
@@ -626,14 +633,12 @@ function stepMe(dt) {
   if (!me.armed && !nearTrigger()) me.armed = true;
   if (me.stun <= 0) triggers(t);
   if ((me.boost > 0 || me.dash > 0) && me.moving) emit(me.x - Math.sin(me.yaw) * 1.4, me.y + 1, me.z - Math.cos(me.yaw) * 1.4, 1, { colors: ["#ffffff", "#ffd84a"], speed: 1, up: 0.3, life: 0.3, grav: 0, size: 0.16, spread: 1.4 });   // speed streaks
-  // footsteps: dust; a level-20 mount leaves sparkles, a Shiny or Golden one a trail
+  // footsteps: dust; a Legendary leaves sparkles
   if (me.ground && me.moving) { me.stepT -= dt; if (me.stepT <= 0) { me.stepT = 0.16; trail(me.x, me.y, me.z, q, kind); } }
+  if (q.va) { const f = me.foot; sparkle(f ? me.mx : me.x, f ? me.my : me.y, f ? me.mz : me.z, World.mountScale(q) * MOUNTS[q.sp].size, dt); }
 }
 function trail(x, y, z, q, kind) {
   if (q.tr === "cloud") for (let k = 0; k < 2; k++) emit(x + (Math.random() - 0.5) * 0.8, y + 0.35 + Math.random() * 0.4, z + (Math.random() - 0.5) * 0.8, 1, { colors: ["#ffffff", "#e8f2ff", "#d6e6fb"], speed: 0.3, up: 0.6, life: 1.3, grav: -0.3, size: 0.42 });   // (owner, 2026-11-11) the Cloud Trail: soft puffs behind
-  if (q.va === 3) emit(x, y + 0.5, z, 3, { colors: RAINBOW, speed: 0.9, up: 1.3, life: 0.9, grav: -1, size: 0.15 });
-  else if (q.va === 2) emit(x, y + 0.5, z, 2, { colors: ["#ffd84a", "#fff3b8"], speed: 0.8, up: 1.2, life: 0.8, grav: -1, size: 0.14 });
-  else if (q.va === 1) emit(x, y + 0.5, z, 2, { colors: ["#bfe6ff", "#ffffff", "#ffc7f0"], speed: 0.8, up: 1.2, life: 0.8, grav: -1, size: 0.12 });
   if (q.r >= 4) emit(x, y + 0.1, z, 2, { colors: ["#ffd84a", "#ffffff"], speed: 1.2, up: 1.5, life: 0.6, grav: 2, size: 0.12 });
   else if (kind === "mud") emit(x, y + 0.1, z, 2, { colors: ["#6b4d33"], speed: 1.5, up: 2, life: 0.4, grav: 9, size: 0.14 });
   else if (Math.random() < 0.4) emit(x, y + 0.1, z, 1, { colors: ["#e9e2d2"], speed: 0.6, up: 0.8, life: 0.35, grav: 1, size: 0.12 });
@@ -831,7 +836,7 @@ function stepReveal(dt) {   // (owner, 2026-11-11) all of the run's parcels open
 function revealMount(C) {
   const m = C.g.mount, wrap = el("div", "rmount"), im = el("img"); im.src = portrait(m.sp, m.va, m.r); im.alt = ""; wrap.appendChild(el("i", "rmrays")); wrap.appendChild(im);
   if (save.mounts.filter((k) => k.sp === m.sp && k.r === m.r).length <= 1) wrap.appendChild(el("b", "rnew disp", "NEW!"));
-  wrap.style.setProperty("--mc", m.va === 3 ? "#b06bff" : m.va === 2 ? "#ffd84a" : m.va === 1 ? "#bfe6ff" : RARITY_C[m.r]);
+  wrap.style.setProperty("--mc", m.va ? "#bfe6ff" : RARITY_C[m.r]);
   const nm = el("b", "rmname disp", mountName(m)); nm.style.color = RARITY_C[m.r] === "#ffffff" ? "#ffffff" : RARITY_C[m.r];
   C.card.insertBefore(wrap, C.list); C.card.insertBefore(nm, C.list); 
 }
@@ -917,7 +922,7 @@ function openPanel(k) { panel = panel === k ? "" : k; $("panel").style.display =
 function closePanel() { panel = ""; $("panel").style.display = "none"; }
 const btn = (text, fn, cls) => { const b = el("button", "btn " + (cls || ""), text); b.onclick = fn; return b; };
 const coinBtn = (cost, fn, ok) => { const b = el("button", "btn buy"); b.appendChild(el("i", "coin")); b.appendChild(document.createTextNode(fmt(cost))); b.disabled = !ok; b.onclick = fn; return b; };
-const mountName = (m) => (World.VARIANTS[m.va] ? World.VARIANTS[m.va] + " " : "") + RARITY[m.r | 0] + " " + MOUNTS[m.sp].name;
+const mountName = (m) => (m.va ? "Shiny " : "") + World.COATS[clamp(m.r | 0, 0, 4)].name + " " + MOUNTS[m.sp].name;   // (owner, 2026-11-11) e.g. Shiny Void Wolf
 const pct = (v) => (v >= 0.1 ? (v * 100).toFixed(0) : v >= 0.01 ? (v * 100).toFixed(1) : (v * 100).toFixed(2)) + "%";
 function oddsRow(odds) { const r = el("div", "odds"); odds.forEach((v, n) => { if (v > 0) { const s = el("span", "", pct(v)); s.style.color = RARITY_C[n] === "#ffffff" ? "#6f7d8a" : RARITY_C[n]; s.title = RARITY[n]; r.appendChild(s); } }); return r; }
 function renderPanel() {
@@ -947,7 +952,7 @@ function renderPanel() {
     TIERS.forEach((T, n) => { const r = el("div", "orow" + (n < open ? "" : " off")); const b = el("b", "", T.name); b.style.color = T.c; r.appendChild(b); const full = el("div", "odds"); World.rollOdds(T.luck + World.stampLuck(save.up.stamps)).forEach((v, i) => { const s = el("span", "", pct(v)); s.style.color = RARITY_C[i] === "#ffffff" ? "#6f7d8a" : RARITY_C[i]; full.appendChild(s); }); r.appendChild(full); r.appendChild(el("em", "", "x" + T.mult + " · " + pct(sw[n]))); body.appendChild(r); });
     for (const k of Object.keys(MODS)) { const r = el("div", "orow"); r.appendChild(el("span", "mod " + k, MODS[k].name)); r.appendChild(el("em", "", "+" + MODS[k].bonus * 100 + "%")); body.appendChild(r); }
     { const r = el("div", "orow"); r.appendChild(el("b", "", "Mount")); const full = el("div", "odds"); World.PET_CHANCE.forEach((v, i) => { const s = el("span", "", pct(v)); s.style.color = RARITY_C[i] === "#ffffff" ? "#6f7d8a" : RARITY_C[i]; full.appendChild(s); }); r.appendChild(full); body.appendChild(r); }   // (owner, 2026-11-11) each rarity of mount's chance, tried from the parcel's own rarity down
-    const vr = el("div", "orow"); vr.appendChild(el("b", "", "Shiny")); vr.appendChild(el("em", "", "1 / 100")); body.appendChild(vr); const gr = el("div", "orow"); gr.appendChild(el("b", "", "Golden")); gr.appendChild(el("em", "", "1 / 1,000")); body.appendChild(gr);
+    const vr = el("div", "orow"); vr.appendChild(el("b", "", "Shiny")); vr.appendChild(el("em", "", "1 / 10,000")); body.appendChild(vr);
   } else if (panel === "set") {
     const row = (name, node) => { const r = el("label", "setrow"); r.appendChild(el("span", "", name)); r.appendChild(node); body.appendChild(r); };
     const fr = el("input"); fr.type = "checkbox"; fr.checked = save.set.friendly; fr.onchange = () => { save.set.friendly = fr.checked; netSend({ t: "set", friendly: fr.checked }); }; row("Friendly", fr);
@@ -984,7 +989,7 @@ function hatchShow(kind, m) {
   if ($("hatch").style.display === "flex") { hatchQ.push([kind, m]); return; }
   const o = $("hatch"), egg = $("hegg"), im = $("himg"), nm = $("hname"), rr = $("hrar"), M = { ...MOUNTS[m.sp], r: m.r | 0 }, c = RARITY_C[M.r]; o.classList.remove("won", "first"); o.style.display = "flex"; egg.style.display = "block"; egg.style.background = ""; im.style.display = nm.style.display = rr.style.display = "none"; egg.className = kind === "gift" ? "egg gift wob" : kind === "fuse" ? "egg fuse wob" : "egg wob";   // a new mount as a gift comes in a box
   for (const k of [0, 1, 2]) setTimeout(() => sfx("wobble"), 150 + k * 420);
-  setTimeout(() => { egg.style.display = "none"; im.src = portrait(m.sp, m.va, m.r); im.style.display = nm.style.display = rr.style.display = "block"; nm.textContent = mountName(m); rr.textContent = RARITY[M.r]; rr.style.color = c; o.style.setProperty("--glow", m.va === 3 ? "#b06bff" : m.va === 2 ? "#ffd84a" : m.va === 1 ? "#bfe6ff" : c); sfx("hatch"); if (m.va) sfx("shiny"); flash(c);
+  setTimeout(() => { egg.style.display = "none"; im.src = portrait(m.sp, m.va, m.r); im.style.display = nm.style.display = rr.style.display = "block"; nm.textContent = mountName(m); rr.textContent = RARITY[M.r]; rr.style.color = c; o.style.setProperty("--glow", m.va ? "#bfe6ff" : c); sfx("hatch"); if (m.va) sfx("shiny"); flash(c);
     // (owner, 2026-11-11) a new mount gets its own moment on top: it drops in spinning over rays, with confetti; the first of its kind says NEW!
     o.classList.add("won"); if (save.mounts.filter((k) => k.sp === m.sp && k.r === m.r).length <= 1) o.classList.add("first"); setTimeout(() => { confetti(Math.max(1, M.r + (m.va ? 1 : 0)), innerWidth / 2, innerHeight / 2); if (M.r >= 3 || m.va) sfx("fanfare", Math.max(3, M.r)); }, 450); }, 1500);
   setTimeout(() => { o.onclick = () => { o.style.display = "none"; o.onclick = null; const nx = hatchQ.shift(); if (nx) hatchShow(...nx); }; }, 1900);
@@ -1136,7 +1141,7 @@ function onNet(m) {
     case "fused": adopt(m.data); selMount = m.m.id; if (panel === "stable") renderPanel(); hatchShow("fuse", m.m); break;
     case "reset": location.reload(); break;   // (owner, 2026-11-11) staff made this a brand new courier
     case "upgraded": adopt(m.data); remount(); sfx("buy"); emit(me.x, me.y + 2, me.z, 30, { colors: ["#ffd84a", "#ffffff", "#7ee08a"], speed: 4, up: 5, life: 1 }); break;
-    case "announce": { const a = $("announce"); a.textContent = m.name + (m.fused ? " merged a " : " found a ") + mountName(m) + "!"; a.style.color = m.va === 3 ? "#d9a6ff" : m.va === 2 ? "#ffd84a" : m.va === 1 ? "#bfe6ff" : RARITY_C[m.r | 0]; a.classList.remove("go"); void a.offsetWidth; a.classList.add("go"); sfx("shiny"); break; }
+    case "announce": { const a = $("announce"); a.textContent = m.name + (m.fused ? " merged a " : " found a ") + mountName(m) + "!"; a.style.color = m.va ? "#bfe6ff" : RARITY_C[m.r | 0]; a.classList.remove("go"); void a.offsetWidth; a.classList.add("go"); sfx("shiny"); break; }
     case "chat": { const o = others.get(m.id); chatLine(o ? o.name : m.name, m.text); if (o) bubble(o.rig, m.text); break; }
     case "invited": invites.push({ from: m.from, name: m.name, until: performance.now() + 28000 }); renderInvite(); break;
     case "declined": toast(m.name + " ✕"); break;
@@ -1225,7 +1230,8 @@ function stepOthers(dt, t) {
     if (o.graceT > 0) { o.graceT -= dt; if (Math.random() < 0.4) emit(o.x, o.y + 1.2, o.z, 1, { colors: ["#ffffff", "#bfe6ff"], speed: 1.2, up: 1, life: 0.5, grav: -1, size: 0.1, spread: 1.6 }); }
     if (o.kickT > 0) o.kickT -= dt; if (o.hideT > 0) o.hideT -= dt;
     pose(o.rig, { x: o.x, y: o.y, z: o.z, yaw: o.yaw, moving: !!(o.mv & 1), foot, air: !!(o.mv & 4), stun: o.stunT, mx: o.mx, my: o.my, mz: o.mz, myaw: o.myaw, kickT: o.kickT, hidden: o.hideT > 0, glide: !!(o.mv & 16) }, dt, t, 10);
-    if ((o.mv & 1) && !(o.mv & 6) && (o.va || o.r >= 4 || o.tr)) { o.stepT -= dt; if (o.stepT <= 0) { o.stepT = 0.18; trail(o.x, o.y, o.z, o, ""); } }
+    if (o.va && !(o.hideT > 0)) { const f = foot; sparkle(f ? o.mx : o.x, f ? o.my : o.y, f ? o.mz : o.z, World.mountScale({ r: o.r | 0 }), dt); }
+    if ((o.mv & 1) && !(o.mv & 6) && (o.r >= 4 || o.tr)) { o.stepT -= dt; if (o.stepT <= 0) { o.stepT = 0.18; trail(o.x, o.y, o.z, o, ""); } }
   }
 }
 function stepNpcs(dt, t) {

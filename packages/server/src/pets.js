@@ -211,7 +211,7 @@ export function attachPets(server, { origins = [], allowLocal = false, store = m
         if (my < 2) return reply("Not allowed");
         const n = Math.max(1, Math.min(1e7, Math.floor(+m.n || 1))), what = String(m.what || ""), d = cleanData(a.data);
         if (what === "coins") d.coins += n;
-        else if (what.startsWith("mount:") && MOUNTS[what.slice(6)]) { const va = clamp(Math.floor(+m.va || 0), 0, 2), r = clamp(Math.floor(+m.r || 0), 0, 4); for (let k = 0; k < Math.min(n, 20) && d.mounts.length < W.MOUNT_CAP; k++) d.mounts.push({ id: d.nextId++, sp: what.slice(6), r, va }); }
+        else if (what.startsWith("mount:") && MOUNTS[what.slice(6)]) { const va = clamp(Math.floor(+m.va || 0), 0, 1), r = clamp(Math.floor(+m.r || 0), 0, 4); for (let k = 0; k < Math.min(n, 20) && d.mounts.length < W.MOUNT_CAP; k++) d.mounts.push({ id: d.nextId++, sp: what.slice(6), r, va }); }
         else return reply("Unknown");
         await putData(d); log("give", what + " x" + n); break;
       }
@@ -335,12 +335,12 @@ export function attachPets(server, { origins = [], allowLocal = false, store = m
           if (k) q.tr = k; else delete q.tr; changed(me); pushData(me); if (q.id === d.ride) showMount(me); break;
         }
         case "equip": { const q = d.mounts.find((k) => k.id === m.id); if (q && d.ride !== q.id) { d.ride = q.id; changed(me); pushData(me); showMount(me); sendBag(me, { k: "mount" }); } break; }
-        case "fuse": {   // (owner, 2026-11-11) two of the same mount and skin: the better gets the next skin, the other goes
+        case "fuse": {   // (owner, 2026-11-11) two of the same normal mount: the chosen one becomes Shiny, the other goes
           const four = W.fuseSet(d.mounts, m.id); if (!four) break;
-          const best = four[0]; best.va++;   // the one you chose
+          const best = four[0]; best.va = 1;   // the one you chose becomes Shiny
           d.mounts = d.mounts.filter((k) => k === best || !four.includes(k)); if (!d.mounts.some((k) => k.id === d.ride)) d.ride = best.id;
           changed(me); flush(me.acct); send(ws, { t: "fused", m: best, data: d }); showMount(me);
-          if (best.va >= 2) announce(me, best, true);
+          if (best.r >= 3) announce(me, best, true);   // a Shiny Epic or Legendary by merging tells everyone
           break;
         }
         case "upgrade": {
