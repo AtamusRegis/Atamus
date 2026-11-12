@@ -3,12 +3,12 @@
   "version": "0.1.0",
   "private": true,
   "type": "module",
-  "description": "Critter Courier server: accounts, rooms, the conveyor, deliveries and rolls, kicks, dogs and geese, mounts, chat and parties over a WebSocket at /pets.",
+  "description": "Critter Courier server: accounts, rooms, the conveyor, deliveries and rolls, kicks, dogs and geese, mounts, chat and parties over a WebSocket at /pets; and Pet Delivery Co. (the game from before) at /pokemon.",
   "main": "src/index.js",
   "scripts": {
     "start": "node src/index.js",
-    "smoke": "node smoke.mjs",
-    "smoke:browser": "node smoke-browser.mjs"
+    "smoke": "node smoke.mjs && node pokemon/smoke.mjs && node pokemon/smoke-both.mjs",
+    "smoke:browser": "node smoke-browser.mjs && node pokemon/smoke-browser.mjs"
   },
   "engines": {
     "node": ">=20"
