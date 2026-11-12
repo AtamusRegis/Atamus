@@ -4,7 +4,7 @@
 // deliveries, rolls, damage, coins, mounts; this page shows the town (pets-world.js, shared with the server), moves you
 // and asks. Phone first: a thumb joystick, drag to look, pinch to zoom, big buttons.
 import * as THREE from "./vendor/three.module.min.js";
-import * as World from "./pets-world.js?v=1794465528";
+import * as World from "./pets-world.js?v=1794466362";
 
 const $ = (id) => document.getElementById(id);
 const { TAU, clamp, hyp, MOUNTS, TIERS, RARITY, RARITY_C, MODS, UPGRADES } = World;
@@ -922,7 +922,7 @@ function openPanel(k) { panel = panel === k ? "" : k; $("panel").style.display =
 function closePanel() { panel = ""; $("panel").style.display = "none"; }
 const btn = (text, fn, cls) => { const b = el("button", "btn " + (cls || ""), text); b.onclick = fn; return b; };
 const coinBtn = (cost, fn, ok) => { const b = el("button", "btn buy"); b.appendChild(el("i", "coin")); b.appendChild(document.createTextNode(fmt(cost))); b.disabled = !ok; b.onclick = fn; return b; };
-const mountName = (m) => (m.va ? "Shiny " : "") + World.COATS[clamp(m.r | 0, 0, 4)].name + " " + MOUNTS[m.sp].name;   // (owner, 2026-11-11) e.g. Shiny Void Wolf
+const mountName = (m) => (m.va ? "Shiny " : "") + World.coatName(m.sp, m.r) + " " + MOUNTS[m.sp].name;   // (owner, 2026-11-11) e.g. Shiny Spirit Wolf
 const pct = (v) => (v >= 0.1 ? (v * 100).toFixed(0) : v >= 0.01 ? (v * 100).toFixed(1) : (v * 100).toFixed(2)) + "%";
 function oddsRow(odds) { const r = el("div", "odds"); odds.forEach((v, n) => { if (v > 0) { const s = el("span", "", pct(v)); s.style.color = RARITY_C[n] === "#ffffff" ? "#6f7d8a" : RARITY_C[n]; s.title = RARITY[n]; r.appendChild(s); } }); return r; }
 function renderPanel() {
@@ -937,7 +937,7 @@ function renderPanel() {
     for (const [name, v, max] of [["Speed", S.speed, 20], ["Jump", S.jump, 11], ["Grip", S.grip * 100, 60]]) { const r = el("div", "stat"); r.appendChild(el("span", "", name)); const b = el("div", "bar"), f = el("i"); f.style.width = clamp((v / max) * 100, 4, 100) + "%"; b.appendChild(f); r.appendChild(b); r.appendChild(el("em", "", name === "Grip" ? Math.round(v) + "%" : v.toFixed(1))); info.appendChild(r); }
     const ar = el("div", "stat ab" + (tier ? "" : " off")); ar.appendChild(el("span", "", World.ABILITY[M.ab])); const pp = el("div", "pips"); for (const need of [0, 2, 4]) pp.appendChild(el("i", m.r >= need ? "on" : "", RARITY[need][0])); ar.appendChild(pp); info.appendChild(ar);
     const acts = el("div", "acts"); if (m.id !== save.ride) acts.appendChild(btn("Ride", () => netSend({ t: "equip", id: m.id }), "go"));
-    if (World.fuseSet(save.mounts, m.id)) acts.appendChild(btn("Merge", () => netSend({ t: "fuse", id: m.id }), "fuse"));   // two the same: the next skin
+    if (World.fuseSet(save.mounts, m.id)) acts.appendChild(btn("Merge", () => netSend({ t: "fuse", id: m.id }), "fuse"));   // two the same: the next coat up
     for (const k of World.trailsFor(save)) { const T = World.TRAILS.find((q) => q.k === k), on = m.tr === k, b = btn(T.name, () => netSend({ t: "trail", id: m.id, k: on ? "" : k }), "trail" + (on ? " on" : "")); acts.appendChild(b); }   // (owner, 2026-11-11) unlocked trails, on any mount
     info.appendChild(acts); d.appendChild(info);
     body.appendChild(d); body.appendChild(grid);
