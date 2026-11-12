@@ -19,7 +19,7 @@ import { hashSecret, verifySecret } from "./hash.js";
 import { memStore } from "./petstore.js";
 
 const { cleanData, MOUNTS, EGGS, UPGRADES, TIERS, KICK, DOG, GOOSE, GOAT, ROCK, SKYGOOSE, PIPE, ISLES, CANNON, hyp, clamp } = W;
-const ROOM_MAX = 100, TICK_MS = 50, CHAT_GAP_MS = 1200, BEAT_MS = 10000, SAVE_MS = 60000, INVITE_MS = 30000, PARTY_MAX = 6, SPEED_CAP = 60, DROP_S = 20;
+const ROOM_MAX = 100, TICK_MS = 50, CHAT_GAP_MS = 1200, BEAT_MS = 10000, SAVE_MS = 60000, INVITE_MS = 30000, PARTY_MAX = 6, SPEED_CAP = 110, DROP_S = 20;
 const EXPRESS_EXTRA = [0, 0, 8, 40, 45];   // seconds on top for the districts whose roads wind
 const rooms = [], online = new Map();   // account id -> player
 let nextId = 1;
@@ -60,7 +60,7 @@ export function attachPets(server, { origins = [], allowLocal = false, store = m
   const showMount = (p) => { const m = mountOf(p); all(p.room, { t: "mount", id: p.id, sp: m.sp, lv: m.lv, va: m.va }, p); };
 
   // ---- parcels ----
-  const fillBelt = (p) => { const up = p.acct.data.up, lv = mountOf(p).lv; if (!p.ready) { p.ready = p.next || W.rollParcel(up, lv); p.next = null; } if (!p.next) p.next = W.rollParcel(up, lv); send(p.ws, { t: "belt", ready: p.ready, next: p.next }); };
+  const fillBelt = (p) => { const open = W.openFor(p.acct.data), lv = mountOf(p).lv; if (!p.ready) { p.ready = p.next || W.rollParcel(open, lv); p.next = null; } if (!p.next) p.next = W.rollParcel(open, lv); send(p.ws, { t: "belt", ready: p.ready, next: p.next }); };
   // (owner, 2026-11-11) a mount carries 1 to 5 parcels by its level: p.bag (on the saddle), p.stolen (geese have them), p.dropped (on the ground after a busted goose)
   const carry = (p) => all(p.room, { t: "carry", id: p.id, c: p.bag.map((q) => [q.tier, q.mod]) }, p);
   const held = (p) => p.bag.length + p.stolen.length + p.dropped.length;
@@ -85,7 +85,7 @@ export function attachPets(server, { origins = [], allowLocal = false, store = m
   }
   function grab(p) {
     const now = Date.now(), d = p.acct.data, lv = mountOf(p).lv; if (held(p) >= W.bagSize(lv) || !p.ready || now < p.stunUntil || W.counterDist(p.x, p.z) > W.GRAB_R + 1.2 || Math.abs(p.y) > 3) return;
-    const c = p.ready, hs = W.housesIn(c.tier), h = hs[Math.floor(Math.random() * hs.length)], max = c.mod === "fragile" ? 1 : W.boxDur(d.up.boxes);
+    const c = p.ready, hs = W.housesIn(c.tier), h = hs[Math.floor(Math.random() * hs.length)], max = W.boxDur(d.up.boxes);
     const q = { pid: ++p.pids, tier: c.tier, mod: c.mod, dur: max, max, hits: 0, house: h.id, t0: now, due: c.mod === "express" ? now + 1000 * (Math.max(W.EXPRESS_MIN, hyp(h.mx, h.mz) * W.EXPRESS_PER_M) + EXPRESS_EXTRA[c.tier]) : 0 };
     p.bag.push(q); p.ready = null; sendBag(p, { k: "grab", pid: q.pid }); carry(p); fillBelt(p);
   }
@@ -93,9 +93,9 @@ export function attachPets(server, { origins = [], allowLocal = false, store = m
   // it's opened. Four unopened gifts of one rarity merge into one of the next.
   function deliver(p, q) {
     const d = p.acct.data, m = mountOf(p), now = Date.now(), late = q.mod === "express" && now > q.due;
-    const coins = W.deliveryCoins(q.tier, q.mod, d.up.payout, q.hits, late), roll = W.rewardRoll(q.tier, q.mod, d.up, d.stamp), xp = 5 + 3 * q.tier;
+    const coins = W.deliveryCoins(q.tier, q.mod, d.up.payout, q.hits, late), roll = W.rewardRoll(q.tier, d.up), xp = 5 + 3 * q.tier;
     const lvUp = W.addXp(m, xp);
-    d.coins += coins; d.stamp = roll.stamp; d.stats.del++; if (q.mod === "golden") d.stats.golden++; d.fails = 0;
+    d.coins += coins; d.stats.del++; d.fails = 0;
     const gift = { gid: d.nextGid++, r: roll.tier, pt: q.tier };
     // a courier's second delivery brings a new mount (a random Uncommon), revealed when that gift is opened
     if (d.stats.del === 2 && d.mounts.length < W.MOUNT_CAP) { const pool = Object.keys(MOUNTS).filter((k) => MOUNTS[k].r === 1), nm = { id: d.nextId++, sp: pool[Math.floor(Math.random() * pool.length)], va: 0, lv: 1, xp: 0 }; d.mounts.push(nm); gift.m = nm.id; }
@@ -161,7 +161,7 @@ export function attachPets(server, { origins = [], allowLocal = false, store = m
   }
   // ---- the staff panel ----
   const staffView = (a, p) => ({ id: a.id, name: a.name, role: rankOf(a) === 3 ? "owner" : a.role, online: !!p, muted: a.muteUntil > Date.now() ? (a.muteUntil === Infinity ? -1 : a.muteUntil) : 0, banned: a.banUntil > Date.now() ? (a.banUntil === Infinity ? -1 : a.banUntil) : 0 });
-  const inv = (d) => ({ coins: d.coins, coupons: d.coupons, eggs: d.eggs, mounts: d.mounts, ride: d.ride, up: d.up, stamp: d.stamp });
+  const inv = (d) => ({ coins: d.coins, coupons: d.coupons, eggs: d.eggs, mounts: d.mounts, ride: d.ride, up: d.up });
   async function admin(me, m) {
     const my = rankOf(me.acct); if (my < 1) return;
     const reply = (msg) => send(me.ws, { t: "admin_msg", msg });
@@ -312,7 +312,8 @@ export function attachPets(server, { origins = [], allowLocal = false, store = m
             if (v > SPEED_CAP && now - me.tpAt > 1500) { me.flags++; me.sus = now; }
             me.lx = x; me.lz = z; me.lt = now;
           }
-          me.x = x; me.y = y; me.z = z; me.yaw = num(m.yaw, 10); me.mv = clamp(m.mv | 0, 0, 255); me.ct = Number.isFinite(+m.ct) ? +m.ct : 0; me.fresh = true;
+          // (owner, 2026-11-11) any angle, wrapped (clamping it to +-10 left others riding sideways once they'd turned round a few times)
+          me.x = x; me.y = y; me.z = z; me.yaw = Math.atan2(Math.sin(num(m.yaw, 1e6)), Math.cos(num(m.yaw, 1e6))); me.mv = clamp(m.mv | 0, 0, 255); me.ct = Number.isFinite(+m.ct) ? +m.ct : 0; me.fresh = true;
           const n = W.isleAt(x, z); if (n >= 0 && Math.abs(y - ISLES[n].y) < 3) me.lastIsle = n;
           break;
         }
@@ -336,7 +337,7 @@ export function attachPets(server, { origins = [], allowLocal = false, store = m
           if (q.va) { const s = JSON.stringify({ t: "announce", name: me.name, sp: q.sp, va: q.va }); for (const p of online.values()) if (p.ws.readyState === 1) p.ws.send(s); }   // the whole server hears of a Shiny or a Golden
           break;
         }
-        case "fuse": {   // four of the same mount and skin: the best of them gets the next skin, the other three go
+        case "fuse": {   // (owner, 2026-11-11) two of the same mount and skin: the better gets the next skin, the other goes
           const four = W.fuseSet(d.mounts, m.id); if (!four) break;
           const best = four.reduce((a, b) => (b.lv > a.lv || (b.lv === a.lv && b.xp > a.xp) ? b : a)); best.va++;
           d.mounts = d.mounts.filter((k) => k === best || !four.includes(k)); if (!d.mounts.some((k) => k.id === d.ride)) d.ride = best.id;
@@ -360,13 +361,13 @@ export function attachPets(server, { origins = [], allowLocal = false, store = m
         }
         case "pipe": {   // the sewer pipe: in one end, out the other; a goose inside costs a hit
           if (now < me.stunUntil || now - me.pipeAt < 2000) break;
-          const a = hyp(me.x - PIPE.a.x, me.z - PIPE.a.z) < PIPE.r + 1.5 && Math.abs(me.y - PIPE.a.y) < 2, b = hyp(me.x - PIPE.b.x, me.z - PIPE.b.z) < PIPE.r + 1.5 && Math.abs(me.y - PIPE.b.y) < 2; if (!a && !b) break;
+          const a = hyp(me.x - PIPE.a.x, me.z - PIPE.a.z) < PIPE.r + 3 && Math.abs(me.y - PIPE.a.y) < 2, b = hyp(me.x - PIPE.b.x, me.z - PIPE.b.z) < PIPE.r + 3 && Math.abs(me.y - PIPE.b.y) < 2; if (!a && !b) break;
           me.pipeAt = now + PIPE.time * 1000; const out = a ? PIPE.b : PIPE.a, goose = W.pipeGoose(now / 1000);
           me.x = out.x; me.z = out.z; me.y = out.y; me.tpAt = now + PIPE.time * 1000; me.lx = out.x; me.lz = out.z; me.lt = me.tpAt;
           send(ws, { t: "piped", x: out.x, z: out.z, y: out.y, s: PIPE.time, goose }); all(room, { t: "fx", k: "pipe", id: me.id, s: PIPE.time }, me);
           if (goose) hit(me, "pipe"); break;
         }
-        case "balloon": { const b = W.balloons.find((q) => hyp(me.x - q.x, me.z - q.z) < 4 && Math.abs(me.y - q.y) < 3); if (b && now >= me.stunUntil) teleport(me, W.SPAWN.x, W.SPAWN.z + 6, 0, "balloon"); break; }
+        case "balloon": { const b = W.balloons.find((q) => hyp(me.x - q.x, me.z - q.z) < 6.5 && Math.abs(me.y - q.y) < 4); if (b && now >= me.stunUntil) teleport(me, W.SPAWN.x, W.SPAWN.z + 6, 0, "balloon"); break; }
         case "chat": {
           const text = cleanChat(m.text); if (!text || now - me.lastChat < CHAT_GAP_MS) break;
           if (me.acct.muteUntil > now) { send(ws, { t: "muted", until: me.acct.muteUntil === Infinity ? -1 : me.acct.muteUntil }); break; }
@@ -398,7 +399,9 @@ export function attachPets(server, { origins = [], allowLocal = false, store = m
   // an animal's step toward a point, staying on ground it can walk (no walls, no drops); false when it can't
   const pace = (o, tx, tz, sp, tol) => {
     const dx = tx - o.x, dz = tz - o.z, l = hyp(dx, dz) || 1, st = Math.min(l, sp), ok = (x, z) => { const y = W.surfaceAt(x, z, o.y + tol); if (Math.abs(y - o.y) > tol || W.blocked(x, z, y, 0.4)) return false; o.x = x; o.z = z; o.y = y; return true; };
-    o.yaw = Math.atan2(dx, dz); return ok(o.x + (dx / l) * st, o.z + (dz / l) * st) || ok(o.x + (dx / l) * st, o.z) || ok(o.x, o.z + (dz / l) * st);
+    const ox = o.x, oz = o.z, moved = ok(o.x + (dx / l) * st, o.z + (dz / l) * st) || ok(o.x + (dx / l) * st, o.z) || ok(o.x, o.z + (dz / l) * st);
+    if (moved && hyp(o.x - ox, o.z - oz) > 1e-4) o.yaw = Math.atan2(o.x - ox, o.z - oz); else o.yaw = Math.atan2(dx, dz);   // (owner, 2026-11-11) facing the way it really went, never sideways
+    return moved;
   };
   const near = (players, o, R) => players.some((p) => Math.abs(p.x - o.x) < R && Math.abs(p.z - o.z) < R);
   // dogs roam their district (owner, 2026-11-11), a short walk at a time, and go for any parcel that comes close
@@ -438,7 +441,13 @@ export function attachPets(server, { origins = [], allowLocal = false, store = m
       const G = W.geese[g.id], P = W.ponds[G.pond];
       g.awake = !!g.carry || g.mode !== 0 || players.some((p) => Math.abs(p.x - P.x) < 120 && Math.abs(p.z - P.z) < 120 && Math.abs(p.y - P.y) < 12);
       if (!g.awake) continue;   // asleep while nobody's near
-      const go = (tx, tz, sp) => { const dx = tx - g.x, dz = tz - g.z, d = hyp(dx, dz) || 1, s = Math.min(d, sp * dt); g.yaw = Math.atan2(dx, dz); g.x += (dx / d) * s; g.z += (dz / d) * s; const s2 = W.surfaceAt(g.x, g.z, P.y + 1.4); g.y = s2 > -100 ? s2 : P.y; return d; };
+      // (owner, 2026-11-11) houses, fences, hedges and trees stop geese as they stop couriers: a goose slides along them
+      // (one stuck for over a second with a parcel squeezes through, so a parcel can't be held forever)
+      const inside = W.blocked(g.x, g.z, g.y, 0.3), free = (x, z) => inside || !W.blocked(x, z, g.y, 0.3) || (g.carry && g.stuck > 1);   // (already in something: it walks out)
+      const go = (tx, tz, sp) => { const dx = tx - g.x, dz = tz - g.z, d = hyp(dx, dz) || 1, s = Math.min(d, sp * dt), ux = (dx / d) * s, uz = (dz / d) * s, ox = g.x, oz = g.z;
+        if (free(g.x + ux, g.z + uz)) { g.x += ux; g.z += uz; } else if (free(g.x + ux, g.z)) g.x += ux; else if (free(g.x, g.z + uz)) g.z += uz;
+        const mv = hyp(g.x - ox, g.z - oz); g.stuck = mv < s * 0.2 ? (g.stuck || 0) + dt : 0; g.yaw = mv > 1e-4 ? Math.atan2(g.x - ox, g.z - oz) : Math.atan2(dx, dz);
+        const s2 = W.surfaceAt(g.x, g.z, P.y + 1.4); g.y = s2 > -100 ? s2 : P.y; return d; };
       if (g.mode === 4) { if ((g.t -= dt) <= 0) { g.mode = 0; g.cool = now + GOOSE.cool * 1000; } continue; }   // dizzy from a kick
       if (g.carry) {   // waddling to the pond with a parcel
         if (g.mode !== 5) { if (go(P.x, P.z, GOOSE.carry) < 1) { g.mode = 5; g.t = GOOSE.dunk; } }   // out in the middle of its pond, it takes a moment to sink the parcel
@@ -455,7 +464,7 @@ export function attachPets(server, { origins = [], allowLocal = false, store = m
       if (!p || p.gone || !p.bag.length || !exposed(p, now) || (g.t -= dt) <= 0) { g.mode = 0; g.target = null; g.cool = now + GOOSE.cool * 1000; continue; }
       if (go(p.x, p.z, W.GOOSE_D[G.d].lunge) < GOOSE.touch && Math.abs(p.y - g.y) < 2.5) {   // it has the parcel (no stun): off to the pond
         if (Math.random() < W.shakeOff(mountOf(p).lv, G.d)) { all(r, { t: "fx", k: "shake", id: p.id }); g.mode = 4; g.t = 1.5; g.target = null; continue; }   // outgrown: shaken off
-        const q = pick1(p.bag); drop(p.bag, q); q.goose = g.id; p.stolen.push(q); g.carry = { p, parcel: q }; g.mode = 3; g.target = null;
+        const q = pick1(p.bag); drop(p.bag, q); q.goose = g.id; p.stolen.push(q); g.carry = { p, parcel: q }; g.stuck = 0; g.mode = 3; g.target = null;
         sendBag(p, { k: "stolen", pid: q.pid, goose: g.id }); carry(p); all(r, { t: "fx", k: "steal", goose: g.id, id: p.id }, p);
       }
     }

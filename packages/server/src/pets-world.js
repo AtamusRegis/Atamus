@@ -19,9 +19,10 @@ export const TIERS = [
   { k: "sky", name: "Sky", c: "#9aa8ff", mult: 15, luck: 1, w: 4 },
 ];
 export const DISTRICTS = ["Main Street", "Maple Suburbs", "Goose Marsh", "Cliffside", "Floating Islands"];
-// modifiers: one parcel in five rolls one. Golden is 2% of those.
-export const MODS = { fragile: { name: "Fragile", bonus: 1 }, heavy: { name: "Heavy", bonus: 0.5 }, express: { name: "Express", bonus: 1.5 }, golden: { name: "Golden", bonus: 2 } };
-export const MOD_CHANCE = 0.2, EMPTY_FAST = 1.5, GOLDEN_OF_MODS = 0.02, BASE_DUR = 3, BASE_COINS = 10, HIT_CUT = 0.2, HEAVY_SLOW = 0.85, MUD_SLOW = 0.75;
+// modifiers: one parcel in five is timed (Express). (owner, 2026-11-11) only the rarer tiers and timed parcels stay:
+// Fragile, Heavy and Golden went
+export const MODS = { express: { name: "Express", bonus: 1.5 } };
+export const MOD_CHANCE = 0.2, EMPTY_FAST = 2, BASE_DUR = 3, BASE_COINS = 10, HIT_CUT = 0.2, MUD_SLOW = 0.75;   // (owner, 2026-11-11) empty, a mount goes twice as fast
 // reward rolls: chance, coins, Training XP, Level Coupons (and the chance of one), eggs (chance, and which)
 export const ROLLS = [
   { chance: 0.6, coins: [4, 10], xp: 6, coupons: 0, couponChance: 0, egg: 0, eggs: [] },
@@ -32,18 +33,22 @@ export const ROLLS = [
 ];
 // luck moves the odds toward the rarer tiers: tier n's chance is weighted by (1 + luck)^n
 export function rollOdds(luck) { const w = ROLLS.map((r, n) => r.chance * Math.pow(1 + luck, n)), s = w.reduce((a, b) => a + b, 0); return w.map((v) => v / s); }
-export const PITY_RARE = 25, PITY_EPIC = 100;
-// courier upgrades: 10 levels each; a level costs base x 1.8^(level - 1)
+// courier upgrades: 10 levels each; a level costs base x 1.8^(level - 1). (owner, 2026-11-11) Route Permits went: the
+// districts open by themselves as your mounts level up (and what was spent on permits came back as coins)
 export const UPGRADES = {
-  routes: { name: "Route Permits", base: 250 }, payout: { name: "Payout", base: 300 }, stamps: { name: "Lucky Stamps", base: 500 },
+  payout: { name: "Payout", base: 300 }, stamps: { name: "Lucky Stamps", base: 500 },
   press: { name: "Coupon Press", base: 400 }, boxes: { name: "Sturdy Boxes", base: 350 },
 };
 export const UP_MAX = 10, upgradeCost = (k, lv) => Math.round(UPGRADES[k].base * Math.pow(1.8, lv));   // the cost of going from lv to lv + 1
-export const districtsOpen = (routes) => 1 + (routes >= 2) + (routes >= 4) + (routes >= 6) + (routes >= 8);
-// which tiers a courier's conveyor gives: only open districts; permits lift the higher tiers (Sky to 8%), and so does the
-// mount's level (owner, 2026-11-11: the higher level, the pricier the parcels and the farther the trips)
-export function spawnWeights(routes, lv = 1) {
-  const open = districtsOpen(routes), w = TIERS.map((t, n) => (n < open ? t.w * (1 + (n * routes) / 10) * (1 + (n * (lv - 1)) / 8) : 0)), s = w.reduce((a, b) => a + b, 0), p = w.map((v) => v / s);
+// the districts open: one more as your best mount reaches each of these levels
+export const OPEN_LV = [1, 3, 6, 9, 12];
+export const districtsOpen = (lv) => OPEN_LV.filter((l) => lv >= l).length;
+export const topLevel = (d) => Math.max(1, ...((d && d.mounts) || []).map((m) => m.lv));
+export const openFor = (d) => districtsOpen(topLevel(d));
+// which tiers a courier's conveyor gives: only open districts; the more are open, the more of the higher tiers, and the
+// ridden mount's level lifts them too (owner, 2026-11-11: the higher level, the pricier the parcels and the farther the trips)
+export function spawnWeights(open, lv = 1) {
+  open = clamp(open | 0, 1, TIERS.length); const w = TIERS.map((t, n) => (n < open ? t.w * (1 + (n * (open - 1)) / 5) * (1 + (n * (lv - 1)) / 8) : 0)), s = w.reduce((a, b) => a + b, 0), p = w.map((v) => v / s);
   // (owner, 2026-11-11) at least 30% go to the farthest area you've opened; the rest spread over the ones in between
   const top = open - 1; if (top > 0 && p[top] < TOP_SHARE) { const rest = 1 - p[top]; for (let n = 0; n < top; n++) p[n] *= (1 - TOP_SHARE) / rest; p[top] = TOP_SHARE; }
   return p;
@@ -52,7 +57,7 @@ export const TOP_SHARE = 0.3;
 export const stampLuck = (lv) => 0.0405 * lv, payoutMult = (lv) => 1 + 0.1 * lv, pressChance = (lv) => 0.01 * lv, boxDur = (lv) => BASE_DUR + (lv >= 5) + (lv >= 10);
 export const upTotal = (up) => Object.keys(UPGRADES).reduce((a, k) => a + (up[k] || 0), 0);
 export const RANKS = ["", "Bronze", "Silver", "Gold", "Platinum"], RANK_C = ["", "#b9763c", "#b8c2cc", "#f2b01e", "#bfe9ff"];
-export const rankOf = (total) => (total >= 38 ? 4 : total >= 25 ? 3 : total >= 13 ? 2 : total >= 1 ? 1 : 0);
+export const rankOf = (total) => (total >= 30 ? 4 : total >= 20 ? 3 : total >= 10 ? 2 : total >= 1 ? 1 : 0);   // of 40 levels
 // mounts: a rarity (0-4), an ability (from level 5; stronger at 10 and 20), colors and a size
 export const MOUNTS = {
   pup: { name: "Pup", r: 0, ab: "bark", c: "#c98a4b", a: "#f3dcc0", size: 1 },
@@ -72,10 +77,10 @@ export const MOUNTS = {
 export const MOUNT_MOVED = { parrot: "deer", owl: "stego", dragon: "unicorn" };
 export const ABILITY = { bark: "Bark", dash: "Dash", jump2: "Double Jump" };
 export const MAX_LV = 20, VARIANTS = ["", "Shiny", "Golden", "Rainbow"], SHINY = 0.01, GOLDEN = 0.001;
-// (owner, 2026-11-11) four of the same mount with the same skin merge into the best of them (the highest level), which
+// (owner, 2026-11-11) two of the same mount with the same skin merge into the better of them (the higher level), which
 // gets the next skin: normal, Shiny, Golden, Rainbow (Rainbow only by merging)
-export const FUSE_N = 4;
-export function fuseSet(mounts, id) {   // the four a merge would take (the chosen one and the lowest-level others), or null
+export const FUSE_N = 2;
+export function fuseSet(mounts, id) {   // the ones a merge would take (the chosen one and the lowest-level other), or null
   const m = mounts.find((k) => k.id === id); if (!m || m.va >= VARIANTS.length - 1) return null;
   const same = mounts.filter((k) => k.sp === m.sp && k.va === m.va && k.id !== id).sort((a, b) => a.lv - b.lv || a.id - b.id);
   return same.length >= FUSE_N - 1 ? [m, ...same.slice(0, FUSE_N - 1)] : null;
@@ -87,7 +92,8 @@ export const mountScale = (lv) => 1 + 0.079 * (lv - 1);                     // 1
 export const abilityTier = (lv) => (lv >= 20 ? 3 : lv >= 10 ? 2 : lv >= 5 ? 1 : 0);
 export function mountStats(sp, lv) {
   const r = MOUNTS[sp].r, n = lv - 1;
-  return { speed: 10 + 0.6 * r + (0.1 + 0.02 * r) * n, jump: 8 + 0.25 * r + (0.08 + 0.01 * r) * n, grip: Math.min(0.6, 0.05 * r + 0.02 * n) };
+  // (owner, 2026-11-11) faster as it levels: about 16 to 20 m/s at level 20
+  return { speed: 10 + 0.6 * r + (0.3 + 0.03 * r) * n, jump: 8 + 0.25 * r + (0.08 + 0.01 * r) * n, grip: Math.min(0.6, 0.05 * r + 0.02 * n) };
 }
 export const ABILITY_CD = { bark: [0, 12, 9, 6], dash: [0, 8, 6, 4], jump2: [0, 0, 0, 0] };
 // eggs: what hatches from each (by rarity), then a mount of that rarity at random
@@ -103,39 +109,37 @@ export const GRAB_R = 3.4, DELIVER_R = 3, PICKUP_R = 2.2, SAFE_R = 20, EXPRESS_P
 export function cleanData(d) {
   d = d && typeof d === "object" ? d : {};
   const int = (v, lo, hi, def) => (Number.isFinite(+v) ? clamp(Math.floor(+v), lo, hi) : def);
-  const out = { v: 1, coins: int(d.coins, 0, 1e12, 0), coupons: int(d.coupons, 0, 1e6, 0), stamp: int(d.stamp, 0, PITY_EPIC, 0), nextId: int(d.nextId, 1, 1e9, 1), mounts: [], ride: 0, eggs: {}, up: {}, stats: {}, set: {}, fails: int(d.fails, 0, 99, 0) };
+  const out = { v: 1, coins: int(d.coins, 0, 1e12, 0), coupons: int(d.coupons, 0, 1e6, 0), nextId: int(d.nextId, 1, 1e9, 1), mounts: [], ride: 0, eggs: {}, up: {}, stats: {}, set: {}, fails: int(d.fails, 0, 99, 0) };
   for (const m of Array.isArray(d.mounts) ? d.mounts.slice(0, MOUNT_CAP) : []) if (m && MOUNTS[MOUNT_MOVED[m.sp] || m.sp]) out.mounts.push({ id: int(m.id, 1, 1e9, 0) || out.nextId++, sp: MOUNT_MOVED[m.sp] || m.sp, va: int(m.va, 0, 3, 0), lv: int(m.lv, 1, MAX_LV, 1), xp: int(m.xp, 0, 1e9, 0) });
   if (!out.mounts.length) out.mounts.push({ id: out.nextId++, sp: "pup", va: 0, lv: 1, xp: 0 });
   out.nextId = Math.max(out.nextId, ...out.mounts.map((m) => m.id + 1));
   out.ride = out.mounts.some((m) => m.id === d.ride) ? d.ride : out.mounts[0].id;
   for (const k of Object.keys(EGGS)) out.eggs[k] = int(d.eggs && d.eggs[k], 0, 9999, 0);
   for (const k of Object.keys(UPGRADES)) out.up[k] = int(d.up && d.up[k], 0, UP_MAX, 0);
+  const permits = int(d.up && d.up.routes, 0, UP_MAX, 0); for (let l = 0; l < permits; l++) out.coins += Math.round(250 * Math.pow(1.8, l));   // (owner, 2026-11-11) Route Permits went: their coins back, once (they're not saved again)
   out.gifts = (Array.isArray(d.gifts) ? d.gifts : []).slice(0, GIFT_CAP).filter((g) => g && Number.isFinite(+g.gid)).map((g) => ({ gid: int(g.gid, 1, 1e9, 1), r: int(g.r, 0, 4, 0), pt: int(g.pt, 0, 4, 0), ...(Number.isFinite(+g.m) ? { m: int(g.m, 1, 1e9, 1) } : {}) }));
   out.nextGid = Math.max(int(d.nextGid, 1, 1e9, 1), ...out.gifts.map((g) => g.gid + 1));
   for (const k of ["del", "golden", "geese", "kicks"]) out.stats[k] = int(d.stats && d.stats[k], 0, 1e9, 0);
   out.set = { friendly: !!(d.set && d.set.friendly), music: int(d.set && d.set.music, 0, 10, 5), sfx: int(d.set && d.set.sfx, 0, 10, 7), shirt: /^#[0-9a-f]{6}$/i.test(d.set && d.set.shirt) ? d.set.shirt : "#f2a33a", tut: !!(d.set && d.set.tut) };   // tut: the new-courier tutorial is done
   return out;
 }
-// a new parcel for the conveyor: its tier by the courier's permits, maybe a modifier
-export function rollParcel(up, lv = 1, rnd = Math.random) {
-  const w = spawnWeights(up.routes, lv); let r = rnd(), tier = 0; for (let n = 0; n < w.length; n++) { if (r < w[n]) { tier = n; break; } r -= w[n]; }
-  let mod = ""; if (rnd() < MOD_CHANCE) mod = rnd() < GOLDEN_OF_MODS ? "golden" : ["fragile", "heavy", "express"][Math.floor(rnd() * 3)];
+// a new parcel for the conveyor: its tier by the districts open (and the ridden mount's level), maybe timed
+export function rollParcel(open, lv = 1, rnd = Math.random) {
+  const w = spawnWeights(open, lv); let r = rnd(), tier = 0; for (let n = 0; n < w.length; n++) { if (r < w[n]) { tier = n; break; } r -= w[n]; }
+  const mod = rnd() < MOD_CHANCE ? "express" : "";
   return { tier, mod };
 }
 // coins for a delivery: base 10 x tier x (1 + modifier bonus) x payout upgrade x (1 - 0.2 per hit taken). late: an Express parcel past its time
 export function deliveryCoins(tier, mod, payoutLv, hits, late) {
-  const bonus = mod && !(mod === "express" && late) ? MODS[mod].bonus : 0;
+  const bonus = MODS[mod] && !(mod === "express" && late) ? MODS[mod].bonus : 0;
   return Math.max(1, Math.round(BASE_COINS * TIERS[tier].mult * (1 + bonus) * payoutMult(payoutLv) * Math.max(0, 1 - HIT_CUT * hits)));
 }
-// the reward roll. Returns { tier, coins, xp, coupons, egg, stamp (the meter after), near (it just missed Legendary) }
-export function rewardRoll(tier, mod, up, stamp, rnd = Math.random) {
+// the reward roll. Returns { tier, coins, xp, coupons, egg, near (it just missed Legendary) }. (owner, 2026-11-11) no
+// Stamp Meter (pity) any more: every roll is its own
+export function rewardRoll(tier, up, rnd = Math.random) {
   const odds = rollOdds(TIERS[tier].luck + stampLuck(up.stamps)); let r = rnd(), t = 0; for (let n = 0; n < odds.length; n++) { if (r < odds[n]) { t = n; break; } r -= odds[n]; t = n; }
   const near = t < 4 && r < 0.012 && t >= 3;
-  if (t < 2) stamp++;
-  let floor = 0; if (stamp >= PITY_EPIC) floor = 3; else if (t < 2 && stamp % PITY_RARE === 0) floor = 2;
-  if (mod === "golden") floor = Math.max(floor, 2);
-  t = Math.max(t, floor); if (t >= 3) stamp = 0;
-  return { tier: t, stamp, near, ...giftContents(t, tier, up, rnd) };
+  return { tier: t, near, ...giftContents(t, tier, up, rnd) };
 }
 // what's inside a gift of rarity t from a parcel of tier pt (decided when it's opened, owner 2026-11-11)
 export function giftContents(t, pt, up, rnd = Math.random) {
@@ -186,7 +190,8 @@ export const ZIP_SPEED = 24, STEP_H = 2;
 export const SPRINKLER = { r: 5, push: 9, every: 6, on: 3 }, sprinklerOn = (s, t) => (t + s.ph) % SPRINKLER.every < SPRINKLER.on;
 export const WIND = { every: 11, on: 3.5, push: 4.5 };
 export function windAt(t) { const n = Math.floor(t / WIND.every), on = t - n * WIND.every < WIND.on, a = ((n * 2654435761) >>> 0) / 4294967296 * TAU; return { on, x: Math.cos(a), z: Math.sin(a) }; }
-export const ROCK = { delay: 1, r: 2.3, stun: 1.5, every: [3, 6] }, GOAT = { see: 9, telegraph: 0.8, speed: 13, run: 1.3, touch: 1.6, knock: 15, cool: 6, roam: 2.4 }, SKYGOOSE = { delay: 1.4, r: 2.2, every: [8, 14] };
+// (owner, 2026-11-11) goats charge faster
+export const ROCK = { delay: 1, r: 2.3, stun: 1.5, every: [3, 6] }, GOAT = { see: 9, telegraph: 0.8, speed: 20, run: 0.95, touch: 1.6, knock: 15, cool: 6, roam: 2.4 }, SKYGOOSE = { delay: 1.4, r: 2.2, every: [8, 14] };
 export const CANNON = { x: 408, z: 0, y: 18, r: 2.6, to: 0 }, SKY_Y = 24;
 const ISLE_LINKS = [[0, 1], [1, 2]];
 export function districtAt(x, z, y = 0) { return x > ISLE_X && y > SKY_Y ? 4 : x >= CLIFF.x0 ? 3 : x >= MARSH.x0 ? 2 : x >= SUBURBS_X ? 1 : 0; }
@@ -291,7 +296,10 @@ export function wallAt(x, z, y) {
   for (const o of solids) { if (y + 1.4 < o.y0 || y + 0.25 > o.y1) continue; const dx = x - o.x, dz = z - o.z; if (Math.abs(dx) > o.rad || Math.abs(dz) > o.rad) continue; if (Math.abs(dx * o.c - dz * o.s) < o.hw && Math.abs(dx * o.s + dz * o.c) < o.hd) return true; }
   return false;
 }
-export function blocked(x, z, y, r = 0.55) { return wallAt(x, z, y) || wallAt(x + r, z, y) || wallAt(x - r, z, y) || wallAt(x, z + r, y) || wallAt(x, z - r, y); }
+export function blocked(x, z, y, r = 0.55) {
+  if (wallAt(x, z, y) || wallAt(x + r, z, y) || wallAt(x - r, z, y) || wallAt(x, z + r, y) || wallAt(x, z - r, y)) return true;
+  const k = r * 0.7; return r > 0.6 && (wallAt(x + k, z + k, y) || wallAt(x - k, z + k, y) || wallAt(x + k, z - k, y) || wallAt(x - k, z - k, y));   // a wide body: its corners too, so a tree can't slip between
+}
 // how far (x, z) is from the conveyor (the counter's edge)
 export const counterDist = (x, z) => { const dx = Math.max(Math.abs(x - PO.x) - PO.counter, 0), dz = Math.max(Math.abs(z - PO.z) - PO.counter, 0); return hyp(dx, dz); };
 export const inSafeZone = (x, z, y = 0) => y < 8 && hyp(x - PO.x, z - PO.z) < SAFE_R;
@@ -308,6 +316,9 @@ export const GOOSE_D = [{ see: 6, telegraph: 1.2, lunge: 11.5 }, { see: 7, teleg
 // (no stun, no hit, the parcel kept) grows with its level, 8% a level past 4 x the area's number, up to 85%
 export const shakeOff = (lv, d) => clamp((lv - 1 - 4 * d) * 0.08, 0, 0.85);
 export function roamOk(x, z, y, d) { return Math.abs(surfaceAt(x, z, y + 0.5) - y) < 0.55 && !blocked(x, z, y, 0.6) && !inSafeZone(x, z, y) && hyp(x - PO.x, z - PO.z) > SAFE_R + 4 && districtAt(x, z, y) === d && !inPond(x, z, y); }
+// (owner, 2026-11-11: geese are stopped by houses and trees too) a goose that would start inside something moves round its pond to a clear spot
+for (const g of geese) if (blocked(g.x, g.z, g.y, 0.6)) { const P = ponds[g.pond], a0 = Math.atan2(g.z - P.z, g.x - P.x);
+  for (let k = 1; k < 48; k++) { const a = a0 + (k % 2 ? 1 : -1) * Math.ceil(k / 2) * (TAU / 48), x = P.x + Math.cos(a) * (P.r + 3), z = P.z + Math.sin(a) * (P.r + 3); if (!blocked(x, z, g.y, 0.6) && surfaceAt(x, z, g.y + 0.5) > -1e9) { g.x = x; g.z = z; break; } } }
 (function populate() {   // dogs, more of them the farther out
   const rnd = rng(77123), put = (n, d, pt) => { for (let k = 0, tries = 0; k < n && tries < 6000; tries++) { const [x, z, y] = pt(); if (!roamOk(x, z, y, d) || dogs.some((q) => hyp(q.hx - x, q.hz - z) < 10)) continue; dogs.push({ id: dogs.length, hx: x, hz: z, y, d, look: Math.floor(rnd() * 3) }); k++; } };
   put(2, 0, () => [40 + rnd() * 65, (rnd() - 0.5) * 50, 0]);

@@ -33,8 +33,8 @@ Every rule below is in `website/pets-world.js` (shared with the server, an ident
 20); ride back into the conveyor to load up. Each has its own address (the same neighborhood as another or a
 different one), its own marker, and its own row on the parcel card (with its distance; the card shows how many of how
 many). The ground arrow points to the nearest. Each delivers at its own mailbox and rolls; several rolls take turns.
-A parcel that breaks or is lost is gone; the conveyor always has the next one. **Empty-handed you ride 1.5x faster**
-(owner, 2026-11-11: parcels weigh you down), so the trip back to the post office is quick.
+A parcel that breaks or is lost is gone; the conveyor always has the next one. **Empty-handed you ride twice as fast**
+(owner, 2026-11-11: parcels weigh you down; empty mounts "way faster"), so the trip back to the post office is quick.
 
 ## The conveyor
 
@@ -55,16 +55,17 @@ A parcel that breaks or is lost is gone; the conveyor always has the next one. *
 | Sky | Floating Islands | x15 | +100% | 4% |
 
 - (owner, 2026-11-11) **At least 30% go to the farthest area you've opened**; the rest spread over the ones in between.
-- Tiers for districts you haven't opened never appear. Route Permits also lift the higher tiers' share (Sky to about 8%
-  at level 10), and so does the mount's level (owner, 2026-11-11: the higher level, the pricier the parcels and the
+- (owner, 2026-11-11) **Districts open by themselves as your mounts level up** (Route Permits went): one more each time
+  your best mount reaches level 3, 6, 9 and 12 (`OPEN_LV`). Tiers for districts you haven't opened never appear. The
+  more districts are open, the bigger the higher tiers' share (tier n's weight x (1 + n x (open - 1) / 5)), and so does
+  the ridden mount's level (owner, 2026-11-11: the higher level, the pricier the parcels and the
   longer the trips): tier n's weight x (1 + n x (level - 1) / 8).
 - Every hit (a kick, a bite, a rock, a fall, the pipe's goose) lands on one of your parcels at random.
 - Every parcel has 3 durability (Sturdy Boxes: 4 at level 5, 5 at level 10). Each hit takes 1 and 20% of the delivery
   coins; at 0 it breaks.
-- One parcel in five has a **modifier**: Fragile (1 durability: any hit breaks it; +100% coins), Heavy (the mount is
-  15% slower, no ziplines; +50%), Express (a countdown: 0.16 s per meter to the address, at least 14 s, plus 8 / 40 /
-  45 s for the Marsh / Cliffside / Islands; no bonus if late; +150%), Golden (2% of modifiers; +200% and the roll is
-  Rare or better).
+- (owner, 2026-11-11) Parcels differ only by tier (rarity) and timing: one parcel in five is **Express** (a countdown:
+  0.16 s per meter to the address, at least 14 s, plus 8 / 40 / 45 s for the Marsh / Cliffside / Islands; no bonus if
+  late; +150%). Fragile, Heavy and Golden parcels went.
 - Delivery coins = 10 x tier x (1 + modifier bonus) x Payout upgrade x (1 - 0.2 per hit).
 
 ## The reward roll
@@ -80,10 +81,8 @@ A parcel that breaks or is lost is gone; the conveyor always has the next one. *
 - Every delivery also gives the mount 5 + 3 per tier Training XP.
 - **Luck** (the tier's, plus Lucky Stamps) weights each roll by (1 + luck) to the power of its rank, then the odds are
   scaled back to 100%. Lucky Stamps at level 10 takes Legendary from 1% to 3% on a Bronze parcel.
-- **Stamp Meter** (pity, on the HUD): +1 for every roll below Rare. When it reaches a multiple of 25 that roll is Rare;
-  at 100 it is Epic. Any Epic or Legendary sets it back to 0.
 - A roll that just missed Legendary hangs on it for a moment before landing (near miss).
-- The Odds menu always shows the current odds for every tier, the modifiers and the eggs.
+- The Odds menu always shows the current odds for every tier, the Express bonus and the eggs.
 
 ## Mounts
 
@@ -95,7 +94,8 @@ A parcel that breaks or is lost is gone; the conveyor always has the next one. *
   (Double Jump); Uncommon Cat (Dash), Fox (Dash), Deer (Double Jump); Rare Raptor (Dash), Stegosaurus (Bark), Pony
   (Double Jump); Epic T-Rex (Bark), Triceratops (Dash); Legendary Unicorn (Double Jump). A new courier starts with a
   Pup. A Parrot, Owl or Dragon someone already had became a Deer, Stegosaurus or Unicorn, keeping its level.
-- **Stats** (rarity 0-4, n = level - 1): Speed 10 + 0.6 x rarity + (0.1 + 0.02 x rarity) x n m/s; Jump 8 + 0.25 x rarity
+- **Stats** (rarity 0-4, n = level - 1): Speed 10 + 0.6 x rarity + (0.3 + 0.03 x rarity) x n m/s (owner, 2026-11-11:
+  faster as it levels; about 16 to 20 m/s at level 20); Jump 8 + 0.25 x rarity
   + (0.08 + 0.01 x rarity) x n; Grip (shortens stuns) 5% x rarity + 2% x n, up to 60%.
 - **Ability** from level 5, stronger at 10 and 20: Dash (a burst of speed; every 8 / 6 / 4 s), Double Jump (a second jump, higher at 10, a third at 20), Bark (dogs within 10.5 / 14 / 17.5 m
   run home; every 12 / 9 / 6 s).
@@ -111,20 +111,19 @@ A parcel that breaks or is lost is gone; the conveyor always has the next one. *
 - Only from reward rolls. Basic: Common 70%, Uncommon 25%, Rare 5%. Rare: Uncommon 50%, Rare 38%, Epic 10%, Legendary
   2%. Legendary: Rare 50%, Epic 38%, Legendary 12%. The odds are on each egg in the Stable before you hatch.
 - Hatch from the Stable, no timer: the egg wobbles three times and opens. Any mount of the rolled rarity.
-- (owner, 2026-11-11) **Merging mounts:** four of the same mount with the same skin merge (the Stable's Merge button,
-  on any of them) into the best of the four (the highest level), which gets the next skin: normal, Shiny, Golden,
-  **Rainbow** (violet with a sea-green trim and a rainbow trail; only by merging). The other three go. A Golden or
+- (owner, 2026-11-11) **Merging mounts:** two of the same mount with the same skin merge (the Stable's Merge button,
+  on either) into the better of the two (the higher level), which gets the next skin: normal, Shiny, Golden,
+  **Rainbow** (violet with a sea-green trim and a rainbow trail; only by merging). The other goes. A Golden or
   Rainbow merge is announced to the server.
 - 1 in 100 is **Shiny** (a lighter coat and a sparkle trail), 1 in 1,000 **Golden** (a gold coat and trail); the whole
   server is told. Up to 60 mounts.
 
 ## The tutorial
 
-(owner, 2026-11-11) A courier with no deliveries gets six short cards at the bottom of the screen (on narrow phones,
+(owner, 2026-11-11) A courier with no deliveries gets five short cards at the bottom of the screen (on narrow phones,
 under the parcel card), each with its own words (the owner asked for this explanation, an exception to "no helper
 text"): **Pick up parcels** (the ground arrow points at your parcel on the counter), **Drop them off**, **Open your
-parcels** (the parcels on the left outlined), **Stable**, **Upgrades** and **Stamp Meter** (their buttons, and the bar,
-outlined in pink). The first three move on when you do them; the rest with Next. Skip ends it. It's shown once (saved
+parcels** (the parcels on the left outlined), **Stable** and **Upgrades** (their buttons outlined in pink). The first three move on when you do them; the rest with Next. Skip ends it. It's shown once (saved
 as a setting).
 
 ## The town
@@ -150,6 +149,8 @@ animals:** its chance to shake off a bite or a goose's grab (no stun, no hit, "S
   broken boardwalk on (gaps of mud to jump), one across the middle, 6 houses on platforms, three ponds (11 geese), 5 dogs.
 - **Cliffside** (Diamond, x 290-415): three steps up the road, 6 m each, a ramp up the road onto each; a house each side
   on each step; boulders on each step to ride round; 6 dogs; 4 goats; falling rocks. The **Sky Cannon** at the top.
+- (owner, 2026-11-11) The sewer pipe's mouth and the balloon take you from farther off: the pipe from 3.5 m round its
+  middle (it was 1.7), the balloon from 5.5 m (it was 3).
 - **Floating Islands** (Sky): three islands 32 to 44 m up off Cliffside's far side, two houses each, joined by jump
   pads; 3 dogs, wind and sky geese (every 8 to 14 s). Each island's houses stand as far as they can from its pads,
   landing spots, balloon and middle; anyone who somehow ends up inside something solid is moved out to the nearest
@@ -158,7 +159,7 @@ animals:** its chance to shake off a bite or a goose's grab (no stun, no hit, "S
 
 **Shortcuts:** the sewer pipe (Main Street to the foot of Cliffside in 4 s; a goose sits in it 8 s in every 24, eyes showing at both
 ends, and costs 1 hit), ziplines (the tower at the suburbs' east end down into the marsh; the top of Cliffside back to
-the tower; not with a Heavy parcel), boost pads (x1.6 speed for 2.5 s) on the road, the alleys and the marsh's main
+the tower), boost pads (x1.6 speed for 2.5 s) on the road, the alleys and the marsh's main
 boardwalk, and rooftop hops (three roofs, each 2 m higher, up the side of each Cliffside step's face: they need a jump
 of about 2 m).
 
@@ -173,11 +174,17 @@ of about 2 m).
   up to 2.2 s). Touching you it takes one of your parcels (no stun) and waddles to its pond (7.2 m/s), then takes 3 s out in the
   middle to sink it: then it's lost. **Kick the goose** and the parcel drops where it stands, unharmed: pick it up
   (within 20 s) for 15 coins x the tier. "GOOSE BUSTED!"
+- (owner, 2026-11-11: animals have the same blocks couriers have) Houses, fences, hedges and trees stop geese as they
+  stop couriers (and dogs): a goose slides along them; one stuck for over a second with a parcel squeezes through. A
+  goose that would start inside something stands at a clear spot round its pond instead. Dogs, geese and goats face the
+  way they actually move.
+- (owner, 2026-11-11) A mount is as wide as it looks: the bigger it has grown, the farther from a wall, hedge or tree it
+  stops (0.55 m on foot and at level 1, up to about 1 m).
 - **Sprinklers** (Suburbs): on 3 s in every 6, they shove you sideways.
 - **Falling rocks** (Cliffside): every 3 to 6 s near a courier on the mountain; a shadow for 1 s, then a 1.5 s stun and
   1 hit within 2.3 m.
 - **Goats** (Cliffside, 4): they wander their terrace; a goat that sees anyone within 9 m stomps for 0.8 s, then
-  charges and knocks them back toward the ledge (no hit); it won't run off its own ledge.
+  charges (owner, 2026-11-11: faster, 20 m/s for under a second) and knocks them back toward the ledge (no hit); it won't run off its own ledge.
 - **Wind** (Islands): a gust for 3.5 s in every 11 pushes everyone the same way.
 - **Sky geese** (Islands): every 9 to 16 s one dives at a courier carrying a parcel; a shadow circle for 1.4 s, then it
   takes one of your parcels for good if you're still within 2.2 m.
@@ -199,18 +206,18 @@ Ten levels each; a level costs base x 1.8^(level it's bought at).
 
 | Upgrade | Base | Does |
 | --- | --- | --- |
-| Route Permits | 250 | opens the next district at levels 2, 4, 6 and 8; lifts the higher tiers' share |
 | Payout | 300 | +10% delivery coins per level |
 | Lucky Stamps | 500 | luck on every roll (Legendary 1% to 3%) |
 | Coupon Press | 400 | +1% per level of a bonus Level Coupon on a roll |
 | Sturdy Boxes | 350 | +1 durability at level 5 and at level 10 |
 
-The total of all levels is the **postmaster rank**, a badge on the name tag: Bronze from 1, Silver 13, Gold 25,
-Platinum 38.
+The total of all levels (of 40) is the **postmaster rank**, a badge on the name tag: Bronze from 1, Silver 10, Gold 20,
+Platinum 30. (owner, 2026-11-11) Route Permits went (districts open with mount levels); a courier who had bought any
+gets those coins back the next time their data loads.
 
 ## The screen
 
-- Coins top left (they count up; coins fly to it). Chat button under it. The Stamp Meter down the left.
+- Coins top left (they count up; coins fly to it). Chat button under it. Delivered parcels down the left.
 - The parcel card top center: a row per parcel (tier, modifier, durability pips, address, distance, the Express
   countdown), stolen or dropped ones faded, and how many you carry of how many.
 - Bottom right: Kick (with its cooldown), Whistle above it, the Ability beside it (gray until level 5), Jump.
@@ -231,6 +238,8 @@ loop.
 
 - Rooms of up to 100 couriers share one town. Positions go out 10 times a second; dogs, geese and goats are the
   room's, run by the server 20 times a second.
+- (owner, 2026-11-11: others rode sideways) Facing is sent as an angle within one turn (the server wraps any angle;
+  it used to clamp it, which left a courier who had turned round a few times facing the wrong way for everyone else).
 - Chat (Enter or the button); a bubble over the speaker.
 - Parties: tap a courier, then Party; they accept or decline. Up to 6. Party members can't kick each other.
 - A new website build reloads everyone onto it.
@@ -240,7 +249,7 @@ loop.
 The page may ask: grab, kick, the Bark ability, equip, buy a level, use a coupon, hatch an egg, buy an upgrade, change
 a setting, the sewer pipe, the balloon. Everything else (parcels, addresses, deliveries, rolls, damage, stuns, coins)
 is the server's. Checks: a grab only near the conveyor; a delivery only in the right mailbox's ring with an unbroken
-parcel; kick range and cooldown; coins for every purchase; a speed cap (anything over 60 m/s is flagged and blocks
+parcel; kick range and cooldown; coins for every purchase; a speed cap (anything over 110 m/s is flagged and blocks
 deliveries for 2 s).
 
 ## Accounts and saving
@@ -249,8 +258,8 @@ deliveries for 2 s).
 - (owner, 2026-11-11) **Fresh start, logins kept:** accounts and passwords carried over; every courier starts with a
   Pup and 0 coins. A courier's data is its own column (`courier`) on `pet_accounts`; the old game's `data` column and
   the `pet_world` table are left in the database untouched, unused.
-- Saved: coins, mounts (id, kind, variant, level, Training XP), the equipped mount, eggs, Level Coupons, upgrades, the
-  Stamp Meter, stats (deliveries, Golden parcels, geese busted, kicks landed), settings, failed runs in a row. Not
+- Saved: coins, mounts (id, kind, variant, level, Training XP), the equipped mount, eggs, Level Coupons, upgrades,
+  stats (deliveries, Golden parcels, geese busted, kicks landed), settings, failed runs in a row. Not
   saved: the parcels you carry and the conveyor's parcels.
 - Purchases and hatches save at once; everything else every 60 s and when you leave.
 
@@ -268,6 +277,10 @@ its own fresh saves, with the same logins. It is described in `docs/POKEMON.md`;
 Courier's rules.
 
 ## Rejected / removed
+
+- (owner, 2026-11-11) The **Stamp Meter** (pity: Rare at every 25 rolls below Rare, Epic at 100), its bar on the HUD
+  and its tutorial card; **Route Permits** (districts open with mount levels now; their coins refunded); the **Fragile,
+  Heavy and Golden** parcels (only tiers and Express stay); merging **four** mounts (now two).
 
 - (owner, 2026-11-11) Back alleys; the wide (120 m) town; rewards rolled in full on delivery (now the rarity on
   delivery, the contents on opening).
