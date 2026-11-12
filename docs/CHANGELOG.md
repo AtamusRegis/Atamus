@@ -6,6 +6,9 @@ and any rule decided. Use `git log` for the code detail (and for the older Atamu
 
 ## 2026-11-12
 
+- **The far zones made into places (owner).** Snow drifts, ice spikes, snowmen and falling snow; dunes, cacti, palms and
+  pyramids; log bridges, ruins and a temple; rock spires, a smoking volcano and embers; craters, crystals, glowing
+  mushrooms and stars. Each has its own sky.
 - **Every animal its own ability (owner).** Bear Tough Hide, Wolf Howl, Fox Vanish, Raptor Pounce, Trike Charge, T-Rex
   Roar and Unicorn Blink join the Dog's Bark, the Cat's Double Jump and the Gator's Dash.
 - **Admin freecam (owner).** Admins can fly the camera freely round the town from the Admin panel.

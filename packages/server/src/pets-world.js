@@ -250,6 +250,10 @@ export const skinRoll = (rnd = Math.random) => (rnd() < SHINY ? 1 : 0);   // 1 i
 // Ground is made of slabs (flat rectangles and discs, and ramps); solids are boxes that stop you.
 // ---------------------------------------------------------------------------------------------------------------------
 export const sprinklers = [], goats = [], zips = [];
+// (owner, 2026-11-12) the far zones' own scenery (drawn by the page; the solid ones stop you): ice spikes, snowmen and
+// snowy pines; cacti, palms and pyramids; ruined pillars and a temple; rock spires and a volcano; crystals and glowing
+// mushrooms. k: the kind, s: its size
+export const props = [];
 export const slabs = [], solids = [], houses = [], dogs = [], ponds = [], geese = [], trees = [], roads = [], pads = [], boosts = [], balloons = [], fences = [];
 // (owner, 2026-11-11) the post office is a building with a conveyor belt coming out of its door, pushing your parcel to
 // the end, where you grab it. (x, z: the middle of its square; b: the building; belt: the conveyor; end: where your parcel waits)
@@ -362,6 +366,26 @@ function buildTown() {
   balloons.push({ x: FAR.x0 + FAR.n * FAR.len - 9, z: 14, y: 0 });   // (owner, 2026-11-12) the one balloon home: at the very end of the last zone
   { const x0 = farX(7); for (const dx of [22, 50, 78]) rect(x0 + dx - 3, x0 + dx + 3, FAR.z0, FAR.z1, 0.02, "water", -0.5); }   // the jungle's rivers
   { const x0 = farX(8); for (const [dx, z, r] of [[14, 12, 4], [30, -3, 3], [46, -16, 5], [62, 4, 3.5], [80, -12, 4], [88, 20, 3.5]]) { lavas.push({ x: x0 + dx, z, r }); disc(x0 + dx, z, r, 0.03, "lava", -0.5); } }
+  // (owner, 2026-11-12) each far zone its own shape and things in it, not five flat lots
+  { const prnd = rng(20261112), clear = (x, z, r) => Math.abs(z) > 5.5 + r && !houses.some((h) => hyp(h.x - x, h.z - z) < h.size / 2 + 2 + r || hyp(h.mx - x, h.mz - z) < 3.5 + r) && !lavas.some((l) => hyp(l.x - x, l.z - z) < l.r + 1 + r) && !props.some((q) => hyp(q.x - x, q.z - z) < 3 + r);
+    const scatter = (d, n, k, r, sMin, sMax, solidR, h) => { const x0 = farX(d); for (let i = 0, t = 0; i < n && t < 3000; t++) { const x = x0 + 3 + prnd() * (FAR.len - 6), z = FAR.z0 + 3 + prnd() * (FAR.z1 - FAR.z0 - 6), sc = sMin + prnd() * (sMax - sMin); if (!clear(x, z, r * sc)) continue; props.push({ k, x, z, y: 0, s: sc }); if (solidR) solid(x, z, solidR * sc, solidR * sc, -1, h * sc); i++; } };
+    // Frostbite Fields: snow drifts across the road to ride over, ice spikes, snowmen, snowy pines
+    { const x0 = farX(5); for (const dx of [7, 29, 50, 80, 92]) { rampX(x0 + dx - 2.5, x0 + dx, -9, 9, 0, 1, "snow"); rampX(x0 + dx, x0 + dx + 2.5, -9, 9, 1, 0, "snow"); } }
+    scatter(5, 12, "spike", 1, 0.8, 1.6, 0.6, 3); scatter(5, 5, "snowman", 1, 0.9, 1.2, 0.7, 2.6); scatter(5, 14, "pine", 1.2, 0.9, 1.4, 0.45, 8);
+    // Sunscorch Dunes: big dunes the road climbs over, cacti, palms, and pyramids beyond the edge
+    { const x0 = farX(6); for (const dx of [9, 31, 52, 78, 92]) { rampX(x0 + dx - 4.5, x0 + dx, -12, 12, 0, 2, "sand"); rampX(x0 + dx, x0 + dx + 4.5, -12, 12, 2, 0, "sand"); } }
+    scatter(6, 14, "cactus", 0.8, 0.8, 1.4, 0.45, 3.5); scatter(6, 7, "palm", 1, 0.9, 1.3, 0.4, 6);
+    props.push({ k: "pyramid", x: farX(6) + 30, z: -78, y: 0, s: 30 }, { k: "pyramid", x: farX(6) + 72, z: -95, y: 0, s: 40 }, { k: "pyramid", x: farX(6) + 55, z: 82, y: 0, s: 26 });
+    // Jungle Ruins: log bridges over the rivers (the fast line), broken pillars, a stepped temple to climb
+    { const x0 = farX(7); for (const dx of [22, 50, 78]) rect(x0 + dx - 3.4, x0 + dx + 3.4, -1.7, 1.7, 0.35, "log", -0.4);
+      for (let k = 0; k < 3; k++) rect(x0 + 84 + k * 2, x0 + 97 - k * 2, -28 + k * 2, -15 - k * 2, 1.4 * (k + 1), "stone", 0);   // the temple: three steps up
+      props.push({ k: "temple", x: x0 + 90.5, z: -21.5, y: 0, s: 1 }); solid(x0 + 90.5, -21.5, 2, 2, 4.2, 7); }
+    scatter(7, 12, "pillar", 0.8, 0.6, 1.3, 0.55, 5);
+    // Lava Flats: rock spires, and a volcano smoking beyond the edge
+    scatter(8, 16, "spire", 1, 0.8, 1.8, 0.7, 5); props.push({ k: "volcano", x: farX(8) + 50, z: -85, y: 0, s: 45 });
+    // Moon Garden: craters to bounce through, crystals, glowing mushrooms
+    { const x0 = farX(9); for (const [dx, z, r] of [[12, -2, 5], [34, 3, 4], [56, -1, 6], [84, 2, 4.5]]) { disc(x0 + dx, z, r, -0.5, "crater", -2); props.push({ k: "crater", x: x0 + dx, z, y: -0.5, s: r }); } }
+    scatter(9, 12, "crystal", 1, 0.8, 1.8, 0.5, 3.5); scatter(9, 14, "shroom", 0.8, 0.7, 1.4, 0.35, 2.5); }
   // ---- trees where there's room ----
   for (let n = 0, tries = 0; n < 24 && tries < 4000; tries++) {
     const x = TOWN.x0 + 6 + rnd() * (TOWN.x1 - TOWN.x0 - 12), z = TOWN.z0 + 6 + rnd() * (TOWN.z1 - TOWN.z0 - 12);

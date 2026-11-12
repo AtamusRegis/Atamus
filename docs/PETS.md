@@ -236,6 +236,16 @@ power (4 x (rarity + half its area's number)) is past 4 x the animal's area numb
     stun; once every 2 s).
   - **Moon Garden** (Unicorn): low gravity (45%).
   Falling off the islands only counts over the islands, not the zones below or the zipline down.
+- (owner, 2026-11-12) **Each far zone its own place** (`props`, the slabs, and its own sky, fog and air):
+  - **Frostbite Fields:** snow drifts across the road (1 m humps, snow grips), ice spikes, snowmen, snowy pines,
+    snow falling; a pale blue sky.
+  - **Sunscorch Dunes:** five 2 m dunes the road climbs over, cacti, palms, three pyramids beyond the edge, sand
+    blowing with the gusts; an orange sky.
+  - **Jungle Ruins:** a log bridge over each river (the fast line: no river slow), ruined pillars, a three-step
+    temple with a shrine on top, fireflies; a green sky.
+  - **Lava Flats:** rock spires with glowing cracks, a volcano smoking beyond the edge, embers rising; a dark red sky.
+  - **Moon Garden:** four craters (half a meter down, with rims), crystals and glowing mushrooms, motes, a night sky
+    full of stars.
 
 **Shortcuts:** (owner, 2026-11-12) none any more (the sewer pipe and the zipline tower went; the only zipline is the
 way down to Frostbite Fields). **No walls round the outside:** ride or jump off any edge of the town (anywhere but

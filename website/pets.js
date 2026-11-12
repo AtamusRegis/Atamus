@@ -4,7 +4,7 @@
 // deliveries, rolls, damage, coins, mounts; this page shows the town (pets-world.js, shared with the server), moves you
 // and asks. Phone first: a thumb joystick, drag to look, pinch to zoom, big buttons.
 import * as THREE from "./vendor/three.module.min.js";
-import * as World from "./pets-world.js?v=1794473393";
+import * as World from "./pets-world.js?v=1794474060";
 
 const $ = (id) => document.getElementById(id);
 const { TAU, clamp, hyp, MOUNTS, TIERS, RARITY, RARITY_C, MODS, UPGRADES } = World;
@@ -45,7 +45,7 @@ function textSprite(text, { size = 40, color = "#23303b", bg = "rgba(255,255,255
 // ---- the town, drawn from the shared world ----
 // (owner, 2026-11-11) the town's colors are kept calm so the delivery marker (POI: the one hot pink thing in town) stands out
 const POI = "#ff1f8f";
-const KIND_C = { grass: "#78b765", mud: "#75583e", rock: "#9a948b", plank: "#b9905f", isle: "#80bd6c", road: "#84878f", stone: "#a9adb5", roof: "#b9573f", pod0: "#e8b923", pod1: "#c9d1d9", pod2: "#c98a4b", ice: "#d6f0ff", sand: "#e8cf8f", jungle: "#3f8f4a", basalt: "#4a4446", lava: "#ff5a1f", moon: "#c9c6d9", water: "#3f8fd0" };
+const KIND_C = { grass: "#78b765", mud: "#75583e", rock: "#9a948b", plank: "#b9905f", isle: "#80bd6c", road: "#84878f", stone: "#a9adb5", roof: "#b9573f", pod0: "#e8b923", pod1: "#c9d1d9", pod2: "#c98a4b", ice: "#d6f0ff", sand: "#e8cf8f", jungle: "#3f8f4a", basalt: "#4a4446", lava: "#ff5a1f", moon: "#c9c6d9", water: "#3f8fd0", snow: "#f4f8fb", log: "#8a5a34", crater: "#8a86a0" };
 const HOUSE_C = [["#efe3cc", "#c8604c"], ["#ecd5b8", "#5c86bd"], ["#cfdcc0", "#7a5a3c"], ["#dcd3c6", "#8368b0"], ["#f1f1ec", "#3fa9a4"], ["#eef6fb", "#5aa0d9"], ["#f0d9a8", "#c8662e"], ["#b9a27a", "#3f7a3f"], ["#5a5050", "#c8401e"], ["#e4e0f0", "#6a4ab0"]];   // walls and roofs, by district
 const houseMesh = [], dogMesh = [], gooseMesh = [], goatMesh = [], sprinklerMesh = [], pipeEyes = [];
 function rampGeo(s) {   // a wedge: flat at the bottom, rising along z (k 2) or x (k 3)
@@ -1419,6 +1419,45 @@ let windOn = false;
 
 // ---- every frame ----
 let last = performance.now();
+// (owner, 2026-11-12) the far zones' scenery, sky and air: each its own place
+const glow = (c) => new THREE.MeshBasicMaterial({ color: c });
+function mesh(geo, material, x, y, z, parent) { const m = new THREE.Mesh(geo, material); m.position.set(x, y, z); m.castShadow = true; m.receiveShadow = true; (parent || scene).add(m); return m; }
+const volcanoes = [];
+function buildProps() {
+  for (const P of World.props) {
+    const g = new THREE.Group(); g.position.set(P.x, P.y, P.z); g.scale.setScalar(P.k === "pyramid" || P.k === "volcano" || P.k === "crater" ? 1 : P.s); g.rotation.y = (P.x * 7.3 + P.z * 3.1) % TAU; scene.add(g);
+    if (P.k === "spike") { for (const [dx, dz, h] of [[0, 0, 3], [0.7, 0.3, 1.8], [-0.5, 0.6, 1.4]]) { const m = mesh(new THREE.ConeGeometry(0.45, h, 5), mat("#bfe9ff"), dx, h / 2, dz, g); m.rotation.z = dx * 0.2; } }
+    else if (P.k === "snowman") { mesh(new THREE.SphereGeometry(0.7, 12, 10), mat("#ffffff"), 0, 0.65, 0, g); mesh(new THREE.SphereGeometry(0.5, 12, 10), mat("#ffffff"), 0, 1.65, 0, g); mesh(new THREE.SphereGeometry(0.36, 12, 10), mat("#ffffff"), 0, 2.4, 0, g); const n = mesh(new THREE.ConeGeometry(0.08, 0.4, 6), mat("#f08a24"), 0, 2.4, 0.42, g); n.rotation.x = Math.PI / 2; for (const x of [-0.13, 0.13]) box(0.07, 0.07, 0.05, "#1d232a", x, 2.5, 0.33, g, false); box(0.9, 0.16, 0.16, "#c8401e", 0, 2.05, 0, g); }
+    else if (P.k === "pine") { box(0.4, 2, 0.4, "#6b4a2e", 0, 1, 0, g); mesh(new THREE.ConeGeometry(1.8, 3.6, 8), mat("#2f6a4a"), 0, 3.4, 0, g); mesh(new THREE.ConeGeometry(1.2, 2.6, 8), mat("#2f6a4a"), 0, 5.2, 0, g); mesh(new THREE.ConeGeometry(0.75, 1.3, 8), mat("#ffffff"), 0, 6.2, 0, g); mesh(new THREE.ConeGeometry(1.85, 0.9, 8), mat("#ffffff"), 0, 4.95, 0, g); }
+    else if (P.k === "cactus") { box(0.6, 3.4, 0.6, "#4f9a5a", 0, 1.7, 0, g); box(0.4, 1.2, 0.4, "#4f9a5a", 0.6, 1.9, 0, g); box(0.5, 0.4, 0.4, "#4f9a5a", 0.4, 1.4, 0, g); box(0.4, 1, 0.4, "#4f9a5a", -0.6, 2.4, 0, g); box(0.5, 0.4, 0.4, "#4f9a5a", -0.4, 2, 0, g); box(0.25, 0.25, 0.25, "#ff8fd9", 0, 3.5, 0, g); }
+    else if (P.k === "palm") { const tr = mesh(new THREE.CylinderGeometry(0.22, 0.32, 5.5, 7), mat("#9a7448"), 0.4, 2.7, 0, g); tr.rotation.z = -0.15; for (let k = 0; k < 6; k++) { const a = (k / 6) * TAU, l = box(2.6, 0.1, 0.7, "#3f9a4a", 0.8 + Math.cos(a) * 1.1, 5.4, Math.sin(a) * 1.1, g); l.rotation.y = -a; l.rotation.z = -0.35; } }
+    else if (P.k === "pyramid") { const m = mesh(new THREE.ConeGeometry(P.s, P.s * 0.95, 4), mat("#e2c07a"), 0, P.s * 0.47, 0, g); m.rotation.y = Math.PI / 4; }
+    else if (P.k === "temple") { box(4, 2.6, 4, "#9a9488", 0, 4.2 + 1.3, 0, g); box(1.4, 1.8, 0.2, "#2a2f2a", 0, 4.2 + 0.9, 2.02, g, false); for (const [x, z] of [[-2, 2], [2, 2], [-2, -2], [2, -2]]) box(0.5, 3.2, 0.5, "#b9b2a2", x, 4.2 + 1.6, z, g); box(4.6, 0.4, 4.6, "#3f8a4a", 0, 4.2 + 2.8, 0, g); }
+    else if (P.k === "pillar") { const h = P.s < 0.9 ? 2.2 : 4.2; mesh(new THREE.CylinderGeometry(0.5, 0.55, h, 8), mat("#b9b2a2"), 0, h / 2, 0, g); box(1.3, 0.35, 1.3, "#a9a294", 0, h + 0.17, 0, g); box(1.35, 0.15, 1.35, "#3f8a4a", 0, h + 0.4, 0, g); }
+    else if (P.k === "spire") { mesh(new THREE.ConeGeometry(1, 5, 6), mat("#3a3436"), 0, 2.5, 0, g); mesh(new THREE.ConeGeometry(0.6, 2.6, 6), mat("#2a2426"), 0.7, 1.3, 0.4, g); box(0.12, 1.6, 0.12, "#ff6a1f", 0.55, 1.4, 0.75, g, false).material = glow("#ff6a1f"); }
+    else if (P.k === "volcano") { mesh(new THREE.CylinderGeometry(P.s * 0.14, P.s, P.s * 0.8, 12), mat("#4a3a36"), 0, P.s * 0.4, 0, g); const top = new THREE.Mesh(new THREE.CircleGeometry(P.s * 0.13, 14).rotateX(-Math.PI / 2), glow("#ff5a1f")); top.position.y = P.s * 0.8 + 0.1; g.add(top); for (let k = 0; k < 5; k++) { const a = k * 1.3, st = box(1.6, P.s * 0.5, 1, "#ff5a1f", Math.cos(a) * P.s * 0.4, P.s * 0.42, Math.sin(a) * P.s * 0.4, g, false); st.material = glow("#ff6a1f"); st.lookAt(g.position.x, P.s, g.position.z); } volcanoes.push({ x: P.x, y: P.s * 0.8, z: P.z, s: P.s }); }
+    else if (P.k === "crater") { const rim = mesh(new THREE.TorusGeometry(P.s, 0.45, 6, 28).rotateX(Math.PI / 2), mat("#d9d6e8"), 0, 0.45, 0, g); rim.castShadow = false; }
+    else if (P.k === "crystal") { const c = (P.x | 0) % 2 ? "#9fe0ff" : "#c9a6ff"; for (const [dx, dz, h, tilt] of [[0, 0, 2.2, 0], [0.6, 0.2, 1.4, 0.4], [-0.5, 0.4, 1.1, -0.5]]) { const m = new THREE.Mesh(new THREE.OctahedronGeometry(0.45, 0), glow(c)); m.scale.set(1, h, 1); m.position.set(dx, h * 0.45, dz); m.rotation.z = tilt; g.add(m); } }
+    else if (P.k === "shroom") { mesh(new THREE.CylinderGeometry(0.16, 0.22, 1.2, 7), mat("#f4f1ea"), 0, 0.6, 0, g); const cap = new THREE.Mesh(new THREE.SphereGeometry(0.7, 12, 8, 0, TAU, 0, Math.PI / 2), glow((P.z | 0) % 2 ? "#ff8fd9" : "#7ef0c8")); cap.position.y = 1.15; g.add(cap); }
+  }
+  // the Moon Garden's stars
+  const n = 500, pos = new Float32Array(n * 3); for (let k = 0; k < n; k++) { const a = Math.random() * TAU, e = 0.15 + Math.random() * 1.2, r = 700; pos[k * 3] = World.farX(9) + 50 + Math.cos(a) * Math.cos(e) * r; pos[k * 3 + 1] = Math.sin(e) * r; pos[k * 3 + 2] = Math.sin(a) * Math.cos(e) * r; }
+  const geo = new THREE.BufferGeometry(); geo.setAttribute("position", new THREE.BufferAttribute(pos, 3)); stars = new THREE.Points(geo, new THREE.PointsMaterial({ color: "#ffffff", size: 2.2, sizeAttenuation: false, fog: false, transparent: true, opacity: 0 })); scene.add(stars);
+}
+let stars = null;
+const SKY = { 5: ["#cfe6f5", "#eef6fb"], 6: ["#f2c98a", "#f6dcae"], 7: ["#8fc7a0", "#b9dcc0"], 8: ["#5a2e28", "#7a3a2a"], 9: ["#141a3a", "#2a2f5a"] }, SKY0 = ["#9cc7e6", "#bcd9ec"], skyC = [new THREE.Color(SKY0[0]), new THREE.Color(SKY0[1])], tmpC = new THREE.Color();
+function stepAir(dt) {
+  const z = World.districtAt(me.x, me.z, me.y), S = SKY[z] || SKY0, k = Math.min(1, dt * 1.5);
+  scene.background.lerp(tmpC.set(S[0]), k); scene.fog.color.lerp(tmpC.set(S[1]), k);
+  if (stars) stars.material.opacity += ((z === 9 ? 1 : 0) - stars.material.opacity) * k;
+  const R = () => (Math.random() - 0.5) * 50;
+  if (z === 5 && Math.random() < dt * 40) emit(me.x + R(), me.y + 14, me.z + R(), 1, { colors: ["#ffffff", "#eef6fb"], speed: 0.4, up: 0, life: 5, grav: 1.2, size: 0.14 });   // snow falling
+  if (z === 6) { const w = World.windAt(srvNow() + 5); if (w.on && Math.random() < dt * 60 && parts.length < PN) parts.push({ x: me.x + R(), y: me.y + 0.3 + Math.random() * 2.5, z: me.z + R(), vx: w.x * 16, vy: 0.2, vz: w.z * 16, t: 0, life: 1.2, size: 0.12, grav: 0, c: Math.random() < 0.5 ? "#e8cf8f" : "#d9b47a", r: Math.random() * 6 }); }   // blowing sand
+  if (z === 7 && Math.random() < dt * 8) emit(me.x + R() * 0.6, me.y + 1 + Math.random() * 3, me.z + R() * 0.6, 1, { colors: ["#e8ff7a", "#bfff8a"], speed: 0.4, up: 0.2, life: 2.5, grav: 0, size: 0.14, tw: 1 });   // fireflies
+  if (z === 8) { if (Math.random() < dt * 25) emit(me.x + R(), me.y + Math.random() * 2, me.z + R(), 1, { colors: ["#ff6a1f", "#ffd84a", "#ff3a1f"], speed: 0.4, up: 2.5, life: 2.2, grav: -0.4, size: 0.12 });   // embers
+    for (const v of volcanoes) if (Math.random() < dt * 6) emit(v.x + (Math.random() - 0.5) * 6, v.y + 2, v.z + (Math.random() - 0.5) * 6, 1, { colors: ["#5a5050", "#7a7070", "#3a3436"], speed: 1.5, up: 6, life: 6, grav: -0.3, size: 4 }); }   // the volcano's smoke
+  if (z === 9 && Math.random() < dt * 10) emit(me.x + R() * 0.7, me.y + 0.5 + Math.random() * 3, me.z + R() * 0.7, 1, { colors: ["#c9a6ff", "#9fe0ff", "#ffffff"], speed: 0.3, up: 0.3, life: 2, grav: 0, size: 0.16, tw: 1 });   // moon motes
+}
 function frame(tms) {
   requestAnimationFrame(frame);
   let dt = Math.min(0.08, (tms - last) / 1000); last = tms; const t = tms / 1000;
@@ -1431,11 +1470,11 @@ function frame(tms) {
     if (mine) pose(mine, { x: me.x, y: me.y, z: me.z, yaw: me.yaw, moving: me.moving, foot: me.foot, air: !me.ground, stun: me.stun, mx: me.mx, my: me.my, mz: me.mz, myaw: me.myaw, kickT: me.kickT, hidden: me.hidden, squash: me.squash, hop: me.hop, glide: me.glide }, dt, t, myStats().speed);
     if (tms - lastSent > 66) sendPos();
   }
-  stepOthers(dt, t); stepNpcs(dt, t); stepPods(dt, t); stepParts(dt); stepMarks(dt); blobStep(); stepCamera(dt);
+  if (loggedIn) stepAir(dt); stepOthers(dt, t); stepNpcs(dt, t); stepPods(dt, t); stepParts(dt); stepMarks(dt); blobStep(); stepCamera(dt);
   renderer.render(scene, camera);
   if (loggedIn) { hud(dt); stepGifts(dt); stepReveal(dt); maybeOpenRun(); } stepPops(dt);
 }
-buildTown(); buildAnimals(); buildGates(); beltShow(); stepCamera(0.016);
+buildTown(); buildProps(); buildAnimals(); buildGates(); beltShow(); stepCamera(0.016);
 // for the tests and the console
 window.Pets = { World, me, cam, others, show: { playZones, levelFx, hatchShow, startReveal, get cine() { return cine; } }, get save() { return save; }, get parcel() { return bag[0] || null; }, get bag() { return bag; }, get cap() { return cap; }, get belt() { return belt; }, get stolen() { return stolen; }, get dropped() { return dropped; }, get loggedIn() { return loggedIn; }, get panel() { return panel; }, dogMesh, gooseMesh, goatMesh, get arrow() { return wayArrow; }, readyAt, onNet, teleport(x, z, y = 0) { me.x = x; me.z = z; me.y = y; me.vx = me.vz = me.vy = 0; me.transit = null; me.ground = false; sendPos(true); }, netSend, openPanel };
 $("lgo").disabled = $("lnew").disabled = true;
