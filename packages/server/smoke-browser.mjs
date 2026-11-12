@@ -91,7 +91,7 @@ try {
   await page.click("#mstable"); await page.click(".btn.buy"); await until(page, () => window.Pets.save.mounts[0].lv === 2, "the level wasn't bought");
   await page.click(".eggc .btn.go"); await until(page, (h) => window.Pets.save.mounts.length === h.mounts + 1 && getComputedStyle(document.getElementById("hatch")).display !== "none", "the egg didn't hatch", had);
   await page.waitForTimeout(2100); await page.click("#hatch"); await page.click("#pclose");
-  await page.click("#mup"); await page.click(".uprow .btn.buy"); await until(page, () => window.Pets.save.up.routes === 1, "the upgrade wasn't bought"); await page.click("#pclose");
+  await page.click("#mup"); await page.click(".uprow .btn.buy"); await until(page, () => window.Pets.save.up.payout === 1, "the upgrade wasn't bought"); await page.click("#pclose");
   // a second player joins: the first must see them move, and take their kick (out of the post office's safe zone)
   step = "see a second player move";
   browser2 = await chromium.launch({ executablePath: chrome, args });   // its own browser, so neither page is a background tab

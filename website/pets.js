@@ -4,7 +4,7 @@
 // deliveries, rolls, damage, coins, mounts; this page shows the town (pets-world.js, shared with the server), moves you
 // and asks. Phone first: a thumb joystick, drag to look, pinch to zoom, big buttons.
 import * as THREE from "./vendor/three.module.min.js";
-import * as World from "./pets-world.js?v=1794439868";
+import * as World from "./pets-world.js?v=1794454540";
 
 const $ = (id) => document.getElementById(id);
 const { TAU, clamp, hyp, MOUNTS, TIERS, RARITY, RARITY_C, MODS, EGGS, UPGRADES } = World;
@@ -406,12 +406,10 @@ function buildAnimals() {
 }
 // a parcel: its tier's color, taped; modifiers show on it
 function parcelMesh(tier, mod) {
-  const g = new THREE.Group(), s = mod === "heavy" ? 0.92 : 0.72, c = mod === "golden" ? "#ffd23a" : TIERS[tier].c;
-  const b = new THREE.Mesh(BOX, new THREE.MeshLambertMaterial({ color: c, emissive: mod === "golden" ? "#a06a00" : "#000000" })); b.scale.setScalar(s); b.position.y = s / 2; b.castShadow = true; g.add(b);
+  const g = new THREE.Group(), s = 0.72, c = TIERS[tier].c;
+  const b = new THREE.Mesh(BOX, new THREE.MeshLambertMaterial({ color: c })); b.scale.setScalar(s); b.position.y = s / 2; b.castShadow = true; g.add(b);
   box(s * 1.02, s * 0.16, s * 1.02, "#fff8e6", 0, s / 2, 0, g, false); box(s * 0.16, s * 1.02, s * 1.02, "#fff8e6", 0, s / 2, 0, g, false);
-  if (mod === "fragile") box(s * 1.04, s * 0.3, s * 0.5, "#e5534b", 0, s * 0.8, 0, g, false);
   if (mod === "express") box(s * 0.5, s * 1.04, s * 0.3, "#3a8ee6", 0, s / 2, s * 0.2, g, false);
-  if (mod === "heavy") for (const x of [-1, 1]) box(s * 0.12, s * 1.04, s * 1.04, "#3d4650", x * s * 0.36, s / 2, 0, g, false);
   g.userData.s = s; return g;
 }
 
@@ -498,7 +496,6 @@ const keys = new Set(), joy = { id: null, x: 0, y: 0, ox: 0, oy: 0 }, cam = { ya
 let jumpHeld = false, jumpTap = false, hitStop = 0;
 const GRAV = 24, now = () => performance.now() / 1000;
 let clockOff = 0; const srvNow = () => (Date.now() + clockOff) / 1000;
-const heavy = () => bag.some((q) => q.mod === "heavy");
 function tryJump() {
   if (me.stun > 0 || me.transit) return; const st = myStats(), q = riding(), ab = MOUNTS[q.sp].ab, tier = World.abilityTier(q.lv);
   if (me.ground) { me.vy = me.foot ? 7.5 : st.jump; me.ground = false; me.jumps = 0; sfx("jump"); emit(me.x, me.y + 0.1, me.z, 5, { colors: ["#e9e2d2"], speed: 2, up: 1, life: 0.4, grav: 2 }); }
@@ -543,13 +540,13 @@ function stepMe(dt) {
   if (me.stun > 0) mx = mz = 0;
   const kind = me.ground ? World.groundKind(me.x, me.z, me.y) : "", mud = kind === "mud" && !World.inPond(me.x, me.z, me.y) ? World.MUD_SLOW : kind === "mud" ? 0.6 : 1;
   if (me.boost > 0) me.boost -= dt; if (me.dash > 0) me.dash -= dt;
-  let speed = me.foot ? 5.5 : st.speed * (heavy() ? World.HEAVY_SLOW : 1) * (bag.length ? 1 : World.EMPTY_FAST) * mud   // (owner, 2026-11-11) a parcel weighs you down: empty-handed you ride back much faster
+  let speed = me.foot ? 5.5 : st.speed * (bag.length ? 1 : World.EMPTY_FAST) * mud   // (owner, 2026-11-11) a parcel weighs you down: empty-handed you ride back much faster
     * (me.dash > 0 ? 2.4 : me.boost > 0 ? 1.6 : 1);
   if (me.dash > 0 && hyp(mx, mz) < 0.1) { mx = Math.sin(me.yaw); mz = Math.cos(me.yaw); }
   const acc = (me.ground ? 70 : 26) * dt, tvx = mx * speed, tvz = mz * speed;
   me.vx += clamp(tvx - me.vx, -acc, acc); me.vz += clamp(tvz - me.vz, -acc, acc);
   me.moving = hyp(me.vx, me.vz) > 0.6;
-  if (hyp(mx, mz) > 0.08) me.yaw += angDiff(Math.atan2(mx, mz), me.yaw) * Math.min(1, 12 * dt);
+  if (hyp(mx, mz) > 0.08) me.yaw = angDiff(me.yaw + angDiff(Math.atan2(mx, mz), me.yaw) * Math.min(1, 12 * dt), 0);   // kept within a turn (owner, 2026-11-11: others saw you sideways)
   // jumping, gliding, falling
   if (jumpTap) { jumpTap = false; tryJump(); }
   me.vy -= GRAV * dt;
@@ -560,11 +557,14 @@ function stepMe(dt) {
   const pl = hyp(me.px, me.pz); if (pl > 16) { me.px *= 16 / pl; me.pz *= 16 / pl; } const dec = Math.exp(-3.2 * dt); me.px *= dec; me.pz *= dec;
   // sideways, stopping at walls
   // (in small steps, riding up slopes as it goes, so a slow frame can't jam you against a ramp)
+  // (owner, 2026-11-11) a mount is as wide as it looks: the bigger it's grown, the farther from a wall, hedge or tree it stops
+  let BR = me.foot ? 0.55 : clamp(0.55 + 0.32 * (World.mountScale(q.lv) * MOUNTS[q.sp].size - 1), 0.55, 1.05);
+  if (BR > 0.55 && World.blocked(me.x, me.z, me.y, BR)) BR = 0.55;   // already up against something (it just grew, or landed there): the old width until it's clear
   const DX = (me.vx + me.px) * dt, DZ = (me.vz + me.pz) * dt, n = Math.max(1, Math.ceil(hyp(DX, DZ) / 0.3));
   for (let k = 0; k < n; k++) {
     const dx = DX / n, dz = DZ / n;
-    if (me.vx || me.px) { if (!World.blocked(me.x + dx, me.z, me.y)) me.x += dx; else { me.vx = 0; me.px = 0; } }
-    if (me.vz || me.pz) { if (!World.blocked(me.x, me.z + dz, me.y)) me.z += dz; else { me.vz = 0; me.pz = 0; } }
+    if (me.vx || me.px) { if (!World.blocked(me.x + dx, me.z, me.y, BR)) me.x += dx; else { me.vx = 0; me.px = 0; } }
+    if (me.vz || me.pz) { if (!World.blocked(me.x, me.z + dz, me.y, BR)) me.z += dz; else { me.vz = 0; me.pz = 0; } }
     if (me.ground) { const g = World.surfaceAt(me.x, me.z, me.y + 0.1); if (g > me.y && g - me.y < 0.6) me.y = g; }
   }
   // down (or up a step) onto the ground
@@ -595,18 +595,19 @@ const BELT_H = World.PO.counter - 0.65, BELT_L = 8 * BELT_H, BELT_GAP = 2.6; let
 function beltPos(s) { s = ((s % BELT_L) + BELT_L) % BELT_L; const k = Math.floor(s / (2 * BELT_H)), u = s - k * 2 * BELT_H - BELT_H, P = World.PO; return k === 0 ? { x: P.x + u, z: P.z + BELT_H } : k === 1 ? { x: P.x + BELT_H, z: P.z - u } : k === 2 ? { x: P.x - u, z: P.z - BELT_H } : { x: P.x - BELT_H, z: P.z + u }; }
 const beltS = () => now() * 1.1 + BELT_H, readyAt = () => beltPos(beltS() - beltLag);
 const near = (o, r, dy = 1.6) => hyp(me.x - o.x, me.z - o.z) < r && Math.abs(me.y - o.y) < dy;
-function nearTrigger() { return World.zips.some((z) => near(z, 2.6) || near({ x: z.tx, z: z.tz, y: z.ty }, 2.6)) || near(World.PIPE.a, World.PIPE.r + 1) || near(World.PIPE.b, World.PIPE.r + 1) || World.pads.some((p) => near(p, 2.4) || near({ x: p.tx, z: p.tz, y: p.ty }, 2.4)) || World.balloons.some((b) => near(b, 4.2)); }
+function nearTrigger() { return World.zips.some((z) => near(z, 2.6) || near({ x: z.tx, z: z.tz, y: z.ty }, 2.6)) || near(World.PIPE.a, World.PIPE.r + 3.5) || near(World.PIPE.b, World.PIPE.r + 3.5) || World.pads.some((p) => near(p, 2.4) || near({ x: p.tx, z: p.tz, y: p.ty }, 2.4)) || World.balloons.some((b) => near(b, 7, 3)); }
 let askAt = 0, shakeAt = 0;
 function triggers(t) {
   if (belt.ready && bag.length + stolen.length + dropped.length < cap && hyp(me.x - readyAt().x, me.z - readyAt().z) < 3.3 && Math.abs(me.y) < 2 && t > askAt) { askAt = t + 0.4; netSend({ t: "grab" }); }
   for (const b of World.boosts) if (near(b, 2) && me.boost < 2) { if (me.boost <= 0) { sfx("boost"); cam.shake = Math.max(cam.shake, 0.12); } me.boost = 2.5; }
   if (bag.length && t > shakeAt) for (const h of World.houses) if (!bag.some((q) => q.house === h.id) && hyp(me.x - h.mx, me.z - h.mz) < World.DELIVER_R - 0.6 && Math.abs(me.y - h.my) < 2) { shakeAt = t + 1.2; houseMesh[h.id].shake = 0.5; sfx("shake"); break; }   // the wrong mailbox shakes its head
   if (!me.armed) return;
-  for (const z of World.zips) if (near(z, 1.5)) { if (heavy()) { if (t > askAt) { askAt = t + 1; sfx("no"); } } else { const len = hyp(z.tx - z.x, z.ty - z.y, z.tz - z.z); me.transit = { k: "zip", ax: z.x, ay: z.y, az: z.z, bx: z.tx, by: z.ty, bz: z.tz, len, t: 0 }; me.vx = me.vz = me.vy = 0; sfx("zip"); } return; }
+  for (const z of World.zips) if (near(z, 1.5)) { { const len = hyp(z.tx - z.x, z.ty - z.y, z.tz - z.z); me.transit = { k: "zip", ax: z.x, ay: z.y, az: z.z, bx: z.tx, by: z.ty, bz: z.tz, len, t: 0 }; me.vx = me.vz = me.vy = 0; sfx("zip"); } return; }
   const C = World.CANNON; if (near(C, C.r)) { const I = World.ISLES[C.to]; arc(I.x - 9, I.y, I.z, 3.2, 27, "cannon"); sfx("cannon"); cam.shake = 0.9; banner("SKY CANNON!", "#9aa8ff"); emit(C.x, C.y + 1, C.z, 40, { colors: ["#ffffff", "#c9ced6"], speed: 9, up: 5, life: 0.9, grav: 2, size: 0.4 }); return; }
   for (const p of World.pads) if (near(p, 1.7)) { arc(p.tx, p.ty, p.tz, 1.1 + hyp(p.tx - p.x, p.tz - p.z) / 70, 9, "pad"); sfx("pad"); return; }
-  if ((near(World.PIPE.a, World.PIPE.r - 0.3) || near(World.PIPE.b, World.PIPE.r - 0.3)) && t > askAt) { askAt = t + 1; netSend({ t: "pipe" }); return; }
-  if (World.balloons.some((b) => near(b, 3)) && t > askAt) { askAt = t + 1.5; netSend({ t: "balloon" }); }
+  // (owner, 2026-11-11) the pipe's mouth and the balloon take you from farther off
+  if ((near(World.PIPE.a, World.PIPE.r + 1.5) || near(World.PIPE.b, World.PIPE.r + 1.5)) && t > askAt) { askAt = t + 1; netSend({ t: "pipe" }); return; }
+  if (World.balloons.some((b) => near(b, 5.5, 3)) && t > askAt) { askAt = t + 1.5; netSend({ t: "balloon" }); }
 }
 
 // ---- the camera: behind and above; drag to look round, pinch or wheel to zoom ----
@@ -739,17 +740,16 @@ function landGifts(list, lvUp) {   // what the server says came out: totals unde
 function hurryGift() { if (opening && !opening.all) { opening.speed = Math.min(8, opening.speed * 2.5); sfx("tick"); } }   // a tap while it builds up: faster
 $("gopen").onclick = hurryGift; $("gall").onclick = openAll; $("gx").onclick = () => { $("gres").style.display = "none"; giftsUi(); };
 for (const id of ["gopen", "gall", "gx"]) $(id).addEventListener("pointerdown", (e) => e.stopPropagation());
-// ---- the new courier's tutorial (owner, 2026-11-11): six short cards at the bottom of the screen, each pointing at what
-// it explains: picking up parcels, dropping them off, opening them, the Stable, Upgrades and the Stamp Meter. The first
+// ---- the new courier's tutorial (owner, 2026-11-11): five short cards at the bottom of the screen, each pointing at what
+// it explains: picking up parcels, dropping them off, opening them, the Stable and Upgrades. The first
 // three move on when you do them; the rest with Next. Skip ends it; it's shown once (saved), to couriers with no
 // deliveries yet. ----
 const TUT = [
   { t: "Pick up parcels", p: "Ride into your parcel on the post office counter. The pink arrow shows the way.", on: "grab" },
   { t: "Drop them off", p: "Follow the pink arrow to the pink beam and ride into the ring by the mailbox.", on: "deliver" },
   { t: "Open your parcels", p: "Delivered parcels wait on the left. Tap one to open it (tap again to hurry it), or Open all. Four of one rarity merge into a better one.", on: "open", hi: "gifts" },
-  { t: "Stable", p: "Your mounts: ride one, level it up with coins or Level Coupons, hatch eggs, and merge four of the same into a cooler skin.", hi: "mstable" },
-  { t: "Upgrades", p: "Spend coins on Route Permits to open farther neighborhoods, and on better pay, luck and sturdier boxes.", hi: "mup" },
-  { t: "Stamp Meter", p: "The bar on the left gets a stamp for every Common or Uncommon parcel. At 25 the next is Rare, at 100 Epic.", hi: "stamp" },
+  { t: "Stable", p: "Your mounts: ride one, level it up with coins or Level Coupons, hatch eggs, and merge two of the same into a cooler skin.", hi: "mstable" },
+  { t: "Upgrades", p: "Spend coins on better pay, luck, Level Coupons and sturdier boxes. Farther neighborhoods open as your mounts level up.", hi: "mup" },
 ];
 let tut = -1;
 function tutShow(n) {
@@ -783,7 +783,7 @@ function hud(dt) {
   const all = [...bag, ...dropped.map((q) => ({ ...q, gone: 1 })), ...stolen.map((q) => ({ ...q, gone: 1 }))], key = all.map((P) => [P.pid, P.dur, P.gone ? 1 : 0].join(":")).join() + "/" + cap;
   if (key !== cardKey) {
     cardKey = key; const c = $("card"); c.style.display = all.length ? "flex" : "none"; c.innerHTML = "";
-    for (const P of all) { const T = TIERS[P.tier], r = el("div", "prow" + (P.gone ? " gone" : "")); r.dataset.pid = P.pid; const tc = el("span", "ctier disp", T.name); tc.style.background = P.mod === "golden" ? "#ffd23a" : T.c; r.appendChild(tc);
+    for (const P of all) { const T = TIERS[P.tier], r = el("div", "prow" + (P.gone ? " gone" : "")); r.dataset.pid = P.pid; const tc = el("span", "ctier disp", T.name); tc.style.background = T.c; r.appendChild(tc);
       if (P.mod) r.appendChild(el("span", "mod " + P.mod, MODS[P.mod].name)); const pp = el("span", "cpips"); for (let k = 0; k < P.max; k++) pp.appendChild(el("i", k < P.dur ? "on" : "")); r.appendChild(pp);
       r.appendChild(el("span", "caddr disp", World.houses[P.house].name)); r.appendChild(el("span", "cdist disp")); if (P.mod === "express") r.appendChild(el("span", "ctimer disp")); c.appendChild(r); }
     if (all.length) { const n = el("div", "pcount disp", all.length + " / " + cap); c.appendChild(n); }
@@ -797,7 +797,6 @@ function hud(dt) {
   if (!tg && tut === 0 && belt.ready) { const q = readyAt(); tg = { x: q.x, y: 1, z: q.z, c: POI }; }   // the tutorial's first step: the arrow points at your parcel on the counter
   stepArrow(t, tg);
   if (!hudDirty) return; hudDirty = false;
-  $("stampn").textContent = save.stamp; $("stampfill").style.height = clamp(save.stamp, 0, 100) + "%";
   const ba = $("bability"); ba.firstChild.textContent = World.ABILITY[ab]; ba.classList.toggle("locked", !tier); ba.dataset.tier = tier;
 }
 
@@ -825,20 +824,19 @@ function renderPanel() {
     const ar = el("div", "stat ab" + (tier ? "" : " off")); ar.appendChild(el("span", "", World.ABILITY[M.ab])); const pp = el("div", "pips"); for (const need of [5, 10, 20]) pp.appendChild(el("i", m.lv >= need ? "on" : "", need)); ar.appendChild(pp); info.appendChild(ar);
     const acts = el("div", "acts"); if (m.id !== save.ride) acts.appendChild(btn("Ride", () => netSend({ t: "equip", id: m.id }), "go"));
     if (m.lv < World.MAX_LV) { acts.appendChild(coinBtn(World.levelCost(m.lv), () => netSend({ t: "level", id: m.id }), save.coins >= World.levelCost(m.lv))); const cb = btn("Coupon " + save.coupons, () => netSend({ t: "coupon", id: m.id }), "coupon"); cb.disabled = save.coupons < 1; acts.appendChild(cb); }
-    if (World.fuseSet(save.mounts, m.id)) acts.appendChild(btn("Merge", () => netSend({ t: "fuse", id: m.id }), "fuse"));   // four the same: the next skin
+    if (World.fuseSet(save.mounts, m.id)) acts.appendChild(btn("Merge", () => netSend({ t: "fuse", id: m.id }), "fuse"));   // two the same: the next skin
     info.appendChild(acts); d.appendChild(info);
     const eggs = el("div", "eggs"); for (const k of Object.keys(EGGS)) { const E = EGGS[k], c = el("div", "eggc"), e = el("i", "egg"); e.style.background = E.c; c.appendChild(e); c.appendChild(el("b", "", E.name)); c.appendChild(oddsRow(E.odds)); const hb = btn("Hatch " + save.eggs[k], () => netSend({ t: "hatch", kind: k }), "go"); hb.disabled = save.eggs[k] < 1 || save.mounts.length >= World.MOUNT_CAP; c.appendChild(hb); eggs.appendChild(c); }
     body.appendChild(d); body.appendChild(eggs); body.appendChild(grid);
   } else if (panel === "up") {
-    const total = World.upTotal(save.up), rk = World.rankOf(total), head = el("div", "rank"); const bd = el("i", "badge"); bd.style.background = rk ? World.RANK_C[rk] : "#d7e1ea"; head.appendChild(bd); head.appendChild(el("b", "", rk ? World.RANKS[rk] + " Postmaster" : "Postmaster")); head.appendChild(el("span", "", total + " / 50")); body.appendChild(head);
-    const val = { routes: (l) => World.DISTRICTS[World.districtsOpen(l) - 1], payout: (l) => "+" + l * 10 + "%", stamps: (l) => pct(World.rollOdds(World.stampLuck(l))[4]), press: (l) => "+" + l + "%", boxes: (l) => World.boxDur(l) + " durability" };
+    const total = World.upTotal(save.up), rk = World.rankOf(total), head = el("div", "rank"); const bd = el("i", "badge"); bd.style.background = rk ? World.RANK_C[rk] : "#d7e1ea"; head.appendChild(bd); head.appendChild(el("b", "", rk ? World.RANKS[rk] + " Postmaster" : "Postmaster")); head.appendChild(el("span", "", total + " / " + World.UP_MAX * Object.keys(UPGRADES).length)); body.appendChild(head);
+    const val = { payout: (l) => "+" + l * 10 + "%", stamps: (l) => pct(World.rollOdds(World.stampLuck(l))[4]), press: (l) => "+" + l + "%", boxes: (l) => World.boxDur(l) + " durability" };
     for (const k of Object.keys(UPGRADES)) { const l = save.up[k], r = el("div", "uprow"); r.appendChild(el("b", "", UPGRADES[k].name)); const pp = el("div", "pips"); for (let n = 0; n < World.UP_MAX; n++) pp.appendChild(el("i", n < l ? "on" : "")); r.appendChild(pp); r.appendChild(el("span", "val", val[k](l) + (l < World.UP_MAX && val[k](l + 1) !== val[k](l) ? " → " + val[k](l + 1) : "")));
       if (l < World.UP_MAX) r.appendChild(coinBtn(World.upgradeCost(k, l), () => netSend({ t: "upgrade", k }), save.coins >= World.upgradeCost(k, l))); else r.appendChild(el("span", "max", "MAX")); body.appendChild(r); }
   } else if (panel === "odds") {
     const head = el("div", "orow head"); head.appendChild(el("b", "", "")); const hr = el("div", "odds"); RARITY.forEach((n, i) => { const s = el("span", "", n); s.style.color = RARITY_C[i] === "#ffffff" ? "#6f7d8a" : RARITY_C[i]; hr.appendChild(s); }); head.appendChild(hr); body.appendChild(head);
-    const open = World.districtsOpen(save.up.routes), sw = World.spawnWeights(save.up.routes);
+    const open = World.openFor(save), sw = World.spawnWeights(open, riding().lv);
     TIERS.forEach((T, n) => { const r = el("div", "orow" + (n < open ? "" : " off")); const b = el("b", "", T.name); b.style.color = T.c; r.appendChild(b); const full = el("div", "odds"); World.rollOdds(T.luck + World.stampLuck(save.up.stamps)).forEach((v, i) => { const s = el("span", "", pct(v)); s.style.color = RARITY_C[i] === "#ffffff" ? "#6f7d8a" : RARITY_C[i]; full.appendChild(s); }); r.appendChild(full); r.appendChild(el("em", "", "x" + T.mult + " · " + pct(sw[n]))); body.appendChild(r); });
-    const st = el("div", "orow"); st.appendChild(el("b", "", "Stamp Meter")); st.appendChild(el("em", "", save.stamp + " · " + World.PITY_RARE + " Rare · " + World.PITY_EPIC + " Epic")); body.appendChild(st);
     for (const k of Object.keys(MODS)) { const r = el("div", "orow"); r.appendChild(el("span", "mod " + k, MODS[k].name)); r.appendChild(el("em", "", "+" + MODS[k].bonus * 100 + "%")); body.appendChild(r); }
     for (const k of Object.keys(EGGS)) { const r = el("div", "orow"); r.appendChild(el("b", "", EGGS[k].name)); const full = el("div", "odds"); EGGS[k].odds.forEach((v, i) => { const s = el("span", "", v ? pct(v) : "–"); s.style.color = RARITY_C[i] === "#ffffff" ? "#6f7d8a" : RARITY_C[i]; full.appendChild(s); }); r.appendChild(full); body.appendChild(r); }
     const vr = el("div", "orow"); vr.appendChild(el("b", "", "Shiny")); vr.appendChild(el("em", "", "1 / 100")); body.appendChild(vr); const gr = el("div", "orow"); gr.appendChild(el("b", "", "Golden")); gr.appendChild(el("em", "", "1 / 1,000")); body.appendChild(gr);
@@ -866,7 +864,7 @@ function renderAdmin(body) {
     const quick = el("div", "acts wrap"); for (const [c, name] of [["coins", "+100,000"], ["allmounts", "All mounts"], ["maxlv", "Max levels"], ["eggs", "Eggs"], ["coupons", "Coupons"], ["upgrades", "Upgrades"], ["everything", "Everything"], ["reset", "Reset"]]) quick.appendChild(btn(name, () => op({ op: "quick", cmd: c, n: 100000 })));
     body.appendChild(acts); body.appendChild(give); body.appendChild(quick);
     if (adminData) { const ed = el("div", "acts wrap"); const f = {}; for (const k of ["coins", "coupons"]) { const i = el("input"); i.type = "number"; i.value = adminData[k]; i.title = k; f[k] = i; const l = el("label", "", k === "coins" ? "Coins " : "Coupons "); l.appendChild(i); ed.appendChild(l); }
-      ed.appendChild(btn("Save", () => op({ op: "edit", coins: +f.coins.value, coupons: +f.coupons.value }), "go")); ed.appendChild(el("span", "", adminData.mounts.length + " mounts · stamp " + adminData.stamp)); body.appendChild(ed); }
+      ed.appendChild(btn("Save", () => op({ op: "edit", coins: +f.coins.value, coupons: +f.coupons.value }), "go")); ed.appendChild(el("span", "", adminData.mounts.length + " mounts")); body.appendChild(ed); }
   } else body.appendChild(acts);
 }
 $("pclose").onclick = closePanel; $("panel").addEventListener("pointerdown", (e) => { if (e.target === $("panel")) closePanel(); });
@@ -999,7 +997,7 @@ function onNet(m) {
     case "bag": {   // my parcels changed; ev says how
       const ev = m.ev || {}, before = bag.length; bag = m.bag || []; stolen = m.stolen || []; dropped = m.dropped || []; cap = m.cap || 1; setCarry(mine, bagCarry()); setTargets(); syncDropped(); hudDirty = true; cardKey = "";
       const q = bag.find((k) => k.pid === ev.pid);
-      if (ev.k === "grab") { tutDid("grab"); sfx("grab"); me.squash = 0.25; if (q && q.mod === "golden") { sfx("shiny"); banner("GOLDEN PARCEL!", "#ffd84a"); } if (bag.length > 1) popup(bag.length + " / " + cap, "#ffffff", me.x, me.y + 3, me.z); }
+      if (ev.k === "grab") { tutDid("grab"); sfx("grab"); me.squash = 0.25; if (bag.length > 1) popup(bag.length + " / " + cap, "#ffffff", me.x, me.y + 3, me.z); }
       else if (ev.k === "pickup") { sfx("grab"); me.squash = 0.25; if (ev.bonus) { popup("+" + ev.bonus, "#ffd84a", me.x, me.y + 2.6, me.z); save.coins = ev.coins; flyCoins(me.x, me.y + 2, me.z, 3); } }
       else if (ev.k === "crack") { sfx("crack"); cam.shake = Math.max(cam.shake, 0.35); flash("#e5534b"); popup("-20%", "#ff6b6b", me.x, me.y + 2.8, me.z); emit(me.x, me.y + 1.4, me.z, 12, { colors: ["#c89a5e", "#8a5a34"], speed: 4, up: 3, life: 0.6, size: 0.14 }); }
       else if (ev.k === "lost") { sfx("smash"); cam.shake = Math.max(cam.shake, 0.5); flash("#e5534b"); banner(ev.why === "broke" ? "PARCEL BROKE!" : "PARCEL LOST!", "#ff6b6b"); emit(me.x, me.y + 1.4, me.z, 26, { colors: ["#c89a5e", "#8a5a34", "#fff8e6"], speed: 6, up: 5, life: 0.9 }); }

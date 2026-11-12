@@ -6,6 +6,11 @@ and any rule decided. Use `git log` for the code detail (and for the older Atamu
 
 ## 2026-11-11
 
+- **Stage 1: fixes, cuts and feel (owner).** Others' mounts no longer ride sideways, and animals face the way they
+  go. Geese are stopped by houses, hedges and trees like couriers, and a grown mount is as wide as it looks. Bigger
+  pipe and balloon catch areas; goats charge faster. Mounts get faster as they level, and twice as fast empty. The
+  Stamp Meter is gone; districts open by themselves as your mounts level (Route Permits gone, their coins refunded);
+  only Express stays as a parcel modifier (Fragile, Heavy, Golden gone); two of the same mount merge (was four).
 - **Pet Delivery Co. is back at atamus.io/pokemon (owner).** The game from before the remake, as it was, beside
   Critter Courier: same logins, everyone starting fresh there (its own saves and block world; the old saves and world
   stay untouched, the old town used as its starting town). Docs in `docs/POKEMON.md`.
