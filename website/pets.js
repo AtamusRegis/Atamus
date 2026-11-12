@@ -4,7 +4,7 @@
 // deliveries, rolls, damage, coins, mounts; this page shows the town (pets-world.js, shared with the server), moves you
 // and asks. Phone first: a thumb joystick, drag to look, pinch to zoom, big buttons.
 import * as THREE from "./vendor/three.module.min.js";
-import * as World from "./pets-world.js?v=1794471281";
+import * as World from "./pets-world.js?v=1794472117";
 
 const $ = (id) => document.getElementById(id);
 const { TAU, clamp, hyp, MOUNTS, TIERS, RARITY, RARITY_C, MODS, UPGRADES } = World;
@@ -111,7 +111,7 @@ function buildTown() {
     m.position.copy(a).lerp(b, 0.5); m.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), b.clone().sub(a).normalize()); scene.add(m);
     box(0.3, 3.2, 0.3, "#8a5a34", z.x, z.y + 1.6, z.z); box(0.3, 3.2, 0.3, "#8a5a34", z.tx, z.ty + 1.6, z.tz); box(1.6, 0.14, 1.6, "#ffd84a", z.x, z.y + 0.07, z.z, null, false);
   }
-  for (const e of [World.PIPE.a, World.PIPE.b]) {
+  for (const e of World.PIPE.off ? [] : [World.PIPE.a, World.PIPE.b]) {
     const m = new THREE.Mesh(new THREE.CylinderGeometry(World.PIPE.r, World.PIPE.r, 0.6, 20, 1, true), new THREE.MeshLambertMaterial({ color: "#4f9a5a", side: THREE.DoubleSide })); m.position.set(e.x, e.y + 0.3, e.z); m.castShadow = true; scene.add(m);
     const lip = new THREE.Mesh(new THREE.TorusGeometry(World.PIPE.r, 0.22, 8, 24).rotateX(Math.PI / 2), mat("#5fb56b")); lip.position.set(e.x, e.y + 0.6, e.z); scene.add(lip);
     const dark = new THREE.Mesh(new THREE.CircleGeometry(World.PIPE.r - 0.05, 20).rotateX(-Math.PI / 2), basic("#10151a")); dark.position.set(e.x, e.y + 0.42, e.z); scene.add(dark);
@@ -690,7 +690,7 @@ function triggers(t) {
   const C = World.CANNON; if (near(C, C.r) && openNow >= 5) { const I = World.ISLES[C.to]; arc(I.x - 9, I.y, I.z, 3.2, 27, "cannon"); sfx("cannon"); cam.shake = 0.9; banner("SKY CANNON!", "#9aa8ff"); emit(C.x, C.y + 1, C.z, 40, { colors: ["#ffffff", "#c9ced6"], speed: 9, up: 5, life: 0.9, grav: 2, size: 0.4 }); return; }
   for (const p of World.pads) if (near(p, 1.7)) { arc(p.tx, p.ty, p.tz, 1.1 + hyp(p.tx - p.x, p.tz - p.z) / 70, 9, "pad"); sfx("pad"); return; }
   // (owner, 2026-11-11) the pipe's mouth and the balloon take you from farther off
-  if (((near(World.PIPE.a, World.PIPE.r + 1.5) && openNow >= 4) || near(World.PIPE.b, World.PIPE.r + 1.5)) && t > askAt) { askAt = t + 1; netSend({ t: "pipe" }); return; }
+  if (!World.PIPE.off && ((near(World.PIPE.a, World.PIPE.r + 1.5) && openNow >= 4) || near(World.PIPE.b, World.PIPE.r + 1.5)) && t > askAt) { askAt = t + 1; netSend({ t: "pipe" }); return; }
   if (World.balloons.some((b) => near(b, BALLOON_R, 6)) && t > askAt) { askAt = t + 1; netSend({ t: "balloon" }); }
 }
 
