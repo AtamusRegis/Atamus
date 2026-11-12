@@ -138,12 +138,12 @@ export function attachPets(server, { origins = [], allowLocal = false, store = m
   const kickable = (me, x, z, y, extra = 0) => { const fx = Math.sin(me.yaw), fz = Math.cos(me.yaw), dx = x - me.x, dz = z - me.z, along = dx * fx + dz * fz; return Math.abs(y - me.y) < 2.6 && along > -0.6 && along < KICK.range + extra && Math.abs(dx * fz - dz * fx) < KICK.half + 0.9 + extra; };
   function kick(me) {
     const now = Date.now(), r = me.room; if (now < me.kickAt + KICK.cd * 1000 - 150 || now < me.stunUntil) return;
-    me.kickAt = now; let landed = false; const d = me.acct.data;
+    me.kickAt = now; let landed = false, aura = 0; const d = me.acct.data, zone = W.districtAt(me.x, me.z, me.y), paid = (q) => { if (now - (q.bonkAt || 0) < W.BONK.again * 1000) return; q.bonkAt = now; aura += W.bonkAura(zone, "animal"); };
     if (!W.inSafeZone(me.x, me.z, me.y)) {
       if (!d.set.friendly) for (const p of r.players.values()) {
         if (p === me || p.acct.data.set.friendly || (me.party && me.party === p.party) || W.inSafeZone(p.x, p.z, p.y) || now < p.graceUntil || now < p.stunUntil || !kickable(me, p.x, p.z, p.y)) continue;
         landed = true; stun(p, KICK.stun, "kick"); p.graceUntil = p.stunUntil + KICK.grace * 1000; all(r, { t: "fx", k: "grace", id: p.id, s: (p.graceUntil - now) / 1000 });
-        if (now - (p.cracked.get(me.acct.id) || 0) > KICK.farm * 1000) { p.cracked.set(me.acct.id, now); hit(p, "kick"); }   // the same courier cracks your parcel once in 30 s
+        if (now - (p.cracked.get(me.acct.id) || 0) > KICK.farm * 1000) { p.cracked.set(me.acct.id, now); hit(p, "kick"); aura += W.bonkAura(zone, "courier"); }   // the same courier cracks your parcel (and pays Aura) once in 30 s
       }
       const nearMe = (x, z, y) => Math.abs(y - me.y) < 2.6 && hyp(x - me.x, z - me.z) < KICK.aoe;   // (owner, 2026-11-11) every animal near, all round
       for (const g of r.geese) if (g.mode !== 4 && nearMe(g.x, g.z, g.y)) {
@@ -153,12 +153,13 @@ export function attachPets(server, { origins = [], allowLocal = false, store = m
           sendBag(o, { k: "dropped", pid: q.pid }); d.stats.geese++;
           all(r, { t: "fx", k: "busted", id: me.id, x: r1(g.x), y: r1(g.y), z: r1(g.z) });
         }
-        g.mode = 4; g.t = 3; release(g);
+        g.mode = 4; g.t = 3; release(g); paid(g);
       }
-      for (const q of r.dogs) if (q.mode !== 3 && nearMe(q.x, q.z, q.y)) { landed = true; q.mode = 3; release(q); q.cool = now + DOG.cool * 1000; all(r, { t: "fx", k: "yelp", dog: q.id }); }
-      for (const g of r.goats) if (nearMe(g.x, g.z, W.goats[g.id].y)) { landed = true; g.mode = 3; release(g); g.cool = now + GOAT.cool * 1000; }
+      for (const q of r.dogs) if (q.mode !== 3 && nearMe(q.x, q.z, q.y)) { landed = true; q.mode = 3; release(q); q.cool = now + DOG.cool * 1000; all(r, { t: "fx", k: "yelp", dog: q.id }); paid(q); }
+      for (const g of r.goats) if (nearMe(g.x, g.z, W.goats[g.id].y)) { landed = true; g.mode = 3; release(g); g.cool = now + GOAT.cool * 1000; paid(g); }
     }
     if (landed) { d.stats.kicks++; changed(me); }
+    if (aura) { d.coins += aura; changed(me); send(me.ws, { t: "bonkaura", n: aura, coins: d.coins }); }   // (owner, 2026-11-12)
     all(r, { t: "fx", k: "kick", id: me.id, hit: landed ? 1 : 0 });
   }
   // (owner, 2026-11-12) the animals within R of a courier: turned tail (a bark, a charge) or frozen (a roar); geese let go

@@ -148,7 +148,7 @@ try {
     q.t = 10; q.sx = q.x; q.sz = q.z; pa.calmUntil = 0; await put(a, "smokeA", q.x + 0.5, q.z, q.y); await a.wait((m) => (m.t === "stun" && m.why === "dog") || (m.t === "fx" && m.k === "shake"), "the bite after the calm (or a shake-off: this mount's level 10)"); ok(!pa.slots.has(q) && pa.calmUntil > Date.now() + 2000, "an animal that bites leaves the queue, and the calm starts");
     for (const d of pa.room.dogs) d.cool = Date.now() + 60000;
     q2.mode = 2; q2.target = null; q2.x = pa.x - 2.5; q2.z = pa.z; q2.y = pa.y; pa.stunUntil = 0; const pb = who("smokeB"); pb.kickAt = 0; pb.stunUntil = 0; await put(b, "smokeB", pa.x - 1, pa.z + 0.5, pa.y);
-    pb.yaw = 0; b.send({ t: "kick" }); await a.wait((m) => m.t === "fx" && m.k === "yelp" && m.dog === q2.id, "a kick sends off any animal near, whichever way you face");
+    pb.yaw = 0; q2.bonkAt = 0; b.send({ t: "kick" }); await a.wait((m) => m.t === "fx" && m.k === "yelp" && m.dog === q2.id, "a kick sends off any animal near, whichever way you face"); const ba = await b.wait((m) => m.t === "bonkaura", "a bonk's Aura"); ok(ba.n >= W.bonkAura(0, "animal") && W.bonkAura(0, "courier") === 4 * W.bonkAura(0, "animal"), "a bonk on an animal pays Aura; on a courier four times as much");
     pa.calmUntil = 0; }
   // chat and parties
   a.send({ t: "chat", text: "hello" }); await b.wait((m) => m.t === "chat" && m.text === "hello", "chat");
@@ -158,6 +158,7 @@ try {
   // staff: the owner's quick commands; a player's are ignored
   const n = client("N"); await n.open; n.send({ t: "register", user: "Nyssary", pass: "pass1234" });
   const wn = await n.wait((m) => m.t === "welcome", "owner welcome"); ok(wn.role === "admin", "the owner is admin");
+  who("smokeB").acct.data.coins = 0;   // (its bonks paid Aura)
   b.send({ t: "admin", op: "quick", cmd: "coins", n: 5000, name: "smokeB" });   // a player: nothing happens
   n.send({ t: "admin", op: "quick", cmd: "coins", n: 5000, name: "smokeB" });
   ok((await b.wait((m) => m.t === "data", "B's coins")).data.coins === 5000, "an admin gives coins once; a player's command is ignored");

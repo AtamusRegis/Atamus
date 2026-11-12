@@ -117,8 +117,8 @@
     body.cinema #hud, body.cinema #joy, body.cinema #tut { opacity: 0; pointer-events: none; transition: opacity .4s; }
     #cine i { position: fixed; left: 0; right: 0; height: 0; background: #0b1218; z-index: 28; transition: height .5s; } #cine i:first-child { top: 0; } #cine i:last-child { bottom: 0; } #cine.on i { height: 11vh; }
     /* (owner, 2026-11-11) a run's parcels open full screen, one after another, once there are none left to deliver */
-    #reveal { position: fixed; inset: 0; z-index: 29; display: none; pointer-events: none; flex-direction: column; align-items: center; justify-content: center; gap: 14px; background: radial-gradient(circle, color-mix(in srgb, var(--rc, #fff) 55%, transparent) 0, rgba(20,40,60,.88) 58%); cursor: pointer; }
-    #reveal > :not(#rrays) { position: relative; } #reveal .rcard { pointer-events: auto; }   /* (owner, 2026-11-12) you keep riding while it shows: only the cards take a tap */
+    #reveal { position: fixed; inset: 0; z-index: 29; display: none; flex-direction: column; align-items: center; justify-content: center; gap: 14px; background: radial-gradient(circle, color-mix(in srgb, var(--rc, #fff) 55%, transparent) 0, rgba(20,40,60,.88) 58%); cursor: pointer; }
+    #reveal > :not(#rrays) { position: relative; }
     #rrays { position: absolute; left: 50%; top: 50%; width: 900px; height: 900px; margin: -480px 0 0 -450px; pointer-events: none; opacity: var(--ray, 0); background: repeating-conic-gradient(from 0deg, var(--rc, #fff) 0 7deg, transparent 7deg 22deg); -webkit-mask: radial-gradient(circle, #000 8%, transparent 55%); mask: radial-gradient(circle, #000 8%, transparent 55%); animation: spin 6s linear infinite; }
     /* every parcel of the run opens at once, each in its own card, all of them centered */
     #rgrid { display: flex; flex-wrap: wrap; justify-content: center; align-items: stretch; gap: 14px; max-width: min(96vw, 900px); padding: 12px; }
@@ -137,6 +137,8 @@
     @media (max-width: 560px) { .rcard { width: 120px; min-height: 200px; } .rcard .gtile.big { transform: scale(1.2); } }
     /* things that pop up */
     #pops { position: fixed; inset: 0; pointer-events: none; overflow: hidden; }
+    /* (owner, 2026-11-12) Aura from a bonk: an orb and the amount pop out of you with a bouncy scale */
+    .pop.aura { display: flex; align-items: center; gap: 6px; font-size: 42px; color: #e9d2ff; text-shadow: 0 0 10px #a45be0, 0 2px 0 rgba(40,0,70,.7); } .pop.aura .coin { width: 34px; height: 34px; }
     .pop { position: absolute; left: 0; top: 0; font: 800 24px "Big Shoulders Display", system-ui, sans-serif; text-shadow: 0 2px 0 rgba(0,0,0,.55), 0 0 8px rgba(0,0,0,.35); white-space: nowrap; will-change: transform, opacity; } .pop.big { font-size: 36px; }
     .flycoin { position: absolute; width: 20px; height: 20px; border-radius: 50%; background: radial-gradient(circle at 35% 30%, #ffffff, #e2b8ff 25%, #a45be0 60%, #5a1f9a); border: 2px solid #4a1680; box-shadow: 0 0 10px #c77dff; transform: translate(-50%, -50%); }
     /* delivered parcels, on the left: the waiting ones (a sparkle in their rarity's color), the one opening, what came out */
@@ -209,7 +211,7 @@
     <button id="bwhistle" class="act" title="Whistle"><span>Whistle</span></button>
     <button id="bjump" class="act" title="Jump"><span>Jump</span></button>
     <button id="bability" class="act" title="Ability"><span>Dash</span></button>
-    <button id="bkick" class="act" title="Kick"><span>Kick</span></button>
+    <button id="bkick" class="act" title="Bonk"><span>Bonk</span></button>
     <div id="gifts"><div id="gq"></div><button id="gall" class="disp">Open all</button><div id="gopen"><i id="grays"></i><div id="gbig"></div><b id="glabel" class="disp"></b></div><div id="gres"><button id="gx" title="Close">✕</button><div id="gtitle"></div><div id="glist"></div></div></div>
     <div id="announce"></div>
     <form id="chatbar" autocomplete="off"><input id="chatin" maxlength="120" placeholder="Chat" enterkeyhint="send"></form>
@@ -232,6 +234,6 @@
     <button id="lgo" class="btn go" type="submit">Log in</button>
     <button id="lnew" class="btn" type="button">Create account</button>
   </form>
-  <script type="module" src="pets.js?v=1794474060"></script>
+  <script type="module" src="pets.js?v=1794515578"></script>
 </body>
 </html>

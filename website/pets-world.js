@@ -144,6 +144,10 @@ export const abilityTier = (m) => [1, 1, 2, 2, 3][clamp(m.r | 0, 0, 4)];      //
 // (owner, 2026-11-12) around the post office every mount goes the same speed; the purple Aura pad across the way out
 // (x AURA_PAD.x, all the way across) switches on its own speed for the run
 export const AURA_PAD = { x: 25, w: 3 }, startArea = (x, z, y) => x < AURA_PAD.x && districtAt(x, z, y) === 0;
+// (owner, 2026-11-12) a bonk (the old kick) that lands pays Aura: each animal bonked, more for each courier, more in the
+// farther zones (by the square root of the zone's tier pay). An animal pays once in BONK.again s, a courier once in
+// KICK.farm s from the same bonker
+export const BONK = { animal: 3, courier: 12, again: 8 }, bonkAura = (zone, who) => Math.round((who === "courier" ? BONK.courier : BONK.animal) * Math.sqrt(TIERS[clamp(zone | 0, 0, TIERS.length - 1)].mult));
 export const BASE_SPEED = 12, RARITY_UP = 0.2, ZONE_UP = 0.05, SPD_UP = 0.05;
 // (owner, 2026-11-12) speed: 20% more per rarity step; 5% more for each zone an animal is short of its own zone, 5% less
 // for each zone past it (a Wolf, from the fifth, goes 120% on Main Street, a Dog 80% on the Floating Islands); 5% more

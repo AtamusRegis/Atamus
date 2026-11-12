@@ -6,6 +6,9 @@ and any rule decided. Use `git log` for the code detail (and for the older Atamu
 
 ## 2026-11-12
 
+- **Bonks pay Aura; no riding during rewards (owner).** The kick is now the bonk, and a landed bonk pays Aura (couriers
+  four times what animals do, more in farther zones), which pops out of you with a bounce. While the reward screen is
+  up you can't ride (a tap anywhere skips it again).
 - **The far zones made into places (owner).** Snow drifts, ice spikes, snowmen and falling snow; dunes, cacti, palms and
   pyramids; log bridges, ruins and a temple; rock spires, a smoking volcano and embers; craters, crystals, glowing
   mushrooms and stars. Each has its own sky.

@@ -4,7 +4,7 @@
 // deliveries, rolls, damage, coins, mounts; this page shows the town (pets-world.js, shared with the server), moves you
 // and asks. Phone first: a thumb joystick, drag to look, pinch to zoom, big buttons.
 import * as THREE from "./vendor/three.module.min.js";
-import * as World from "./pets-world.js?v=1794474060";
+import * as World from "./pets-world.js?v=1794515302";
 
 const $ = (id) => document.getElementById(id);
 const { TAU, clamp, hyp, MOUNTS, TIERS, RARITY, RARITY_C, MODS, UPGRADES } = World;
@@ -619,8 +619,8 @@ function stepMe(dt) {
   if (World.blocked(me.x, me.z, me.y)) out: for (let r = 1; r < 16; r++) for (let k = 0; k < 12; k++) { const x = me.x + Math.cos((k / 12) * TAU) * r, z = me.z + Math.sin((k / 12) * TAU) * r; if (!World.blocked(x, z, me.y) && World.surfaceAt(x, z, me.y + 0.5) > -1e9) { me.x = x; me.z = z; break out; } }   // inside something solid (it shouldn't happen): out to the nearest clear spot
   // what the player's asking for, relative to the camera
   let ix = 0, iz = 0;
-  if (!chatting && !panelOpen() && !cine && !free) { if (keys.has("KeyW") || keys.has("ArrowUp")) iz += 1; if (keys.has("KeyS") || keys.has("ArrowDown")) iz -= 1; if (keys.has("KeyD") || keys.has("ArrowRight")) ix += 1; if (keys.has("KeyA") || keys.has("ArrowLeft")) ix -= 1; }
-  if (!cine && !free) { ix += joy.x; iz -= joy.y; } const il = hyp(ix, iz); if (il > 1) { ix /= il; iz /= il; }
+  if (!chatting && !panelOpen() && !cine && !free && !reveal) {   /* (owner, 2026-11-12) no riding while the reward screen is up */ if (keys.has("KeyW") || keys.has("ArrowUp")) iz += 1; if (keys.has("KeyS") || keys.has("ArrowDown")) iz -= 1; if (keys.has("KeyD") || keys.has("ArrowRight")) ix += 1; if (keys.has("KeyA") || keys.has("ArrowLeft")) ix -= 1; }
+  if (!cine && !free && !reveal) { ix += joy.x; iz -= joy.y; } const il = hyp(ix, iz); if (il > 1) { ix /= il; iz /= il; }
   let mx = -Math.sin(cam.yaw) * iz + Math.cos(cam.yaw) * ix, mz = -Math.cos(cam.yaw) * iz - Math.sin(cam.yaw) * ix;
   if (me.stun > 0) mx = mz = 0;
   const kind = me.ground ? World.groundKind(me.x, me.z, me.y) : "", mud = kind === "mud" && !World.inPond(me.x, me.z, me.y) ? World.MUD_SLOW : kind === "mud" ? 0.6 : kind === "sand" ? World.SAND_SLOW : kind === "water" ? World.WATER_SLOW : 1;   // (owner, 2026-11-12) sand and the jungle's rivers slow you too
@@ -765,6 +765,7 @@ addEventListener("keydown", (e) => {
   if (e.code === "Enter") { openChat(); e.preventDefault(); return; }
   if (e.code === "Escape") { if (free) setFree(false); closePanel(); return; }
   if (e.repeat) return; keys.add(e.code); if (free) { e.preventDefault(); return; }   // the freecam takes the keys
+  if (reveal) return;   // (owner, 2026-11-12) nothing to do while the reward screen is up
   if (e.code === "Space") { jumpHeld = true; jumpTap = true; e.preventDefault(); }
   if (e.code === "KeyF") doKick(); if (e.code === "KeyQ") doWhistle(); if (e.code === "KeyE" || e.code === "ShiftLeft") useAbility();
 });
@@ -776,8 +777,15 @@ press("bkick", doKick); press("bwhistle", doWhistle); press("bability", useAbili
 // ---- words and numbers that pop up: floating numbers (they rise and fade in 0.8 s), banners, toasts ----
 const pops = [], V = new THREE.Vector3();
 function toScreen(x, y, z) { V.set(x, y, z).project(camera); return { x: (V.x * 0.5 + 0.5) * innerWidth, y: (-V.y * 0.5 + 0.5) * innerHeight, front: V.z < 1 }; }
+// (owner, 2026-11-12) Aura from a bonk pops out of you: an orb and the amount, flung up and out, scaling in with a bounce
+function auraPop(n) {
+  const d = el("div", "pop aura"); d.appendChild(el("span", "coin")); d.appendChild(el("span", "", "+" + fmt(n))); $("pops").appendChild(d);
+  const a = Math.random() * TAU; pops.push({ d, x: me.x, y: me.y + 1.6, z: me.z, t: 0, life: 1.8, aura: 1, vx: Math.cos(a) * 1.6, vz: Math.sin(a) * 1.6 });
+  emit(me.x, me.y + 1.6, me.z, 26, { colors: ["#c77dff", "#e2b8ff", "#ffffff", "#a45be0"], speed: 6, up: 6, life: 0.8, grav: 10, size: 0.22 }); sfx("coin"); hudDirty = true;
+}
+const bounceS = (k) => (k < 0.12 ? 1.7 * (k / 0.12) : k < 0.24 ? 1.7 - 0.85 * ((k - 0.12) / 0.12) : k < 0.34 ? 0.85 + 0.35 * ((k - 0.24) / 0.1) : k < 0.42 ? 1.2 - 0.2 * ((k - 0.34) / 0.08) : 1);
 function popup(text, color, x, y, z, big) { const d = el("div", "pop" + (big ? " big" : ""), text); d.style.color = color || "#ffffff"; $("pops").appendChild(d); pops.push({ d, x, y, z, t: 0, life: big ? 1.2 : 0.8 }); }
-function stepPops(dt) { for (let i = pops.length - 1; i >= 0; i--) { const p = pops[i]; p.t += dt; if (p.t >= p.life) { p.d.remove(); pops.splice(i, 1); continue; } const s = toScreen(p.x, p.y + p.t * 1.6, p.z), k = p.t / p.life; p.d.style.transform = `translate(-50%, -50%) translate(${s.x.toFixed(1)}px, ${s.y.toFixed(1)}px) scale(${(k < 0.15 ? 0.6 + k * 4 : 1.2 - k * 0.2).toFixed(2)})`; p.d.style.opacity = s.front ? String(Math.min(1, 2.5 * (1 - k))) : "0"; } }
+function stepPops(dt) { for (let i = pops.length - 1; i >= 0; i--) { const p = pops[i]; p.t += dt; if (p.t >= p.life) { p.d.remove(); pops.splice(i, 1); continue; } const k = p.t / p.life, s = p.aura ? toScreen(p.x + p.vx * Math.min(p.t, 0.5), p.y + 3.2 * Math.min(p.t, 0.5) * (2 - Math.min(p.t, 0.5) * 2) + p.t * 0.4, p.z + p.vz * Math.min(p.t, 0.5)) : toScreen(p.x, p.y + p.t * 1.6, p.z); p.d.style.transform = `translate(-50%, -50%) translate(${s.x.toFixed(1)}px, ${s.y.toFixed(1)}px) scale(${(p.aura ? bounceS(k) : k < 0.15 ? 0.6 + k * 4 : 1.2 - k * 0.2).toFixed(2)})`; p.d.style.opacity = s.front ? String(p.aura ? (k < 0.7 ? 1 : (1 - k) / 0.3) : Math.min(1, 2.5 * (1 - k))) : "0"; } }
 let bannerT = 0;
 function banner(text, color, sub) { const b = $("banner"); b.firstChild.textContent = text; b.lastChild.textContent = sub || ""; b.style.color = color || "#ffffff"; b.classList.remove("go"); void b.offsetWidth; b.classList.add("go"); clearTimeout(bannerT); bannerT = setTimeout(() => b.classList.remove("go"), 1500); }
 function toast(txt, color) { const d = el("div", "", txt); if (color) d.style.color = color; $("toast").appendChild(d); setTimeout(() => d.remove(), 1900); }
@@ -1216,6 +1224,7 @@ function onNet(m) {
     case "fused": adopt(m.data); selMount = m.m.id; if (panel === "stable") renderPanel(); hatchShow("fuse", m.m); break;
     case "reset": location.reload(); break;   // (owner, 2026-11-11) staff made this a brand new courier
     case "petup": adopt(m.data); remount(); sfx("buy"); if (panel === "stable") renderPanel(); emit(me.x, me.y + 2, me.z, 30, { colors: ["#c77dff", "#ffffff", "#e2b8ff"], speed: 4, up: 5, life: 1 }); break;
+    case "bonkaura": save.coins = m.coins; auraPop(m.n); break;
     case "aura": save.coins = m.coins; popup("+" + fmt(m.n), "#d9a6ff", me.x, me.y + 2.6, me.z); hudDirty = true; break;   // (owner, 2026-11-12) a podium paid
     case "podiums": setPods(m.pods); break;
     case "upgraded": adopt(m.data); remount(); sfx("buy"); emit(me.x, me.y + 2, me.z, 30, { colors: ["#ffd84a", "#ffffff", "#7ee08a"], speed: 4, up: 5, life: 1 }); break;
@@ -1231,7 +1240,7 @@ const fallers = [], divers = [];
 function onFx(m) {
   const o = whereOf(m.id), mineFx = m.id === myId, nearMe = o && hyp(o.x - me.x, o.z - me.z) < 50;
   switch (m.k) {
-    case "kick": if (mineFx) { if (m.hit) { banner("KICK!", "#ffd84a"); hitStop = 0.05; cam.shake = Math.max(cam.shake, 0.45); sfx("kick"); const fx = me.x + Math.sin(me.yaw) * 2, fz = me.z + Math.cos(me.yaw) * 2; emit(fx, me.y + 1, fz, 18, { colors: ["#ffffff", "#ffd84a"], speed: 7, up: 3, life: 0.4, size: 0.2 }); } } else if (o) { o.kickT = 0.28; if (nearMe) sfx(m.hit ? "kick" : "swish"); } break;
+    case "kick": if (mineFx) { if (m.hit) { banner("BONK!", "#ffd84a"); hitStop = 0.05; cam.shake = Math.max(cam.shake, 0.45); sfx("kick"); const fx = me.x + Math.sin(me.yaw) * 2, fz = me.z + Math.cos(me.yaw) * 2; emit(fx, me.y + 1, fz, 18, { colors: ["#ffffff", "#ffd84a"], speed: 7, up: 3, life: 0.4, size: 0.2 }); } } else if (o) { o.kickT = 0.28; if (nearMe) sfx(m.hit ? "kick" : "swish"); } break;
     case "stun": if (o && !mineFx) o.stunT = m.s; break;
     case "grace": if (mineFx) me.grace = m.s; else if (o) o.graceT = m.s; break;
     case "crack": if (o && nearMe) { sfx("crack"); emit(o.x, o.y + 1.4, o.z, 10, { colors: ["#c89a5e", "#8a5a34"], speed: 4, up: 3, life: 0.6, size: 0.14 }); } break;
@@ -1476,6 +1485,6 @@ function frame(tms) {
 }
 buildTown(); buildProps(); buildAnimals(); buildGates(); beltShow(); stepCamera(0.016);
 // for the tests and the console
-window.Pets = { World, me, cam, others, show: { playZones, levelFx, hatchShow, startReveal, get cine() { return cine; } }, get save() { return save; }, get parcel() { return bag[0] || null; }, get bag() { return bag; }, get cap() { return cap; }, get belt() { return belt; }, get stolen() { return stolen; }, get dropped() { return dropped; }, get loggedIn() { return loggedIn; }, get panel() { return panel; }, dogMesh, gooseMesh, goatMesh, get arrow() { return wayArrow; }, readyAt, onNet, teleport(x, z, y = 0) { me.x = x; me.z = z; me.y = y; me.vx = me.vz = me.vy = 0; me.transit = null; me.ground = false; sendPos(true); }, netSend, openPanel };
+window.Pets = { World, me, cam, others, show: { playZones, levelFx, hatchShow, startReveal, auraPop, get cine() { return cine; } }, get save() { return save; }, get parcel() { return bag[0] || null; }, get bag() { return bag; }, get cap() { return cap; }, get belt() { return belt; }, get stolen() { return stolen; }, get dropped() { return dropped; }, get loggedIn() { return loggedIn; }, get panel() { return panel; }, dogMesh, gooseMesh, goatMesh, get arrow() { return wayArrow; }, readyAt, onNet, teleport(x, z, y = 0) { me.x = x; me.z = z; me.y = y; me.vx = me.vz = me.vy = 0; me.transit = null; me.ground = false; sendPos(true); }, netSend, openPanel };
 $("lgo").disabled = $("lnew").disabled = true;
 connect(); requestAnimationFrame(frame);
