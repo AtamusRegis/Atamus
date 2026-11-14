@@ -353,6 +353,9 @@ Cannon's boom. (owner, 2026-11-11: more umph, and moments for the big things)
 loop. (owner, 2026-11-11) The same tune in every area, a little different in each, switching at the next loop: Main
 Street as it is; Maple Suburbs with a soft chime an octave up; Goose Marsh a touch slower and reedy with a bluesy note
 or two; Cliffside brassier over a deeper bass; the Floating Islands an octave up, airy, with an echo.
+(owner, 2026-11-14) **Five tunes** take turns (a random one first, each playing 8 loops before the next), all made the
+same way and voiced by the zone as above; each zone also changes a small part of every tune: the last four notes of
+each loop move up or down by the zone's own interval (none on Main Street).
 
 ## Co-op
 

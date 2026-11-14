@@ -6,6 +6,7 @@ and any rule decided. Use `git log` for the code detail (and for the older Atamu
 
 ## 2026-11-14
 
+- **Five tunes (owner).** The music takes turns between five tunes; each zone changes a small part of them.
 - **No Big Jump; falls keep your parcels; Drop (owner).** The Big Jump is gone (Jump is the big button). Falling off
   the town sends you back to the respawn point with your parcels; Drop beside the parcel counter lets go of them.
 - **Select in the builder (owner).** The builder opens on Select: click any piece to select it and change its settings,
