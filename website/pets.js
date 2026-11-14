@@ -427,9 +427,9 @@ function parcelMesh(tier, mod) {
 // ---- little bits that fly: confetti, sparkles, dust, splinters ----
 const PN = 900, pMesh = new THREE.InstancedMesh(new THREE.BoxGeometry(1, 1, 0.35), new THREE.MeshBasicMaterial(), PN), parts = [], pDummy = new THREE.Object3D(), pCol = new THREE.Color();
 pMesh.frustumCulled = false; pMesh.count = 0; scene.add(pMesh);
-function emit(x, y, z, n, { colors = ["#ffffff"], speed = 4, up = 4, life = 0.9, size = 0.16, grav = 12, spread = 0.3, tw = 0 } = {}) {
+function emit(x, y, z, n, { colors = ["#ffffff"], speed = 4, up = 4, life = 0.9, size = 0.16, grav = 12, spread = 0.3, tw = 0, dir = null } = {}) {   // dir: [x, y, z] sends them that way (a gust's streaks) instead of all around
   for (let k = 0; k < n && parts.length < PN; k++) { const a = Math.random() * TAU, v = speed * (0.4 + Math.random() * 0.6);
-    parts.push({ x: x + (Math.random() - 0.5) * spread, y: y + (Math.random() - 0.5) * spread, z: z + (Math.random() - 0.5) * spread, vx: Math.cos(a) * v, vy: up * (0.5 + Math.random() * 0.8), vz: Math.sin(a) * v, t: 0, life: life * (0.6 + Math.random() * 0.6), size: size * (0.7 + Math.random() * 0.6), grav, c: pick(colors), r: Math.random() * 6, tw }); }
+    parts.push({ x: x + (Math.random() - 0.5) * spread, y: y + (Math.random() - 0.5) * spread, z: z + (Math.random() - 0.5) * spread, vx: dir ? dir[0] * v : Math.cos(a) * v, vy: dir ? dir[1] * v : up * (0.5 + Math.random() * 0.8), vz: dir ? dir[2] * v : Math.sin(a) * v, t: 0, life: life * (0.6 + Math.random() * 0.6), size: size * (0.7 + Math.random() * 0.6), grav, c: pick(colors), r: Math.random() * 6, tw }); }
 }
 function stepParts(dt) {
   let n = 0;
@@ -604,7 +604,10 @@ function stepMe(dt) {
   const sn = srvNow();
   for (const s of World.sprinklers) { const d = hyp(me.x - s.x, me.z - s.z); if (d < World.SPRINKLER.r && Math.abs(me.y - s.y) < 2 && World.sprinklerOn(s, sn)) { const k = World.SPRINKLER.push * dt * 3 / Math.max(d, 0.6); me.px += (me.x - s.x) * k; me.pz += (me.z - s.z) * k; } }
 
-  const pl = hyp(me.px, me.pz); if (pl > 16) { me.px *= 16 / pl; me.pz *= 16 / pl; } const dec = Math.exp(-3.2 * dt); me.px *= dec; me.pz *= dec;
+  // (owner, 2026-11-13) a gust blows you the way it's turned while it's on; a turbine's updraft lifts you
+  const gu = World.gustAt(me.x, me.z, me.y + 0.5, sn); if (gu) { me.px += gu.dx * gu.pw * dt * 3.2; me.pz += gu.dz * gu.pw * dt * 3.2; }
+  if (!me.foot && World.updraftAt(me.x, me.z, me.y)) { me.vy = Math.min(World.TURBINE.max, Math.max(me.vy, 0) + World.TURBINE.lift * dt); me.ground = false; me.coyote = 0; }
+  const pl = hyp(me.px, me.pz), PMAX = gu ? Math.max(16, gu.pw) : 16; if (pl > PMAX) { me.px *= PMAX / pl; me.pz *= PMAX / pl; } const dec = Math.exp(-3.2 * dt); me.px *= dec; me.pz *= dec;
   // sideways, stopping at walls
   // (in small steps, riding up slopes as it goes, so a slow frame can't jam you against a ramp)
   // (owner, 2026-11-11) a mount is as wide as it looks: the bigger it's grown, the farther from a wall, hedge or tree it stops
@@ -613,7 +616,10 @@ function stepMe(dt) {
   const OPEN = World.openFor(save), gated = (nx, nz) => World.gateBlocked(nx, nz, me.y, OPEN, BR) && !World.gateBlocked(me.x, me.z, me.y, OPEN, BR);   // (owner, 2026-11-13) a closed gate stops you (already in one: you can walk out)   // (owner, 2026-11-11) a closed area's gate: heading east stops at it (west is always fine)   // already up against something (it just grew, or landed there): the old width until it's clear
   const DX = (me.vx + me.px) * dt, DZ = (me.vz + me.pz) * dt, n = Math.max(1, Math.ceil(hyp(DX, DZ) / 0.3));
   // (owner, 2026-11-13) on the ground with no direction held, you can slide but never off the edge you're on
-  const hold = me.ground && !steer, edge = (nx, nz) => hold && World.surfaceAt(nx, nz, me.y + 0.1) < me.y - 0.45;
+  // a moving platform you stand on carries you along
+  if (me.ground && me.onMv) { const p = World.moverPos(me.onMv.q, sn); if (!World.blocked(me.x + p.x - me.onMv.p.x, me.z + p.z - me.onMv.p.z, me.y, BR)) { me.x += p.x - me.onMv.p.x; me.z += p.z - me.onMv.p.z; } me.y += p.y - me.onMv.p.y; me.onMv.p = p; }
+  const topAt = (x, z, y) => { const mv = World.moverUnder(x, z, y, sn); return Math.max(World.surfaceAt(x, z, y), mv ? mv.top : -Infinity); };
+  const hold = me.ground && !steer, edge = (nx, nz) => hold && topAt(nx, nz, me.y + 0.1) < me.y - 0.45;
   for (let k = 0; k < n; k++) {
     const dx = DX / n, dz = DZ / n;
     if (me.vx || me.px) { if (!World.blocked(me.x + dx, me.z, me.y, BR) && !gated(me.x + dx, me.z) && !edge(me.x + dx, me.z)) me.x += dx; else { me.vx = 0; me.px = 0; } }
@@ -623,7 +629,8 @@ function stepMe(dt) {
   // down (or up a step) onto the ground
   const was = me.ground, y0 = me.y; me.y += me.vy * dt;
   if (World.wallAt(me.x, me.z, me.y) && !World.wallAt(me.x, me.z, y0)) me.y = y0;   // never down into something solid
-  const s = World.surfaceAt(me.x, me.z, Math.max(y0, me.y) + (was ? 0.1 : 0));   // the ground under where this step began, so a fast fall can't pass through it
+  const yq = Math.max(y0, me.y) + (was ? 0.1 : 0), mv = World.moverUnder(me.x, me.z, yq, sn); let s = World.surfaceAt(me.x, me.z, yq);   // the ground under where this step began, so a fast fall can't pass through it
+  if (mv && mv.top >= s) { s = mv.top; me.onMv = me.onMv && me.onMv.q.id === mv.q.id ? me.onMv : { q: mv.q, p: mv.p }; } else me.onMv = null;
   if (s > -1e9 && me.vy <= 0 && (me.y <= s || (was && me.y - s < 0.45))) { if (!was && me.vy < -9) { emit(me.x, s + 0.1, me.z, 8, { colors: ["#e9e2d2"], speed: 3, up: 1, life: 0.4, grav: 3 }); } me.y = s; me.vy = 0; me.ground = true; me.jumps = 0; me.coyote = World.COYOTE; }
   else { me.ground = false; me.coyote = (me.coyote || 0) - dt; }
   if (me.y < -45) { me.x = World.SPAWN.x; me.z = World.SPAWN.z; me.y = World.SPAWN.y; me.vy = 0; }   // nothing below the town (the server sets you back on an island)
