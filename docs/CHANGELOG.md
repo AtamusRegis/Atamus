@@ -8,6 +8,7 @@ and any rule decided. Use `git log` for the code detail (and for the older Atamu
 
 - **Zone rewards and speeds (owner).** A gift's best coins rise 5% per zone out, and older zones' lowest coins rise 5%
   for every zone opened past them. Each zone's animal is 5% faster than the one before, the same in every zone.
+- **Five tunes (owner).** The music takes turns between five tunes; each zone changes a small part of them.
 - **No Big Jump; falls keep your parcels; Drop (owner).** The Big Jump is gone (Jump is the big button). Falling off
   the town sends you back to the respawn point with your parcels; Drop beside the parcel counter lets go of them.
 - **Select in the builder (owner).** The builder opens on Select: click any piece to select it and change its settings,

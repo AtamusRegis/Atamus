@@ -495,13 +495,22 @@ const MUSIC_V = [
   { w: "sawtooth", k: 0.5, step: 0.18, vol: 0.2, swap: { 784: 740 } },
   { w: "sine", k: 2, step: 0.26, vol: 0.4, echo: true, chime: true },
 ];
-let musicZone = 0;
+// (owner, 2026-11-14) five tunes, taking turns (each plays 8 loops, then the next): all made the same way, and each zone
+// changes a small part of them (besides its sound above): the last four notes of every loop move by the zone's interval
+const TUNES = [
+  { mel: [523, 0, 659, 784, 0, 659, 523, 0, 587, 0, 698, 880, 0, 698, 587, 0], bass: [131, 131, 196, 196, 147, 147, 196, 196] },
+  { mel: [784, 0, 659, 0, 698, 784, 880, 0, 784, 0, 659, 587, 523, 0, 587, 0], bass: [175, 175, 131, 131, 147, 147, 196, 196] },
+  { mel: [440, 523, 659, 0, 587, 523, 494, 0, 440, 523, 587, 659, 0, 523, 440, 0], bass: [110, 110, 165, 165, 147, 147, 165, 165] },
+  { mel: [523, 523, 784, 0, 698, 659, 587, 0, 659, 659, 880, 0, 784, 698, 659, 0], bass: [131, 196, 131, 196, 175, 262, 196, 247] },
+  { mel: [392, 0, 523, 0, 659, 0, 587, 523, 440, 0, 523, 0, 587, 0, 0, 0], bass: [131, 131, 110, 110, 175, 175, 196, 196] },
+], ZONE_END = [1, 9 / 8, 6 / 5, 4 / 3, 3 / 2, 5 / 4, 2 / 3, 3 / 4, 8 / 9, 2];
+let musicZone = 0, tuneN = Math.floor(Math.random() * TUNES.length);
 function startMusic() {   // a bouncy two-bar loop
-  const tune = [523, 0, 659, 784, 0, 659, 523, 0, 587, 0, 698, 880, 0, 698, 587, 0], bass = [131, 131, 196, 196, 147, 147, 196, 196]; let n = 0, next = AC.currentTime + 0.2, V = MUSIC_V[0];
+  let tune = TUNES[tuneN].mel, bass = TUNES[tuneN].bass, n = 0, loops = 0, end = 1, next = AC.currentTime + 0.2, V = MUSIC_V[0];
   const note = (f, type, at, len, vol) => { const o = AC.createOscillator(), g = AC.createGain(); o.type = type; o.frequency.value = f; g.gain.setValueAtTime(0.0001, at); g.gain.linearRampToValueAtTime(vol, at + 0.02); g.gain.exponentialRampToValueAtTime(0.0001, at + len * 0.95); o.connect(g); g.connect(musGain); o.start(at); o.stop(at + len); };
   setInterval(() => { if (!AC || AC.state !== "running") return; while (next < AC.currentTime + 0.5) {
-    if (n % tune.length === 0) V = MUSIC_V[musicZone] || MUSIC_V[0];
-    const step = V.step, f0 = tune[n % tune.length], f = f0 ? ((V.swap && V.swap[f0]) || f0) * V.k : 0;
+    if (n % tune.length === 0) { if (n && ++loops % 8 === 0) { tuneN = (tuneN + 1) % TUNES.length; tune = TUNES[tuneN].mel; bass = TUNES[tuneN].bass; n = 0; } V = MUSIC_V[musicZone] || MUSIC_V[0]; end = ZONE_END[musicZone] || 1; }
+    const step = V.step, f0 = tune[n % tune.length], f = f0 ? ((V.swap && V.swap[f0]) || f0) * V.k * (n % tune.length >= tune.length - 4 ? end : 1) : 0;
     if (f) { note(f, V.w, next, step, V.vol); if (V.chime && n % 4 === 2) note(f * 2, "sine", next, step * 1.6, 0.18); if (V.echo) note(f, "sine", next + step * 1.5, step, 0.14); }
     if (n % 2 === 0) { const o = AC.createOscillator(), g = AC.createGain(); o.type = "sine"; o.frequency.value = bass[(n / 2) % bass.length] * (V.bassK || 1); g.gain.setValueAtTime(0.6, next); g.gain.exponentialRampToValueAtTime(0.0001, next + step * 1.8); o.connect(g); g.connect(musGain); o.start(next); o.stop(next + step * 2); }
     n++; next += step; } }, 200);
