@@ -6,6 +6,9 @@ and any rule decided. Use `git log` for the code detail (and for the older Atamu
 
 ## 2026-11-13
 
+- **Reward screen right away (owner).** The rewards open the moment a run's last parcel is done, as you're sent back to
+  the respawn point, and you can't move until you've closed them. A click cracks the boxes at once; the rewards stay up
+  until the next click (no closing by themselves).
 - **Paint while building (owner).** In build mode a left-button drag keeps placing (or erasing) pieces; the right button
   turns the camera. A right click never opens the browser's menu in the game.
 - **Builder tools (owner).** A Build button on screen for admins; blueprint holograms of each piece as the preview;
