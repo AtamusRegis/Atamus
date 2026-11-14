@@ -4,7 +4,7 @@
 // deliveries, rolls, damage, coins, mounts; this page shows the town (pets-world.js, shared with the server), moves you
 // and asks. Phone first: a thumb joystick, drag to look, pinch to zoom, big buttons.
 import * as THREE from "./vendor/three.module.min.js";
-import * as World from "./pets-world.js?v=1794629324";
+import * as World from "./pets-world.js?v=1794635641";
 
 const $ = (id) => document.getElementById(id);
 const { TAU, clamp, hyp, MOUNTS, TIERS, RARITY, RARITY_C, MODS, UPGRADES } = World;
@@ -542,14 +542,16 @@ const keys = new Set(), joy = { id: null, x: 0, y: 0, ox: 0, oy: 0 }, cam = { ya
 let jumpHeld = false, jumpTap = false, hitStop = 0;
 const GRAV = 24, now = () => performance.now() / 1000;
 let clockOff = 0; const srvNow = () => (Date.now() + clockOff) / 1000;
+// (owner, 2026-11-13) coyote time: a jump still works for a moment after running off an edge
+const onGround = () => me.ground || me.coyote > 0;
 function tryJump() {
-  if (me.stun > 0 || me.transit || !me.ground) return; const st = myStats();
-  me.vy = me.foot ? 7.5 : st.jump; me.ground = false; sfx("jump"); emit(me.x, me.y + 0.1, me.z, 5, { colors: ["#e9e2d2"], speed: 2, up: 1, life: 0.4, grav: 2 });
+  if (me.stun > 0 || me.transit || !onGround()) return; const st = myStats();
+  me.vy = me.foot ? 7.5 : st.jump; me.ground = false; me.coyote = 0; sfx("jump"); emit(me.x, me.y + 0.1, me.z, 5, { colors: ["#e9e2d2"], speed: 2, up: 1, life: 0.4, grav: 2 });
 }
 // (owner, 2026-11-13) the Big Jump, on every mount (instead of the bonk and the animals' abilities)
 function bigJump() {
-  const t = now(); if (me.stun > 0 || me.transit || me.foot || !me.ground || t < me.bigAt + World.BIG_JUMP.cd) return; me.bigAt = t;
-  me.vy = myStats().jump * World.BIG_JUMP.x; me.ground = false; me.squash = 0.2; sfx("jump"); sfx("boost"); cam.shake = Math.max(cam.shake, 0.2);
+  const t = now(); if (me.stun > 0 || me.transit || me.foot || !onGround() || t < me.bigAt + World.BIG_JUMP.cd) return; me.bigAt = t;
+  me.vy = myStats().jump * World.BIG_JUMP.x; me.ground = false; me.coyote = 0; me.squash = 0.2; sfx("jump"); sfx("boost"); cam.shake = Math.max(cam.shake, 0.2);
   emit(me.x, me.y + 0.1, me.z, 22, { colors: ["#e9e2d2", "#ffffff"], speed: 5, up: 2, life: 0.5, grav: 4 });
 }
 function doWhistle() {   // (owner, 2026-11-11) instant: back on your mount at once, even while stunned
@@ -620,8 +622,8 @@ function stepMe(dt) {
   const was = me.ground, y0 = me.y; me.y += me.vy * dt;
   if (World.wallAt(me.x, me.z, me.y) && !World.wallAt(me.x, me.z, y0)) me.y = y0;   // never down into something solid
   const s = World.surfaceAt(me.x, me.z, Math.max(y0, me.y) + (was ? 0.1 : 0));   // the ground under where this step began, so a fast fall can't pass through it
-  if (s > -1e9 && me.vy <= 0 && (me.y <= s || (was && me.y - s < 0.45))) { if (!was && me.vy < -9) { emit(me.x, s + 0.1, me.z, 8, { colors: ["#e9e2d2"], speed: 3, up: 1, life: 0.4, grav: 3 }); } me.y = s; me.vy = 0; me.ground = true; me.jumps = 0; }
-  else me.ground = false;
+  if (s > -1e9 && me.vy <= 0 && (me.y <= s || (was && me.y - s < 0.45))) { if (!was && me.vy < -9) { emit(me.x, s + 0.1, me.z, 8, { colors: ["#e9e2d2"], speed: 3, up: 1, life: 0.4, grav: 3 }); } me.y = s; me.vy = 0; me.ground = true; me.jumps = 0; me.coyote = World.COYOTE; }
+  else { me.ground = false; me.coyote = (me.coyote || 0) - dt; }
   if (me.y < -45) { me.x = World.SPAWN.x; me.z = World.SPAWN.z; me.y = World.SPAWN.y; me.vy = 0; }   // nothing below the town (the server sets you back on an island)
   // off the mount after a stun: on foot until the mount's back under you (it comes on its own, or at a whistle)
   if (me.foot && me.stun <= 0) { me.footT -= dt; if (me.footT <= 0 || hyp(me.x - me.mx, me.z - me.mz) < 1.4) doWhistle(); }
