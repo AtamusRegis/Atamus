@@ -50,6 +50,7 @@ website/              GitHub Pages site (atamus.io)
                       roll odds, mounts, upgrades, dogs / geese / hazard numbers, the courier-data rules
                       (cleanData). packages/server/src/pets-world.js must be an identical copy (scripts/check.sh
                       compares them)
+  icons.js            the game's SVG icons (ICON, svg(name), fillIcons for data-ico="name")
   vendor/             Three.js (self-hosted); fonts/, assets/ (logo), favicon, CNAME
   pokemon/            (owner, 2026-11-11) Pet Delivery Co., the game from before the remake, at atamus.io/pokemon:
                       index.html, pets.js, pets-world.js (copy in packages/server/src/pokemon/, keep identical);

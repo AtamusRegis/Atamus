@@ -237,12 +237,13 @@ is one 1 m grass block (`SEED`) to stand on, with sky all round. Everything is a
   it shows: "Wind", "Platforms"...) and a point. When the neighborhood opens, after its gate bursts open, the showing
   goes through each shot in order: the camera circles the point (about 4 s) with the shot's name over the
   neighborhood's. In the ⚙ panel: Shots, + (a new shot; the next left click in the world sets its point), each row's
-  name, 📍 (pick its point again) and ✕; Save keeps them. While building, the edited neighborhood's shot points show
+  name, ▶ (plays that shot now, as typed, saved or not), 📍 (pick its point again) and ✕; Save keeps them. While building, the edited neighborhood's shot points show
   as rings with a post and their number and name (defaults: the zone names, each zone's animal, 40 / 20 /
   10 / 5 / 1%, 1 in 10,000). The Odds menu's tier names are the neighborhoods' names.
 - **Building** (admins; (owner, 2026-11-13) the Build button on screen, a hammer under the menu buttons; "no need for
   phone editor": building is for a computer, an exception to mobile parity): the freecam (fly where you look: WASD,
-  Space or E up, C or Q down, Shift faster; drag to look) and a bar at the bottom: Block, House, Mailbox, Gate, Wall,
+  Space or E up, C or Q down, Shift faster; drag to look) and a bar at the bottom ((owner, 2026-11-13) every piece a rounded tile with a picture of
+  the piece and its name under it): Block, House, Mailbox, Gate, Wall,
   Tree, Boost, Start Line / Podium, Respawn, Post Office, Bounds, Erase, ⟳ (turn; R) and ✕ (Escape or the Build
   button); under it **the neighborhood you're editing** (− name +) and ⚙, then W / H / D and the material for a block,
   L for a wall. (owner, 2026-11-13) Gates, walls and bounds are placed for the neighborhood you're editing (a gate or
@@ -299,6 +300,9 @@ gets those coins back the next time their data loads.
 - The parcel card top center: a row per parcel (tier, modifier, durability pips, address, distance, the Express
   countdown), stolen or dropped ones faded, and how many you carry of how many.
 - Bottom right: Big Jump (with its cooldown), Whistle above it, Jump beside it.
+- (owner, 2026-11-13) **Icons are drawn symbols** (website/icons.js): a barn for the Stable, a green up arrow for
+  Upgrades, a die for Odds, a cog for Settings, a hammer for Build, a speech bubble for chat, a whistle, an arrow for
+  Jump, double chevrons for Big Jump; the builder's turn, close, neighborhood (cog) and shot point (pin) buttons too.
 - Right edge: Stable, Upgrades, Odds, Settings (music and SFX volume, shirt color, Admin for staff, Log out).
 - Controls: WASD or arrows, Space to jump, F Big Jump, Q whistle, Enter chat; drag to look, wheel to zoom. Touch:
   a thumb joystick on the left, drag to look, pinch to zoom, the buttons.

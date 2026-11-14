@@ -6,6 +6,10 @@ and any rule decided. Use `git log` for the code detail (and for the older Atamu
 
 ## 2026-11-13
 
+- **Builder tiles and shot preview (owner).** The build bar's pieces are rounded tiles with a picture of each piece; each
+  cinematic shot in a neighborhood's panel has a play button.
+- **Drawn icons (owner).** The HUD's and builder's icons are real symbols (barn, die, cog, hammer, whistle...) instead
+  of simple shapes; the action buttons show icons instead of words.
 - **Respawn point turns freely (owner).** Hold R to turn it to any angle; couriers come back facing its arrow with the
   camera at 45 degrees. Only builders see it.
 - **Edges hold you (owner).** With no direction held, a slide (after a landing, say) stops at the edge instead of
