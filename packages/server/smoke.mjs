@@ -19,7 +19,7 @@ W.setBuild([]); ok(W.build.length === 1 && W.build[0].w === 1 && W.surfaceAt(0.5
 W.setBuild([...TEST_TOWN, { id: 99, k: "nope" }, { id: 98, k: "block", x: 1e9, z: 0, y: 0, w: 999, h: 0, d: 2, m: "lava" }]);
 ok(W.build.length === TEST_TOWN.length + 1 && W.build[W.build.length - 1].w === W.BLOCK_MAX && W.build[W.build.length - 1].m === "grass" && W.build[W.build.length - 1].x === W.GROUND.r, "the build is cleaned: unknown pieces dropped, sizes and places clamped");
 W.setBuild(TEST_TOWN);
-ok(W.houses.length === 20 && W.housesIn(3).length === 2 && W.addr(1).name === "1 Main Street" && W.addr(2).name === "2 Main Street" && W.addr(5).name === "1 Goose Way" && W.buildings.length === 1 && W.gates.length === 1, "mailboxes are the addresses, named by zone; houses and gates placed");
+ok(W.houses.length === 20 && W.housesIn(3).length === 2 && W.addr(1).name === "1 Main Street" && W.addr(2).name === "2 Main Street" && W.addr(5).name === "1 Goose Marsh" && W.buildings.length === 1 && W.gates.length === 1, "mailboxes are the addresses, named by zone; houses and gates placed");
 ok(W.surfaceAt(25, -23, 3) === 2 && W.blocked(26, -22, 0) && W.blocked(40, 20, 0) && W.blocked(40, 10, 0) && !W.blocked(45, 10, 0), "a block can be stood on and stops you from the side; houses and mailboxes are solid");
 ok(W.gateBlocked(55, 2, 0, 1) && !W.gateBlocked(55, 2, 0, 2) && !W.gateBlocked(55, 9, 0, 1) && !W.gateBlocked(60, 2, 0, 1), "a gate is closed until its zone is open, and only across its width");
 ok(W.PO.on && W.SPAWN.z === 17 && W.PODIUM.spots.length === 3 && W.PODIUM.spots[0].y === 1.6 && W.onStart(2, 24, 0) && !W.onStart(2, 30, 0) && W.boosts.length === 1 && W.trees.length === 1 && W.blocked(-40, -30, 0) && W.inSafeZone(0, 10, 0) && Math.abs(W.counterDist(0, 8) - 2.3) < 1e-9, "the post office, respawn point, podiums, start line, boost and tree are placed too");
@@ -145,11 +145,25 @@ try {
   // (owner, 2026-11-13) the zone builder: an admin places and erases, everyone gets it, it's saved; a player can't
   { const n0 = W.build.length; b.send({ t: "build", op: "add", piece: { k: "mailbox", x: 5, z: 40, y: 0, zone: 0 } }); await sleep(150); ok(W.build.length === n0, "a player can't build");
     n.send({ t: "build", op: "add", piece: { k: "mailbox", x: 5, z: 40, y: 0, zone: 0 } }); const bb = await b.wait((m) => m.t === "build" && m.build.length === n0 + 1, "the new mailbox"); const id = bb.build[bb.build.length - 1].id;
-    ok(W.addr(id) && W.addr(id).name === "3 Main Street" && (await store.loadBuild()).length === n0 + 1, "an admin places a mailbox: everyone gets it, it's saved, it's an address");
-    n.send({ t: "build", op: "del", id }); await b.wait((m) => m.t === "build" && m.build.length === n0, "the mailbox erased"); ok(!W.addr(id) && (await store.loadBuild()).length === n0, "and erases it"); }
+    ok(W.addr(id) && W.addr(id).name === "3 Main Street" && (await store.loadBuild()).pieces.length === n0 + 1, "an admin places a mailbox: everyone gets it, it's saved, it's an address");
+    n.send({ t: "build", op: "del", id }); await b.wait((m) => m.t === "build" && m.build.length === n0, "the mailbox erased"); ok(!W.addr(id) && (await store.loadBuild()).pieces.length === n0, "and erases it"); }
   { n.send({ t: "build", op: "add", piece: { k: "office", x: 0, z: 100, y: 0, r: 1 }, tag: 7 }); const ack = await n.wait((m) => m.t === "buildok" && m.tag === 7, "the builder's id back");
     await sleep(100); ok(W.build.filter((q) => q.k === "office").length === 1 && W.PO.z === 100 && W.PO.yaw === Math.PI / 2 && Math.abs(W.PO.end.x - 3.9) < 1e-9 && W.addr && ack.id > 0, "one post office at a time (a new one replaces it), turnable; the builder gets the new piece's id");
     n.send({ t: "build", op: "del", id: ack.id }); n.send({ t: "build", op: "add", piece: { k: "office", x: 0, z: 0, y: 0, r: 0 } }); await sleep(150); }
+  // (owner, 2026-11-13) neighborhoods: bounds decide where a piece belongs, can be moved after; walls close like gates; each neighborhood's name, animal and chances
+  { n.send({ t: "build", op: "add", piece: { k: "area", x: -200, z: -200, y: 0, w: 20, d: 20, zone: 4 }, tag: 8 }); const ack = await n.wait((m) => m.t === "buildok" && m.tag === 8, "new bounds");
+    n.send({ t: "build", op: "add", piece: { k: "mailbox", x: -190, z: -190, y: 0 } }); await b.wait((m) => m.t === "build" && m.build.some((q) => q.k === "mailbox" && q.x === -190), "a mailbox inside");
+    const mb = W.build.find((q) => q.k === "mailbox" && q.x === -190); ok(W.districtAt(-190, -190, 0) === 4 && W.addr(mb.id).d === 4 && / Floating Islands$/.test(W.addr(mb.id).name), "a mailbox inside bounds belongs to their neighborhood");
+    n.send({ t: "build", op: "set", piece: { id: ack.id, k: "block", x: -300, z: -200, y: 0, w: 20, d: 20, zone: 4 } }); await b.wait((m) => m.t === "build" && m.build.some((q) => q.id === ack.id && q.x === -300), "the bounds moved");
+    ok(W.build.find((q) => q.id === ack.id).k === "area" && W.addr(mb.id).d === 0, "bounds move after the fact (keeping their kind), and what's left outside goes back to Main Street");
+    n.send({ t: "build", op: "zone", n: 4, zone: { name: "Hilltop", sp: "gator", chance: [1, 0, 0, 0, 0], shiny: 0.5 } }); const zb = await b.wait((m) => m.t === "build" && m.zones && m.zones[4].name === "Hilltop", "the neighborhood renamed");
+    ok(W.zoneName(4) === "Hilltop" && W.zoneSp(4) === "gator" && W.zoneCfg(4).chance[0] === 1 && W.zoneCfg(4).shiny === 0.5 && (await store.loadBuild()).zones[4].name === "Hilltop" && zb.zones.length === W.TIERS.length, "a neighborhood's name, animal, chances and shiny are set and saved");
+    const g = W.giftContents(0, 4, null, () => 0.3).pet; ok(g && g.sp === "gator" && g.r === 0, "its gifts are its animal");
+    b.send({ t: "build", op: "zone", n: 4, zone: { name: "Nope" } }); await sleep(120); ok(W.zoneName(4) === "Hilltop", "a player can't change a neighborhood");
+    n.send({ t: "build", op: "zone", n: 4, zone: {} }); n.send({ t: "build", op: "del", id: ack.id }); n.send({ t: "build", op: "del", id: mb.id });
+    n.send({ t: "build", op: "add", piece: { k: "wall", x: -250, z: 0, y: 0, r: 0, w: 12, zone: 3 } }); await b.wait((m) => m.t === "build" && m.build.some((q) => q.k === "wall"), "a wall");
+    ok(W.gateBlocked(-245, 0, 0, 1, 0.5) && !W.gateBlocked(-235, 0, 0, 1, 0.5) && !W.gateBlocked(-245, 0, 0, 4, 0.5), "a bound wall stops couriers along its length until its neighborhood is open");
+    n.send({ t: "build", op: "del", id: W.build.find((q) => q.k === "wall").id }); await sleep(150); }
   who("smokeB").acct.data.coins = 0;   // (its bonks paid Aura)
   b.send({ t: "admin", op: "quick", cmd: "coins", n: 5000, name: "smokeB" });   // a player: nothing happens
   n.send({ t: "admin", op: "quick", cmd: "coins", n: 5000, name: "smokeB" });

@@ -307,7 +307,7 @@ export function attachPets(server, { origins = [], allowLocal = false, store = m
           lastChat: 0, party: null, ready: null, next: null, bag: [], stolen: [], dropped: [], slots: new Set(), calmUntil: 0, pids: 0, stunUntil: 0, graceUntil: 0, kickAt: 0, abilityAt: 0, cracked: new Map(), lastIsle: -1, nextRock: 0, nextDive: 0, pipeAt: 0 };
         me.lx = me.x; me.lz = me.z; me.lt = now;
         online.set(acct.id, me);
-        send(ws, { t: "welcome", build: W.build, web: websiteBuild(), by: websiteBy(), now, id: me.id, name: me.name, role: rankOf(acct) >= 2 ? "admin" : acct.role, token, data: acct.data, x: me.x, y: me.y, z: me.z, players: [...room.players.values()].map(pub),
+        send(ws, { t: "welcome", build: W.build, zones: W.zones, web: websiteBuild(), by: websiteBy(), now, id: me.id, name: me.name, role: rankOf(acct) >= 2 ? "admin" : acct.role, token, data: acct.data, x: me.x, y: me.y, z: me.z, players: [...room.players.values()].map(pub),
           dogs: room.dogs.map(dogView), geese: room.geese.map(gooseView), goats: room.goats.map(goatView), pods: podView(room) });
         room.players.set(me.id, me);
         all(room, { t: "join", p: pub(me) }, me);
@@ -430,9 +430,11 @@ export function attachPets(server, { origins = [], allowLocal = false, store = m
           let list = W.build.slice();
           if (m.op === "add") { const q = W.cleanPiece({ ...m.piece, id: list.reduce((a, b) => Math.max(a, b.id), 0) + 1 }); if (!q || list.length >= W.BUILD_MAX) break; if (W.ONE_ONLY.includes(q.k)) list = list.filter((o) => o.k !== q.k); list.push(q); send(ws, { t: "buildok", tag: m.tag, id: q.id }); }   // (owner, 2026-11-13) the id back, for undo; one post office, one respawn point
           else if (m.op === "del") { const n = list.length; list = list.filter((q) => q.id !== +m.id); if (list.length === n) break; }
+          else if (m.op === "set") { const i = list.findIndex((q) => q.id === +(m.piece && m.piece.id)), q = i >= 0 && W.cleanPiece({ ...m.piece, k: list[i].k }); if (!q) break; list[i] = q; }   // (owner, 2026-11-13) a piece changed (a bound moved or resized)
+          else if (m.op === "zone") { const n = +m.n; if (!(n >= 0 && n < W.TIERS.length)) break; W.zones[n] = W.cleanZone(m.zone, n); }   // a neighborhood's name, animal and chances
           else break;
-          W.setBuild(list); store.saveBuild(W.build).catch((e) => console.error("[pets] saveBuild", e.message));
-          for (const r of rooms) { all(r, { t: "build", build: W.build }); for (const p of r.players.values()) { for (const k of ["ready", "next"]) if (p[k] && !W.housesIn(p[k].tier).length) p[k] = null; fillBelt(p); } }
+          W.setBuild({ pieces: list, zones: W.zones.slice() }); store.saveBuild({ pieces: W.build, zones: W.zones }).catch((e) => console.error("[pets] saveBuild", e.message));
+          for (const r of rooms) { all(r, { t: "build", build: W.build, zones: W.zones }); for (const p of r.players.values()) { for (const k of ["ready", "next"]) if (p[k] && !W.housesIn(p[k].tier).length) p[k] = null; fillBelt(p); } }
           break;
         }
         case "admin": admin(me, m).catch((e) => { console.error("[pets] admin", e.message); send(ws, { t: "admin_msg", msg: "Failed" }); }); break;
