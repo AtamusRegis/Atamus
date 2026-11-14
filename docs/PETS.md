@@ -140,8 +140,8 @@ A parcel that breaks or is lost is gone; the conveyor always has the next one. *
   Main Street, a Dog 80% on the Floating Islands) x (1 + 5% per Aura **Boost** level, up to 10: the Stable's Boost row,
   100 Aura x 1.7^level x (1 + 0.5 x rarity) x (1 + 0.5 x a)); Jump 8 + 0.5 x rarity + 0.25 x a; Grip (shortens stuns) 10%
   x rarity + 3% x a.
-- **Jumping** (owner, 2026-11-13): Space (or Jump) jumps by the mount's Jump; **Big Jump** (F, or the big button where
-  Bonk was), on every mount, from the ground, is 1.7x that jump, once in 3 s. **A jump keeps its speed:** in the air
+- **Jumping** (owner, 2026-11-13): Space (or Jump, (owner, 2026-11-14) the big button now) jumps by the mount's Jump.
+  **A jump keeps its speed:** in the air
   you carry on at the speed you left the ground with (letting go doesn't stop you), and the controls only steer gently.
   (owner, 2026-11-13) **Coyote time:** both jumps still work for 0.15 s after you run off an edge. **Landing
   forgiveness:** a block's or a podium's top reaches 5% past its sides for standing on (2.5% of its width on each side),
@@ -285,8 +285,9 @@ is one 1 m grass block (`SEED`) to stand on, with sky all round. Everything is a
   follows; a click places it, turned with ⟳), **Ctrl+Z** undoes your last place or erase, **Ctrl+Shift+Z** (or Ctrl+Y)
   redoes. Placing a post office or respawn point replaces the old one (undo brings it back). Up to 6,000 pieces.
   Erasing everything leaves the one block.
-- **Falling off** (below 20 m down, `EDGE_Y`) starts the run over: every parcel you hold is lost and you're back at the
-  respawn point.
+- **Falling off** (below 20 m down, `EDGE_Y`) sends you back to the respawn point; (owner, 2026-11-14) you keep the
+  parcels you carry and go on with them. **Drop** (the button beside the parcel counter) lets go of every parcel you
+  carry (no banner), so you can take new ones.
 
 ## Danger
 
@@ -323,12 +324,12 @@ gets those coins back the next time their data loads.
   card's rows, with tier, pips, address, distance and countdown, are gone).
 - (owner, 2026-11-14) Admins only: the Odds button (players don't see the rarity chart), and B opens or closes the build
   menu.
-- Bottom right: Big Jump (with its cooldown), Whistle above it, Jump beside it.
+- Bottom right: Jump (the big button), Whistle above it.
 - (owner, 2026-11-13) **Icons are drawn symbols** (website/icons.js): a barn for the Stable, a green up arrow for
   Upgrades, a die for Odds, a cog for Settings, a hammer for Build, a speech bubble for chat, a whistle, an arrow for
-  Jump, double chevrons for Big Jump; the builder's turn, close, neighborhood (cog) and shot point (pin) buttons too.
+  Jump; the builder's turn, close, neighborhood (cog) and shot point (pin) buttons too.
 - Right edge: Stable, Upgrades, Odds, Settings (music and SFX volume, shirt color, Admin for staff, Log out).
-- Controls: WASD or arrows, Space to jump, F Big Jump, Q whistle, Enter chat; drag to look, wheel to zoom. Touch:
+- Controls: WASD or arrows, Space to jump, Q whistle, Enter chat; drag to look, wheel to zoom. Touch:
   a thumb joystick on the left, drag to look, pinch to zoom, the buttons.
 - No helper text anywhere; buttons and tooltips are names only.
 
@@ -404,6 +405,8 @@ its own fresh saves, with the same logins. It is described in `docs/POKEMON.md`;
 Courier's rules.
 
 ## Rejected / removed
+
+- (owner, 2026-11-14) **The Big Jump** (F, the big button); losing your parcels when you fall off the town.
 
 - (owner, 2026-11-14) The parcel card's per-parcel rows (tier, durability pips, address, distance, Express countdown):
   replaced by just a counter. The Odds menu for players.

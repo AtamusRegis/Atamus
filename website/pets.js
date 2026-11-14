@@ -5,7 +5,7 @@
 // and asks. Phone first: a thumb joystick, drag to look, pinch to zoom, big buttons.
 import * as THREE from "./vendor/three.module.min.js";
 import { svg, fillIcons, ICON } from "./icons.js?v=4";
-import * as World from "./pets-world.js?v=1794639926";
+import * as World from "./pets-world.js?v=1794649685";
 
 const $ = (id) => document.getElementById(id);
 const { TAU, clamp, hyp, MOUNTS, TIERS, RARITY, RARITY_C, MODS, UPGRADES } = World;
@@ -558,12 +558,6 @@ function tryJump() {
   if (me.stun > 0 || me.transit || !onGround()) return; const st = myStats();
   me.vy = me.foot ? 7.5 : st.jump; me.ground = false; me.coyote = 0; sfx("jump"); emit(me.x, me.y + 0.1, me.z, 5, { colors: ["#e9e2d2"], speed: 2, up: 1, life: 0.4, grav: 2 });
 }
-// (owner, 2026-11-13) the Big Jump, on every mount (instead of the bonk and the animals' abilities)
-function bigJump() {
-  const t = now(); if (me.stun > 0 || me.transit || me.foot || !onGround() || t < me.bigAt + World.BIG_JUMP.cd) return; me.bigAt = t;
-  me.vy = myStats().jump * World.BIG_JUMP.x; me.ground = false; me.coyote = 0; me.squash = 0.2; sfx("jump"); sfx("boost"); cam.shake = Math.max(cam.shake, 0.2);
-  emit(me.x, me.y + 0.1, me.z, 22, { colors: ["#e9e2d2", "#ffffff"], speed: 5, up: 2, life: 0.5, grav: 4 });
-}
 function doWhistle() {   // (owner, 2026-11-11) instant: back on your mount at once, even while stunned
   sfx("whistle"); if (me.transit) return;
   if (me.foot) { me.foot = false; me.footT = 0; mine.m.g.visible = true; emit(me.x, me.y + 0.3, me.z, 14, { colors: ["#e9e2d2", "#ffffff"], speed: 4, up: 1.5, life: 0.5, grav: 3 }); me.vy = 4; me.ground = false; }
@@ -762,12 +756,12 @@ addEventListener("keydown", (e) => {
   if (e.repeat) return; keys.add(e.code); if (free) { e.preventDefault(); return; }   // the freecam takes the keys
   if (rewardLock()) return;   // (owner, 2026-11-12) nothing to do while the reward screen is up (or opening)
   if (e.code === "Space") { jumpHeld = true; jumpTap = true; e.preventDefault(); }
-  if (e.code === "KeyF") bigJump(); if (e.code === "KeyQ") doWhistle();
+  if (e.code === "KeyQ") doWhistle();
 });
 addEventListener("keyup", (e) => { keys.delete(e.code); if (e.code === "Space") jumpHeld = false; });
 addEventListener("blur", () => { keys.clear(); jumpHeld = false; });
 function press(id, down, up) { const b = $(id); b.addEventListener("pointerdown", (e) => { e.preventDefault(); e.stopPropagation(); down(); }); if (up) for (const k of ["pointerup", "pointercancel", "pointerleave"]) b.addEventListener(k, up); }
-press("bbig", bigJump); press("bwhistle", doWhistle); press("bjump", () => { jumpHeld = true; jumpTap = true; }, () => { jumpHeld = false; });
+press("bwhistle", doWhistle); press("bjump", () => { jumpHeld = true; jumpTap = true; }, () => { jumpHeld = false; });
 
 // ---- words and numbers that pop up: floating numbers (they rise and fade in 0.8 s), banners, toasts ----
 const pops = [], V = new THREE.Vector3();
@@ -947,16 +941,15 @@ function stepGifts(dt) {   // the build-up: three shakes, each bigger, the spark
   if (o.t >= T && o.res) landGifts(o.res.list);
 }
 let hudDirty = true, shownCoins = 0, cardKey = "", myName = "", myRole = "player", myId = null, loggedIn = false;
-const cdBtn = (id, left, total) => { const b = $(id), k = total > 0 ? clamp(left / total, 0, 1) : 0; b.style.setProperty("--cd", (k * 360).toFixed(0) + "deg"); b.classList.toggle("cool", k > 0); };
 function hud(dt) {
   watchZones();
   // coins count up to what the server says
   const coinsNow = save.coins;
   if (shownCoins !== coinsNow) { const d = coinsNow - shownCoins; shownCoins = Math.abs(d) < 1 ? coinsNow : shownCoins + d * Math.min(1, dt * 8); $("coinn").textContent = fmt(Math.round(shownCoins)); }
-  const t = now(); cdBtn("bbig", me.bigAt + World.BIG_JUMP.cd - t, World.BIG_JUMP.cd);
+  const t = now();
   // (owner, 2026-11-14) the parcel counter: how many parcels you're carrying, of how many you can
   const key = bag.length + "/" + cap;
-  if (key !== cardKey) { cardKey = key; const c = $("card"); c.style.display = bag.length ? "flex" : "none"; c.innerHTML = svg("parcel") + `<b class="disp">${bag.length} / ${cap}</b>`; }
+  if (key !== cardKey) { cardKey = key; const c = $("card"); c.style.display = bag.length ? "flex" : "none"; c.innerHTML = svg("parcel") + `<b class="disp">${bag.length} / ${cap}</b>`; const dz = el("button", "cdrop"); dz.innerHTML = svg("erase"); dz.title = "Drop"; dz.onclick = (e) => { e.stopPropagation(); netSend({ t: "dropall" }); }; c.appendChild(dz); }   // (owner, 2026-11-14) Drop lets go of them
   // the way there: the arrow on the ground round you points at the nearest address (or a dropped parcel, or a goose with one)
   let tg = null, best = Infinity; const consider = (x, y, z, c) => { const d = hyp(x - me.x, z - me.z); if (d < best) { best = d; tg = { x, y, z, c }; } };
   for (const q of bag) { const h = addrOf(q.house); consider(h.mx, h.my, h.mz, POI); }
@@ -1450,7 +1443,7 @@ function onNet(m) {
       if (ev.k === "grab") { tutDid("grab"); sfx("grab"); me.squash = 0.25; if (bag.length > 1) popup(bag.length + " / " + cap, "#ffffff", me.x, me.y + 3, me.z); }
       else if (ev.k === "pickup") { sfx("grab"); me.squash = 0.25; if (ev.bonus) { popup("+" + ev.bonus, "#d9a6ff", me.x, me.y + 2.6, me.z); save.coins = ev.coins; flyCoins(me.x, me.y + 2, me.z, 3); } }
       else if (ev.k === "crack") { sfx("crack"); cam.shake = Math.max(cam.shake, 0.35); flash("#e5534b"); popup("-20%", "#ff6b6b", me.x, me.y + 2.8, me.z); emit(me.x, me.y + 1.4, me.z, 12, { colors: ["#c89a5e", "#8a5a34"], speed: 4, up: 3, life: 0.6, size: 0.14 }); }
-      else if (ev.k === "lost") { sfx("smash"); cam.shake = Math.max(cam.shake, 0.5); flash("#e5534b"); banner(ev.why === "broke" ? "PARCEL BROKE!" : "PARCEL LOST!", "#ff6b6b"); emit(me.x, me.y + 1.4, me.z, 26, { colors: ["#c89a5e", "#8a5a34", "#fff8e6"], speed: 6, up: 5, life: 0.9 }); }
+      else if (ev.k === "lost") { sfx("smash"); cam.shake = Math.max(cam.shake, 0.5); flash("#e5534b"); if (ev.why !== "drop") banner(ev.why === "broke" ? "PARCEL BROKE!" : "PARCEL LOST!", "#ff6b6b"); emit(me.x, me.y + 1.4, me.z, 26, { colors: ["#c89a5e", "#8a5a34", "#fff8e6"], speed: 6, up: 5, life: 0.9 }); }
       else if (ev.k === "stolen") { sfx("steal"); sfx("honk"); banner("STOLEN!", "#ff6b6b"); cam.shake = Math.max(cam.shake, 0.3); }
       void before; break;
     }
