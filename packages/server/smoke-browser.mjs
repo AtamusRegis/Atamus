@@ -1,7 +1,7 @@
 // Browser smoke test (part of the required check): the game page itself runs. Serves website/ and the real /pets
 // server (in memory, no database) on a free local port, opens pets.html in headless Chrome, creates an account, rides,
 // grabs a parcel off the conveyor, delivers it and sees the reward roll, opens every menu, then a second player joins
-// and the first must see them move and take their kick; it fails on any page error, console error or failed request.
+// and the first must see them move and Big Jump; it fails on any page error, console error or failed request.
 // smoke.mjs covers the server and the world's rules; this covers website/pets.js, which the syntax check alone can't
 // (a runtime error there breaks the game).
 // Run: cd packages/server && npm run smoke:browser   (CHROME=/path/to/chrome when it isn't found; in CI it must be)
@@ -93,7 +93,7 @@ try {
   await page.click("#mstable");
   await until(page, () => document.querySelectorAll(".mtile").length === new Set(window.Pets.save.mounts.map((m) => [m.sp, m.r, m.va, m.cap | 0, m.spd | 0, m.tr || ""].join())).size && [...document.querySelectorAll(".mtile img")].length > 0, "the new mount isn't in the Stable (identical ones stacked)", had); await page.click("#pclose");
   await page.click("#mup"); await page.click(".uprow .btn.buy"); await until(page, () => window.Pets.save.up.payout === 1, "the upgrade wasn't bought"); await page.click("#pclose");
-  // a second player joins: the first must see them move, and take their kick (out of the post office's safe zone)
+  // a second player joins: the first must see them move, and Big Jump
   step = "see a second player move";
   browser2 = await chromium.launch({ executablePath: chrome, args });   // its own browser, so neither page is a background tab
   const page2 = await browser2.newPage({ viewport: { width: 640, height: 480 } });
@@ -102,11 +102,11 @@ try {
   await until(page, () => window.Pets.others.size === 1, "the first player doesn't see the second");
   await page.evaluate(() => window.Pets.teleport(60, 30)); await page2.evaluate(() => { window.Pets.teleport(60, 27.6); window.Pets.me.yaw = 0; });
   await until(page, () => { const o = [...window.Pets.others.values()][0]; return Math.abs(o.x - 60) < 1 && Math.abs(o.z - 27.6) < 1; }, "the second player looks frozen to the first");
-  step = "take a kick"; await page.waitForTimeout(400);
+  step = "see a Big Jump"; await page.waitForTimeout(400);   // (owner, 2026-11-13) the Big Jump replaced the bonk
   await page2.keyboard.press("KeyF");
-  await until(page, () => window.Pets.me.foot && window.Pets.me.stun > 0, "the kick didn't land");
+  await until(page, () => [...window.Pets.others.values()][0].y > 2.3, "the second player's Big Jump wasn't seen");
 } catch (e) { problems.push(`could not ${step}: ${e.message.split("\n")[0]}`); }
 await browser.close(); if (browser2) await browser2.close(); server.close();
 if (problems.length) { console.error("SMOKE FAILED (browser)\n" + problems.map((p) => "  " + p).join("\n")); process.exit(1); }
-console.log("browser smoke passed: the game loads, a parcel is grabbed, delivered and rolled, the menus work, and a second player is seen moving and kicking");
+console.log("browser smoke passed: the game loads, a parcel is grabbed, delivered and rolled, the menus work, and a second player is seen moving and Big Jumping");
 process.exit(0);
