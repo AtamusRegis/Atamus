@@ -29,7 +29,8 @@
     #coins.bump { animation: bump .25s; }
     @keyframes bump { 40% { transform: scale(1.18); } }
     #bchat { position: fixed; left: calc(10px + var(--sl)); top: calc(52px + var(--st)); width: 38px; height: 34px; border: 0; border-radius: 12px; background: var(--card); box-shadow: 0 3px 0 rgba(0,0,0,.14); display: grid; place-items: center; }
-    #bchat svg, .mbtn svg { width: 22px; height: 22px; fill: none; stroke: var(--ink); stroke-width: 2.2; stroke-linecap: round; stroke-linejoin: round; }
+    #bchat svg, .mbtn svg { width: 26px; height: 26px; } .ico { display: block; } #pclose svg { width: 18px; height: 18px; margin: auto; } #party button svg { width: 12px; height: 12px; display: block; }
+    .act svg { position: relative; z-index: 1; width: 55%; height: 55%; } #bbig svg { width: 58%; height: 58%; } #buildbar .bt svg, #zpanel .bt svg, #pprompt .bt svg { width: 18px; height: 18px; vertical-align: middle; }
     /* the parcel card, top center */
     #card { position: fixed; left: 50%; top: calc(10px + var(--st)); transform: translateX(-50%); display: none; flex-direction: column; align-items: stretch; gap: 4px; padding: 6px 10px; border-radius: 16px; background: var(--card); box-shadow: 0 3px 0 rgba(0,0,0,.14); max-width: calc(100vw - 150px); }
     .prow { display: flex; align-items: center; gap: 6px; white-space: nowrap; } .prow.gone { opacity: .45; filter: grayscale(.8); }
@@ -205,22 +206,22 @@
   <div id="pops"></div>
   <div id="hud">
     <div id="coins" class="pill"><i class="coin"></i><span id="coinn">0</span></div>
-    <button id="bchat" title="Chat"><svg viewBox="0 0 24 24"><path d="M4 5h16v11H10l-5 4v-4H4z"/></svg></button>
+    <button id="bchat" title="Chat" data-ico="chat"></button>
     <div id="card"></div>
     <div id="msgs"></div>
     <div id="party"></div>
     <div id="invite"></div>
     <div id="pmenu"></div>
     <div id="menus">
-      <button id="mstable" class="mbtn" title="Stable"><svg viewBox="0 0 24 24"><path d="M6 4v8a6 6 0 0 0 12 0V4M4 4h4M16 4h4"/></svg></button>
-      <button id="mup" class="mbtn" title="Upgrades"><svg viewBox="0 0 24 24"><path d="M12 20V6M5 12l7-7 7 7"/></svg></button>
-      <button id="modds" class="mbtn" title="Odds"><svg viewBox="0 0 24 24"><rect x="4" y="4" width="16" height="16" rx="3"/><path d="M9 9h.01M15 9h.01M12 12h.01M9 15h.01M15 15h.01"/></svg></button>
-      <button id="mset" class="mbtn" title="Settings"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M12 3v3M12 18v3M3 12h3M18 12h3M5.6 5.6l2.1 2.1M16.3 16.3l2.1 2.1M5.6 18.4l2.1-2.1M16.3 7.7l2.1-2.1"/></svg></button>
-      <button id="mbuild" class="mbtn" title="Build" hidden><svg viewBox="0 0 24 24"><path d="M14 6l4 4M4 20l9-9M12 4l8 8-3 3-8-8z"/></svg></button>
+      <button id="mstable" class="mbtn" title="Stable" data-ico="stable"></button>
+      <button id="mup" class="mbtn" title="Upgrades" data-ico="upgrades"></button>
+      <button id="modds" class="mbtn" title="Odds" data-ico="odds"></button>
+      <button id="mset" class="mbtn" title="Settings" data-ico="settings"></button>
+      <button id="mbuild" class="mbtn" title="Build" hidden data-ico="build"></button>
     </div>
-    <button id="bwhistle" class="act" title="Whistle"><span>Whistle</span></button>
-    <button id="bjump" class="act" title="Jump"><span>Jump</span></button>
-    <button id="bbig" class="act" title="Big Jump"><span>Big Jump</span></button>
+    <button id="bwhistle" class="act" title="Whistle" data-ico="whistle"></button>
+    <button id="bjump" class="act" title="Jump" data-ico="jump"></button>
+    <button id="bbig" class="act" title="Big Jump" data-ico="bigjump"></button>
     <div id="gifts"><div id="gq"></div><button id="gall" class="disp">Open all</button><div id="gopen"><i id="grays"></i><div id="gbig"></div><b id="glabel" class="disp"></b></div><div id="gres"><button id="gx" title="Close">✕</button><div id="gtitle"></div><div id="glist"></div></div></div>
     <div id="announce"></div>
     <form id="chatbar" autocomplete="off"><input id="chatin" maxlength="120" placeholder="Chat" enterkeyhint="send"></form>
@@ -236,7 +237,7 @@
   <div id="toast"></div>
   <div id="tut"><div class="tuth"><b id="tutt" class="disp"></b><span id="tutn" class="disp"></span></div><p id="tutp"></p><div class="acts"><button id="tutskip" class="btn">Skip</button><button id="tutnext" class="btn go">Next</button></div></div>
   <div id="joy"><div id="knob"></div></div>
-  <div id="panel"><div id="pbox"><div id="phead"><h2 id="ptitle" class="disp"></h2><button id="pclose" title="Close">✕</button></div><div id="pbody"></div></div></div>
+  <div id="panel"><div id="pbox"><div id="phead"><h2 id="ptitle" class="disp"></h2><button id="pclose" title="Close" data-ico="close"></button></div><div id="pbody"></div></div></div>
   <div id="hatch"><i id="hrays"></i><b id="hnew" class="disp">NEW!</b><i id="hegg" class="egg"></i><img id="himg" alt=""><div id="hname" class="disp"></div><div id="hrar" class="disp"></div></div>
   <form id="login" autocomplete="on">
     <h1 class="disp">CRITTER<br>COURIER</h1>
@@ -246,6 +247,6 @@
     <button id="lgo" class="btn go" type="submit">Log in</button>
     <button id="lnew" class="btn" type="button">Create account</button>
   </form>
-  <script type="module" src="pets.js?v=1794636546"></script>
+  <script type="module" src="pets.js?v=1794639077"></script>
 </body>
 </html>

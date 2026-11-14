@@ -299,6 +299,9 @@ gets those coins back the next time their data loads.
 - The parcel card top center: a row per parcel (tier, modifier, durability pips, address, distance, the Express
   countdown), stolen or dropped ones faded, and how many you carry of how many.
 - Bottom right: Big Jump (with its cooldown), Whistle above it, Jump beside it.
+- (owner, 2026-11-13) **Icons are drawn symbols** (website/icons.js): a barn for the Stable, a green up arrow for
+  Upgrades, a die for Odds, a cog for Settings, a hammer for Build, a speech bubble for chat, a whistle, an arrow for
+  Jump, double chevrons for Big Jump; the builder's turn, close, neighborhood (cog) and shot point (pin) buttons too.
 - Right edge: Stable, Upgrades, Odds, Settings (music and SFX volume, shirt color, Admin for staff, Log out).
 - Controls: WASD or arrows, Space to jump, F Big Jump, Q whistle, Enter chat; drag to look, wheel to zoom. Touch:
   a thumb joystick on the left, drag to look, pinch to zoom, the buttons.
