@@ -6,6 +6,7 @@ and any rule decided. Use `git log` for the code detail (and for the older Atamu
 
 ## 2026-11-14
 
+- **Five tunes (owner).** The music takes turns between five tunes; each zone changes a small part of them.
 - **Select in the builder (owner).** The builder opens on Select: click any piece to select it and change its settings,
   turn it or delete it. Picking a platform's B shows a ghost of where it would go and the path there.
 - **Cinematic shots in the world (owner).** A Shot tile places a neighborhood's cinematic points in the world; picking
