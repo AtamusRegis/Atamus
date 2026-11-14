@@ -325,7 +325,7 @@ export function attachPets(server, { origins = [], allowLocal = false, store = m
           const a = W.sellPrice(q); d.mounts = d.mounts.filter((k) => k !== q); d.coins += a; changed(me); flush(me.acct); send(ws, { t: "sold", n: a, data: d }); break;
         }
         case "petup": {   // (owner, 2026-11-12) Aura on one mount: carrying (cap) or speed (spd)
-          const q = d.mounts.find((k) => k.id === m.id), k = m.k === "cap" || m.k === "spd" ? m.k : ""; if (!q || !k || (q[k] | 0) >= (k === "cap" ? W.CAP_MAX : W.SPD_MAX)) break;
+          const q = d.mounts.find((k) => k.id === m.id), k = m.k === "cap" ? m.k : "";   /* (owner, 2026-11-14) no speed (Boost) levels to buy */ if (!q || !k || (q[k] | 0) >= (k === "cap" ? W.CAP_MAX : W.SPD_MAX)) break;
           const cost = W.petUpCost(q, k); if (d.coins < cost) break;
           d.coins -= cost; q[k] = (q[k] | 0) + 1; changed(me); flush(me.acct); send(ws, { t: "petup", id: q.id, k, data: d }); break;
         }

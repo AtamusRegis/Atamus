@@ -141,9 +141,8 @@ A parcel that breaks or is lost is gone; the conveyor always has the next one. *
   stops quickly whatever the speed (grip 7x the speed, at least 70 m/s², so fast mounts don't drift; ice still slides).
 - **Stats** (rarity 0-4, area a 0-4 for Dog to Wolf): (owner, 2026-11-12) Speed 12 m/s x (1 + 20% per rarity step) x
   (owner, 2026-11-14) 1.05^a (each zone's animal 5% faster than the one before: Dog 100%, Cat 105%, Gator 110%...,
-  the same in every zone) x (1 + 5% per Aura **Boost** level, up to 10: the Stable's Boost row,
-  100 Aura x 1.7^level x (1 + 0.5 x rarity) x (1 + 0.5 x a)); Jump 8 + 0.5 x rarity + 0.25 x a; Grip (shortens stuns) 10%
-  x rarity + 3% x a.
+  the same in every zone). (owner, 2026-11-14) Every mount jumps 8 and has no grip (the old Jump and Grip by rarity and
+  area, and the Aura **Boost** speed levels, are gone); the Stable shows just the speed, as a number.
 - **Jumping** (owner, 2026-11-13): Space (or Jump, (owner, 2026-11-14) the big button now) jumps by the mount's Jump.
   **A jump keeps its speed:** in the air
   you carry on at the speed you left the ground with (letting go doesn't stop you), and the controls only steer gently.
@@ -162,7 +161,7 @@ A parcel that breaks or is lost is gone; the conveyor always has the next one. *
 
 - (owner, 2026-11-12) **Aura** (a shiny purple orb) is the money: it replaced coins one for one (the saved field is
   still `coins`). Deliveries, gifts, geese and everything else that paid coins pay Aura; the farther the area, the more
-  a delivery pays (its tier). Aura buys courier upgrades, carry and Boost levels on a mount, and trails.
+  a delivery pays (its tier). Aura buys courier upgrades, carry levels on a mount, and trails.
 - **The podiums:** three by the post office (gold, silver, bronze). Each server's three best mounts stand on them, with
   their courier's name; each courier's best three can stand. Best: rarity, then Shiny, then the farther area, then its
   Aura levels. A better mount takes a podium from a lesser one; a tie keeps the one already standing; a courier leaving
@@ -180,7 +179,7 @@ A parcel that breaks or is lost is gone; the conveyor always has the next one. *
   one you chose, which goes up to the next coat (rarity) and keeps its skin. (owner, 2026-11-12) How many: 2 Commons make
   an Uncommon, 4 Uncommons a Rare, 8 Rares an Epic, 16 Epics a Legendary (`fuseN`); two Tan Dogs make a Chocolate Dog,
   two Shiny Tan Dogs a Shiny Chocolate Dog. A Legendary can't merge. (owner, 2026-11-12) It keeps the best carry and
-  Boost levels of the ones merged. (owner, 2026-11-12) **Merge all** (the Stable, when there's a merge to make) makes every merge
+  levels of the ones merged. (owner, 2026-11-12) **Merge all** (the Stable, when there's a merge to make) makes every merge
   there is, Commons first so what they make can merge on up; in each group it keeps the ridden one if it's there, else
   the one with the most Aura levels. **Selling:** any mount but the one you ride (and never your last) sells for Aura
   by rarity: 15 / 60 / 250 / 1,000 / 4,000, x5 Shiny (the Stable's Sell button). An Epic, Legendary or Shiny made by merging is announced. Up to 60 mounts.
@@ -412,6 +411,9 @@ its own fresh saves, with the same logins. It is described in `docs/POKEMON.md`;
 Courier's rules.
 
 ## Rejected / removed
+
+- (owner, 2026-11-14) Mount Jump and Grip levels (by rarity and area) and their bars; the Aura Boost (speed) levels
+  bought on a mount.
 
 - (owner, 2026-11-14) Mounts going faster short of their own zone and slower past it; gift coins scaling with the
   square root of the tier's multiplier.

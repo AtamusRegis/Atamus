@@ -143,8 +143,8 @@ export const BASE_SPEED = 12, RARITY_UP = 0.2, ZONE_UP = 0.05, SPD_UP = 0.05;
 // animal goes 5% faster than the one before (Dog 100%, Cat 105%, Gator 110%...), the same in every zone
 export const zoneSpeed = (sp) => Math.pow(1 + ZONE_UP, homeZone(sp));
 export function mountStats(m, zone) {   // m: { sp, r (rarity), spd }; zone: where it is (districtAt), or its own zone
-  const r = clamp(m.r | 0, 0, 4), z = homeZone(m.sp); void zone;
-  return { speed: BASE_SPEED * (1 + RARITY_UP * r) * zoneSpeed(m.sp) * (1 + SPD_UP * clamp(m.spd | 0, 0, SPD_MAX)), jump: 8 + 0.5 * r + 0.25 * z, grip: Math.min(0.6, 0.1 * r + 0.03 * z) };
+  const r = clamp(m.r | 0, 0, 4); void zone;
+  return { speed: BASE_SPEED * (1 + RARITY_UP * r) * zoneSpeed(m.sp), jump: 8, grip: 0 };   // (owner, 2026-11-14) no Aura speed (Boost) levels, and every mount jumps and grips the same
 }
 // (owner, 2026-11-11) trails: one more to unlock every five areas opened (with five areas, the first at the Floating
 // Islands); any mount can wear any trail you've unlocked
