@@ -6,6 +6,9 @@ and any rule decided. Use `git log` for the code detail (and for the older Atamu
 
 ## 2026-11-14
 
+- **Breaking platforms; builder tidy-ups (owner).** Platforms can break on step or after being stood on a while, and
+  come back after a respawn time. A selected piece's settings replace the tiles in the build bar; the mouse wheel moves
+  the blueprint up or down.
 - **Gates reach the sky (owner).** A locked gate's or wall's boundary stops you at any height, fading out above and
   below; unlocked, it disappears.
 - **No Boost, Jump or Grip levels (owner).** Mounts no longer buy Boost (speed) levels; every mount jumps and grips

@@ -5,7 +5,7 @@
 // and asks. Phone first: a thumb joystick, drag to look, pinch to zoom, big buttons.
 import * as THREE from "./vendor/three.module.min.js";
 import { svg, fillIcons, ICON } from "./icons.js?v=4";
-import * as World from "./pets-world.js?v=1794651016";
+import * as World from "./pets-world.js?v=1794652110";
 
 const $ = (id) => document.getElementById(id);
 const { TAU, clamp, hyp, MOUNTS, TIERS, RARITY, RARITY_C, MODS, UPGRADES } = World;
@@ -738,7 +738,8 @@ const endPointer = (e) => {
 canvas.addEventListener("pointermove", (e) => { if (bm && e.pointerType === "mouse") { if (bm.gdrag) shotMove(e.clientX, e.clientY); else if (bm.adrag) areaMove(e.clientX, e.clientY); else if (bm.paint) paintMove(e.clientX, e.clientY); else buildAim(e.clientX, e.clientY); } });
 addEventListener("pointerup", (e) => { if (bm && e.button === 0) { if (bm.gdrag) shotUp(); if (bm.adrag) areaEnd(); bm.paint = null; } });
 canvas.addEventListener("pointerup", endPointer); canvas.addEventListener("pointercancel", endPointer);
-canvas.addEventListener("wheel", (e) => { cam.dist = clamp(cam.dist * (e.deltaY > 0 ? 1.1 : 0.9), 5, 26); e.preventDefault(); }, { passive: false });
+canvas.addEventListener("wheel", (e) => { if (bm) { bm.lift = clamp((bm.lift || 0) + (e.deltaY > 0 ? -1 : 1), -100, 100); buildAim(bm.px, bm.py); e.preventDefault(); return; }   // (owner, 2026-11-14) building: the wheel raises or lowers where a piece goes
+  cam.dist = clamp(cam.dist * (e.deltaY > 0 ? 1.1 : 0.9), 5, 26); e.preventDefault(); }, { passive: false });
 addEventListener("contextmenu", (e) => { if (!/^(INPUT|TEXTAREA)$/.test(e.target.tagName)) e.preventDefault(); });   // (owner, 2026-11-13) no browser menu on a right click, anywhere in the game
 addEventListener("keydown", (e) => {
   if (e.target && (e.target.tagName === "INPUT" || e.target.tagName === "SELECT")) return;
@@ -1107,7 +1108,7 @@ const zoneReach = () => { let z = 0; while (z < World.TIERS.length - 1 && World.
 function buildBar() {
   const B = $("buildbar"); B.innerHTML = ""; B.style.display = "flex"; const row0 = el("div", "brow"), row2 = el("div", "brow");
   // (owner, 2026-11-13) every piece a rounded tile with its picture
-  for (const [k, name] of BUILD_TOOLS) { const b = btn("", () => { bm.tool = k; if (k !== "area") bm.sel = 0; buildBar(); buildAim(bm.px, bm.py); drawAreas(); }, "btile" + (bm.tool === k ? " on" : "")); const im = document.createElement("img"); im.src = thumb(k); im.alt = ""; b.append(im, el("span", "", name)); b.title = name; row0.appendChild(b); }
+  if (!(bm.tool === "select" && hazSel())) for (const [k, name] of BUILD_TOOLS) {   /* (owner, 2026-11-14) a selected piece: just its settings */ const b = btn("", () => { bm.tool = k; if (k !== "area") bm.sel = 0; buildBar(); buildAim(bm.px, bm.py); drawAreas(); }, "btile" + (bm.tool === k ? " on" : "")); const im = document.createElement("img"); im.src = thumb(k); im.alt = ""; b.append(im, el("span", "", name)); b.title = name; row0.appendChild(b); }
   const turnB = (ibtn("rotate", "Turn", () => { if (bm.tool === "spawn") bm.a = (Math.round(bm.a / 45) * 45 + 45) % 360; else bm.r = (bm.r + 1) % 4; buildAim(bm.px, bm.py); }, "bt")), closeB = ibtn("close", "Close", endBuild, "bt"); row0.className = "btiles"; B.appendChild(row0);
   const step = (label, get, set, lo, hi) => { const g = el("div", "bstep" + (label === zLabel ? " zone" : "")); g.appendChild(btn("−", () => { set(clamp(get() - 1, lo, hi)); buildBar(); buildAim(bm.px, bm.py); }, "bt")); g.appendChild(el("span", "", label())); g.appendChild(btn("+", () => { set(clamp(get() + 1, lo, hi)); buildBar(); buildAim(bm.px, bm.py); }, "bt")); row2.appendChild(g); };
   // (owner, 2026-11-13) the neighborhood you're editing: its bounds, gates and walls are placed for it; ⚙ its name, animal and chances
@@ -1122,7 +1123,10 @@ function buildBar() {
     if (q.k !== "gust" && q.k !== "mover" && q.k !== "block") row2.appendChild(ibtn("rotate", "Turn", () => doSet(q, q.k === "spawn" ? { ...q, a: ((q.a | 0) + 45) % 360 } : { ...q, r: ((q.r | 0) + 1) % 4 }), "bt"));
     if (q.k === "gust") row2.appendChild(ibtn("rotate", "Turn", () => doSet(q, { ...q, a: ((q.a | 0) + 45) % 360 }), "bt"));
     if (q.k === "gust") { step(() => "Every " + q.iv + "s", () => Math.round(q.iv * 2), ch((a, v) => (a.iv = v / 2)), 1, 60); step(() => "Power " + q.pw, () => q.pw, ch((a, v) => (a.pw = v)), 1, 60); }
-    else if (q.k === "mover") { step(() => "Speed " + q.sp, () => q.sp, ch((a, v) => (a.sp = v)), 1, 30); const pb = ibtn("pin", "B", () => { bm.bPick = !bm.bPick; buildBar(); }, "bt" + (bm.bPick ? " on" : "")); row2.appendChild(pb); }
+    else if (q.k === "mover") { step(() => "Speed " + q.sp, () => q.sp, ch((a, v) => (a.sp = v)), 1, 30);
+      // (owner, 2026-11-14) breaking: never, on step, or on prolonged step; its timer; when it comes back (0: never)
+      row2.appendChild(btn(["Never Breaks", "Break On Step", "Prolonged Step"][q.brk | 0], () => doSet(q, { ...q, brk: ((q.brk | 0) + 1) % 3 }), "bt" + (q.brk ? " on" : "")));
+      if (q.brk) { step(() => "Timer " + q.bt + "s", () => Math.round(q.bt * 2), ch((a, v) => (a.bt = v / 2)), 1, 60); step(() => (q.rs ? "Respawn " + q.rs + "s" : "No Respawn"), () => Math.round(q.rs * 2), ch((a, v) => (a.rs = v / 2)), 0, 240); } const pb = ibtn("pin", "B", () => { bm.bPick = !bm.bPick; buildBar(); }, "bt" + (bm.bPick ? " on" : "")); row2.appendChild(pb); }
     row2.appendChild(ibtn("erase", "Delete", () => { doDel(q); bm.hsel = 0; bm.bPick = false; buildBar(); drawHazSel(); }, "bt"));
     row2.appendChild(ibtn("close", "Deselect", () => { bm.hsel = 0; bm.bPick = false; buildBar(); drawHazSel(); buildAim(bm.px, bm.py); }, "bt"));
   } else if (bm.tool === "block" || bm.tool === "gust" || bm.tool === "mover") {
@@ -1155,7 +1159,8 @@ function hologram(q, red) {
   for (const m of meshes) { m.material = fill; m.castShadow = m.receiveShadow = false; m.renderOrder = 2; if (m.geometry.attributes.position.count < 400) { const e = new THREE.LineSegments(new THREE.EdgesGeometry(m.geometry, 30), edge); e.renderOrder = 3; m.add(e); } }
   return g;
 }
-function buildPiece(a, base) {   // the piece the bar (or the clipboard: base) would place at an aim, turned bm.r more
+function buildPiece(a, base) { const q = buildPiece0(a, base); if (q && bm && bm.lift) q.y += bm.lift; return q; }
+function buildPiece0(a, base) {   // the piece the bar (or the clipboard: base) would place at an aim, turned bm.r more
   const T = base ? base.k : bm.tool, p = a.p, n = a.n, up = n.y > 0.5, down = n.y < -0.5;
   if (T === "block" || T === "gust" || T === "mover") {
     const B = base || { w: bm.w, h: bm.h, d: bm.d, m: bm.m }, w = bm.r % 2 ? B.d : B.w, d = bm.r % 2 ? B.w : B.d, h = B.h;
@@ -1408,6 +1413,7 @@ function onNet(m) {
   switch (m.t) {
     case "welcome": {
       if (stale(m.web, false, m.by)) return;
+      for (const [id, until] of m.plats || []) World.platGone[id] = until;
       World.setBuild({ pieces: m.build || [], zones: m.zones || [] }); drawBuild();   // (owner, 2026-11-13) the town the zone builder placed
       setTok(m.token); const again = loggedIn && myName === m.name; myName = m.name; myId = m.id; myRole = m.role || "player"; $("mbuild").hidden = $("modds").hidden = myRole !== "admin"; netOk = true; loggedIn = true; clockOff = m.now - Date.now();
       $("login").style.display = "none"; $("hud").style.display = "block"; if (document.activeElement && document.activeElement.blur) document.activeElement.blur();
@@ -1470,7 +1476,8 @@ function onNet(m) {
     case "reset": location.reload(); break;   // (owner, 2026-11-11) staff made this a brand new courier
     case "petup": adopt(m.data); remount(); sfx("buy"); if (panel === "stable") renderPanel(); emit(me.x, me.y + 2, me.z, 30, { colors: ["#c77dff", "#ffffff", "#e2b8ff"], speed: 4, up: 5, life: 1 }); break;
     case "buildok": { const f = pend.get(m.tag); pend.delete(m.tag); if (f) f(m.id); break; }
-    case "build": World.setBuild({ pieces: m.build || [], zones: m.zones || [] }); drawBuild(); setPods(lastPods); if (bm) { if (bm.tool === "select" && bm.hsel) buildBar(); buildAim(bm.px, bm.py); pipeSel(); drawHazSel(); if (bm.sel && !World.build.some((q) => q.id === bm.sel)) bm.sel = 0; drawAreas(); if ($("zpanel").style.display === "block") zonePanel(); } break;   // (owner, 2026-11-13) someone built
+    case "plat": if (m.gone !== undefined) { const q = World.movers.find((o) => o.id === m.id); delete World.platWarn[m.id]; World.platGone[m.id] = m.gone; if (m.gone && q) { const p = World.moverPos(q, srvNow()); if (hyp(p.x - me.x, p.z - me.z) < 80) { sfx("crack"); emit(p.x + q.w / 2, p.y + q.h, p.z + q.d / 2, 26, { colors: [MAT_C[q.m] || "#a87a4a", "#ffffff"], speed: 5, up: 3, life: 0.8, spread: Math.max(q.w, q.d) / 2 }); } } } else if (m.warn !== undefined) World.platWarn[m.id] = 1; break;   // (owner, 2026-11-14) a breaking platform
+    case "build": for (const k in World.platGone) delete World.platGone[k]; for (const k in World.platWarn) delete World.platWarn[k]; World.setBuild({ pieces: m.build || [], zones: m.zones || [] }); drawBuild(); setPods(lastPods); if (bm) { if (bm.tool === "select" && bm.hsel) buildBar(); buildAim(bm.px, bm.py); pipeSel(); drawHazSel(); if (bm.sel && !World.build.some((q) => q.id === bm.sel)) bm.sel = 0; drawAreas(); if ($("zpanel").style.display === "block") zonePanel(); } break;   // (owner, 2026-11-13) someone built
     case "aura": save.coins = m.coins; popup("+" + fmt(m.n), "#d9a6ff", me.x, me.y + 2.6, me.z); hudDirty = true; break;   // (owner, 2026-11-12) a podium paid
     case "podiums": setPods(m.pods); break;
     case "upgraded": adopt(m.data); remount(); sfx("buy"); emit(me.x, me.y + 2, me.z, 30, { colors: ["#ffd84a", "#ffffff", "#7ee08a"], speed: 4, up: 5, life: 1 }); break;
@@ -1709,7 +1716,7 @@ function drawHazSel() { if (bm && bm.hselG) { scene.remove(bm.hselG); bm.hselG =
 function stepHazards(dt) {
   const t = srvNow(), P = camera.position;
   if (gizmoG && gizmoG.parent && bm) gizmoG.scale.setScalar(clamp(P.distanceTo(gizmoG.position) / 16, 0.6, 8));   // the move arrows stay the same size on screen
-  for (const m of moverMeshes) { const p = World.moverPos(m.q, t); m.g.position.set(p.x, p.y, p.z); }
+  for (const m of moverMeshes) { const p = World.moverPos(m.q, t), gone = (World.platGone[m.q.id] || 0) > t, sh = World.platWarn[m.q.id] ? 0.08 : 0; m.g.visible = !gone; m.g.position.set(p.x + (Math.random() - 0.5) * sh, p.y + (Math.random() - 0.5) * sh, p.z + (Math.random() - 0.5) * sh); }   // gone while broken; shaking before it breaks
   for (const f of fans) f.g.rotation.y += dt * 9;
   for (const g of World.gusts) { const cx = (g.x0 + g.x1) / 2, cz = (g.z0 + g.z1) / 2; if (hyp(cx - P.x, cz - P.z) > 90) continue; const on = World.gustOn(g, t), n = on ? Math.min(6, (g.x1 - g.x0) * (g.z1 - g.z0) * (g.y1 - g.y0) * dt * 0.8) : 0;
     for (let k = 0; k < n || (k === 0 && Math.random() < n); k++) emit(g.x0 + Math.random() * (g.x1 - g.x0), g.y0 + 0.3 + Math.random() * (g.y1 - g.y0 - 0.3), g.z0 + Math.random() * (g.z1 - g.z0), 1, { colors: ["#ffffff", "#e3f4ff"], dir: [g.dx, 0, g.dz], speed: 6 + g.pw * 0.5, grav: 0, life: 0.5, size: 0.09, spread: 0 }); }
