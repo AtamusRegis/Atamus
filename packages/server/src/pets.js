@@ -186,7 +186,7 @@ export function attachPets(server, { origins = [], allowLocal = false, store = m
     else if (ab === "blink") { me.tpAt = now; me.lt = now; }   // Blink: the jump ahead isn't a speed hack
     all(me.room, { t: "fx", k: "ab", ab, id: me.id, s: T / 1000 }, me);
   }
-  function teleport(p, x, z, y, why) { p.x = x; p.z = z; p.y = y; p.tpAt = Date.now(); p.lx = x; p.lz = z; p.lt = p.tpAt; send(p.ws, { t: "tp", x, z, y, why }); }
+  function teleport(p, x, z, y, why, yaw) { p.x = x; p.z = z; p.y = y; p.tpAt = Date.now(); p.lx = x; p.lz = z; p.lt = p.tpAt; send(p.ws, yaw === undefined ? { t: "tp", x, z, y, why } : { t: "tp", x, z, y, why, yaw }); }
 
   // ---- parties ----
   const invites = new Map();   // "to:from" -> expiry
@@ -400,6 +400,11 @@ export function attachPets(server, { origins = [], allowLocal = false, store = m
           if (m.tut === true) s.tut = true;
           changed(me); if (was !== s.friendly || shirt !== s.shirt) all(room, { t: "look", id: me.id, friendly: s.friendly, shirt: s.shirt }, me); break;
         }
+        case "tube": {   // (owner, 2026-11-13) a pipe shortcut the builder linked: in its mouth, out of the other's
+          const q = W.pipes.find((o) => o.id === +m.id), o = W.tubePartner(q); if (!o || now < me.stunUntil || now - (me.tubeAt || 0) < W.TUBE.cd * 1000) break;
+          const [mx, mz] = W.turn(0, W.TUBE.l / 2 + 0.7, q.yaw); if (hyp(me.x - q.x - mx, me.z - q.z - mz) > 5 || Math.abs(me.y - q.y) > 4) break;
+          me.tubeAt = now; const e = W.pipeExit(o); teleport(me, e.x, e.z, e.y, "tube", e.yaw); all(room, { t: "fx", k: "tube", id: me.id, x: e.x, y: e.y, z: e.z }, me); break;
+        }
         case "pipe": {   // the sewer pipe: in one end, out the other; a goose inside costs a hit
           if (PIPE.off || now < me.stunUntil || now - me.pipeAt < 2000) break;
           const a = hyp(me.x - PIPE.a.x, me.z - PIPE.a.z) < PIPE.r + 3 && Math.abs(me.y - PIPE.a.y) < 2, b = hyp(me.x - PIPE.b.x, me.z - PIPE.b.z) < PIPE.r + 3 && Math.abs(me.y - PIPE.b.y) < 2; if (!a && !b) break;
@@ -429,6 +434,10 @@ export function attachPets(server, { origins = [], allowLocal = false, store = m
           if (rankOf(me.acct) < 2) break;
           let list = W.build.slice();
           if (m.op === "add") { const q = W.cleanPiece({ ...m.piece, id: list.reduce((a, b) => Math.max(a, b.id), 0) + 1 }); if (!q || list.length >= W.BUILD_MAX) break; if (W.ONE_ONLY.includes(q.k)) list = list.filter((o) => o.k !== q.k); list.push(q); send(ws, { t: "buildok", tag: m.tag, id: q.id }); }   // (owner, 2026-11-13) the id back, for undo; one post office, one respawn point
+          else if (m.op === "link" || m.op === "unlink") {   // (owner, 2026-11-13) two pipes joined into a shortcut (each loses any other partner), or parted
+            const a = list.find((q) => q.id === +m.a && q.k === "pipe"), b = m.op === "link" ? list.find((q) => q.id === +m.b && q.k === "pipe" && q !== a) : null; if (!a || (m.op === "link" && !b)) break;
+            list = list.map((q) => (q.k === "pipe" && (q.to === a.id || (b && q.to === b.id) || q === a || q === b) ? { ...q, to: q === a ? (b ? b.id : 0) : q === b ? a.id : 0 } : q));
+          }
           else if (m.op === "del") { const n = list.length; list = list.filter((q) => q.id !== +m.id); if (list.length === n) break; }
           else if (m.op === "set") { const i = list.findIndex((q) => q.id === +(m.piece && m.piece.id)), q = i >= 0 && W.cleanPiece({ ...m.piece, k: list[i].k }); if (!q) break; list[i] = q; }   // (owner, 2026-11-13) a piece changed (a bound moved or resized)
           else if (m.op === "zone") { const n = +m.n; if (!(n >= 0 && n < W.TIERS.length)) break; W.zones[n] = W.cleanZone(m.zone, n); }   // a neighborhood's name, animal and chances

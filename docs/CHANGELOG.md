@@ -6,6 +6,8 @@ and any rule decided. Use `git log` for the code detail (and for the older Atamu
 
 ## 2026-11-13
 
+- **Pipe shortcuts (owner).** The builder places pipes; shift-click two and Link them, and riding into one's mouth
+  brings you out of the other's.
 - **Neighborhoods (owner).** Gates show a blue holographic boundary; new bound walls carry the same boundary and stop
   couriers until the neighborhood they're tied to is open. In the builder you pick the neighborhood you're editing and
   draw its bounds (movable and resizable after): whatever stands inside belongs to it (mailbox names, house colors, the
