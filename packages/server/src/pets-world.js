@@ -406,7 +406,7 @@ export function moverUnder(x, z, y, tSec) {   // the highest moving platform top
 export const addr = (id) => houses.find((h) => h.id === id) || null;   // a mailbox by its id
 // a closed gate in the way at (x, z, y), for someone with `open` zones open
 export function gateBlocked(x, z, y, open, r = 0.55) {
-  for (const g of gates) { if (g.d < open || y + 1.4 < g.y || y > g.y + GATE_H) continue; const dx = x - g.x, dz = z - g.z; if (Math.abs(dx * g.c - dz * g.s) < g.w / 2 + r && Math.abs(dx * g.s + dz * g.c) < GATE_T / 2 + r) return true; }
+  for (const g of gates) { if (g.d < open) continue;   /* (owner, 2026-11-14) at any height */ const dx = x - g.x, dz = z - g.z; if (Math.abs(dx * g.c - dz * g.s) < g.w / 2 + r && Math.abs(dx * g.s + dz * g.c) < GATE_T / 2 + r) return true; }
   return false;
 }
 

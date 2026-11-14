@@ -21,7 +21,7 @@ ok(W.build.length === TEST_TOWN.length + 1 && W.build[W.build.length - 1].w === 
 W.setBuild(TEST_TOWN);
 ok(W.houses.length === 20 && W.housesIn(3).length === 2 && W.addr(1).name === "1 Main Street" && W.addr(2).name === "2 Main Street" && W.addr(5).name === "1 Goose Marsh" && W.buildings.length === 1 && W.gates.length === 1, "mailboxes are the addresses, named by zone; houses and gates placed");
 ok(W.surfaceAt(25, -23, 3) === 2 && W.blocked(26, -22, 0) && W.blocked(40, 20, 0) && W.blocked(40, 10, 0) && !W.blocked(45, 10, 0), "a block can be stood on and stops you from the side; houses and mailboxes are solid");
-ok(W.gateBlocked(55, 2, 0, 1) && !W.gateBlocked(55, 2, 0, 2) && !W.gateBlocked(55, 9, 0, 1) && !W.gateBlocked(60, 2, 0, 1), "a gate is closed until its zone is open, and only across its width");
+ok(W.gateBlocked(55, 2, 0, 1) && !W.gateBlocked(55, 2, 0, 2) && !W.gateBlocked(55, 9, 0, 1) && !W.gateBlocked(60, 2, 0, 1) && W.gateBlocked(55, 2, 40, 1) && W.gateBlocked(55, 2, -15, 1), "a gate is closed until its zone is open, only across its width, and (owner, 2026-11-14) at any height");
 ok(W.PO.on && W.SPAWN.z === 17 && W.PODIUM.spots.length === 3 && W.PODIUM.spots[0].y === 1.6 && W.onStart(2, 24, 0) && !W.onStart(2, 30, 0) && W.boosts.length === 1 && W.trees.length === 1 && W.blocked(-40, -30, 0) && W.inSafeZone(0, 10, 0) && Math.abs(W.counterDist(0, 8) - 2.3) < 1e-9, "the post office, respawn point, podiums, start line, boost and tree are placed too");
 ok(W.districtAt(0, 10, 0) === 0 && W.districtAt(102, 9, 0) === 2 && W.districtAt(310, -8, 0) === 9, "where you are: the nearest mailbox's zone");
 const fresh = W.cleanData({});
