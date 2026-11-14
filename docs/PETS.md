@@ -30,8 +30,10 @@ Every rule below is in `website/pets-world.js` (shared with the server, an ident
    middle of the screen with its rarity; they shake together (rays and glow growing, a little longer the rarer the best
    one), burst, and every card shows what was inside at once: coins, and a mount the parcel brought right there in its
    card (it drops in spinning over rays, its name and rarity under it, NEW! for the first of its kind and rarity). No
-   separate unboxing to click through. (owner, 2026-11-12) No riding while it's up. A tap hurries the shaking, then closes it (it closes by itself after a few
-   seconds too).
+   separate unboxing to click through. (owner, 2026-11-12) No riding while it's up. (owner, 2026-11-13) It opens the moment the
+   last parcel is delivered or lost, as you're sent back to the respawn point, and you can't move from then until it's
+   closed. The boxes start cracking by themselves; a click cracks them at once; what was inside stays up until another
+   click (so a double click goes straight through).
    (owner, 2026-11-11) **When the run's over** (nothing left delivered, carried, with a goose or on the ground) you're
    taken straight back to the post office. Up to 60 can wait;
    past that the oldest open by themselves.
