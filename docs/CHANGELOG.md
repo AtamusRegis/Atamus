@@ -4,6 +4,11 @@ Critter Courier (Pet Delivery Co. until 2026-11-11). Newest first. Add one entry
 and any rule decided. Use `git log` for the code detail (and for the older Atamus prototypes, removed from the tree on
 2026-11-08).
 
+## 2026-11-14
+
+- **Hazards (owner).** Mud and turbine blocks (water blocks are now see-through walls), gusts with their own size,
+  direction, interval and power, and moving platforms between two points, all placed and edited in the builder.
+
 ## 2026-11-13
 
 - **Builder tiles and shot preview (owner).** The build bar's pieces are rounded tiles with a picture of each piece; each

@@ -302,8 +302,8 @@ const BASE_N = { slabs: slabs.length, solids: solids.length };
 // colors). A mailbox: an address in zone d (parcels of that zone's tier go to its mailboxes). A gate: 8 m wide, closed
 // to anyone who hasn't opened zone d yet (the zone it leads into) ----
 export const BUILD_MAX = 6000, BLOCK_MAX = 60, HOUSE_S = 8, HOUSE_H = 5, GATE_W = 8, GATE_H = 7, GATE_T = 1;
-export const MATS = ["grass", "dirt", "stone", "brick", "wood", "road", "sand", "snow", "ice", "water"];
-export const PIECES = ["block", "house", "mailbox", "gate", "wall", "tree", "boost", "start", "podium", "spawn", "office", "area", "pipe"];
+export const MATS = ["grass", "dirt", "stone", "brick", "wood", "road", "sand", "snow", "ice", "water", "mud", "turbine"];   // (owner, 2026-11-13) mud slows, ice slides, water is a see-through wall, a turbine blows you up into the air
+export const PIECES = ["block", "house", "mailbox", "gate", "wall", "tree", "boost", "start", "podium", "spawn", "office", "area", "pipe", "gust", "mover"];
 export const AREA_MAX = 1000;
 export const ONE_ONLY = ["spawn", "office"];   // the last one placed counts
 export const buildings = [], gates = [], starts = [], areas = [], pipes = [];
@@ -326,6 +326,8 @@ export function cleanPiece(q) {
   if (!q || !PIECES.includes(q.k)) return null;
   const n = (v, a, b) => clamp(Math.round(+v || 0), a, b), o = { id: n(q.id, 1, 1e9), k: q.k, x: n(q.x, -GROUND.r, GROUND.r), z: n(q.z, -GROUND.r, GROUND.r), y: n(q.y, -40, 300) };
   if (q.k === "block") { o.w = n(q.w, 1, BLOCK_MAX); o.h = n(q.h, 1, BLOCK_MAX); o.d = n(q.d, 1, BLOCK_MAX); o.m = MATS.includes(q.m) ? q.m : "grass"; }
+  else if (q.k === "gust") { o.w = n(q.w, 1, BLOCK_MAX); o.h = n(q.h, 1, BLOCK_MAX); o.d = n(q.d, 1, BLOCK_MAX); o.a = n(q.a, 0, 359); o.iv = clamp(Math.round((+q.iv || GUST.iv) * 10) / 10, 0.5, 30); o.pw = n(q.pw === undefined ? GUST.pw : q.pw, 1, 60); }
+  else if (q.k === "mover") { o.w = n(q.w, 1, BLOCK_MAX); o.h = n(q.h, 1, BLOCK_MAX); o.d = n(q.d, 1, BLOCK_MAX); o.m = MATS.includes(q.m) && q.m !== "turbine" ? q.m : "wood"; o.bx = n(q.bx, -200, 200); o.by = n(q.by, -100, 100); o.bz = n(q.bz, -200, 200); o.sp = n(q.sp === undefined ? MOVER.sp : q.sp, 1, 30); }
   else if (q.k === "area") { o.w = n(q.w, 1, AREA_MAX); o.d = n(q.d, 1, AREA_MAX); o.zone = n(q.zone, 0, TIERS.length - 1); }   // (owner, 2026-11-13) a neighborhood's bounds
   else { o.r = n(q.r, 0, 3); if (q.k === "gate" || q.k === "wall") o.zone = n(q.zone, 1, TIERS.length - 1); if (q.k === "wall") o.w = n(q.w, 1, BLOCK_MAX); if (q.k === "pipe") o.to = n(q.to, 0, 1e9); if (q.k === "spawn") o.a = n(q.a === undefined ? o.r * 90 : q.a, 0, 359); }   // a: (owner, 2026-11-13) the respawn point turns all the way round, in degrees
   return o;
@@ -336,12 +338,14 @@ export function setBuild(data) {   // data: { pieces, zones } (or, from before, 
   build = list.map(cleanPiece).filter(Boolean).slice(0, BUILD_MAX); if (!build.length) build = SEED.map((q) => ({ ...q }));
   areas.length = 0; for (const q of build) if (q.k === "area") areas.push({ id: q.id, x0: q.x, z0: q.z, x1: q.x + q.w, z1: q.z + q.d, d: q.zone, size: q.w * q.d });
   areas.sort((a, b) => a.size - b.size);
-  slabs.length = BASE_N.slabs; solids.length = BASE_N.solids; houses.length = 0; buildings.length = 0; gates.length = 0; starts.length = 0; boosts.length = 0; trees.length = 0; pipes.length = 0; PODIUM.spots.length = 0; PO.on = false;
+  slabs.length = BASE_N.slabs; solids.length = BASE_N.solids; houses.length = 0; buildings.length = 0; gates.length = 0; starts.length = 0; boosts.length = 0; trees.length = 0; pipes.length = 0; gusts.length = 0; movers.length = 0; updrafts.length = 0; PODIUM.spots.length = 0; PO.on = false;
   Object.assign(SPAWN, { x: 0.5, z: 0.5, y: 0, yaw: 0 });
   const count = TIERS.map(() => 0);
   for (const q of build) {
     const yaw = q.k === "spawn" && q.a !== undefined ? (q.a * Math.PI) / 180 : (q.r | 0) * (Math.PI / 2);
-    if (q.k === "block") rect(q.x, q.x + q.w, q.z, q.z + q.d, q.y + q.h, q.m, q.y, STAND_X);
+    if (q.k === "block") { rect(q.x, q.x + q.w, q.z, q.z + q.d, q.y + q.h, q.m, q.y, STAND_X); if (q.m === "turbine") updrafts.push({ id: q.id, x0: q.x, x1: q.x + q.w, z0: q.z, z1: q.z + q.d, y0: q.y + q.h, y1: q.y + q.h + TURBINE.h }); }
+    else if (q.k === "gust") { const a = (q.a * Math.PI) / 180; gusts.push({ id: q.id, x0: q.x, x1: q.x + q.w, z0: q.z, z1: q.z + q.d, y0: q.y, y1: q.y + q.h, dx: Math.sin(a), dz: Math.cos(a), iv: q.iv, pw: q.pw }); }
+    else if (q.k === "mover") movers.push({ ...q });
     else if (q.k === "house") { buildings.push({ id: q.id, x: q.x, z: q.z, y: q.y, yaw, d: districtAt(q.x, q.z, q.y) }); solid(q.x, q.z, HOUSE_S / 2, HOUSE_S / 2, q.y - 1, q.y + HOUSE_H, yaw); }
     else if (q.k === "mailbox") { const d = districtAt(q.x, q.z, q.y); houses.push({ id: q.id, x: q.x, z: q.z, y: q.y, yaw, d, mx: q.x, mz: q.z, my: q.y, name: ++count[d] + " " + zoneName(d) }); solid(q.x, q.z, 0.2, 0.2, q.y - 1, q.y + 1.3); }   // in whichever neighborhood's bounds it stands
     else if (q.k === "wall") gates.push({ id: q.id, x: q.x, z: q.z, y: q.y, yaw, d: q.zone, c: Math.cos(yaw), s: Math.sin(yaw), w: q.w, wall: 1 });   // a bound wall: closed like a gate
@@ -373,6 +377,26 @@ export function pipeAt(x, z, y) {   // the linked pipe whose mouth (x, z, y) is 
   return null;
 }
 export function pipeExit(p) { const [ox, oz] = turn(0, TUBE.l / 2 + 2, p.yaw); return { x: p.x + ox, z: p.z + oz, y: p.y, yaw: p.yaw }; }
+// (owner, 2026-11-13) hazards the builder places. A gust: a box of wind that blows the way it's turned for GUST.on s out of
+// every iv s, pushing riders inside with pw; the same moment for everyone (server time). A turbine block: an updraft
+// TURBINE.h m high over its top lifts riders into the air. A mover: a platform going back and forth between where it was
+// placed (A) and A + (bx, by, bz) (B) at sp m/s, resting MOVER.rest s at each end; riders on it go along.
+export const gusts = [], movers = [], updrafts = [];
+export const GUST = { iv: 4, pw: 18, on: 1.6 }, TURBINE = { h: 12, lift: 34, max: 15 }, MOVER = { sp: 4, rest: 0.6 };
+export const gustOn = (g, tSec) => (((tSec % g.iv) + g.iv) % g.iv) < Math.min(GUST.on, g.iv * 0.6);
+export function gustAt(x, z, y, tSec) { for (const g of gusts) if (x >= g.x0 && x <= g.x1 && z >= g.z0 && z <= g.z1 && y >= g.y0 - 0.5 && y <= g.y1 && gustOn(g, tSec)) return g; return null; }
+export function updraftAt(x, z, y) { for (const u of updrafts) if (x >= u.x0 && x <= u.x1 && z >= u.z0 && z <= u.z1 && y >= u.y0 - 0.3 && y <= u.y1) return u; return null; }
+export function moverPos(q, tSec) {   // the platform's corner (x, y, z) at tSec
+  const L = Math.hypot(q.bx, q.by, q.bz); if (L < 0.01) return { x: q.x, y: q.y, z: q.z };
+  const go = L / q.sp, T = 2 * (go + MOVER.rest), p = ((tSec % T) + T) % T;
+  let u = p < go ? p / go : p < go + MOVER.rest ? 1 : p < 2 * go + MOVER.rest ? 1 - (p - go - MOVER.rest) / go : 0; u = u * u * (3 - 2 * u);
+  return { x: q.x + q.bx * u, y: q.y + q.by * u, z: q.z + q.bz * u };
+}
+export function moverUnder(x, z, y, tSec) {   // the highest moving platform top under (x, z) at most a step above y, with where it is
+  let best = null;
+  for (const q of movers) { const p = moverPos(q, tSec), m = STAND_X / 2, top = p.y + q.h; if (x >= p.x - q.w * m && x <= p.x + q.w * (1 + m) && z >= p.z - q.d * m && z <= p.z + q.d * (1 + m) && top <= y + 0.6 && (!best || top > best.top)) best = { q, p, top }; }
+  return best;
+}
 export const addr = (id) => houses.find((h) => h.id === id) || null;   // a mailbox by its id
 // a closed gate in the way at (x, z, y), for someone with `open` zones open
 export function gateBlocked(x, z, y, open, r = 0.55) {

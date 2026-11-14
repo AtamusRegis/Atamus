@@ -228,6 +228,17 @@ is one 1 m grass block (`SEED`) to stand on, with sky all round. Everything is a
     and a prompt offers **Link** (Unlink if those two are already joined); a pipe joins one other at a time. Linked
     pipes are bright green: riding into one's mouth brings you out 2 m in front of the other's, facing out of it and
     keeping your speed (once a second). Unlinked pipes are grey-green and go nowhere.
+  - **Hazards** (owner, 2026-11-13):
+    - **Block materials:** Mud (slows you), Ice (you slide), Water (a see-through wall: you can't go through it) and
+      Turbine (a spinning fan on top; its updraft, 12 m high over the block, blows you up into the air).
+    - **Gust:** a box of wind (W / H / D, like a block) that blows the way it's turned (hold R to turn it, any angle)
+      for 1.6 s out of every few seconds (the same moment for everyone), pushing riders inside. Players see its wind
+      streaks; only builders see its box and arrow. Click a placed gust (with the Gust tool) to select it: its size,
+      Every (the interval, 0.5 to 30 s) and Power (1 to 60), and R turns it.
+    - **Platform:** a block (W / H / D, any material but Turbine) going back and forth between where it was placed (A)
+      and B at its Speed (m/s), resting 0.6 s at each end; riders standing on it go along. Click a placed platform
+      (with the Platform tool) to select it: its size, Speed, and the pin (then click where B goes). Builders see B as
+      a yellow ghost with a dashed line. Its sides don't stop you (only its top holds you).
   - **Bounds** (owner, 2026-11-13): a rectangle (up to 1000 x 1000 m, any height) for a neighborhood. **Anything inside
     belongs to that neighborhood** (where bounds overlap, the smallest wins); outside every bounds is Main Street.
 - **The neighborhood a spot is in** is its bounds' (above): it names the mailboxes and colors the houses, and sets the
