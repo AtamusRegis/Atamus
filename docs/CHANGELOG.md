@@ -6,6 +6,8 @@ and any rule decided. Use `git log` for the code detail (and for the older Atamu
 
 ## 2026-11-13
 
+- **Respawn point turns freely (owner).** Hold R to turn it to any angle; couriers come back facing its arrow with the
+  camera at 45 degrees. Only builders see it.
 - **Edges hold you (owner).** With no direction held, a slide (after a landing, say) stops at the edge instead of
   going over; holding a direction still walks off.
 - **Coyote time and landing forgiveness (owner).** Jumps still work for a moment after running off an edge; blocks and
