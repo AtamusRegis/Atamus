@@ -16,7 +16,7 @@ Every rule below is in `website/pets-world.js` (shared with the server, an ident
 2. **Ride** to the address: a random house in the parcel's district. (owner, 2026-11-11) The delivery spot is the one
    hot pink thing in town (the town's colors are kept calm around it): a tall beam, a spinning marker, a ring on the
    ground and the address on a label. A pink arrow on the ground a few meters out from you points the way (like the old
-   game's), and the parcel card shows how far.
+   game's).
 3. **Deliver.** Ride into the glowing ring in front of that mailbox (within 3 m; no button). The server checks it. A
    wrong mailbox just shakes.
 4. **Open it.** Coins pay out, and the delivered parcel (a **gift**, kept on the server
@@ -41,8 +41,7 @@ Every rule below is in `website/pets-world.js` (shared with the server, an ident
 (owner, 2026-11-12) **A stack of parcels:** every mount carries 1 parcel; Aura raises it a level at a time, up to 5
 (the Stable's Carry row: 150 Aura x 4^level x (1 + 0.5 x rarity) x (1 + 0.5 x its area), so rarer and farther animals
 cost more). Mounts from before kept what they carried (one per rarity rank), once. Ride back into the conveyor to load up. (owner, 2026-11-11) The mount shows **a big box for each parcel**, stacked. Each has its own address (the same neighborhood as another or a
-different one), its own marker, and its own row on the parcel card (with its distance; the card shows how many of how
-many). The ground arrow points to the nearest. Each delivers at its own mailbox and rolls; several rolls take turns.
+different one), its own marker, and the parcel counter shows how many of how many. The ground arrow points to the nearest. Each delivers at its own mailbox and rolls; several rolls take turns.
 A parcel that breaks or is lost is gone; the conveyor always has the next one. **Empty-handed you ride twice as fast**
 (owner, 2026-11-11: parcels weigh you down; empty mounts "way faster"), so the trip back to the post office is quick.
 
@@ -313,8 +312,10 @@ gets those coins back the next time their data loads.
 ## The screen
 
 - Aura top left (it counts up; orbs fly to it). Chat button under it. Delivered parcels down the left.
-- The parcel card top center: a row per parcel (tier, modifier, durability pips, address, distance, the Express
-  countdown), stolen or dropped ones faded, and how many you carry of how many.
+- (owner, 2026-11-14) The parcel counter top center: a parcel icon and how many you carry of how many (the old parcel
+  card's rows, with tier, pips, address, distance and countdown, are gone).
+- (owner, 2026-11-14) Admins only: the Odds button (players don't see the rarity chart), and B opens or closes the build
+  menu.
 - Bottom right: Big Jump (with its cooldown), Whistle above it, Jump beside it.
 - (owner, 2026-11-13) **Icons are drawn symbols** (website/icons.js): a barn for the Stable, a green up arrow for
   Upgrades, a die for Odds, a cog for Settings, a hammer for Build, a speech bubble for chat, a whistle, an arrow for
@@ -393,6 +394,9 @@ its own fresh saves, with the same logins. It is described in `docs/POKEMON.md`;
 Courier's rules.
 
 ## Rejected / removed
+
+- (owner, 2026-11-14) The parcel card's per-parcel rows (tier, durability pips, address, distance, Express countdown):
+  replaced by just a counter. The Odds menu for players.
 
 - (owner, 2026-11-13) **Mount abilities** (Bark, Double Jump, Dash, Tough Hide, Howl, Vanish, Pounce, Charge, Roar,
   Blink) and **bonking** (the kick: stuns, cracked parcels, bonk Aura and its pop, grace, the Friendly setting):
