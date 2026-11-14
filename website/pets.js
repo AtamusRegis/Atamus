@@ -612,10 +612,12 @@ function stepMe(dt) {
   if (BR > 0.55 && World.blocked(me.x, me.z, me.y, BR)) BR = 0.55;
   const OPEN = World.openFor(save), gated = (nx, nz) => World.gateBlocked(nx, nz, me.y, OPEN, BR) && !World.gateBlocked(me.x, me.z, me.y, OPEN, BR);   // (owner, 2026-11-13) a closed gate stops you (already in one: you can walk out)   // (owner, 2026-11-11) a closed area's gate: heading east stops at it (west is always fine)   // already up against something (it just grew, or landed there): the old width until it's clear
   const DX = (me.vx + me.px) * dt, DZ = (me.vz + me.pz) * dt, n = Math.max(1, Math.ceil(hyp(DX, DZ) / 0.3));
+  // (owner, 2026-11-13) on the ground with no direction held, you can slide but never off the edge you're on
+  const hold = me.ground && !steer, edge = (nx, nz) => hold && World.surfaceAt(nx, nz, me.y + 0.1) < me.y - 0.45;
   for (let k = 0; k < n; k++) {
     const dx = DX / n, dz = DZ / n;
-    if (me.vx || me.px) { if (!World.blocked(me.x + dx, me.z, me.y, BR) && !gated(me.x + dx, me.z)) me.x += dx; else { me.vx = 0; me.px = 0; } }
-    if (me.vz || me.pz) { if (!World.blocked(me.x, me.z + dz, me.y, BR) && !gated(me.x, me.z + dz)) me.z += dz; else { me.vz = 0; me.pz = 0; } }
+    if (me.vx || me.px) { if (!World.blocked(me.x + dx, me.z, me.y, BR) && !gated(me.x + dx, me.z) && !edge(me.x + dx, me.z)) me.x += dx; else { me.vx = 0; me.px = 0; } }
+    if (me.vz || me.pz) { if (!World.blocked(me.x, me.z + dz, me.y, BR) && !gated(me.x, me.z + dz) && !edge(me.x, me.z + dz)) me.z += dz; else { me.vz = 0; me.pz = 0; } }
     if (me.ground) { const g = World.surfaceAt(me.x, me.z, me.y + 0.1); if (g > me.y && g - me.y < 0.6) me.y = g; }
   }
   // down (or up a step) onto the ground
