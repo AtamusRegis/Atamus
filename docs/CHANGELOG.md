@@ -6,6 +6,8 @@ and any rule decided. Use `git log` for the code detail (and for the older Atamu
 
 ## 2026-11-14
 
+- **Cinematic shots in the world (owner).** A Shot tile places a neighborhood's cinematic points in the world; picking
+  one shows move arrows (east-west, north-south, up-down) to drag it, saved as you let go. Only builders see them.
 - **Gates chain the neighborhoods (owner).** Gates and walls placed while editing a neighborhood lead into the next one,
   and the next neighborhood opens for editing only once a gate into it exists. Each neighborhood's gates have their own
   color, never the same as the one before.

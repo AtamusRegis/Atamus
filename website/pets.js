@@ -715,6 +715,7 @@ const joyEl = $("joy"), knob = $("knob");
 canvas.addEventListener("pointerdown", (e) => {
   canvas.setPointerCapture(e.pointerId);
   if (bm && cine) return;
+  if (bm && e.pointerType === "mouse" && e.button === 0 && shotDown(e.clientX, e.clientY)) return;
   if (bm && e.pointerType === "mouse" && e.button === 0) { if (e.shiftKey) pipePick(e.clientX, e.clientY); else paintStart(e.clientX, e.clientY); return; }   // (owner, 2026-11-13) building: the left button places (and keeps placing as you drag); the right one turns the camera
   if (e.pointerType === "touch" && joy.id === null && e.clientX < innerWidth * 0.45 && e.clientY > innerHeight * 0.35) { joy.id = e.pointerId; joy.ox = e.clientX; joy.oy = e.clientY; joy.x = joy.y = 0; joyEl.style.display = "block"; joyEl.style.left = e.clientX - 60 + "px"; joyEl.style.top = e.clientY - 60 + "px"; knob.style.transform = ""; return; }
   drags.set(e.pointerId, { x: e.clientX, y: e.clientY }); tapStart = { x: e.clientX, y: e.clientY, t: performance.now() };
@@ -731,8 +732,8 @@ const endPointer = (e) => {
   if (drags.delete(e.pointerId) && tapStart && performance.now() - tapStart.t < 300 && hyp(e.clientX - tapStart.x, e.clientY - tapStart.y) < 8) tapAt(e.clientX, e.clientY);
   pinch = 0;
 };
-canvas.addEventListener("pointermove", (e) => { if (bm && e.pointerType === "mouse") { if (bm.adrag) areaMove(e.clientX, e.clientY); else if (bm.paint) paintMove(e.clientX, e.clientY); else buildAim(e.clientX, e.clientY); } });
-addEventListener("pointerup", (e) => { if (bm && e.button === 0) { if (bm.adrag) areaEnd(); bm.paint = null; } });
+canvas.addEventListener("pointermove", (e) => { if (bm && e.pointerType === "mouse") { if (bm.gdrag) shotMove(e.clientX, e.clientY); else if (bm.adrag) areaMove(e.clientX, e.clientY); else if (bm.paint) paintMove(e.clientX, e.clientY); else buildAim(e.clientX, e.clientY); } });
+addEventListener("pointerup", (e) => { if (bm && e.button === 0) { if (bm.gdrag) shotUp(); if (bm.adrag) areaEnd(); bm.paint = null; } });
 canvas.addEventListener("pointerup", endPointer); canvas.addEventListener("pointercancel", endPointer);
 canvas.addEventListener("wheel", (e) => { cam.dist = clamp(cam.dist * (e.deltaY > 0 ? 1.1 : 0.9), 5, 26); e.preventDefault(); }, { passive: false });
 addEventListener("contextmenu", (e) => { if (!/^(INPUT|TEXTAREA)$/.test(e.target.tagName)) e.preventDefault(); });   // (owner, 2026-11-13) no browser menu on a right click, anywhere in the game
@@ -741,6 +742,7 @@ addEventListener("keydown", (e) => {
   if (e.code === "Enter") { openChat(); e.preventDefault(); return; }
   if (e.code === "KeyB" && !e.repeat && myRole === "admin" && !chatting && !e.ctrlKey && !e.metaKey) { if (bm) endBuild(); else startBuild(); return; }   // (owner, 2026-11-14) admins: B opens (and closes) the build menu
   if (e.code === "Escape") { if (bm) { endBuild(); return; } if (free) setFree(false); closePanel(); return; }
+  if (bm && !e.repeat && (e.code === "Delete" || e.code === "Backspace") && bm.shotSel !== undefined && shotList()[bm.shotSel]) { const L = shotList(); L.splice(bm.shotSel, 1); bm.shotSel = undefined; saveShots(L); setTimeout(drawAreas, 150); return; }   // (owner, 2026-11-14) a picked shot taken away
   if (bm && !e.repeat && (e.code === "Delete" || e.code === "Backspace") && selArea()) { doDel(selArea()); bm.sel = 0; buildBar(); drawAreas(); return; }
   if (bm && e.code === "KeyR" && !e.ctrlKey && !e.metaKey) { if (bm.tool === "spawn" || bm.tool === "gust") keys.add("KeyR"); else if (!e.repeat) { bm.r = (bm.r + 1) % 4; buildAim(bm.px, bm.py); } return; }   // (owner, 2026-11-13) the respawn point turns while R is held
   if (bm && (e.ctrlKey || e.metaKey) && !chatting) {   // (owner, 2026-11-13) the builder's copy, cut, paste, undo, redo
@@ -1081,17 +1083,18 @@ const ray = new THREE.Raycaster(), ndc = new THREE.Vector2(), ground = new THREE
 $("mbuild").onclick = () => (bm ? endBuild() : startBuild());   // (owner, 2026-11-13) admins: the Build button on screen
 function startBuild() { closePanel(); if (!free) setFree(true); if (spawnG) spawnG.visible = true; for (const g of buildOnly) g.visible = true; bm = { tool: "block", a: ((Math.round((World.SPAWN.yaw * 180) / Math.PI) % 360) + 360) % 360, zone: 0, w: 2, h: 1, d: 2, m: "grass", r: 0, wl: 8, ly: 0, sel: 0, px: innerWidth / 2, py: innerHeight / 2, ghost: null, aim: null }; buildBar(); document.body.classList.add("building"); buildAim(bm.px, bm.py); drawAreas(); }
 function endBuild() { if (!bm) return; bm.zd = null; if (spawnG) spawnG.visible = false; for (const g of buildOnly) g.visible = false; if (bm.ghost) scene.remove(bm.ghost); if (bm.pselG) scene.remove(bm.pselG); bm = null; $("buildbar").style.display = "none"; $("zpanel").style.display = "none"; $("pprompt").style.display = "none"; drawAreas(); document.body.classList.remove("building"); setFree(false); }
-const BUILD_TOOLS = [["block", "Block"], ["house", "House"], ["mailbox", "Mailbox"], ["gate", "Gate"], ["wall", "Wall"], ["tree", "Tree"], ["boost", "Boost"], ["start", "Start Line"], ["podium", "Podium"], ["spawn", "Respawn"], ["office", "Post Office"], ["pipe", "Pipe"], ["gust", "Gust"], ["mover", "Platform"], ["area", "Bounds"], ["erase", "Erase"]];
+const BUILD_TOOLS = [["block", "Block"], ["house", "House"], ["mailbox", "Mailbox"], ["gate", "Gate"], ["wall", "Wall"], ["tree", "Tree"], ["boost", "Boost"], ["start", "Start Line"], ["podium", "Podium"], ["spawn", "Respawn"], ["office", "Post Office"], ["pipe", "Pipe"], ["gust", "Gust"], ["mover", "Platform"], ["shot", "Shot"], ["area", "Bounds"], ["erase", "Erase"]];
 // each tile's picture: the piece itself, drawn once (with the mount portraits' renderer)
 const THUMB = {}, THUMB_Q = { block: { w: 2, h: 1, d: 2, m: "grass" }, gate: { zone: 1 }, wall: { w: 6, zone: 1 }, area: { w: 6, d: 6, zone: 1 }, gust: { w: 4, h: 3, d: 4, a: 0, iv: 4, pw: 18 }, mover: { w: 4, h: 1, d: 4, m: "wood", bx: 0, by: 0, bz: 0, sp: 4 } };
 function thumb(k) {
   if (THUMB[k]) return THUMB[k];
   if (k === "erase") return (THUMB[k] = "data:image/svg+xml," + encodeURIComponent(`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24">${ICON.erase}</svg>`));
   const q = { id: 0, k, x: 0, y: 0, z: 0, r: 0, ...(THUMB_Q[k] || {}) }; let g;
-  if (k === "area") { g = new THREE.Group(); const bx = new THREE.Mesh(new THREE.BoxGeometry(6, 3, 6), new THREE.MeshBasicMaterial({ color: World.TIERS[1].c, transparent: true, opacity: 0.35 })); bx.position.y = 1.5; g.add(bx, new THREE.LineSegments(new THREE.EdgesGeometry(bx.geometry), new THREE.LineBasicMaterial({ color: "#23303b" }))); g.children[1].position.y = 1.5; }
+  if (k === "shot") { g = new THREE.Group(); g.add(new THREE.Mesh(new THREE.RingGeometry(1.2, 1.6, 28).rotateX(-Math.PI / 2), new THREE.MeshBasicMaterial({ color: "#ffd84a", side: THREE.DoubleSide }))); const p = new THREE.Mesh(new THREE.CylinderGeometry(0.1, 0.1, 3, 6), mat("#ffffff")); p.position.y = 1.5; g.add(p); box(0.9, 0.6, 1.1, "#23303b", 0, 3.1, 0, g, false); const l = new THREE.Mesh(new THREE.CylinderGeometry(0.22, 0.3, 0.4, 10).rotateX(Math.PI / 2), mat("#23303b")); l.position.set(0, 3.1, 0.75); g.add(l); }
+  else if (k === "area") { g = new THREE.Group(); const bx = new THREE.Mesh(new THREE.BoxGeometry(6, 3, 6), new THREE.MeshBasicMaterial({ color: World.TIERS[1].c, transparent: true, opacity: 0.35 })); bx.position.y = 1.5; g.add(bx, new THREE.LineSegments(new THREE.EdgesGeometry(bx.geometry), new THREE.LineBasicMaterial({ color: "#23303b" }))); g.children[1].position.y = 1.5; }
   else g = pieceMesh(q, false);
   g.traverse((o) => { if (o.isSprite) o.visible = false; }); pScene.add(g);
-  const box = new THREE.Box3(); g.updateMatrixWorld(true); g.traverse((o) => { if ((o.isMesh || o.isLineSegments) && o.visible) box.expandByObject(o, true); }); const c = box.getCenter(new THREE.Vector3()), r = Math.max(1, box.getSize(new THREE.Vector3()).length() / 2), d = r / Math.sin((pCam.fov * Math.PI) / 360) * 0.95;
+  const bb = new THREE.Box3(); g.updateMatrixWorld(true); g.traverse((o) => { if ((o.isMesh || o.isLineSegments) && o.visible) bb.expandByObject(o, true); }); const c = bb.getCenter(new THREE.Vector3()), r = Math.max(1, bb.getSize(new THREE.Vector3()).length() / 2), d = r / Math.sin((pCam.fov * Math.PI) / 360) * 0.95;
   pCam.position.set(c.x + d * 0.6, c.y + d * 0.5, c.z + d * 0.62); pCam.lookAt(c); pCam.far = d * 4; pCam.updateProjectionMatrix();
   portraitR.render(pScene, pCam); pScene.remove(g); pCam.far = 60; pCam.updateProjectionMatrix();
   return (THUMB[k] = portraitR.domElement.toDataURL());
@@ -1164,7 +1167,7 @@ function buildAim(px, py) {
   const a = pieceAt(px, py); bm.aim = a; if (!a) return; let g = null;
   if (bm.tool === "erase" || bm.tool === "cut" || bm.tool === "copy") { const q = a.id && World.build.find((o) => o.id === a.id); if (q) g = hologram(q, bm.tool !== "copy"); }
   else if (bm.tool === "paste") { if (bm.clip) g = hologram({ ...buildPiece(a, bm.clip), id: 0 }); }
-  else if (bm.tool !== "area") g = hologram({ ...buildPiece(a), id: 0 });
+  else if (bm.tool !== "area" && bm.tool !== "shot") g = hologram({ ...buildPiece(a), id: 0 });
   if (g) { scene.add(g); bm.ghost = g; }
 }
 // (owner, 2026-11-13) doing and undoing (a keyboard: building is for computers): every placing and erasing (yours) can be
@@ -1194,6 +1197,7 @@ function placeOnce(q) {
 function paintStart(px, py) {
   if (bm.shotPick !== undefined && bm.zd && bm.zd.shots[bm.shotPick]) { const a = pieceAt(px, py); if (a) { Object.assign(bm.zd.shots[bm.shotPick], { x: Math.round(a.p.x), y: Math.round(a.p.y), z: Math.round(a.p.z) }); bm.shotPick = undefined; sfx("pad"); zonePanel(); drawAreas(); } return; }   // (owner, 2026-11-13) a shot's point
   if (bm.tool === "area") { areaStart(px, py); return; }
+  if (bm.tool === "shot") { const a = pieceAt(px, py), L = shotList(); if (a && L.length < World.SHOTS_MAX) { L.push({ name: "", x: Math.round(a.p.x), y: Math.round(a.p.y), z: Math.round(a.p.z) }); saveShots(L); bm.shotSel = L.length - 1; sfx("pad"); setTimeout(drawAreas, 150); } return; }
   if (bm.tool === "gust" || bm.tool === "mover") {   // (owner, 2026-11-13) click one to select it; with B picking, the click sets the platform's B
     const a = pieceAt(px, py), s = hazSel();
     if (bm.bPick && s && s.k === "mover" && a) { const t = buildPiece(a, { ...s, k: "mover" }); doSet(s, { ...s, bx: t.x - s.x, by: t.y - s.y, bz: t.z - s.z }); bm.bPick = false; sfx("pad"); buildBar(); return; }
@@ -1247,6 +1251,38 @@ function areaEnd() {
   else if (c && (c.x !== D.q0.x || c.z !== D.q0.z || c.w !== D.q0.w || c.d !== D.q0.d)) doSet(D.q0, c);
   drawAreas();
 }
+// (owner, 2026-11-14) cinematic shots are things in the world while building: the Shot tile places one (up to 5 a
+// neighborhood); click one to pick it and drag its arrows (red east-west, blue north-south, green up-down, like an
+// editor's move tool) to move it a meter at a time; each move is saved as it's let go
+const shotMarks = [], gizmoHandles = []; let gizmoG = null;
+const shotList = () => (bm.zd && bm.zd.n === bm.zone ? bm.zd.shots : World.zoneCfg(bm.zone).shots).map((q) => ({ ...q }));
+function saveShots(list) { const Z = World.zoneCfg(bm.zone); netSend({ t: "build", op: "zone", n: bm.zone, zone: { name: Z.name, sp: Z.sp, chance: Z.chance, shiny: Z.shiny, shots: list } }); if (bm.zd && bm.zd.n === bm.zone) bm.zd.shots = list.map((q) => ({ ...q })); }
+function gizmo(q) {
+  gizmoHandles.length = 0; const G = new THREE.Group(); G.position.set(q.x, q.y + 1.5, q.z); areaG.add(G); gizmoG = G; G.scale.setScalar(clamp(camera.position.distanceTo(G.position) / 16, 0.6, 8));
+  for (const [ax, c] of [[[1, 0, 0], "#ff4d4d"], [[-1, 0, 0], "#ff4d4d"], [[0, 0, 1], "#3f8cff"], [[0, 0, -1], "#3f8cff"], [[0, 1, 0], "#3fd26a"], [[0, -1, 0], "#3fd26a"]]) {
+    const a = new THREE.Vector3(...ax), h = new THREE.Group(); h.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), a); G.add(h);
+    const m = new THREE.MeshBasicMaterial({ color: c, depthTest: false }), sh = new THREE.Mesh(new THREE.CylinderGeometry(0.09, 0.09, 2, 8), m); sh.position.y = 1.4; sh.renderOrder = 5; h.add(sh);
+    const hd = new THREE.Mesh(new THREE.ConeGeometry(0.32, 0.8, 12), m); hd.position.y = 2.8; hd.renderOrder = 5; h.add(hd);
+    const grab = new THREE.Mesh(new THREE.CylinderGeometry(0.45, 0.45, 2.8, 8), new THREE.MeshBasicMaterial({ visible: false })); grab.position.y = 1.9; grab.userData.axis = a; h.add(grab); gizmoHandles.push(grab);
+  }
+}
+function axisT(px, py, p0, a) {   // how far along the axis (from p0) the pointer's ray passes closest
+  ndc.set((px / innerWidth) * 2 - 1, -(py / innerHeight) * 2 + 1); ray.setFromCamera(ndc, camera); const o = ray.ray.origin, d = ray.ray.direction, w = p0.clone().sub(o), b = a.dot(d), den = 1 - b * b;
+  return den < 1e-4 ? 0 : (b * d.dot(w) - a.dot(w)) / den;
+}
+function shotDown(px, py) {   // a gizmo arrow or a shot under the pointer: true if it took the click
+  ndc.set((px / innerWidth) * 2 - 1, -(py / innerHeight) * 2 + 1); ray.setFromCamera(ndc, camera);
+  const gh = ray.intersectObjects(gizmoHandles, false)[0], list = shotList();
+  if (gh && list[bm.shotSel]) { const q = list[bm.shotSel], p0 = new THREE.Vector3(q.x, q.y + 1.5, q.z), a = gh.object.userData.axis; bm.gdrag = { a, p0, t0: axisT(px, py, p0, a), q0: { ...q }, list }; return true; }
+  const sh = ray.intersectObjects(shotMarks, false)[0]; if (sh) { bm.shotSel = sh.object.userData.shot; sfx("tick"); drawAreas(); return true; }
+  if (bm.shotSel !== undefined && bm.tool !== "shot") { bm.shotSel = undefined; drawAreas(); }
+  return false;
+}
+function shotMove(px, py) {
+  const D = bm.gdrag, u = Math.round(axisT(px, py, D.p0, D.a) - D.t0), q = D.list[bm.shotSel]; q.x = D.q0.x + D.a.x * u; q.y = D.q0.y + D.a.y * u; q.z = D.q0.z + D.a.z * u;
+  if (bm.zd && bm.zd.n === bm.zone) bm.zd.shots[bm.shotSel] = { ...q }; else { D.live = 1; World.zoneCfg(bm.zone).shots[bm.shotSel] = { ...q }; } drawAreas();
+}
+function shotUp() { const D = bm.gdrag; bm.gdrag = null; const q = D.list[bm.shotSel]; if (q.x !== D.q0.x || q.y !== D.q0.y || q.z !== D.q0.z) { saveShots(D.list); sfx("pad"); } }
 function drawAreas() {
   if (areaG) { scene.remove(areaG); areaG = null; } if (!bm) return; areaG = new THREE.Group(); scene.add(areaG);
   const D = bm.adrag, list = World.build.filter((q) => q.k === "area").map((q) => (D && D.cur && D.cur.id === q.id ? D.cur : q)); if (D && D.cur && !D.cur.id) list.push(D.cur);
@@ -1260,10 +1296,14 @@ function drawAreas() {
   }
   // the neighborhood's shot points: a ring and a post with its number and name (what's being edited, if the panel's open)
   const shots = bm.zd && bm.zd.n === bm.zone ? bm.zd.shots : World.zoneCfg(bm.zone).shots, sc = World.TIERS[bm.zone].c;
+  shotMarks.length = 0;
   shots.forEach((q, k) => {
-    const ring = new THREE.Mesh(new THREE.RingGeometry(1.2, 1.6, 28).rotateX(-Math.PI / 2), new THREE.MeshBasicMaterial({ color: bm.shotPick === k ? "#ffd84a" : sc, transparent: true, opacity: 0.9, depthWrite: false, side: THREE.DoubleSide })); ring.position.set(q.x, q.y + 0.08, q.z); areaG.add(ring);
+    const hit = new THREE.Mesh(new THREE.CylinderGeometry(1.6, 1.6, 4, 12), new THREE.MeshBasicMaterial({ visible: false })); hit.position.set(q.x, q.y + 2, q.z); hit.userData.shot = k; areaG.add(hit); shotMarks.push(hit);
+    const ring = new THREE.Mesh(new THREE.RingGeometry(1.2, 1.6, 28).rotateX(-Math.PI / 2), new THREE.MeshBasicMaterial({ color: bm.shotPick === k || bm.shotSel === k ? "#ffd84a" : sc, transparent: true, opacity: 0.9, depthWrite: false, side: THREE.DoubleSide })); ring.position.set(q.x, q.y + 0.08, q.z); areaG.add(ring);
     const post = new THREE.Mesh(new THREE.CylinderGeometry(0.08, 0.08, 3, 6), new THREE.MeshBasicMaterial({ color: "#ffffff" })); post.position.set(q.x, q.y + 1.5, q.z); areaG.add(post);
     const t = textSprite((k + 1) + (q.name ? " · " + q.name : ""), { size: 28 }); t.position.set(q.x, q.y + 3.8, q.z); areaG.add(t);
+    const cm = new THREE.Group(); cm.position.set(q.x, q.y + 3, q.z); box(0.7, 0.5, 0.9, "#23303b", 0, 0, 0, cm, false); const lens = new THREE.Mesh(new THREE.CylinderGeometry(0.18, 0.24, 0.35, 10).rotateX(Math.PI / 2), mat("#23303b")); lens.position.z = 0.6; cm.add(lens); areaG.add(cm);   // a little camera on the post
+    if (bm.shotSel === k) gizmo(q);
   });
 }
 // the neighborhood panel: its name, the animal it gives, each rarity's chance and the shiny chance
@@ -1654,6 +1694,7 @@ function drawHazSel() { if (bm && bm.hselG) { scene.remove(bm.hselG); bm.hselG =
 // each frame: moving platforms where they are now, fans spinning, a gust's wind while it blows, a turbine's updraft
 function stepHazards(dt) {
   const t = srvNow(), P = camera.position;
+  if (gizmoG && gizmoG.parent && bm) gizmoG.scale.setScalar(clamp(P.distanceTo(gizmoG.position) / 16, 0.6, 8));   // the move arrows stay the same size on screen
   for (const m of moverMeshes) { const p = World.moverPos(m.q, t); m.g.position.set(p.x, p.y, p.z); }
   for (const f of fans) f.g.rotation.y += dt * 9;
   for (const g of World.gusts) { const cx = (g.x0 + g.x1) / 2, cz = (g.z0 + g.z1) / 2; if (hyp(cx - P.x, cz - P.z) > 90) continue; const on = World.gustOn(g, t), n = on ? Math.min(6, (g.x1 - g.x0) * (g.z1 - g.z0) * (g.y1 - g.y0) * dt * 0.8) : 0;
@@ -1779,6 +1820,6 @@ function frame(tms) {
 }
 buildTown(); buildProps(); buildAnimals(); buildGates(); beltShow(); stepCamera(0.016);
 // for the tests and the console
-window.Pets = { World, me, cam, others, show: { playZones, levelFx, hatchShow, startReveal, auraPop, get cine() { return cine; } }, get save() { return save; }, get parcel() { return bag[0] || null; }, get bag() { return bag; }, get cap() { return cap; }, get belt() { return belt; }, get stolen() { return stolen; }, get dropped() { return dropped; }, get loggedIn() { return loggedIn; }, get role() { return myRole; }, get panel() { return panel; }, dogMesh, gooseMesh, goatMesh, get arrow() { return wayArrow; }, readyAt, onNet, teleport(x, z, y = 0) { me.x = x; me.z = z; me.y = y; me.vx = me.vz = me.vy = 0; me.transit = null; me.ground = false; sendPos(true); }, netSend, openPanel };
+window.Pets = { World, me, cam, others, show: { playZones, levelFx, hatchShow, startReveal, auraPop, get cine() { return cine; } }, get save() { return save; }, get parcel() { return bag[0] || null; }, get bag() { return bag; }, get cap() { return cap; }, get belt() { return belt; }, get stolen() { return stolen; }, get dropped() { return dropped; }, get loggedIn() { return loggedIn; }, get role() { return myRole; }, THREE, camera, get panel() { return panel; }, dogMesh, gooseMesh, goatMesh, get arrow() { return wayArrow; }, readyAt, onNet, teleport(x, z, y = 0) { me.x = x; me.z = z; me.y = y; me.vx = me.vz = me.vy = 0; me.transit = null; me.ground = false; sendPos(true); }, netSend, openPanel };
 $("lgo").disabled = $("lnew").disabled = true;
 connect(); requestAnimationFrame(frame);
