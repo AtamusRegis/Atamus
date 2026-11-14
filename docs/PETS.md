@@ -204,7 +204,8 @@ is one 1 m grass block (`SEED`) to stand on, with sky all round. Everything is a
   - **Post Office:** the building, its conveyor and counter, and the safe zone (20 m round it), turned as placed. One
     at a time (a new one replaces it). None: no conveyor, no parcels, no safe zone.
   - **Respawn:** where couriers appear and come back to (after a run, a fall, the balloon), facing the way its arrow
-    points, with the camera behind them looking down at 45 degrees. (owner, 2026-11-13) It turns all the way round:
+    points, with the camera straight behind them looking the same way, (owner, 2026-11-14) 30 degrees
+    down (also after falling below the town). (owner, 2026-11-13) It turns all the way round:
     holding R turns it (a full turn in 3 s), ⟳ steps it 45 degrees; only builders see it (in build mode).
     One at a time; none: on the first block.
   - **Podium:** up to three (gold, silver, bronze in the order placed; 1.6 / 1.1 / 0.7 m high): the server's best mounts

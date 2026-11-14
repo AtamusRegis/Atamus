@@ -4,6 +4,11 @@ Critter Courier (Pet Delivery Co. until 2026-11-11). Newest first. Add one entry
 and any rule decided. Use `git log` for the code detail (and for the older Atamus prototypes, removed from the tree on
 2026-11-08).
 
+## 2026-11-14
+
+- **Respawn camera (owner).** At the respawn point the camera sits straight behind you, looking the way you face, 30
+  degrees down.
+
 ## 2026-11-13
 
 - **Builder tiles and shot preview (owner).** The build bar's pieces are rounded tiles with a picture of each piece; each
