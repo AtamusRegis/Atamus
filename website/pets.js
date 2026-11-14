@@ -577,8 +577,8 @@ function stepMe(dt) {
   if (World.blocked(me.x, me.z, me.y)) out: for (let r = 1; r < 16; r++) for (let k = 0; k < 12; k++) { const x = me.x + Math.cos((k / 12) * TAU) * r, z = me.z + Math.sin((k / 12) * TAU) * r; if (!World.blocked(x, z, me.y) && World.surfaceAt(x, z, me.y + 0.5) > -1e9) { me.x = x; me.z = z; break out; } }   // inside something solid (it shouldn't happen): out to the nearest clear spot
   // what the player's asking for, relative to the camera
   let ix = 0, iz = 0;
-  if (!chatting && !panelOpen() && !cine && !free && !reveal) {   /* (owner, 2026-11-12) no riding while the reward screen is up */ if (keys.has("KeyW") || keys.has("ArrowUp")) iz += 1; if (keys.has("KeyS") || keys.has("ArrowDown")) iz -= 1; if (keys.has("KeyD") || keys.has("ArrowRight")) ix += 1; if (keys.has("KeyA") || keys.has("ArrowLeft")) ix -= 1; }
-  if (!cine && !free && !reveal) { ix += joy.x; iz -= joy.y; } const il = hyp(ix, iz); if (il > 1) { ix /= il; iz /= il; }
+  if (!chatting && !panelOpen() && !cine && !free && !rewardLock()) {   /* (owner, 2026-11-12) no riding while the reward screen is up */ if (keys.has("KeyW") || keys.has("ArrowUp")) iz += 1; if (keys.has("KeyS") || keys.has("ArrowDown")) iz -= 1; if (keys.has("KeyD") || keys.has("ArrowRight")) ix += 1; if (keys.has("KeyA") || keys.has("ArrowLeft")) ix -= 1; }
+  if (!cine && !free && !rewardLock()) { ix += joy.x; iz -= joy.y; } const il = hyp(ix, iz); if (il > 1) { ix /= il; iz /= il; }
   let mx = -Math.sin(cam.yaw) * iz + Math.cos(cam.yaw) * ix, mz = -Math.cos(cam.yaw) * iz - Math.sin(cam.yaw) * ix;
   if (me.stun > 0) mx = mz = 0;
   const kind = me.ground ? World.groundKind(me.x, me.z, me.y) : "", mud = kind === "mud" && !World.inPond(me.x, me.z, me.y) ? World.MUD_SLOW : kind === "mud" ? 0.6 : kind === "sand" ? World.SAND_SLOW : kind === "water" ? World.WATER_SLOW : 1;   // (owner, 2026-11-12) sand and the jungle's rivers slow you too
@@ -729,7 +729,7 @@ addEventListener("keydown", (e) => {
     const k = e.code; if (["KeyC", "KeyX", "KeyV", "KeyZ", "KeyY"].includes(k)) { e.preventDefault(); if (!e.repeat) { if (k === "KeyC") copyBuild(false); else if (k === "KeyX") copyBuild(true); else if (k === "KeyV") { if (bm.clip) { bm.tool = "paste"; buildBar(); buildAim(bm.px, bm.py); } } else if (k === "KeyY" || e.shiftKey) redoBuild(); else undoBuild(); } return; }
   }
   if (e.repeat) return; keys.add(e.code); if (free) { e.preventDefault(); return; }   // the freecam takes the keys
-  if (reveal) return;   // (owner, 2026-11-12) nothing to do while the reward screen is up
+  if (rewardLock()) return;   // (owner, 2026-11-12) nothing to do while the reward screen is up (or opening)
   if (e.code === "Space") { jumpHeld = true; jumpTap = true; e.preventDefault(); }
   if (e.code === "KeyF") bigJump(); if (e.code === "KeyQ") doWhistle();
 });
@@ -829,11 +829,13 @@ function confetti(r, X, Y) {
     const a = Math.random() * TAU, v = 120 + Math.random() * (160 + r * 70); d.animate([{ transform: "translate(-50%,-50%) rotate(0deg)", opacity: 1 }, { transform: `translate(${Math.cos(a) * v}px, ${Math.sin(a) * v * 0.6 - 60}px) rotate(${Math.random() * 720}deg)`, opacity: 1, offset: 0.5 }, { transform: `translate(${Math.cos(a) * v * 1.2}px, ${Math.sin(a) * v * 0.6 + 220}px) rotate(${Math.random() * 1080}deg)`, opacity: 0 }], { duration: 1300 + Math.random() * 700, easing: "cubic-bezier(.2,.7,.4,1)" }).onfinish = () => d.remove(); }
 }
 // (owner, 2026-11-11: the loop) delivered parcels wait on the left while you still have parcels to deliver; once none
-// are left (delivered or lost), they all open full screen, one after another: each builds up (longer and bigger the
-// rarer), bursts, shows what was inside; a mount gets its own unboxing. A tap hurries the build-up, or moves on.
-let reveal = null, lastDelAt = 0;
+// are left (delivered or lost), they all open full screen at once (owner, 2026-11-13: right away, as you're sent back
+// to the respawn point, and you can't move until you're through them): they crack by themselves, a click cracks them at
+// once, and what was inside stays up until another click.
+let reveal = null;
+const rewardLock = () => !!reveal || !!(opening && opening.run);
 function maybeOpenRun() {
-  if (opening || reveal || merging || cine || !loggedIn || !save.gifts.length || bag.length + stolen.length + dropped.length || performance.now() - lastDelAt < 900 || $("hatch").style.display === "flex") return;
+  if (opening || reveal || merging || cine || !loggedIn || !save.gifts.length || bag.length + stolen.length + dropped.length || $("hatch").style.display === "flex") return;
   opening = { gids: save.gifts.map((g) => g.gid), all: true, run: true, t: 0, res: null }; netSend({ t: "open", gids: opening.gids });
 }
 function startReveal(list) {
@@ -858,7 +860,7 @@ function stepReveal(dt) {   // (owner, 2026-11-11) all of the run's parcels open
         resultRows(C.list, { coins: C.g.coins, mounts: [] }); if (C.g.mount) { mounts.push(C.g.mount); revealMount(C); } }
       setTimeout(() => sfx("coin"), 200); if (mounts.length) { selMount = mounts[0].id; setTimeout(() => { sfx("hatch"); if (mounts.some((m) => m.va || m.r >= 3)) sfx("fanfare", 3); }, 250); }
     }
-  } else { R.t += dt; if (R.t > 4.5) endReveal(); }   // closes by itself, or with a tap
+  } else R.t += dt;   // (owner, 2026-11-13) stays up until a click
 }
 // (owner, 2026-11-11: one reward screen) a mount the parcel brought shows in its card: it drops in spinning over rays,
 // its name and rarity under it, NEW! for the first of its kind and rarity
@@ -872,7 +874,7 @@ function revealMount(C) {
 function endReveal() {
   const R = reveal; if (!R) return; reveal = null; $("reveal").style.display = "none"; cam.shake = 0; tutDid("open"); hudDirty = true; giftsUi(); if (panel === "stable" || panel === "odds") renderPanel();
 }
-$("reveal").addEventListener("pointerdown", (e) => { e.stopPropagation(); const R = reveal; if (!R) return; if (R.phase === "build") { R.speed = Math.min(8, R.speed * 2.5); sfx("tick"); } else if (R.t > 0.5) endReveal(); });
+$("reveal").addEventListener("pointerdown", (e) => { e.stopPropagation(); const R = reveal; if (!R) return; if (R.phase === "build") R.t = 1e9; else endReveal(); });   // (owner, 2026-11-13) a click cracks them at once; the next closes
 function hurryGift() { if (opening && !opening.all) { opening.speed = Math.min(8, opening.speed * 2.5); sfx("tick"); } }   // a tap while it builds up: faster
 $("gopen").onclick = hurryGift; $("gall").onclick = openAll; $("gx").onclick = () => { $("gres").style.display = "none"; giftsUi(); };
 for (const id of ["gopen", "gall", "gx"]) $(id).addEventListener("pointerdown", (e) => e.stopPropagation());
@@ -1333,7 +1335,7 @@ function onNet(m) {
     case "delivered": {
       const h = addrOf(m.house); sfx("deliver"); emit(h.mx, h.my + 1.6, h.mz, 60, { colors: CONFETTI, speed: 6, up: 8, life: 1.3 }); me.squash = 0.2;
       popup("+" + fmt(m.coins), "#d9a6ff", h.mx, h.my + 2.4, h.mz); flyCoins(h.mx, h.my + 1.6, h.mz, 5); if (houseMesh[m.house]) { houseMesh[m.house].shake = 0.01; houseMesh[m.house].pop = 0.3; }
-      save = World.cleanData(m.data); lastDelAt = performance.now(); delivered(h, m.gift, m.near, m.merges); tutDid("deliver"); break;
+      save = World.cleanData(m.data); delivered(h, m.gift, m.near, m.merges); tutDid("deliver"); break;
     }
     case "opened": {   // what came out of the parcels I opened
       save = World.cleanData(m.data);
