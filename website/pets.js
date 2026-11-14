@@ -4,7 +4,7 @@
 // deliveries, rolls, damage, coins, mounts; this page shows the town (pets-world.js, shared with the server), moves you
 // and asks. Phone first: a thumb joystick, drag to look, pinch to zoom, big buttons.
 import * as THREE from "./vendor/three.module.min.js";
-import * as World from "./pets-world.js?v=1794624765";
+import * as World from "./pets-world.js?v=1794627270";
 
 const $ = (id) => document.getElementById(id);
 const { TAU, clamp, hyp, MOUNTS, TIERS, RARITY, RARITY_C, MODS, UPGRADES } = World;
@@ -733,8 +733,8 @@ const endPointer = (e) => {
   if (drags.delete(e.pointerId) && tapStart && performance.now() - tapStart.t < 300 && hyp(e.clientX - tapStart.x, e.clientY - tapStart.y) < 8) tapAt(e.clientX, e.clientY);
   pinch = 0;
 };
-canvas.addEventListener("pointermove", (e) => { if (bm && e.pointerType === "mouse") { if (bm.paint) paintMove(e.clientX, e.clientY); else buildAim(e.clientX, e.clientY); } });
-addEventListener("pointerup", (e) => { if (bm && bm.paint && e.button === 0) bm.paint = null; });
+canvas.addEventListener("pointermove", (e) => { if (bm && e.pointerType === "mouse") { if (bm.adrag) areaMove(e.clientX, e.clientY); else if (bm.paint) paintMove(e.clientX, e.clientY); else buildAim(e.clientX, e.clientY); } });
+addEventListener("pointerup", (e) => { if (bm && e.button === 0) { if (bm.adrag) areaEnd(); bm.paint = null; } });
 canvas.addEventListener("pointerup", endPointer); canvas.addEventListener("pointercancel", endPointer);
 canvas.addEventListener("wheel", (e) => { cam.dist = clamp(cam.dist * (e.deltaY > 0 ? 1.1 : 0.9), 5, 26); e.preventDefault(); }, { passive: false });
 addEventListener("contextmenu", (e) => { if (!/^(INPUT|TEXTAREA)$/.test(e.target.tagName)) e.preventDefault(); });   // (owner, 2026-11-13) no browser menu on a right click, anywhere in the game
@@ -742,6 +742,7 @@ addEventListener("keydown", (e) => {
   if (e.target && (e.target.tagName === "INPUT" || e.target.tagName === "SELECT")) return;
   if (e.code === "Enter") { openChat(); e.preventDefault(); return; }
   if (e.code === "Escape") { if (bm) { endBuild(); return; } if (free) setFree(false); closePanel(); return; }
+  if (bm && !e.repeat && (e.code === "Delete" || e.code === "Backspace") && selArea()) { doDel(selArea()); bm.sel = 0; buildBar(); drawAreas(); return; }
   if (bm && !e.repeat && e.code === "KeyR" && !e.ctrlKey && !e.metaKey) { bm.r = (bm.r + 1) % 4; buildAim(bm.px, bm.py); return; }
   if (bm && (e.ctrlKey || e.metaKey) && !chatting) {   // (owner, 2026-11-13) the builder's copy, cut, paste, undo, redo
     const k = e.code; if (["KeyC", "KeyX", "KeyV", "KeyZ", "KeyY"].includes(k)) { e.preventDefault(); if (!e.repeat) { if (k === "KeyC") copyBuild(false); else if (k === "KeyX") copyBuild(true); else if (k === "KeyV") { if (bm.clip) { bm.tool = "paste"; buildBar(); buildAim(bm.px, bm.py); } } else if (k === "KeyY" || e.shiftKey) redoBuild(); else undoBuild(); } return; }
@@ -1014,10 +1015,11 @@ function renderPanel() {
   } else if (panel === "odds") {
     const head = el("div", "orow head"); head.appendChild(el("b", "", "")); const hr = el("div", "odds"); RARITY.forEach((n, i) => { const s = el("span", "", n); s.style.color = RARITY_C[i] === "#ffffff" ? "#6f7d8a" : RARITY_C[i]; hr.appendChild(s); }); head.appendChild(hr); body.appendChild(head);
     const open = World.openFor(save), sw = World.spawnWeights(open, riding().r);
-    TIERS.forEach((T, n) => { const r = el("div", "orow" + (n < open ? "" : " off")); const b = el("b", "", T.name); b.style.color = T.c; r.appendChild(b); const full = el("div", "odds"); World.rollOdds(T.luck + World.stampLuck(save.up.stamps)).forEach((v, i) => { const s = el("span", "", pct(v)); s.style.color = RARITY_C[i] === "#ffffff" ? "#6f7d8a" : RARITY_C[i]; full.appendChild(s); }); r.appendChild(full); r.appendChild(el("em", "", "x" + T.mult + " · " + pct(sw[n]))); body.appendChild(r); });
+    TIERS.forEach((T, n) => { const r = el("div", "orow" + (n < open ? "" : " off")); const b = el("b", "", World.zoneName(n)); b.style.color = T.c; r.appendChild(b); const full = el("div", "odds"); World.rollOdds(T.luck + World.stampLuck(save.up.stamps)).forEach((v, i) => { const s = el("span", "", pct(v)); s.style.color = RARITY_C[i] === "#ffffff" ? "#6f7d8a" : RARITY_C[i]; full.appendChild(s); }); r.appendChild(full); r.appendChild(el("em", "", "x" + T.mult + " · " + pct(sw[n]))); body.appendChild(r); });
     for (const k of Object.keys(MODS)) { const r = el("div", "orow"); r.appendChild(el("span", "mod " + k, MODS[k].name)); r.appendChild(el("em", "", "+" + MODS[k].bonus * 100 + "%")); body.appendChild(r); }
-    { const r = el("div", "orow"); r.appendChild(el("b", "", "Mount")); const full = el("div", "odds"); World.PET_CHANCE.forEach((v, i) => { const s = el("span", "", pct(v)); s.style.color = RARITY_C[i] === "#ffffff" ? "#6f7d8a" : RARITY_C[i]; full.appendChild(s); }); r.appendChild(full); body.appendChild(r); }   // (owner, 2026-11-11) each rarity of mount's chance, tried from the parcel's own rarity down
-    const vr = el("div", "orow"); vr.appendChild(el("b", "", "Shiny")); vr.appendChild(el("em", "", "1 / 10,000")); body.appendChild(vr);
+    const Z = World.zoneCfg(World.districtAt(me.x, me.z, me.y));   // (owner, 2026-11-13) the neighborhood you're in's
+    { const r = el("div", "orow"); r.appendChild(el("b", "", "Mount")); const full = el("div", "odds"); Z.chance.forEach((v, i) => { const s = el("span", "", pct(v)); s.style.color = RARITY_C[i] === "#ffffff" ? "#6f7d8a" : RARITY_C[i]; full.appendChild(s); }); r.appendChild(full); body.appendChild(r); }   // (owner, 2026-11-11) each rarity of mount's chance, tried from the parcel's own rarity down
+    const vr = el("div", "orow"); vr.appendChild(el("b", "", "Shiny")); vr.appendChild(el("em", "", Z.shiny > 0 ? "1 / " + Math.round(1 / Z.shiny).toLocaleString() : "—")); body.appendChild(vr);
   } else if (panel === "set") {
     const row = (name, node) => { const r = el("label", "setrow"); r.appendChild(el("span", "", name)); r.appendChild(node); body.appendChild(r); };
     const fr = el("input"); fr.type = "checkbox"; fr.checked = save.set.friendly; fr.onchange = () => { save.set.friendly = fr.checked; netSend({ t: "set", friendly: fr.checked }); }; row("Friendly", fr);
@@ -1089,18 +1091,21 @@ setInterval(() => { if (invites.length) renderInvite(); }, 1000);
 let bm = null;
 const ray = new THREE.Raycaster(), ndc = new THREE.Vector2(), ground = new THREE.Plane(new THREE.Vector3(0, 1, 0), 0), hitV = new THREE.Vector3();
 $("mbuild").onclick = () => (bm ? endBuild() : startBuild());   // (owner, 2026-11-13) admins: the Build button on screen
-function startBuild() { closePanel(); if (!free) setFree(true); bm = { tool: "block", zone: 0, w: 2, h: 1, d: 2, m: "grass", r: 0, px: innerWidth / 2, py: innerHeight / 2, ghost: null, aim: null }; buildBar(); document.body.classList.add("building"); buildAim(bm.px, bm.py); }
-function endBuild() { if (!bm) return; if (bm.ghost) scene.remove(bm.ghost); bm = null; $("buildbar").style.display = "none"; document.body.classList.remove("building"); setFree(false); }
+function startBuild() { closePanel(); if (!free) setFree(true); bm = { tool: "block", zone: 0, w: 2, h: 1, d: 2, m: "grass", r: 0, wl: 8, ly: 0, sel: 0, px: innerWidth / 2, py: innerHeight / 2, ghost: null, aim: null }; buildBar(); document.body.classList.add("building"); buildAim(bm.px, bm.py); drawAreas(); }
+function endBuild() { if (!bm) return; if (bm.ghost) scene.remove(bm.ghost); bm = null; $("buildbar").style.display = "none"; $("zpanel").style.display = "none"; drawAreas(); document.body.classList.remove("building"); setFree(false); }
 function buildBar() {
   const B = $("buildbar"); B.innerHTML = ""; B.style.display = "flex"; const row0 = el("div", "brow"), row1 = el("div", "brow"), row2 = el("div", "brow");
-  for (const [k, name, row] of [["block", "Block", row0], ["house", "House", row0], ["mailbox", "Mailbox", row0], ["gate", "Gate", row0], ["tree", "Tree", row0], ["boost", "Boost", row0], ["start", "Start Line", row1], ["podium", "Podium", row1], ["spawn", "Respawn", row1], ["office", "Post Office", row1], ["erase", "Erase", row1]]) row.appendChild(btn(name, () => { bm.tool = k; buildBar(); buildAim(bm.px, bm.py); }, "bt" + (bm.tool === k ? " on" : "")));
+  for (const [k, name, row] of [["block", "Block", row0], ["house", "House", row0], ["mailbox", "Mailbox", row0], ["gate", "Gate", row0], ["wall", "Wall", row0], ["tree", "Tree", row0], ["boost", "Boost", row0], ["start", "Start Line", row0], ["podium", "Podium", row1], ["spawn", "Respawn", row1], ["office", "Post Office", row1], ["area", "Bounds", row1], ["erase", "Erase", row1]]) row.appendChild(btn(name, () => { bm.tool = k; if (k !== "area") bm.sel = 0; buildBar(); buildAim(bm.px, bm.py); drawAreas(); }, "bt" + (bm.tool === k ? " on" : "")));
   row1.appendChild(btn("⟳", () => { bm.r = (bm.r + 1) % 4; buildAim(bm.px, bm.py); }, "bt")); row1.appendChild(btn("✕", endBuild, "bt")); B.appendChild(row0);
-  const step = (label, get, set, lo, hi) => { const g = el("div", "bstep"); g.appendChild(btn("−", () => { set(clamp(get() - 1, lo, hi)); buildBar(); buildAim(bm.px, bm.py); }, "bt")); g.appendChild(el("span", "", label())); g.appendChild(btn("+", () => { set(clamp(get() + 1, lo, hi)); buildBar(); buildAim(bm.px, bm.py); }, "bt")); row2.appendChild(g); };
+  const step = (label, get, set, lo, hi) => { const g = el("div", "bstep" + (label === zLabel ? " zone" : "")); g.appendChild(btn("−", () => { set(clamp(get() - 1, lo, hi)); buildBar(); buildAim(bm.px, bm.py); }, "bt")); g.appendChild(el("span", "", label())); g.appendChild(btn("+", () => { set(clamp(get() + 1, lo, hi)); buildBar(); buildAim(bm.px, bm.py); }, "bt")); row2.appendChild(g); };
+  // (owner, 2026-11-13) the neighborhood you're editing: its bounds, gates and walls are placed for it; ⚙ its name, animal and chances
+  const zLabel = () => World.zoneName(bm.zone); step(zLabel, () => bm.zone, (v) => { bm.zone = v; drawAreas(); if ($("zpanel").style.display === "block") zonePanel(); }, 0, World.TIERS.length - 1);
+  row2.lastChild.querySelector("span").style.boxShadow = "inset 0 -4px 0 " + World.TIERS[bm.zone].c; row2.appendChild(btn("⚙", () => { const P = $("zpanel"); if (P.style.display === "block") P.style.display = "none"; else zonePanel(); }, "bt"));
   if (bm.tool === "block") {
     step(() => "W " + bm.w, () => bm.w, (v) => (bm.w = v), 1, World.BLOCK_MAX); step(() => "H " + bm.h, () => bm.h, (v) => (bm.h = v), 1, World.BLOCK_MAX); step(() => "D " + bm.d, () => bm.d, (v) => (bm.d = v), 1, World.BLOCK_MAX);
     const mb = btn(bm.m[0].toUpperCase() + bm.m.slice(1), () => { bm.m = World.MATS[(World.MATS.indexOf(bm.m) + 1) % World.MATS.length]; buildBar(); buildAim(bm.px, bm.py); }, "bt mat"); mb.style.background = MAT_C[bm.m]; row2.appendChild(mb);
-  } else if (["house", "mailbox", "gate"].includes(bm.tool)) step(() => World.DISTRICTS[bm.zone], () => bm.zone, (v) => (bm.zone = v), bm.tool === "gate" ? 1 : 0, World.TIERS.length - 1);
-  if (bm.tool === "gate" && bm.zone < 1) bm.zone = 1;
+  } else if (bm.tool === "wall") step(() => "L " + bm.wl, () => bm.wl, (v) => (bm.wl = v), 1, World.BLOCK_MAX);
+  else if (bm.tool === "area") { const q = selArea(); if (q) { const ch = (f) => (v) => { const a = { ...q }; f(a, v); doSet(q, a); }; step(() => "W " + q.w, () => q.w, ch((a, v) => (a.w = v)), 1, World.AREA_MAX); step(() => "D " + q.d, () => q.d, ch((a, v) => (a.d = v)), 1, World.AREA_MAX); row2.appendChild(btn("Delete", () => { doDel(q); bm.sel = 0; buildBar(); drawAreas(); }, "bt")); } }
   B.appendChild(row1); B.appendChild(row2);
 }
 function pieceAt(px, py) {   // what's pointed at: the point, its face's normal and the piece's id (0: the ground)
@@ -1112,7 +1117,7 @@ function pieceAt(px, py) {   // what's pointed at: the point, its face's normal 
 // the box a piece takes: [w, h, d, center x, y, z]
 function pieceBox(q) {
   const S = World.HOUSE_S, P = World.PO.b;
-  return q.k === "block" ? [q.w, q.h, q.d, q.x + q.w / 2, q.y + q.h / 2, q.z + q.d / 2] : q.k === "house" ? [S, 5, S, q.x, q.y + 2.5, q.z] : q.k === "gate" ? [World.GATE_W, World.GATE_H, World.GATE_T, q.x, q.y + World.GATE_H / 2, q.z]
+  return q.k === "block" ? [q.w, q.h, q.d, q.x + q.w / 2, q.y + q.h / 2, q.z + q.d / 2] : q.k === "house" ? [S, 5, S, q.x, q.y + 2.5, q.z] : q.k === "gate" ? [World.GATE_W, World.GATE_H, World.GATE_T, q.x, q.y + World.GATE_H / 2, q.z] : q.k === "wall" ? [q.w, World.GATE_H, World.GATE_T, q.x, q.y + World.GATE_H / 2, q.z] : q.k === "area" ? [q.w, 1, q.d, q.x + q.w / 2, q.y, q.z + q.d / 2]
     : q.k === "tree" ? [1.6, 6.5, 1.6, q.x, q.y + 3.25, q.z] : q.k === "boost" ? [3.2, 0.3, 3.2, q.x, q.y + 0.15, q.z] : q.k === "start" ? [World.START_W, 0.3, World.START_D, q.x, q.y + 0.15, q.z] : q.k === "podium" ? [4.4, 1.6, 4.4, q.x, q.y + 0.8, q.z]
     : q.k === "spawn" ? [1.8, 0.3, 1.8, q.x, q.y + 0.15, q.z] : q.k === "office" ? [P.hw * 2, P.h + 2, P.hd * 2 + 10, q.x, q.y + (P.h + 2) / 2, q.z - 9 + (P.hd * 2 + 10) / 2 - P.hd] : [0.6, 1.5, 0.6, q.x, q.y + 0.75, q.z];
 }
@@ -1135,7 +1140,8 @@ function buildPiece(a, base) {   // the piece the bar (or the clipboard: base) w
     return { k: "block", x, z, y, w, h, d, m: B.m };
   }
   const x = Math.round(p.x + n.x * 0.3), z = Math.round(p.z + n.z * 0.3), s = World.surfaceAt(x, z, p.y + 0.3), q = { k: T, x, z, y: Math.round(Number.isFinite(s) && s > -1e9 ? s : p.y), r: ((base ? base.r | 0 : 0) + bm.r) % 4 };
-  if (["house", "mailbox", "gate"].includes(T)) q.zone = base ? base.zone : bm.zone;
+  if (T === "gate" || T === "wall") q.zone = Math.max(1, base ? base.zone : bm.zone);
+  if (T === "wall") q.w = base ? base.w : bm.wl;
   return q;
 }
 function buildAim(px, py) {
@@ -1143,7 +1149,7 @@ function buildAim(px, py) {
   const a = pieceAt(px, py); bm.aim = a; if (!a) return; let g = null;
   if (bm.tool === "erase" || bm.tool === "cut" || bm.tool === "copy") { const q = a.id && World.build.find((o) => o.id === a.id); if (q) g = hologram(q, bm.tool !== "copy"); }
   else if (bm.tool === "paste") { if (bm.clip) g = hologram({ ...buildPiece(a, bm.clip), id: 0 }); }
-  else g = hologram({ ...buildPiece(a), id: 0 });
+  else if (bm.tool !== "area") g = hologram({ ...buildPiece(a), id: 0 });
   if (g) { scene.add(g); bm.ghost = g; }
 }
 // (owner, 2026-11-13) doing and undoing (a keyboard: building is for computers): every placing and erasing (yours) can be
@@ -1151,10 +1157,11 @@ function buildAim(px, py) {
 let tagN = 0; const pend = new Map(), hist = [], redos = [];
 const strip = (q) => { const o = { ...q }; delete o.id; return o; };
 function sendAdd(piece, then) { const tag = ++tagN; pend.set(tag, then); netSend({ t: "build", op: "add", piece: strip(piece), tag }); }
-function doAdd(piece) { const repl = World.ONE_ONLY.includes(piece.k) ? World.build.filter((q) => q.k === piece.k).map((q) => ({ ...q })) : []; sendAdd(piece, (id) => { hist.push({ add: { ...piece, id }, repl }); redos.length = 0; }); }
+function doAdd(piece, then) { const repl = World.ONE_ONLY.includes(piece.k) ? World.build.filter((q) => q.k === piece.k).map((q) => ({ ...q })) : []; sendAdd(piece, (id) => { hist.push({ add: { ...piece, id }, repl }); redos.length = 0; if (then) then(id); }); }
+function doSet(before, after) { hist.push({ set: { before: { ...before }, after: { ...after } } }); redos.length = 0; netSend({ t: "build", op: "set", piece: after }); sfx("pad"); }
 function doDel(q) { hist.push({ del: { ...q } }); redos.length = 0; netSend({ t: "build", op: "del", id: q.id }); }
-function undoBuild() { const e = hist.pop(); if (!e) return; if (e.add) { netSend({ t: "build", op: "del", id: e.add.id }); for (const r of e.repl) sendAdd(r, (id) => { r.id = id; }); } else sendAdd(e.del, (id) => { e.del.id = id; }); redos.push(e); sfx("pop"); }
-function redoBuild() { const e = redos.pop(); if (!e) return; if (e.add) sendAdd(e.add, (id) => { e.add.id = id; }); else netSend({ t: "build", op: "del", id: e.del.id }); hist.push(e); sfx("pad"); }
+function undoBuild() { const e = hist.pop(); if (!e) return; if (e.set) netSend({ t: "build", op: "set", piece: e.set.before }); else if (e.add) { netSend({ t: "build", op: "del", id: e.add.id }); for (const r of e.repl) sendAdd(r, (id) => { r.id = id; }); } else sendAdd(e.del, (id) => { e.del.id = id; }); redos.push(e); sfx("pop"); }
+function redoBuild() { const e = redos.pop(); if (!e) return; if (e.set) netSend({ t: "build", op: "set", piece: e.set.after }); else if (e.add) sendAdd(e.add, (id) => { e.add.id = id; }); else netSend({ t: "build", op: "del", id: e.del.id }); hist.push(e); sfx("pad"); }
 const aimed = () => bm && bm.aim && bm.aim.id && World.build.find((o) => o.id === bm.aim.id);
 function copyBuild(cut) { const q = aimed(); if (!q) return; bm.clip = strip(q); bm.r = 0; if (cut) doDel(q); bm.tool = "paste"; buildBar(); buildAim(bm.px, bm.py); sfx("pad"); }
 // painting: a left-button drag keeps placing on the level it started at (or erasing what it passes over), never on top
@@ -1170,6 +1177,7 @@ function placeOnce(q) {
   if (P.done.some((o) => overlaps(o, bx))) return; P.done.push(bx); doAdd(q); sfx("pad");
 }
 function paintStart(px, py) {
+  if (bm.tool === "area") { areaStart(px, py); return; }
   buildAim(px, py); const a = bm.aim; if (!a) return;
   if (bm.tool === "erase") { bm.paint = { erase: new Set() }; paintMove(px, py); return; }
   if (bm.tool === "copy" || bm.tool === "cut") { copyBuild(bm.tool === "cut"); return; }
@@ -1183,11 +1191,63 @@ function paintMove(px, py) {
   if (bm.ghost) scene.remove(bm.ghost); bm.ghost = hologram({ ...q, id: 0 }); scene.add(bm.ghost);
 }
 function buildTap(px, py) {
+  if (bm.tool === "area") return;
   buildAim(px, py); const a = bm.aim; if (!a) return;
   if (bm.tool === "erase") { const q = aimed(); if (q) { doDel(q); sfx("pop"); } return; }
   if (bm.tool === "copy" || bm.tool === "cut") { copyBuild(bm.tool === "cut"); return; }
   if (bm.tool === "paste") { if (bm.clip) { doAdd(buildPiece(a, bm.clip)); sfx("pad"); } return; }
   doAdd(buildPiece(a)); sfx("pad");
+}
+// (owner, 2026-11-13) a neighborhood's bounds: with Bounds, a left drag on open space draws new ones for the neighborhood
+// you're editing; clicking bounds picks them, dragging inside moves them and dragging an edge resizes that side. What's
+// inside belongs to that neighborhood (the smallest bounds win where they overlap). Seen only while building.
+let areaG = null;
+const selArea = () => (bm && bm.sel && World.build.find((q) => q.id === bm.sel && q.k === "area")) || null;
+function areaPt(px, py) { ndc.set((px / innerWidth) * 2 - 1, -(py / innerHeight) * 2 + 1); ray.setFromCamera(ndc, camera); const v = new THREE.Vector3(); return ray.ray.intersectPlane(new THREE.Plane(new THREE.Vector3(0, 1, 0), -bm.ly), v) ? v : null; }
+const inArea = (q, p, m = 0) => p.x >= q.x - m && p.x <= q.x + q.w + m && p.z >= q.z - m && p.z <= q.z + q.d + m;
+function areaStart(px, py) {
+  const a = pieceAt(px, py); if (a && a.n.y > 0.5) bm.ly = Math.round(a.p.y); const p = areaPt(px, py); if (!p) return;
+  const s = selArea(), E = 1.5; let mode = null, q = null;
+  if (s && inArea(s, p, E)) { q = s; const ex = Math.abs(p.x - s.x) <= E ? "x0" : Math.abs(p.x - s.x - s.w) <= E ? "x1" : "", ez = Math.abs(p.z - s.z) <= E ? "z0" : Math.abs(p.z - s.z - s.d) <= E ? "z1" : ""; mode = ex || ez ? { ex, ez } : "move"; }
+  else { q = World.build.filter((o) => o.k === "area" && inArea(o, p)).sort((a, b) => a.w * a.d - b.w * b.d)[0] || null; if (q) { mode = "move"; bm.sel = q.id; bm.zone = q.zone; buildBar(); } else { mode = "draw"; if (bm.sel) { bm.sel = 0; buildBar(); } } }
+  bm.adrag = { mode, p0: { x: Math.round(p.x), z: Math.round(p.z) }, q0: q && { ...q }, cur: null }; drawAreas();
+}
+function areaMove(px, py) {
+  const D = bm.adrag, p = areaPt(px, py); if (!p) return; const x = Math.round(p.x), z = Math.round(p.z), M = World.AREA_MAX;
+  if (D.mode === "draw") { const x0 = Math.min(x, D.p0.x), z0 = Math.min(z, D.p0.z), w = Math.abs(x - D.p0.x), d = Math.abs(z - D.p0.z); D.cur = w && d ? { id: 0, k: "area", x: x0, z: z0, y: 0, w: Math.min(w, M), d: Math.min(d, M), zone: bm.zone } : null; }
+  else if (D.mode === "move") D.cur = { ...D.q0, x: D.q0.x + x - D.p0.x, z: D.q0.z + z - D.p0.z };
+  else { const q = D.q0; let x0 = q.x, x1 = q.x + q.w, z0 = q.z, z1 = q.z + q.d; if (D.mode.ex === "x0") x0 = Math.min(x, x1 - 1); if (D.mode.ex === "x1") x1 = Math.max(x, x0 + 1); if (D.mode.ez === "z0") z0 = Math.min(z, z1 - 1); if (D.mode.ez === "z1") z1 = Math.max(z, z0 + 1); D.cur = { ...q, x: x0, z: z0, w: Math.min(x1 - x0, M), d: Math.min(z1 - z0, M) }; }
+  drawAreas();
+}
+function areaEnd() {
+  const D = bm.adrag; bm.adrag = null; const c = D.cur;
+  if (c && D.mode === "draw") { const piece = strip(c); doAdd(piece, (id) => { if (bm) { bm.sel = id; buildBar(); drawAreas(); } }); sfx("pad"); }
+  else if (c && (c.x !== D.q0.x || c.z !== D.q0.z || c.w !== D.q0.w || c.d !== D.q0.d)) doSet(D.q0, c);
+  drawAreas();
+}
+function drawAreas() {
+  if (areaG) { scene.remove(areaG); areaG = null; } if (!bm) return; areaG = new THREE.Group(); scene.add(areaG);
+  const D = bm.adrag, list = World.build.filter((q) => q.k === "area").map((q) => (D && D.cur && D.cur.id === q.id ? D.cur : q)); if (D && D.cur && !D.cur.id) list.push(D.cur);
+  const y = bm.ly + 0.06, H = 6;
+  for (const q of list) {
+    const c = World.TIERS[q.zone].c, dk = "#" + new THREE.Color(c).multiplyScalar(0.62).getHexString(), sel = q.id && q.id === bm.sel || (D && q === D.cur), on = q.zone === bm.zone;
+    const f = new THREE.Mesh(new THREE.PlaneGeometry(q.w, q.d).rotateX(-Math.PI / 2), new THREE.MeshBasicMaterial({ color: c, transparent: true, opacity: sel ? 0.28 : on ? 0.16 : 0.07, depthWrite: false })); f.position.set(q.x + q.w / 2, y, q.z + q.d / 2); f.renderOrder = 2; areaG.add(f);
+    const sides = new THREE.Mesh(new THREE.BoxGeometry(q.w, H, q.d), new THREE.MeshBasicMaterial({ color: c, transparent: true, opacity: sel ? 0.14 : on ? 0.08 : 0.04, depthWrite: false, side: THREE.BackSide })); sides.position.set(q.x + q.w / 2, y + H / 2, q.z + q.d / 2); areaG.add(sides);
+    const e = new THREE.LineSegments(new THREE.EdgesGeometry(sides.geometry), new THREE.LineBasicMaterial({ color: sel ? "#ffd84a" : dk, transparent: true, opacity: on || sel ? 1 : 0.4 })); e.position.copy(sides.position); areaG.add(e);
+    const t = textSprite(World.zoneName(q.zone), { size: 30, color: dk }); t.position.set(q.x + q.w / 2, y + H + 1, q.z + q.d / 2); areaG.add(t);
+  }
+}
+// the neighborhood panel: its name, the animal it gives, each rarity's chance and the shiny chance
+function zonePanel() {
+  const P = $("zpanel"), n = bm.zone, Z = World.zoneCfg(n); P.innerHTML = ""; P.style.display = "block";
+  const row = (name, node) => { const r = el("label", "zrow"); r.appendChild(el("span", "", name)); r.appendChild(node); P.appendChild(r); return node; };
+  const num = (v, step, lo, hi) => { const i = document.createElement("input"); i.type = "number"; i.step = step; i.min = lo; i.max = hi; i.value = v; return i; };
+  const h = el("b", "", World.zoneName(n)); h.style.boxShadow = "inset 0 -4px 0 " + World.TIERS[n].c; P.appendChild(h);
+  const nm = row("Name", document.createElement("input")); nm.maxLength = 24; nm.value = Z.name;
+  const sp = row("Animal", document.createElement("select")); for (const k of Object.keys(World.MOUNTS)) { const o = document.createElement("option"); o.value = k; o.textContent = World.MOUNTS[k].name; if (k === Z.sp) o.selected = true; sp.appendChild(o); }
+  const ch = World.RARITY.map((r, i) => { const inp = row(r + " %", num(+(Z.chance[i] * 100).toFixed(3), 0.1, 0, 100)); inp.previousSibling.style.color = World.RARITY_C[i] === "#ffffff" ? "" : "#" + new THREE.Color(World.RARITY_C[i]).multiplyScalar(0.8).getHexString(); return inp; });
+  const sh = row("Shiny 1 in", num(Z.shiny > 0 ? Math.round(1 / Z.shiny) : 0, 1, 0, 1e7));
+  const go = btn("Save", () => { const N = +sh.value; netSend({ t: "build", op: "zone", n, zone: { name: nm.value, sp: sp.value, chance: ch.map((i) => (+i.value || 0) / 100), shiny: N >= 2 ? 1 / N : 0 } }); sfx("pad"); P.style.display = "none"; }, "go"); P.appendChild(go);
 }
 function tapAt(sx, sy) {   // tapping a courier: their name and a party invitation
   if (bm) { buildTap(sx, sy); return; }
@@ -1257,7 +1317,7 @@ function onNet(m) {
   switch (m.t) {
     case "welcome": {
       if (stale(m.web, false, m.by)) return;
-      World.setBuild(m.build || []); drawBuild();   // (owner, 2026-11-13) the town the zone builder placed
+      World.setBuild({ pieces: m.build || [], zones: m.zones || [] }); drawBuild();   // (owner, 2026-11-13) the town the zone builder placed
       setTok(m.token); const again = loggedIn && myName === m.name; myName = m.name; myId = m.id; myRole = m.role || "player"; $("mbuild").hidden = myRole !== "admin"; netOk = true; loggedIn = true; clockOff = m.now - Date.now();
       $("login").style.display = "none"; $("hud").style.display = "block"; if (document.activeElement && document.activeElement.blur) document.activeElement.blur();
       save = World.cleanData(m.data); shownCoins = save.coins; $("coinn").textContent = fmt(save.coins); remount(); setVolumes(); giftsUi(); if (!again && !save.set.tut && !save.stats.del && tut < 0) setTimeout(() => tutShow(0), 900);
@@ -1319,7 +1379,7 @@ function onNet(m) {
     case "reset": location.reload(); break;   // (owner, 2026-11-11) staff made this a brand new courier
     case "petup": adopt(m.data); remount(); sfx("buy"); if (panel === "stable") renderPanel(); emit(me.x, me.y + 2, me.z, 30, { colors: ["#c77dff", "#ffffff", "#e2b8ff"], speed: 4, up: 5, life: 1 }); break;
     case "buildok": { const f = pend.get(m.tag); pend.delete(m.tag); if (f) f(m.id); break; }
-    case "build": World.setBuild(m.build || []); drawBuild(); setPods(lastPods); if (bm) buildAim(bm.px, bm.py); break;   // (owner, 2026-11-13) someone built
+    case "build": World.setBuild({ pieces: m.build || [], zones: m.zones || [] }); drawBuild(); setPods(lastPods); if (bm) { buildAim(bm.px, bm.py); if (bm.sel && !World.build.some((q) => q.id === bm.sel)) bm.sel = 0; drawAreas(); if ($("zpanel").style.display === "block") zonePanel(); } break;   // (owner, 2026-11-13) someone built
     case "bonkaura": save.coins = m.coins; auraPop(m.n); break;
     case "aura": save.coins = m.coins; popup("+" + fmt(m.n), "#d9a6ff", me.x, me.y + 2.6, me.z); hudDirty = true; break;   // (owner, 2026-11-12) a podium paid
     case "podiums": setPods(m.pods); break;
@@ -1488,7 +1548,7 @@ function pieceMesh(q, live) {
   }
     else if (q.k === "block") { const m = box(q.w, q.h, q.d, MAT_C[q.m], q.x + q.w / 2, q.y + q.h / 2, q.z + q.d / 2, G); if (q.m === "water" || q.m === "ice") { m.material = new THREE.MeshLambertMaterial({ color: MAT_C[q.m], transparent: true, opacity: q.m === "water" ? 0.75 : 0.85 }); } m.userData.pid = q.id; }
     else if (q.k === "house") {
-      const [wall, roof] = HOUSE_C[q.zone] || HOUSE_C[0], g = new THREE.Group(), S = World.HOUSE_S; g.position.set(q.x, q.y, q.z); g.rotation.y = (q.r | 0) * Math.PI / 2; G.add(g);
+      const hb = World.buildings.find((b) => b.id === q.id), [wall, roof] = HOUSE_C[hb ? hb.d : World.districtAt(q.x, q.z, q.y)] || HOUSE_C[0], g = new THREE.Group(), S = World.HOUSE_S; g.position.set(q.x, q.y, q.z); g.rotation.y = (q.r | 0) * Math.PI / 2; G.add(g);
       box(S, 3.2, S, wall, 0, 1.6, 0, g).userData.pid = q.id; box(1.3, 2.1, 0.12, roof, 0, 1.05, S / 2 + 0.02, g, false);
       for (const x of [-1, 1]) box(1.1, 1.0, 0.1, "#bfe6ff", x * S * 0.3, 2.0, S / 2 + 0.02, g, false);
       const rf = new THREE.Mesh(new THREE.ConeGeometry(S * 0.8, 2.6, 4), mat(roof)); rf.rotation.y = Math.PI / 4; rf.position.y = 4.5; rf.castShadow = true; rf.userData.pid = q.id; g.add(rf);
@@ -1498,11 +1558,12 @@ function pieceMesh(q, live) {
       box(0.14, 1.0, 0.14, "#f4f1ea", 0, 0.5, 0, mb).userData.pid = q.id; const bx = box(0.5, 0.42, 0.75, "#3a8ee6", 0, 1.2, 0, mb); bx.userData.pid = q.id; box(0.06, 0.34, 0.06, "#e5534b", 0.3, 1.45, 0.2, mb, false);
       if (live) houseMesh[q.id] = { mb, bx, shake: 0 };
     }
-    else if (q.k === "gate") {   // posts and a beam, and while it's closed to you a shimmering wall with a padlock
-      const g = new THREE.Group(), W2 = World.GATE_W, H = World.GATE_H; g.position.set(q.x, q.y, q.z); g.rotation.y = (q.r | 0) * Math.PI / 2; G.add(g);
-      for (const x of [-W2 / 2, W2 / 2]) box(0.7, H, 0.7, "#6f7d8a", x, H / 2, 0, g).userData.pid = q.id; box(W2 + 0.7, 0.6, 0.7, "#6f7d8a", 0, H, 0, g).userData.pid = q.id;
-      const w = new THREE.Mesh(new THREE.PlaneGeometry(W2, H), new THREE.MeshBasicMaterial({ color: World.TIERS[q.zone].c, transparent: true, opacity: 0.4, side: THREE.DoubleSide, depthWrite: false })); w.position.y = H / 2; w.userData.pid = q.id; g.add(w);
-      const sh = new THREE.Group(); g.add(sh); sh.add(w); const L = lock(sh, H / 2); if (live) gates.push({ g: sh, w, L, d: q.zone, built: 1, at: q });
+    else if (q.k === "gate" || q.k === "wall") {   // (owner, 2026-11-13) a blue holographic boundary while it's closed to you: a gate has posts, a beam and a padlock; a bound wall is just the boundary
+      const g = new THREE.Group(), W2 = q.k === "gate" ? World.GATE_W : q.w, H = World.GATE_H; g.position.set(q.x, q.y, q.z); g.rotation.y = (q.r | 0) * Math.PI / 2; G.add(g);
+      if (q.k === "gate") { for (const x of [-W2 / 2, W2 / 2]) box(0.7, H, 0.7, "#6f7d8a", x, H / 2, 0, g); box(W2 + 0.7, 0.6, 0.7, "#6f7d8a", 0, H, 0, g); }
+      const sh = new THREE.Group(); g.add(sh); const w = holoWall(W2, H); w.position.y = H / 2; sh.add(w);
+      for (const y of [0.05, H]) { const e = new THREE.Mesh(new THREE.BoxGeometry(W2, 0.08, 0.08), new THREE.MeshBasicMaterial({ color: "#bff0ff" })); e.position.y = y; sh.add(e); }
+      const L = q.k === "gate" ? lock(sh, H / 2) : null; if (live) gates.push({ g: sh, w, L, d: q.zone, built: 1, at: q });
     }
     else if (q.k === "tree") { const g = new THREE.Group(); g.position.set(q.x, q.y, q.z); g.rotation.y = (q.r | 0) * Math.PI / 2; G.add(g); const tr = new THREE.Mesh(new THREE.CylinderGeometry(0.28, 0.36, 2.2, 7), mat("#8a5a34")); tr.position.y = 1.1; tr.castShadow = true; g.add(tr); const lf = new THREE.Mesh(new THREE.ConeGeometry(1.9, 4.6, 8), mat("#3fa650")); lf.position.y = 4.2; lf.castShadow = true; g.add(lf); tr.userData.pid = lf.userData.pid = q.id; }
     else if (q.k === "boost") { const m = new THREE.Mesh(new THREE.PlaneGeometry(3.2, 3.2).rotateX(-Math.PI / 2), BOOST_M); m.position.set(q.x, q.y + 0.09, q.z); m.rotation.y = (q.r | 0) * Math.PI / 2 + Math.PI; m.receiveShadow = true; m.userData.pid = q.id; G.add(m); }
@@ -1521,14 +1582,17 @@ function drawBuild() {
   for (const q of World.build) { if (q.k === "office" && q !== office) continue; const g = pieceMesh(q, true); if (q === office) { poG = g; scene.add(g); } else buildG.add(g); }
   if (readyMesh && poG) poG.add(readyMesh); if (nextMesh && poG) poG.add(nextMesh);
 }
-function stepGates(t) { const open = World.openFor(save); for (const q of gates) { q.g.visible = q.d >= open || q.d === gateHold; if (q.g.visible) { q.w.material.opacity = 0.34 + Math.sin(t * 2 + q.d) * 0.08; q.L.rotation.y = Math.sin(t * 0.8 + q.d) * 0.4; } } }
+// the holographic boundary: see-through blue with scan lines that drift up and a fine grid
+const HOLO_TEX = (() => { const cv = document.createElement("canvas"); cv.width = cv.height = 64; const g = cv.getContext("2d"); g.fillStyle = "rgba(40,150,255,0.55)"; g.fillRect(0, 0, 64, 64); g.fillStyle = "rgba(191,240,255,0.9)"; g.fillRect(0, 0, 64, 3); g.fillRect(0, 30, 64, 2); g.fillStyle = "rgba(191,240,255,0.35)"; g.fillRect(0, 0, 2, 64); const t = new THREE.CanvasTexture(cv); t.wrapS = t.wrapT = THREE.RepeatWrapping; return t; })();
+function holoWall(w, h) { const t = HOLO_TEX.clone(); t.needsUpdate = true; t.repeat.set(w / 2, h / 2); return new THREE.Mesh(new THREE.PlaneGeometry(w, h), new THREE.MeshBasicMaterial({ map: t, color: "#5cc8ff", transparent: true, opacity: 0.8, side: THREE.DoubleSide, depthWrite: false })); }
+function stepGates(t) { const open = World.openFor(save); for (const q of gates) { q.g.visible = q.d >= open || q.d === gateHold || !!bm; if (q.g.visible) { q.w.material.opacity = 0.62 + Math.sin(t * 2 + q.d) * 0.1; q.w.material.map.offset.y = -t * 0.25; if (q.L) q.L.rotation.y = Math.sin(t * 0.8 + q.d) * 0.4; } } }
 // (owner, 2026-11-11) a newly opened area gets a short showing: letterbox bars, the camera flies to its gate as it
 // bursts open, then to its chasers (the rarest one), then to its other dangers. A tap or a key skips it. Your mount stays put.
 let cine = null, gateHold = -1, lastOpen = 0, lastOpenFor = "", zoneCalm = 0;
 // (owner, 2026-11-13) the showing flies to the zone's gate (if one's been placed) as it opens
 function zoneShow(d) {
   const G = World.gates.find((q) => q.d === d), gx = G ? G.x : me.x, gy = G ? G.y : me.y, gz = G ? G.z : me.z, nx = G ? G.s : 1, nz = G ? G.c : 0, wx = G ? G.c : 0, wz = G ? -G.s : 1;
-  return [{ dur: 2.6, cam: (u) => ({ x: gx - nx * (20 - 8 * u) + wx * 6, y: gy + 10 - 3 * u, z: gz - nz * (20 - 8 * u) + wz * 6 }), look: () => ({ x: gx, y: gy + 2, z: gz }), title: World.DISTRICTS[d].toUpperCase(), sub: "OPEN!", at: 1.0,
+  return [{ dur: 2.6, cam: (u) => ({ x: gx - nx * (20 - 8 * u) + wx * 6, y: gy + 10 - 3 * u, z: gz - nz * (20 - 8 * u) + wz * 6 }), look: () => ({ x: gx, y: gy + 2, z: gz }), title: World.zoneName(d).toUpperCase(), sub: "OPEN!", at: 1.0,
     fx: () => { gateHold = -1; sfx("unlock"); flash("#ffffff"); cam.shake = 0.5; for (let k = 0; k < 60; k++) { const u = (Math.random() - 0.5) * World.GATE_W; emit(gx + wx * u, gy + 1 + Math.random() * 6, gz + wz * u, 1, { colors: ["#9aa8ff", "#ffffff", "#ffd84a"], speed: 6, up: 4, life: 1.2, size: 0.3 }); } } }];
 }
 function playZones(ds) { if (!ds.length) return; const shots = ds.flatMap(zoneShow); gateHold = ds[0]; cine = { shots, i: 0, t: 0 }; $("cine").classList.add("on"); document.body.classList.add("cinema"); keys.clear(); }

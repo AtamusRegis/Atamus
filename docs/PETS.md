@@ -100,7 +100,7 @@ A parcel that breaks or is lost is gone; the conveyor always has the next one. *
   lower (a Legendary parcel from Main Street: a Common, Uncommon, Rare, Epic or Legendary Dog). (owner, 2026-11-11)
   (owner, 2026-11-12) Each rarity has its own chance: Common 40%, Uncommon 20%, Rare 10%, Epic 5%, Legendary 1%
   (`PET_CHANCE`). A parcel tries its own rarity first, then each one below, and gives one mount at most: a Legendary
-  parcel 1% Legendary, else 5% Epic, else 10% Rare, else 20% Uncommon, else 40% Common. 1 in 10,000 is Shiny. Delivering in the same area again is how you chase a rarer one. Each new mount gets the unboxing in the
+  parcel 1% Legendary, else 5% Epic, else 10% Rare, else 20% Uncommon, else 40% Common. 1 in 10,000 is Shiny. (owner, 2026-11-13) These are the defaults: each neighborhood sets its own chances, Shiny chance and animal (see the zone builder); the Odds menu shows the neighborhood you're in. Delivering in the same area again is how you chase a rarer one. Each new mount gets the unboxing in the
   opening sequence; an Epic, Legendary or Shiny one is announced to the server.
 
 - **Luck** (the tier's, plus Lucky Stamps) weights each roll by (1 + luck) to the power of its rank, then the odds are
@@ -212,21 +212,36 @@ is one 1 m grass block (`SEED`) to stand on, with sky all round. Everything is a
     you're back at the post office (before it, every mount goes 12 m/s). No start lines: always its own speed.
   - **Boost:** a yellow chevron pad: x1.6 speed for a moment, the way it points.
   - **Tree:** solid, 6.5 m tall.
-  - **House:** 8 x 8 m, solid, in a zone's colors; turned to face its door.
-  - **Mailbox:** an **address** in a zone: parcels of that zone's tier go to that zone's mailboxes, named in order of
-    placing ("1 Main Street", "2 Main Street", "1 Maple Lane"...). No mailboxes in a zone: no parcels for it. A mailbox
-    taken away loses the parcels going to it.
-  - **Gate:** 8 m wide, 7 m high: a shimmering wall with a padlock, closed (it stops you) until you've opened the zone it
-    leads into (an Uncommon or better of the zone before's animal; see Parcels); then only its posts and beam. A newly
-    opened zone's showing flies to its gate as it opens.
-- **The zone a spot is in** is the nearest mailbox's (the post office's surroundings are the first): it sets the speed
-  rule (5% per zone short of or past a mount's own), the sky color and a bonk's pay.
+  - **House:** 8 x 8 m, solid, in its neighborhood's colors; turned to face its door.
+  - **Mailbox:** an **address** in the neighborhood it stands in: parcels of that neighborhood's tier go to its
+    mailboxes, named in order of placing with the neighborhood's name ("1 Main Street", "2 Main Street", "1 Maple
+    Suburbs"...). No mailboxes in a neighborhood: no parcels for it. A mailbox taken away loses the parcels going to it.
+  - **Gate:** 8 m wide, 7 m high, posts and a beam with (owner, 2026-11-13) **a blue holographic boundary** (see-through
+    blue, scan lines drifting up) and a padlock: closed (it stops you) until you've opened the neighborhood it leads into
+    (an Uncommon or better of the one before's animal; see Parcels); then only its posts and beam. A newly opened
+    neighborhood's showing flies to its gate as it opens.
+  - **Wall** (owner, 2026-11-13, "bound walls"): the same blue boundary, 7 m high and 1 to 60 m long (L), no posts:
+    closed like a gate of its neighborhood until that's open, then gone.
+  - **Bounds** (owner, 2026-11-13): a rectangle (up to 1000 x 1000 m, any height) for a neighborhood. **Anything inside
+    belongs to that neighborhood** (where bounds overlap, the smallest wins); outside every bounds is Main Street.
+- **The neighborhood a spot is in** is its bounds' (above): it names the mailboxes and colors the houses, and sets the
+  speed rule (5% per neighborhood short of or past a mount's own), the sky color and a bonk's pay.
+- **Each neighborhood's settings** (owner, 2026-11-13; saved with the pieces): its name, the animal its parcels bring and
+  each rarity's chance and the Shiny chance for those mounts (defaults: the zone names, each zone's animal, 40 / 20 /
+  10 / 5 / 1%, 1 in 10,000). The Odds menu's tier names are the neighborhoods' names.
 - **Building** (admins; (owner, 2026-11-13) the Build button on screen, a hammer under the menu buttons; "no need for
   phone editor": building is for a computer, an exception to mobile parity): the freecam (fly where you look: WASD,
-  Space or E up, C or Q down, Shift faster; drag to look) and a bar at the bottom: Block, House, Mailbox, Gate, Tree,
-  Boost / Start Line, Podium, Respawn, Post Office, Erase, ⟳ (turn; R) and ✕ (Escape or the Build button); under it
-  W / H / D and the material for a block, the zone for a house, mailbox or gate (a gate's zone is the one it leads
-  into). **The preview is a blueprint hologram** of the piece itself (see-through blue with glowing edges; red for what
+  Space or E up, C or Q down, Shift faster; drag to look) and a bar at the bottom: Block, House, Mailbox, Gate, Wall,
+  Tree, Boost, Start Line / Podium, Respawn, Post Office, Bounds, Erase, ⟳ (turn; R) and ✕ (Escape or the Build
+  button); under it **the neighborhood you're editing** (− name +) and ⚙, then W / H / D and the material for a block,
+  L for a wall. (owner, 2026-11-13) Gates, walls and bounds are placed for the neighborhood you're editing (a gate or
+  wall in Main Street's leads into the next one). **⚙** opens that neighborhood's panel: name, animal, each rarity's
+  chance (%), Shiny "1 in" (0: never), Save. **Bounds** (seen only while building: a see-through box in the
+  neighborhood's color with its name; the edited neighborhood's brighter, the picked one outlined yellow): a left drag
+  on open space draws new ones; **they can be edited after**: click bounds to pick them (that neighborhood becomes the
+  one you're editing), drag inside to move them, drag an edge (within 1.5 m) to move that side; W / D for the picked
+  bounds, Delete (or the Delete / Backspace key) takes them away; moving and resizing undo and redo too. While building,
+  every gate and wall shows. **The preview is a blueprint hologram** of the piece itself (see-through blue with glowing edges; red for what
   Erase or Cut takes); (owner, 2026-11-13) the left button places, and **dragging with it keeps placing** on the level
   the drag started at (never on top of what the same drag placed; with Erase it erases what it passes over); the right
   button turns the camera. No browser menu on a right click anywhere in the game. **Everything turns** in quarter turns (a block's W and D swap; the post office

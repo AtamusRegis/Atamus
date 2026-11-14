@@ -16,4 +16,6 @@ export const TEST_TOWN = [
   { id: 30, k: "house", x: 40, z: 20, y: 0, r: 2, zone: 0 },
   { id: 31, k: "block", x: 24, z: -24, y: 0, w: 4, h: 2, d: 4, m: "stone" },
   { id: 32, k: "gate", x: 55, z: 0, y: 0, r: 1, zone: 1 },
+  // (owner, 2026-11-13) each neighborhood's bounds (Main Street, neighborhood 0, is everywhere else)
+  ...Array.from({ length: 9 }, (_, n) => ({ id: 70 + n, k: "area", x: 55 + n * 30, z: -60, y: 0, w: 30, d: 120, zone: n + 1 })),
 ];
