@@ -6,6 +6,10 @@ and any rule decided. Use `git log` for the code detail (and for the older Atamu
 
 ## 2026-11-14
 
+- **Builder flow; cracking platforms (owner).** Platforms get their kind (moving or static, breaking, timer, respawn)
+  before placing, and a moving one goes straight on to picking where it goes. Sizes are typed in one row (W / H / L);
+  placing inside a neighborhood's bounds switches to editing it; the ⚙ panel opens on the right; the Turn, Close and
+  Shot tiles are gone (shots come from the panel's list). Breaking platforms crack and shake harder before they go.
 - **Kick camera; respawn facing (owner).** The ragdoll shot now goes to the courier who was kicked; the kicker gets a
   heavy hit instead. Coming back to the respawn point now really faces the way it's turned (an old turn left over from
   the post office overrode it).
