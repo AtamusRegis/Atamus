@@ -107,7 +107,7 @@ export function attachPets(server, { origins = [], allowLocal = false, store = m
   // it's opened. Four unopened gifts of one rarity merge into one of the next.
   function deliver(p, q) {
     const d = p.acct.data, m = mountOf(p), now = Date.now(), late = q.mod === "express" && now > q.due;
-    const coins = W.deliveryCoins(q.tier, q.mod, d.up.payout, q.hits, late), roll = W.rewardRoll(q.tier, d.up);
+    const coins = W.deliveryCoins(q.tier, q.mod, d.up.payout, q.hits, late), roll = W.rewardRoll(q.tier, d.up, Math.random, W.openFor(d));
     d.coins += coins; d.stats.del++; d.fails = 0;
     const gift = { gid: d.nextGid++, r: roll.tier, pt: q.tier };
     // a courier's second delivery brings a new mount, revealed when that gift is opened: (owner, 2026-11-11) the parcel's
@@ -127,7 +127,7 @@ export function attachPets(server, { origins = [], allowLocal = false, store = m
     const d = p.acct.data, list = [];
     for (const gid of new Set(gids)) {
       const g = d.gifts.find((k) => k.gid === gid); if (!g) continue; d.gifts.splice(d.gifts.indexOf(g), 1);
-      const c = W.giftContents(g.r, g.pt, d.up); d.coins += c.coins;
+      const c = W.giftContents(g.r, g.pt, d.up, Math.random, W.openFor(d)); d.coins += c.coins;
       let mount = g.m ? d.mounts.find((k) => k.id === g.m) || null : null; if (mount) mount.r = g.r;   // the second delivery's mount: the gift's rarity
       else if (c.pet && d.mounts.length < W.MOUNT_CAP) { mount = { id: d.nextId++, sp: c.pet.sp, r: c.pet.r, va: c.pet.va }; d.mounts.push(mount); if (mount.va || mount.r >= 3) announce(p, mount); }   // (owner, 2026-11-11) a mount, the parcel's area's animal at its rarity
       delete c.pet; list.push({ gid, r: g.r, pt: g.pt, ...c, mount });
