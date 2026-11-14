@@ -45,11 +45,9 @@
     .act span { position: relative; z-index: 1; font-family: "Big Shoulders Display", system-ui, sans-serif; text-transform: uppercase; }
     .act::after { content: ""; position: absolute; inset: 0; border-radius: 50%; background: conic-gradient(rgba(35,48,59,.5) var(--cd, 0deg), transparent 0); pointer-events: none; }
     .act:active { transform: translateY(3px); box-shadow: 0 1px 0 rgba(0,0,0,.18); }
-    #bkick { right: calc(16px + var(--sr)); bottom: calc(18px + var(--sb)); width: 84px; height: 84px; background: #ff7a59; color: #fff; font-size: 19px; }
+    #bbig { right: calc(16px + var(--sr)); bottom: calc(18px + var(--sb)); width: 84px; height: 84px; background: #ff7a59; color: #fff; font-size: 16px; line-height: 1.05; }
     #bwhistle { right: calc(26px + var(--sr)); bottom: calc(112px + var(--sb)); width: 62px; height: 62px; background: #ffd84a; }
-    #bability { right: calc(110px + var(--sr)); bottom: calc(18px + var(--sb)); width: 66px; height: 66px; background: #7ec4ff; }
-    #bability.locked { background: #cfd8e0; color: #7f8b97; }
-    #bjump { right: calc(100px + var(--sr)); bottom: calc(94px + var(--sb)); width: 62px; height: 62px; background: #8fe08a; }
+    #bjump { right: calc(110px + var(--sr)); bottom: calc(18px + var(--sb)); width: 66px; height: 66px; background: #8fe08a; }
     /* menu buttons down the right edge */
     #menus { position: fixed; right: calc(10px + var(--sr)); top: calc(10px + var(--st)); display: flex; flex-direction: column; gap: 8px; }
     .mbtn { width: 44px; height: 44px; border: 0; border-radius: 14px; background: var(--card); box-shadow: 0 3px 0 rgba(0,0,0,.14); display: grid; place-items: center; }
@@ -221,8 +219,7 @@
     </div>
     <button id="bwhistle" class="act" title="Whistle"><span>Whistle</span></button>
     <button id="bjump" class="act" title="Jump"><span>Jump</span></button>
-    <button id="bability" class="act" title="Ability"><span>Dash</span></button>
-    <button id="bkick" class="act" title="Bonk"><span>Bonk</span></button>
+    <button id="bbig" class="act" title="Big Jump"><span>Big Jump</span></button>
     <div id="gifts"><div id="gq"></div><button id="gall" class="disp">Open all</button><div id="gopen"><i id="grays"></i><div id="gbig"></div><b id="glabel" class="disp"></b></div><div id="gres"><button id="gx" title="Close">✕</button><div id="gtitle"></div><div id="glist"></div></div></div>
     <div id="announce"></div>
     <form id="chatbar" autocomplete="off"><input id="chatin" maxlength="120" placeholder="Chat" enterkeyhint="send"></form>

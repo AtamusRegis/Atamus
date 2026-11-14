@@ -1,6 +1,6 @@
 // Smoke test (required check on every pull request): the shared world loads and its rules hold, and the real /pets
 // server (in memory, no database) serves couriers end to end: accounts, the conveyor, a delivery and its reward roll,
-// kicks, a goose, a dog, upgrades, levels, mounts, chat, parties and staff. Run: cd packages/server && npm run smoke
+// a goose, a dog, upgrades, levels, mounts, chat, parties and staff. Run: cd packages/server && npm run smoke
 // Exits 0 when everything passed, 1 (with what failed) otherwise. Takes a few seconds.
 process.env.ATAMUS_PTR = "1";   // no live website to watch
 import http from "node:http";
@@ -34,7 +34,7 @@ ok(W.spawnWeights(5, 1)[4] >= 0.3 - 1e-9 && W.spawnWeights(3, 1)[2] >= 0.3 - 1e-
 ok(W.shakeOff({ sp: "dog", r: 0 }, 0) === 0 && W.shakeOff({ sp: "dog", r: 4 }, 0) > 0.8 && W.shakeOff({ sp: "dog", r: 4 }, 4) === 0 && W.shakeOff({ sp: "wolf", r: 0 }, 4) === 0 && W.shakeOff({ sp: "wolf", r: 4 }, 4) > 0.5, "a rarer mount outgrows the easier areas' animals");
 ok([0, 1, 2, 3, 4].map((r) => W.bagSize({ r })).join() === "1,1,1,1,1" && W.bagSize({ r: 0, cap: 4 }) === 5 && W.petUpCost({ sp: "dog", r: 0, cap: 1 }, "cap") === 4 * W.petUpCost({ sp: "dog", r: 0 }, "cap") && W.petUpCost({ sp: "wolf", r: 4 }, "spd") > W.petUpCost({ sp: "dog", r: 0 }, "spd") && W.cleanData({ v: 2, mounts: [{ id: 1, sp: "cat", r: 3 }] }).mounts[0].cap === 3 && W.spawnWeights(5, 4).reduce((a, p, n) => a + p * n, 0) > W.spawnWeights(5, 0).reduce((a, p, n) => a + p * n, 0) + 0.4 && W.spawnWeights(5, 4)[0] < W.spawnWeights(5, 0)[0] / 2, "every mount carries 1 parcel, Aura raises it to 5 (dearer each level, and for rarer, farther animals; mounts from before keep what they carried); a rarer mount brings pricier parcels");
 ok(Math.abs(W.rollOdds(0).reduce((a, b) => a + b, 0) - 1) < 1e-9 && Math.abs(W.rollOdds(0)[4] - 0.01) < 1e-9 && W.rollOdds(1)[4] > 0.05 && Math.abs(W.rollOdds(W.stampLuck(10))[4] - 0.03) < 0.004, "roll odds, tier luck and Lucky Stamps");
-ok(!W.levelCost && !W.addXp && W.mountScale({ r: 4 }) === 2 && [0, 1, 2, 3, 4].map((r) => W.abilityTier({ r })).join() === "1,1,2,2,3" && W.upgradeCost("payout", 0) === 300 && W.upgradeCost("payout", 1) === 540 && !W.UPGRADES.routes && !W.UPGRADES.press, "no mount levels (rarity sets size and ability); upgrade costs (no Route Permits)");
+ok(!W.levelCost && !W.addXp && W.mountScale({ r: 4 }) === 2 && !W.ABILITY && !W.abilityTier && !W.KICK && !W.bonkAura && W.BIG_JUMP.x > 1.5 && W.upgradeCost("payout", 0) === 300 && W.upgradeCost("payout", 1) === 540 && !W.UPGRADES.routes && !W.UPGRADES.press, "no mount levels (rarity sets size); no abilities or bonks, a Big Jump; upgrade costs (no Route Permits)");
 ok(W.spawnWeights(1).join() === "1,0,0,0,0,0,0,0,0,0" && W.openFor({ mounts: W.ZONE_KIND.map((sp) => ({ sp, r: 1 })) }) === 10 && [[{ sp: "dog", r: 0 }], [{ sp: "dog", r: 1 }], [{ sp: "dog", r: 4 }, { sp: "cat", r: 1 }], [{ sp: "cat", r: 4 }, { sp: "gator", r: 4 }], [{ sp: "dog", r: 1 }, { sp: "cat", r: 2 }, { sp: "gator", r: 1 }, { sp: "bear", r: 3 }]].map((mounts) => W.openFor({ mounts })).join() === "1,2,3,1,5" && Math.abs(W.spawnWeights(5)[4] - 0.3) < 1e-9 && W.boxDur(10) === 5, "the next area opens with an Uncommon or better animal from the one before; Sturdy Boxes add durability");
 { const c = W.cleanData({ coins: 10, up: { routes: 2, payout: 1 }, stamp: 40 }); ok(c.coins === 10 + 250 + 450 && c.up.payout === 1 && !("routes" in c.up) && !("stamp" in c) && W.cleanData(c).coins === c.coins, "Route Permits' coins come back once; no Stamp Meter"); }
 { const lo = { v: 2, mounts: [{ id: 1, sp: "dog", r: 1 }, { id: 2, sp: "cat", r: 1 }, { id: 3, sp: "gator", r: 1 }] }, hi = { v: 2, mounts: [{ id: 1, sp: "dog", r: 1, tr: "cloud" }, { id: 2, sp: "cat", r: 1, tr: "nope" }, { id: 3, sp: "gator", r: 1 }, { id: 4, sp: "bear", r: 1 }] };
@@ -42,13 +42,13 @@ ok(W.spawnWeights(1).join() === "1,0,0,0,0,0,0,0,0,0" && W.openFor({ mounts: W.Z
 ok(W.ATTACK.slots === 2 && W.ATTACK.calm === 3 && W.DROP_S === 15, "two slots and a 3 s calm; 15 s on the ground");
 ok(Object.keys(W.MODS).join() === "express" && Array.from({ length: 400 }, (_, k) => W.rollParcel(5, 1, () => (k * 0.618) % 1).mod).every((m) => m === "" || m === "express"), "only timed (Express) parcels as modifiers");
 const sp = (s, r, z, spd = 0) => W.mountStats({ sp: s, r, spd }, z).speed, near = (a, b) => Math.abs(a - b) < 1e-9;
-ok(near(sp("dog", 1, 0), sp("dog", 0, 0) * 1.2) && near(sp("wolf", 0, 0), sp("dog", 0, 0) * 1.2) && near(sp("dog", 0, 4), sp("dog", 0, 0) * 0.8) && near(sp("dog", 0, 0, 2), sp("dog", 0, 0) * 1.1) && W.abilityCd({ sp: "dog", r: 4 }) < W.abilityCd({ sp: "dog", r: 0 }) && W.EMPTY_FAST >= 2 && W.GOAT.speed >= 18, "rarity +20% speed and shorter cooldowns; +5% a zone short of its own, -5% a zone past it; +5% an Aura level; goats charge fast");
+ok(near(sp("dog", 1, 0), sp("dog", 0, 0) * 1.2) && near(sp("wolf", 0, 0), sp("dog", 0, 0) * 1.2) && near(sp("dog", 0, 4), sp("dog", 0, 0) * 0.8) && near(sp("dog", 0, 0, 2), sp("dog", 0, 0) * 1.1) && W.EMPTY_FAST >= 2 && W.GOAT.speed >= 18, "rarity +20% speed and shorter cooldowns; +5% a zone short of its own, -5% a zone past it; +5% an Aura level; goats charge fast");
 ok(W.deliveryCoins(0, "", 0, 0, false) === 10 && W.deliveryCoins(4, "", 0, 1, false) === 120 && W.deliveryCoins(1, "express", 0, 0, true) === 20 && W.deliveryCoins(1, "express", 10, 0, false) === 100, "delivery coins");
 { const lo = () => 0.3, up = fresh.up;   // 0.3: a Common roll
   ok(W.rewardRoll(0, up, lo).tier === 0 && W.rewardRoll(0, up, () => 0.999).tier === 4, "a roll is its own (no pity)");
   { const seq = (...v) => { let n = 0; return () => v[Math.min(n++, v.length - 1)]; }, c = W.giftContents(3, 2, up, seq(0.5, 0.04, 0.5)), c2 = W.giftContents(3, 2, up, seq(0.5, 0.15, 0.25, 0.15, 0.5)), c3 = W.giftContents(0, 0, up, seq(0.5, 0.85));
     ok(c.pet && c.pet.sp === "gator" && c.pet.r === 3 && c2.pet.r === 1 && !c3.pet && W.PET_CHANCE.join() === "0.4,0.2,0.1,0.05,0.01", "a parcel tries its own rarity's chance first, then each one below (Epic 5%, Rare 10%, Uncommon 20%, Common 40%)"); }
-  ok(Object.keys(W.MOUNTS).join() === "dog,cat,gator,bear,wolf,fox,raptor,trike,trex,unicorn" && new Set(Object.values(W.MOUNTS).map((m) => m.ab)).size === 10 && Object.values(W.MOUNTS).every((m) => W.ABILITY[m.ab]) && W.CHASERS.join() === Object.keys(W.MOUNTS).join() && W.skinRoll(() => 0.00005) === 1 && W.skinRoll(() => 0.0005) === 0 && W.VARIANTS.length === 2 && W.coatName("wolf", 4) === "Spirit" && W.coatName("gator", 3) === "Black" && W.coat("wolf", 4).length === 2 && W.cleanData({ mounts: [{ id: 1, sp: "dog", r: 0, va: 3 }] }).mounts[0].va === 1, "the mounts are the areas' animals, each with its own coat per rarity; one in ten thousand is Shiny, the only other skin (Golden and Rainbow became Shiny)");
+  ok(Object.keys(W.MOUNTS).join() === "dog,cat,gator,bear,wolf,fox,raptor,trike,trex,unicorn" && W.CHASERS.join() === Object.keys(W.MOUNTS).join() && W.skinRoll(() => 0.00005) === 1 && W.skinRoll(() => 0.0005) === 0 && W.VARIANTS.length === 2 && W.coatName("wolf", 4) === "Spirit" && W.coatName("gator", 3) === "Black" && W.coat("wolf", 4).length === 2 && W.cleanData({ mounts: [{ id: 1, sp: "dog", r: 0, va: 3 }] }).mounts[0].va === 1, "the mounts are the areas' animals, each with its own coat per rarity; one in ten thousand is Shiny, the only other skin (Golden and Rainbow became Shiny)");
   { const old = W.cleanData({ mounts: [{ id: 1, sp: "trex", lv: 7, va: 1 }, { id: 2, sp: "cat", lv: 3 }, { id: 3, sp: "unicorn", lv: 2 }], eggs: { basic: 1, rare: 1, legendary: 1 } });
     ok(old.mounts.map((m) => m.sp + m.r).join() === "dog3,dog1,dog4,dog0,dog2,dog4" && old.mounts[0].va === 1 && !("eggs" in old) && W.cleanData(old).mounts.length === 6, "every mount from before became a Dog of its rarity (level and skin kept); old eggs became Dogs, once"); }
   { const later = W.cleanData({ v: 2, mounts: [{ id: 1, sp: "gator", r: 3, lv: 2 }] }); ok(later.mounts[0].sp === "gator" && W.cleanData({ mounts: [{ id: 1, sp: "gator", r: 3, lv: 2 }] }).mounts[0].sp === "dog", "the change to Dogs happens once (saved data after it keeps its kinds)"); }
@@ -96,13 +96,8 @@ try {
   who("smokeA").ready = { tier: 0, mod: "" }; a.send({ t: "grab" }); await sleep(150); ok(who("smokeA").bag.length === 1, "a level 1 mount carries one parcel at a time");
   await b.wait((m) => m.t === "carry" && m.id === wa.id && m.c, "B sees A's parcel");
   await a.wait((m) => m.t === "belt" && m.ready && m.next, "the conveyor refills");
-  // a kick: stun, one hit; the same courier can't crack it again inside 30 s; nothing in the post office's safe zone
-  await put(b, "smokeB", 0, 5.2); b.send({ t: "kick" }); await sleep(200); ok(who("smokeA").bag[0].hits === 0, "no kicks in the safe zone");
-  who("smokeB").kickAt = 0; await put(a, "smokeA", 40, 40); await put(b, "smokeB", 40, 38);
-  b.send({ t: "kick" });
-  const st = await a.wait((m) => m.t === "stun", "the kick's stun"); ok(st.why === "kick" && st.s > 0.5 && st.s <= 1, "a kick stuns for a second");
-  const cracked = await a.wait((m) => m.t === "bag" && m.ev.k === "crack" && m.ev.why === "kick", "the cracked parcel"); ok(cracked.bag[0].dur === 2 && cracked.bag[0].hits === 1, "a kick takes one durability");
-  { const pa = who("smokeA"), pb = who("smokeB"); pa.stunUntil = 0; pa.graceUntil = 0; pb.kickAt = 0; b.send({ t: "kick" }); await a.wait((m) => m.t === "stun", "a second kick"); ok(pa.bag[0].hits === 1, "the same courier cracks a parcel once in 30 s"); pa.stunUntil = 0; pa.graceUntil = 0; }
+  // (owner, 2026-11-13) no bonking: a "kick" from the page does nothing
+  await put(a, "smokeA", 40, 40); await put(b, "smokeB", 40, 38); b.send({ t: "kick" }); b.send({ t: "ability" }); await sleep(200); ok(who("smokeA").bag[0].hits === 0 && !who("smokeA").stunUntil, "no bonks and no abilities");
   // delivery: the right mailbox, checked by the server; coins, a roll, the Stamp Meter
   { const pa = who("smokeA"), h = W.addr(pa.bag[0].house), wrong = W.houses.find((q) => q.d === 0 && q.id !== h.id);
     for (const g of pa.room.geese) g.cool = Date.now() + 60000;
@@ -110,9 +105,9 @@ try {
     await put(a, "smokeA", wrong.mx, wrong.mz, wrong.my); await sleep(200); ok(pa.bag.length === 1, "the wrong mailbox takes nothing");
     await put(a, "smokeA", h.mx, h.mz, h.my);
     const del = await a.wait((m) => m.t === "delivered", "the delivery");
-    ok(!del.gift.m && del.coins === 8 && del.gift.r >= 0 && del.data.coins === 8 && del.data.gifts.length === 1 && del.data.stats.del === 1, "a delivery pays (less 20% for the hit) and leaves a gift of a rolled rarity");
+    ok(!del.gift.m && del.coins === 10 && del.gift.r >= 0 && del.data.coins === 10 && del.data.gifts.length === 1 && del.data.stats.del === 1, "a delivery pays and leaves a gift of a rolled rarity");
     a.send({ t: "open", gids: [del.gift.gid, 99999] }); const op = await a.wait((m) => m.t === "opened", "the opened gift");
-    ok(op.list.length === 1 && op.list[0].r === del.gift.r && op.data.gifts.length === 0 && op.data.coins === 8 + op.list[0].coins, "opening a gift adds what's inside (once)");
+    ok(op.list.length === 1 && op.list[0].r === del.gift.r && op.data.gifts.length === 0 && op.data.coins === 10 + op.list[0].coins, "opening a gift adds what's inside (once)");
     await b.wait((m) => m.t === "fx" && m.k === "del" && m.id === wa.id, "B sees the delivery"); }
   // a second delivery
   { const pa = who("smokeA"); pa.stunUntil = 0; pa.graceUntil = 0; await put(a, "smokeA", 0, 7.5); pa.ready = { tier: 0, mod: "" }; a.send({ t: "grab" }); await a.wait((m) => m.t === "bag" && m.ev.k === "grab", "another parcel");
@@ -124,16 +119,9 @@ try {
     for (let i = a.inbox.length - 1; i >= 0; i--) if (a.inbox[i].t === "tp") a.inbox.splice(i, 1);   // (earlier runs' trips home)
     for (const q of [...pa.bag]) { const h = W.addr(q.house); pa.stunUntil = 0; await put(a, "smokeA", h.mx, h.mz, h.my); await sleep(250); }
     ok(!pa.bag.length && pa.acct.data.stats.del === 5, "each parcel is delivered at its own mailbox"); { const home = await a.wait((m) => m.t === "tp" && m.why === "home", "back to the post office after the run"); ok(Math.hypot(home.x - W.SPAWN.x, home.z - W.SPAWN.z) < 8, "the run over, back at the post office"); } }
-  // (owner, 2026-11-12) every animal its own ability: a T-Rex's roar freezes the animals near, a Bear's Tough Hide takes no hits
-  { const pa = who("smokeA"), d = pa.acct.data, ride0 = d.ride; d.mounts.push({ id: d.nextId++, sp: "trex", r: 2, va: 0, cap: 0, spd: 0 }, { id: d.nextId++, sp: "bear", r: 2, va: 0, cap: 0, spd: 0 });
-    d.ride = d.mounts[d.mounts.length - 2].id; pa.abilityAt = 0; await put(a, "smokeA", 60, 30); a.send({ t: "ability" }); await a.wait((m) => m.t === "fx" && m.k === "roar", "a roar");
-    ok(pa.abilityAt > 0, "a T-Rex roars");
-    d.ride = d.mounts[d.mounts.length - 1].id; pa.abilityAt = 0; a.send({ t: "ability" }); await sleep(150);
-    ok(pa.hideUntil > Date.now(), "a Bear's Tough Hide is on"); d.ride = ride0; pa.hideUntil = 0; }
   // (owner, 2026-11-12) off the edge of the town: the run starts over at the post office
   { for (let i = a.inbox.length - 1; i >= 0; i--) if (a.inbox[i].t === "tp") a.inbox.splice(i, 1); await put(a, "smokeA", 60, 40, 0); who("smokeA").tpAt = 0; a.send({ t: "pos", x: 60, y: -25, z: 40, yaw: 0, mv: 4, ct: 1 }); const f = await a.wait((m) => m.t === "tp" && m.why === "home", "riding off the edge");
     ok(Math.hypot(f.x - W.SPAWN.x, f.z - W.SPAWN.z) < 8 && W.PIPE.off && !W.zips.length, "riding off the edge starts the run over at the post office; no pipe or ziplines"); }
-  ok(W.bonkAura(0, "courier") === 4 * W.bonkAura(0, "animal") && W.bonkAura(9, "animal") > W.bonkAura(0, "animal"), "a bonk on a courier pays four times an animal's, more farther out");
   // chat and parties
   a.send({ t: "chat", text: "hello" }); await b.wait((m) => m.t === "chat" && m.text === "hello", "chat");
   a.send({ t: "invite", id: wb.id }); const iv = await b.wait((m) => m.t === "invited", "the invitation"); b.send({ t: "answer", from: iv.from, yes: true });
@@ -176,7 +164,6 @@ try {
     for (let i = b.inbox.length - 1; i >= 0; i--) if (b.inbox[i].t === "build") b.inbox.splice(i, 1);
     n.send({ t: "build", op: "unlink", a: p2 }); await b.wait((m) => m.t === "build" && m.build.some((q) => q.id === p1 && !q.to), "the pipes parted"); ok(!W.pipeAt(-120, 2.6, 0.5), "unlinked again");
     n.send({ t: "build", op: "del", id: p1 }); n.send({ t: "build", op: "del", id: p2 }); await sleep(150); }
-  who("smokeB").acct.data.coins = 0;   // (its bonks paid Aura)
   b.send({ t: "admin", op: "quick", cmd: "coins", n: 5000, name: "smokeB" });   // a player: nothing happens
   n.send({ t: "admin", op: "quick", cmd: "coins", n: 5000, name: "smokeB" });
   ok((await b.wait((m) => m.t === "data", "B's coins")).data.coins === 5000, "an admin gives coins once; a player's command is ignored");
@@ -208,7 +195,6 @@ try {
   { const dB = who("smokeB").acct.data; dB.mounts.find((k) => k.id === mid).r = 1; for (const sp of ["cat", "gator", "bear"]) dB.mounts.push({ id: dB.nextId++, sp, r: 1, va: 0 }); } /* an Uncommon of each area's animal: all five areas open */ b.send({ t: "trail", id: mid, k: "cloud" }); const tw = await b.wait((m) => m.t === "data" && m.data.mounts.some((k) => k.id === mid && k.tr === "cloud"), "the trail on");
   ok(!!tw, "an unlocked trail goes on a mount");
   b.send({ t: "set", friendly: true }); await a.wait((m) => m.t === "look" && m.id === wb.id && m.friendly, "Friendly");
-  { const pa = who("smokeA"), pb = who("smokeB"); pa.stunUntil = 0; pa.graceUntil = 0; pa.kickAt = 0; await put(b, "smokeB", 60, 0); await put(a, "smokeA", 60, -2); a.send({ t: "kick" }); await sleep(200); ok(pb.stunUntil === 0, "Friendly couriers can't be kicked"); }
   n.ws.close();
   // logging in again replaces the old connection and keeps everything
   const b2 = client("B2"); await b2.open; b2.send({ t: "login", user: "smokeB", pass: "pass1234" });

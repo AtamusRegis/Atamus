@@ -8,6 +8,12 @@ and any rule decided. Use `git log` for the code detail (and for the older Atamu
 
 - **Pipe shortcuts (owner).** The builder places pipes; shift-click two and Link them, and riding into one's mouth
   brings you out of the other's.
+- **Big Jump; no abilities or bonks (owner).** Every mount gets a Big Jump on the big button (F) where Bonk was; mount
+  abilities and bonking (with its Aura and the Friendly setting) are gone. Jumps keep their speed in the air instead of
+  stopping when you let go; steering in the air is gentle.
+- **Reward screen right away (owner).** The rewards open the moment a run's last parcel is done, as you're sent back to
+  the respawn point, and you can't move until you've closed them. A click cracks the boxes at once; the rewards stay up
+  until the next click (no closing by themselves).
 - **Neighborhoods (owner).** Gates show a blue holographic boundary; new bound walls carry the same boundary and stop
   couriers until the neighborhood they're tied to is open. In the builder you pick the neighborhood you're editing and
   draw its bounds (movable and resizable after): whatever stands inside belongs to it (mailbox names, house colors, the

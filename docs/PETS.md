@@ -30,8 +30,10 @@ Every rule below is in `website/pets-world.js` (shared with the server, an ident
    middle of the screen with its rarity; they shake together (rays and glow growing, a little longer the rarer the best
    one), burst, and every card shows what was inside at once: coins, and a mount the parcel brought right there in its
    card (it drops in spinning over rays, its name and rarity under it, NEW! for the first of its kind and rarity). No
-   separate unboxing to click through. (owner, 2026-11-12) No riding while it's up. A tap hurries the shaking, then closes it (it closes by itself after a few
-   seconds too).
+   separate unboxing to click through. (owner, 2026-11-12) No riding while it's up. (owner, 2026-11-13) It opens the moment the
+   last parcel is delivered or lost, as you're sent back to the respawn point, and you can't move from then until it's
+   closed. The boxes start cracking by themselves; a click cracks them at once; what was inside stays up until another
+   click (so a double click goes straight through).
    (owner, 2026-11-11) **When the run's over** (nothing left delivered, carried, with a goose or on the ground) you're
    taken straight back to the post office. Up to 60 can wait;
    past that the oldest open by themselves.
@@ -76,7 +78,7 @@ A parcel that breaks or is lost is gone; the conveyor always has the next one. *
   more districts are open, the bigger the higher tiers' share (tier n's weight x (1 + n x (open - 1) / 5)), and so does
   the ridden mount's rarity (owner, 2026-11-11: the rarer the mount, the pricier the parcels and the longer the
   trips): tier n's weight x (1 + n x rarity / 2).
-- Every hit (a kick, a bite, a rock, a fall, the pipe's goose) lands on one of your parcels at random.
+- Every hit (a bite, a rock, a fall, the pipe's goose) lands on one of your parcels at random.
 - Every parcel has 3 durability (Sturdy Boxes: 4 at level 5, 5 at level 10). Each hit takes 1 and 20% of the delivery
   coins; at 0 it breaks.
 - (owner, 2026-11-11) Parcels differ only by tier (rarity) and timing: one parcel in five is **Express** (a countdown:
@@ -118,9 +120,9 @@ A parcel that breaks or is lost is gone; the conveyor always has the next one. *
   it's opened, shown in a pink box after you close the roll's card.
 - One equipped mount, seen by everyone; the rest wait in the Stable menu. (owner, 2026-11-11) **No mount levels: the
   rarity decides.** A mount's size is 1 + 0.25 x rarity (Common 1x, Legendary 2x); the rider stays the same size.
-- (owner, 2026-11-11) **The mounts are the areas' animals:** Dog (Main Street, Bark), Cat (Maple Suburbs, Double
-  Jump), Gator (Goose Marsh, Dash), Bear (Cliffside, Tough Hide), Wolf (Floating Islands, Howl), (owner, 2026-11-12) Fox (Frostbite Fields, Vanish),
-  Raptor (Sunscorch Dunes, Pounce), Trike (Jungle Ruins, Charge), T-Rex (Lava Flats, Roar), Unicorn (Moon Garden, Blink), each **Common to Legendary**
+- (owner, 2026-11-11) **The mounts are the areas' animals:** Dog (Main Street), Cat (Maple Suburbs), Gator
+  (Goose Marsh), Bear (Cliffside), Wolf (Floating Islands), (owner, 2026-11-12) Fox (Frostbite Fields), Raptor (Sunscorch
+  Dunes), Trike (Jungle Ruins), T-Rex (Lava Flats), Unicorn (Moon Garden), each **Common to Legendary**
   (the rarity is the mount's own: its coat, its stats and its name; the town's animals of that kind and rarity wear the
   same coat). (owner, 2026-11-11) **Each animal has its own five coats**, one per rarity, chosen to suit it (`MOUNTS[..].coats`),
   Common to Legendary: Dog Tan, Chocolate, Blue Merle, Ember, Starlight; Cat Tabby, Ginger, Siamese, Lilac, Cosmic; Gator
@@ -139,20 +141,13 @@ A parcel that breaks or is lost is gone; the conveyor always has the next one. *
   Main Street, a Dog 80% on the Floating Islands) x (1 + 5% per Aura **Boost** level, up to 10: the Stable's Boost row,
   100 Aura x 1.7^level x (1 + 0.5 x rarity) x (1 + 0.5 x a)); Jump 8 + 0.5 x rarity + 0.25 x a; Grip (shortens stuns) 10%
   x rarity + 3% x a.
-- **Ability:** (owner, 2026-11-12) every animal its own (the button by Kick), stronger at Rare and Legendary (tier 1 /
-  2 / 3: Common and Uncommon, Rare and Epic, Legendary): Dog **Bark** (animals within 10.5 / 14 / 17.5 m run home,
-  geese let go of a parcel and goats back off); Cat **Double Jump** (higher at tier 2, a third at tier 3); Gator
-  **Dash** (a burst of speed); Bear **Tough Hide** (3.25 / 4 / 4.75 s: nothing hits or stuns you, geese can't grab);
-  Wolf **Howl** (4 / 5 / 6 s of 1.5x speed); Fox **Vanish** (3.25 / 4 / 4.75 s: animals can't see you; the ones
-  after you give up); Raptor **Pounce** (a long, fast leap); Trike **Charge** (1.5 / 1.8 / 2.1 s at 1.6x: animals
-  within 3 m are knocked aside, and no hits or stuns but falls); T-Rex **Roar** (animals within 15 / 18 / 21 m freeze
-  for 2.5 / 3 / 3.5 s, geese drop what they hold); Unicorn **Blink** (to the farthest clear ground 13 / 16 / 19 m
-  ahead). Cooldowns: Bark 12, Dash 8, Tough Hide 16, Howl 14, Vanish 14, Pounce 6, Charge 10, Roar 18, Blink 6 s,
-  divided by 1 + 20% per rarity step.
+- **Jumping** (owner, 2026-11-13): Space (or Jump) jumps by the mount's Jump; **Big Jump** (F, or the big button where
+  Bonk was), on every mount, from the ground, is 1.7x that jump, once in 3 s. **A jump keeps its speed:** in the air
+  you carry on at the speed you left the ground with (letting go doesn't stop you), and the controls only steer gently.
 - Legendary: a glowing name tag and sparkling footsteps.
 - **Whistle** calls your mount. A stun knocks you off; you get up on foot (5.5 m/s) and the mount comes back when you
   whistle (owner, 2026-11-11: instantly, even while still stunned), when you reach it, or by itself after about 2 s.
-- Every mount fits every shortcut. Kinds differ only by ability; rarity sets the stats.
+- Every mount fits every shortcut. Kinds differ only by look (and home zone); rarity sets the stats.
 
 ## Aura and the podiums
 
@@ -228,7 +223,7 @@ is one 1 m grass block (`SEED`) to stand on, with sky all round. Everything is a
   - **Bounds** (owner, 2026-11-13): a rectangle (up to 1000 x 1000 m, any height) for a neighborhood. **Anything inside
     belongs to that neighborhood** (where bounds overlap, the smallest wins); outside every bounds is Main Street.
 - **The neighborhood a spot is in** is its bounds' (above): it names the mailboxes and colors the houses, and sets the
-  speed rule (5% per neighborhood short of or past a mount's own), the sky color and a bonk's pay.
+  speed rule (5% per neighborhood short of or past a mount's own), and the sky color.
 - **Each neighborhood's settings** (owner, 2026-11-13; saved with the pieces): its name, the animal its parcels bring and
   each rarity's chance and the Shiny chance for those mounts (defaults: the zone names, each zone's animal, 40 / 20 /
   10 / 5 / 1%, 1 in 10,000). The Odds menu's tier names are the neighborhoods' names.
@@ -266,18 +261,10 @@ is one 1 m grass block (`SEED`) to stand on, with sky all round. Everything is a
 - (owner, 2026-11-11) A mount is as wide as it looks: the bigger it has grown, the farther from a wall it stops (0.55 m
   on foot and when Common, up to about 1 m).
 
-## Bonks
+## Couriers and each other
 
-- (owner, 2026-11-12) The kick is called a **bonk** now (the button, the banner; the code still says kick). Every 4 s. On couriers it reaches 3.6 m in front: a 1 s stun (less with Grip), knocked off the mount, 1 hit to one
-  of their parcels. (owner, 2026-11-11) **On animals it hits every one within 4.5 m, all round:** geese dizzy for 3 s
-  (and they drop the parcel they stole), chasers and goats sent home. (owner, 2026-11-12) **A bonk pays Aura:** 3 per animal and 12 per courier,
-  times the square root of where you are's tier pay (x1 on Main Street to x9.2 in the Moon Garden); an animal pays once
-  in 8 s, a courier once in 30 s from the same bonker (when it also cracks a parcel). The Aura pops out of you: an orb
-  and the amount flung up and out, scaling in big with a bounce, and a burst of purple.
-- **Protection:** no kicks in the safe zone; 5 s of grace after being kicked (a shimmer); the same courier can crack
-  your parcel only once in 30 s; party members can't kick each other; **Friendly** (Settings) means you can't be kicked
-  by couriers and can't kick them (animals still apply).
-- Kicks only crack parcels; nobody can steal another courier's parcel.
+- (owner, 2026-11-13) **No bonks:** couriers can't touch each other or each other's parcels (the old Kick / Bonk, its
+  Aura and the Friendly setting are gone; see Rejected / removed).
 
 ## Courier upgrades
 
@@ -298,9 +285,9 @@ gets those coins back the next time their data loads.
 - Aura top left (it counts up; orbs fly to it). Chat button under it. Delivered parcels down the left.
 - The parcel card top center: a row per parcel (tier, modifier, durability pips, address, distance, the Express
   countdown), stolen or dropped ones faded, and how many you carry of how many.
-- Bottom right: Kick (with its cooldown), Whistle above it, the Ability beside it, Jump.
-- Right edge: Stable, Upgrades, Odds, Settings (Friendly, music and SFX volume, shirt color, Admin for staff, Log out).
-- Controls: WASD or arrows, Space to jump, F kick, Q whistle, E ability, Enter chat; drag to look, wheel to zoom. Touch:
+- Bottom right: Big Jump (with its cooldown), Whistle above it, Jump beside it.
+- Right edge: Stable, Upgrades, Odds, Settings (music and SFX volume, shirt color, Admin for staff, Log out).
+- Controls: WASD or arrows, Space to jump, F Big Jump, Q whistle, Enter chat; drag to look, wheel to zoom. Touch:
   a thumb joystick on the left, drag to look, pinch to zoom, the buttons.
 - No helper text anywhere; buttons and tooltips are names only.
 
@@ -332,15 +319,15 @@ or two; Cliffside brassier over a deeper bass; the Floating Islands an octave up
 - (owner, 2026-11-11: others rode sideways) Facing is sent as an angle within one turn (the server wraps any angle;
   it used to clamp it, which left a courier who had turned round a few times facing the wrong way for everyone else).
 - Chat (Enter or the button); a bubble over the speaker.
-- Parties: tap a courier, then Party; they accept or decline. Up to 6. Party members can't kick each other.
+- Parties: tap a courier, then Party; they accept or decline. Up to 6.
 - A new website build reloads everyone onto it.
 
 ## The server decides
 
-The page may ask: grab, kick, the Bark ability, equip, merge, a trail, open parcels, buy an upgrade, change
+The page may ask: grab, equip, merge, a trail, open parcels, buy an upgrade, change
 a setting, the sewer pipe, the balloon. Everything else (parcels, addresses, deliveries, rolls, damage, stuns, coins)
 is the server's. Checks: a grab only near the conveyor; a delivery only in the right mailbox's ring with an unbroken
-parcel; kick range and cooldown; coins for every purchase; a speed cap (anything over 110 m/s is flagged and blocks
+parcel; coins for every purchase; a speed cap (anything over 110 m/s is flagged and blocks
 deliveries for 2 s).
 
 ## Accounts and saving
@@ -373,6 +360,10 @@ its own fresh saves, with the same logins. It is described in `docs/POKEMON.md`;
 Courier's rules.
 
 ## Rejected / removed
+
+- (owner, 2026-11-13) **Mount abilities** (Bark, Double Jump, Dash, Tough Hide, Howl, Vanish, Pounce, Charge, Roar,
+  Blink) and **bonking** (the kick: stuns, cracked parcels, bonk Aura and its pop, grace, the Friendly setting):
+  replaced by the Big Jump on every mount.
 
 - (owner, 2026-11-13) **The hand-built town** (Main Street, Maple Suburbs, Goose Marsh, Cliffside, the Floating Islands
   and zones 6 to 10 with their houses, roads, hedges, ponds, mud, sprinklers, boost pads, jump pads, the Sky Cannon,

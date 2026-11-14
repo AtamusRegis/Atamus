@@ -18,7 +18,7 @@ import { onWebsiteUpdate, websiteBuild, websiteBy } from "./build.js";
 import { hashSecret, verifySecret } from "./hash.js";
 import { memStore } from "./petstore.js";
 
-const { cleanData, MOUNTS, UPGRADES, TIERS, KICK, DOG, GOOSE, GOAT, ROCK, SKYGOOSE, PIPE, ISLES, CANNON, hyp, clamp } = W;
+const { cleanData, MOUNTS, UPGRADES, TIERS, DOG, GOOSE, GOAT, ROCK, SKYGOOSE, PIPE, ISLES, CANNON, hyp, clamp } = W;
 const ROOM_MAX = 100, TICK_MS = 50, CHAT_GAP_MS = 1200, BEAT_MS = 10000, SAVE_MS = 60000, INVITE_MS = 30000, PARTY_MAX = 6, SPEED_CAP = 110;
 const EXPRESS_EXTRA = [0, 0, 8, 40, 45, 70, 75, 80, 85, 90];   // seconds on top for the districts whose roads wind (the far zones: the cannon, the islands and the zipline first)
 const rooms = [], online = new Map();   // account id -> player
@@ -87,14 +87,12 @@ export function attachPets(server, { origins = [], allowLocal = false, store = m
   // (owner, 2026-11-11) the run's over (nothing left delivered, carried, with a goose or on the ground): back to the post office
   function runDone(p) { if (!held(p) && !p.gone) teleport(p, W.SPAWN.x + (Math.random() - 0.5) * 0.4, W.SPAWN.z + (Math.random() - 0.5) * 0.4, W.SPAWN.y, "home"); }   // (owner, 2026-11-13) the respawn point placed with the zone builder
   function hit(p, why) {   // one hit to one of the parcels on the saddle: a durability pip and 20% of its payout
-    if (Date.now() < (p.hideUntil || 0) || (why !== "fall" && Date.now() < (p.chargeUntil || 0))) return;   // (owner, 2026-11-12) Tough Hide and a Charge shrug it off
     const q = pick1(p.bag); if (!q) return;
     q.dur--; q.hits++;
     if (q.dur <= 0) return lose(p, "broke", q);
     sendBag(p, { k: "crack", why, pid: q.pid }); all(p.room, { t: "fx", k: "crack", id: p.id }, p);
   }
   function stun(p, secs, why) {
-    if (Date.now() < (p.hideUntil || 0) || Date.now() < (p.chargeUntil || 0)) return;
     const s = secs * (1 - statsOf(p).grip); p.stunUntil = Date.now() + s * 1000;
     send(p.ws, { t: "stun", s, why }); all(p.room, { t: "fx", k: "stun", id: p.id, s }, p);
   }
@@ -136,55 +134,6 @@ export function attachPets(server, { origins = [], allowLocal = false, store = m
     }
     if (!list.length) return; changed(p); flush(p.acct);
     if (!quiet) send(p.ws, { t: "opened", list, data: d });
-  }
-  const kickable = (me, x, z, y, extra = 0) => { const fx = Math.sin(me.yaw), fz = Math.cos(me.yaw), dx = x - me.x, dz = z - me.z, along = dx * fx + dz * fz; return Math.abs(y - me.y) < 2.6 && along > -0.6 && along < KICK.range + extra && Math.abs(dx * fz - dz * fx) < KICK.half + 0.9 + extra; };
-  function kick(me) {
-    const now = Date.now(), r = me.room; if (now < me.kickAt + KICK.cd * 1000 - 150 || now < me.stunUntil) return;
-    me.kickAt = now; let landed = false, aura = 0; const d = me.acct.data, zone = W.districtAt(me.x, me.z, me.y), paid = (q) => { if (now - (q.bonkAt || 0) < W.BONK.again * 1000) return; q.bonkAt = now; aura += W.bonkAura(zone, "animal"); };
-    if (!W.inSafeZone(me.x, me.z, me.y)) {
-      if (!d.set.friendly) for (const p of r.players.values()) {
-        if (p === me || p.acct.data.set.friendly || (me.party && me.party === p.party) || W.inSafeZone(p.x, p.z, p.y) || now < p.graceUntil || now < p.stunUntil || !kickable(me, p.x, p.z, p.y)) continue;
-        landed = true; stun(p, KICK.stun, "kick"); p.graceUntil = p.stunUntil + KICK.grace * 1000; all(r, { t: "fx", k: "grace", id: p.id, s: (p.graceUntil - now) / 1000 });
-        if (now - (p.cracked.get(me.acct.id) || 0) > KICK.farm * 1000) { p.cracked.set(me.acct.id, now); hit(p, "kick"); aura += W.bonkAura(zone, "courier"); }   // the same courier cracks your parcel (and pays Aura) once in 30 s
-      }
-      const nearMe = (x, z, y) => Math.abs(y - me.y) < 2.6 && hyp(x - me.x, z - me.z) < KICK.aoe;   // (owner, 2026-11-11) every animal near, all round
-      for (const g of r.geese) if (g.mode !== 4 && nearMe(g.x, g.z, g.y)) {
-        landed = true;
-        if (g.carry) {   // GOOSE BUSTED: the parcel drops where it stands, whole
-          const o = g.carry.p, q = g.carry.parcel; drop(o.stolen, q); o.dropped.push({ parcel: q, x: g.x, z: g.z, y: g.y, until: now + q.left }); g.carry = null;   // its ground time carries on from where it was
-          sendBag(o, { k: "dropped", pid: q.pid }); d.stats.geese++;
-          all(r, { t: "fx", k: "busted", id: me.id, x: r1(g.x), y: r1(g.y), z: r1(g.z) });
-        }
-        g.mode = 4; g.t = 3; release(g); paid(g);
-      }
-      for (const q of r.dogs) if (q.mode !== 3 && nearMe(q.x, q.z, q.y)) { landed = true; q.mode = 3; release(q); q.cool = now + DOG.cool * 1000; all(r, { t: "fx", k: "yelp", dog: q.id }); paid(q); }
-      for (const g of r.goats) if (nearMe(g.x, g.z, W.goats[g.id].y)) { landed = true; g.mode = 3; release(g); g.cool = now + GOAT.cool * 1000; paid(g); }
-    }
-    if (landed) { d.stats.kicks++; changed(me); }
-    if (aura) { d.coins += aura; changed(me); send(me.ws, { t: "bonkaura", n: aura, coins: d.coins }); }   // (owner, 2026-11-12)
-    all(r, { t: "fx", k: "kick", id: me.id, hit: landed ? 1 : 0 });
-  }
-  // (owner, 2026-11-12) the animals within R of a courier: turned tail (a bark, a charge) or frozen (a roar); geese let go
-  function scare(me, R, now, freeze) {
-    const r = me.room, near = (x, z, y) => Math.abs(y - me.y) < 4 && hyp(x - me.x, z - me.z) < R; let n = 0;
-    for (const q of r.dogs) if ((freeze || q.mode !== 3) && near(q.x, q.z, q.y)) { release(q); q.target = null; if (freeze) { q.mode = 0; q.frozen = now + freeze; q.cool = q.frozen + 2000; } else { q.mode = 3; q.cool = now + DOG.cool * 1000; } all(r, { t: "fx", k: "yelp", dog: q.id }); n++; }
-    for (const g of r.geese) if ((freeze || g.mode !== 4) && near(g.x, g.z, g.y)) {
-      if (g.carry) { const o = g.carry.p, q = g.carry.parcel; drop(o.stolen, q); o.dropped.push({ parcel: q, x: g.x, z: g.z, y: g.y, until: now + q.left }); g.carry = null; sendBag(o, { k: "dropped", pid: q.pid }); all(r, { t: "fx", k: "busted", id: me.id, x: r1(g.x), y: r1(g.y), z: r1(g.z) }); }
-      release(g); g.target = null; if (freeze) { g.mode = 0; g.frozen = now + freeze; g.cool = g.frozen + 2000; } else { g.mode = 4; g.t = 3; } n++;
-    }
-    for (const g of r.goats) if ((freeze || g.mode !== 3) && near(g.x, g.z, W.goats[g.id].y)) { release(g); if (freeze) { g.mode = 0; g.frozen = now + freeze; g.cool = g.frozen + 2000; } else { g.mode = 3; g.cool = now + GOAT.cool * 1000; } n++; }
-    return n;
-  }
-  function ability(me) {   // (owner, 2026-11-12) each animal its own: the server's part (the page moves you for the rest)
-    const m = mountOf(me), ab = MOUNTS[m.sp].ab, tier = W.abilityTier(m), now = Date.now(); if (ab === "jump2" || !tier || now < me.abilityAt + W.abilityCd(m) * 1000 - 150) return;
-    me.abilityAt = now; const T = W.abilityTime(ab, tier) * 1000;
-    if (ab === "bark") { const R = 7 + 3.5 * tier; scare(me, R, now, 0); all(me.room, { t: "fx", k: "bark", id: me.id, r: R }); return; }
-    if (ab === "roar") { const R = W.ROAR_R(tier); scare(me, R, now, T); all(me.room, { t: "fx", k: "roar", id: me.id, r: R }); return; }
-    if (ab === "hide") me.hideUntil = now + T;   // Tough Hide: nothing hits or stuns you
-    else if (ab === "vanish") { me.vanishUntil = now + T; for (const q of [...me.room.dogs, ...me.room.geese, ...me.room.goats]) if (q.target === me && !(q.carry)) { release(q); q.target = null; q.mode = 0; } }   // Vanish: animals can't see you
-    else if (ab === "charge") me.chargeUntil = now + T;   // Charge: animals in the way are knocked aside
-    else if (ab === "blink") { me.tpAt = now; me.lt = now; }   // Blink: the jump ahead isn't a speed hack
-    all(me.room, { t: "fx", k: "ab", ab, id: me.id, s: T / 1000 }, me);
   }
   function teleport(p, x, z, y, why, yaw) { p.x = x; p.z = z; p.y = y; p.tpAt = Date.now(); p.lx = x; p.lz = z; p.lt = p.tpAt; send(p.ws, yaw === undefined ? { t: "tp", x, z, y, why } : { t: "tp", x, z, y, why, yaw }); }
 
@@ -304,7 +253,7 @@ export function attachPets(server, { origins = [], allowLocal = false, store = m
         if (old) { send(old.ws, { t: "kicked" }); old.ws.terminate(); gone(old); acct = old.acct; }   // logged in again: the old connection goes
         room = roomFor();
         me = { id: nextId++, ws, room, acct, name: acct.name, x: W.SPAWN.x + (Math.random() - 0.5) * 0.4, y: W.SPAWN.y, z: W.SPAWN.z + (Math.random() - 0.5) * 0.4, yaw: Math.PI, mv: 0, ct: 0, vx: 0, vz: 0, lx: 0, lz: 0, lt: 0, tpAt: now, flags: 0, sus: 0,
-          lastChat: 0, party: null, ready: null, next: null, bag: [], stolen: [], dropped: [], slots: new Set(), calmUntil: 0, pids: 0, stunUntil: 0, graceUntil: 0, kickAt: 0, abilityAt: 0, cracked: new Map(), lastIsle: -1, nextRock: 0, nextDive: 0, pipeAt: 0 };
+          lastChat: 0, party: null, ready: null, next: null, bag: [], stolen: [], dropped: [], slots: new Set(), calmUntil: 0, pids: 0, stunUntil: 0, graceUntil: 0, lastIsle: -1, nextRock: 0, nextDive: 0, pipeAt: 0 };
         me.lx = me.x; me.lz = me.z; me.lt = now;
         online.set(acct.id, me);
         send(ws, { t: "welcome", build: W.build, zones: W.zones, web: websiteBuild(), by: websiteBy(), now, id: me.id, name: me.name, role: rankOf(acct) >= 2 ? "admin" : acct.role, token, data: acct.data, x: me.x, y: me.y, z: me.z, players: [...room.players.values()].map(pub),
@@ -349,8 +298,6 @@ export function attachPets(server, { origins = [], allowLocal = false, store = m
         }
         case "grab": grab(me); break;
         case "open": if (Array.isArray(m.gids)) openGifts(me, m.gids.slice(0, W.GIFT_CAP).map((g) => +g)); break;
-        case "kick": kick(me); break;
-        case "ability": ability(me); break;
         case "trail": {   // (owner, 2026-11-11) put an unlocked trail on a mount (or take it off)
           const q = d.mounts.find((k) => k.id === m.id), k = String(m.k || ""); if (!q || (k && !W.trailsFor(d).includes(k))) break;
           if (k) q.tr = k; else delete q.tr; changed(me); pushData(me); if (q.id === d.ride) showMount(me); break;
@@ -458,7 +405,7 @@ export function attachPets(server, { origins = [], allowLocal = false, store = m
   setInterval(() => { for (const ws of wss.clients) { if (!ws.alive) { ws.terminate(); continue; } ws.alive = false; try { ws.ping(); } catch { /* closing */ } } }, BEAT_MS).unref();
 
   // ---- the town's dangers, 20 times a second; where everyone is, 10 times a second ----
-  const exposed = (p, now) => now >= p.graceUntil && now >= p.stunUntil && now >= p.tpAt && now >= (p.vanishUntil || 0) && !W.inSafeZone(p.x, p.z, p.y);
+  const exposed = (p, now) => now >= p.graceUntil && now >= p.stunUntil && now >= p.tpAt && !W.inSafeZone(p.x, p.z, p.y);
   // an animal's step toward a point, staying on ground it can walk (no walls, no drops); false when it can't
   const pace = (o, tx, tz, sp, tol) => {
     const dx = tx - o.x, dz = tz - o.z, l = hyp(dx, dz) || 1, st = Math.min(l, sp), ok = (x, z) => { const y = W.surfaceAt(x, z, o.y + tol); if (Math.abs(y - o.y) > tol || W.blocked(x, z, y, 0.4)) return false; o.x = x; o.z = z; o.y = y; return true; };
@@ -532,7 +479,6 @@ export function attachPets(server, { origins = [], allowLocal = false, store = m
       if (!p || p.gone || !p.bag.length || !exposed(p, now) || (g.t -= dt) <= 0) { release(g); g.mode = 0; g.cool = now + GOOSE.cool * 1000; continue; }
       if (go(p.x, p.z, S.lunge) < GOOSE.touch && Math.abs(p.y - g.y) < 2.5 && !calmNow(p, now)) {   // it has the parcel (no stun): off to the pond
         if (Math.random() < W.shakeOff(mountOf(p), G.d, G.r)) { all(r, { t: "fx", k: "shake", id: p.id }); p.calmUntil = now + W.ATTACK.calm * 1000; release(g); g.mode = 4; g.t = 1.5; continue; }   // outgrown: shaken off
-        if (now < (p.hideUntil || 0)) { release(g); g.mode = 4; g.t = 2; continue; }   // Tough Hide: it can't get a grip
         const q = pick1(p.bag); drop(p.bag, q); q.goose = g.id; q.sinkAt = now + 1000 * (hyp(P.x - g.x, P.z - g.z) / GOOSE.carry + GOOSE.dunk + 1); p.stolen.push(q); g.carry = { p, parcel: q }; g.stuck = 0; release(g); g.mode = 3;
         sendBag(p, { k: "stolen", pid: q.pid, goose: g.id }); carry(p); all(r, { t: "fx", k: "steal", goose: g.id, id: p.id }, p);
       }
@@ -567,7 +513,6 @@ export function attachPets(server, { origins = [], allowLocal = false, store = m
   function stepSky(r, players, now) {   // falling rocks on Cliffside; diving sky geese and the long drop on the islands
     for (const p of players) {
       const dist = W.districtAt(p.x, p.z, p.y);
-      if (now < (p.chargeUntil || 0)) scare(p, W.CHARGE_R, now, 0);   // (owner, 2026-11-12) a Charge knocks the animals in its way aside
       if (dist === 8 && W.lavaAt(p.x, p.z, p.y) && now >= (p.lavaAt || 0) && now >= p.stunUntil && now - p.tpAt > 600) { p.lavaAt = now + W.LAVA.every * 1000; stun(p, W.LAVA.stun, "lava"); hit(p, "lava"); }   // (owner, 2026-11-12) a lava pool burns
       if (p.y < W.EDGE_Y && !(ISLES.length && p.x > W.ISLE_X && p.x < W.FAR.x0 - 15) && now - p.tpAt > 600) {   // (owner, 2026-11-12) off the edge of the town: the run starts over at the post office
         const held = [...p.bag, ...p.stolen, ...p.dropped.map((o) => o.parcel)]; p.tpAt = now; if (held.length) for (const q of held) lose(p, "fall", q); else runDone(p); continue;
