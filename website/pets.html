@@ -62,9 +62,12 @@
     #pclose { width: 34px; height: 34px; border: 0; border-radius: 10px; background: rgba(255,255,255,.7); }
     #pbody { padding: 12px; overflow-y: auto; touch-action: pan-y; display: flex; flex-direction: column; gap: 10px; -webkit-overflow-scrolling: touch; }
     /* (owner, 2026-11-13) the zone builder's bar: pieces, turn and close on top; sizes, material or zone under */
-    #buildbar { position: fixed; left: 50%; transform: translateX(-50%); bottom: calc(10px + var(--sb)); z-index: 26; display: none; flex-direction: column; gap: 6px; align-items: center; max-width: calc(100vw - 16px); }
+    #buildbar { position: fixed; left: 50%; transform: translateX(-50%); bottom: calc(10px + var(--sb)); z-index: 26; display: none; flex-direction: column; gap: 6px; align-items: center; width: max-content; max-width: calc(100vw - 16px); }
     #buildbar .brow { display: flex; gap: 6px; flex-wrap: wrap; justify-content: center; } #buildbar .bt { padding: 7px 11px; } #buildbar .bt.on { background: #ffd84a; }
     #buildbar .bstep { display: flex; align-items: center; gap: 4px; background: var(--card); border-radius: 12px; padding: 2px 4px; } #buildbar .bstep span { min-width: 54px; text-align: center; font-weight: 700; }
+    #zpanel { position: fixed; left: calc(12px + var(--sl)); bottom: calc(150px + var(--sb)); z-index: 27; display: none; background: var(--card); border-radius: 14px; padding: 12px; width: 270px; box-shadow: 0 6px 20px rgba(0,0,0,.25); }
+    #zpanel > b { display: inline-block; font-size: 16px; margin-bottom: 8px; } #zpanel .zrow { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin: 5px 0; font-weight: 700; white-space: nowrap; }
+    #zpanel input, #zpanel select { width: 120px; padding: 4px 6px; border-radius: 8px; border: 1px solid #c9d2da; font: inherit; } #zpanel .go { width: 100%; margin-top: 8px; }
     #buildbar .mat { color: #1d232a; text-shadow: 0 1px 0 rgba(255,255,255,.6); }
     body.building .act, body.building #gifts { display: none !important; } body.building #mbuild { background: #ffd84a; }
     .btn { border: 0; border-radius: 12px; padding: 8px 14px; background: #e6edf3; box-shadow: 0 3px 0 rgba(0,0,0,.14); display: inline-flex; align-items: center; gap: 6px; white-space: nowrap; }
@@ -224,6 +227,7 @@
     <form id="chatbar" autocomplete="off"><input id="chatin" maxlength="120" placeholder="Chat" enterkeyhint="send"></form>
   </div>
   <div id="buildbar"></div>
+  <div id="zpanel"></div>
   <div id="banner"><b></b><i></i></div>
   <div id="flash"></div>
   <div id="reveal"><i id="rrays"></i><div id="rgrid"></div></div>
@@ -242,6 +246,6 @@
     <button id="lgo" class="btn go" type="submit">Log in</button>
     <button id="lnew" class="btn" type="button">Create account</button>
   </form>
-  <script type="module" src="pets.js?v=1794626339"></script>
+  <script type="module" src="pets.js?v=1794627270"></script>
 </body>
 </html>

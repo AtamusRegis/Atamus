@@ -6,6 +6,11 @@ and any rule decided. Use `git log` for the code detail (and for the older Atamu
 
 ## 2026-11-13
 
+- **Neighborhoods (owner).** Gates show a blue holographic boundary; new bound walls carry the same boundary and stop
+  couriers until the neighborhood they're tied to is open. In the builder you pick the neighborhood you're editing and
+  draw its bounds (movable and resizable after): whatever stands inside belongs to it (mailbox names, house colors, the
+  speed rule). A panel sets each neighborhood's name, animal, rarity chances and Shiny chance; the Odds menu shows the
+  one you're in.
 - **Paint while building (owner).** In build mode a left-button drag keeps placing (or erasing) pieces; the right button
   turns the camera. A right click never opens the browser's menu in the game.
 - **Builder tools (owner).** A Build button on screen for admins; blueprint holograms of each piece as the preview;

@@ -57,7 +57,7 @@ export const UP_MAX = 10, upgradeCost = (k, lv) => Math.round(UPGRADES[k].base *
 // (owner, 2026-11-11) the next area opens once you have an Uncommon (or better) animal from the one before: an
 // Uncommon Dog opens Maple Suburbs, an Uncommon Cat Goose Marsh, and so on
 export const OPEN_R = 1;
-export function openFor(d) { const ms = (d && d.mounts) || []; let open = 1; while (open < ZONE_KIND.length && ms.some((m) => m.sp === ZONE_KIND[open - 1] && m.r >= OPEN_R)) open++; return open; }
+export function openFor(d) { const ms = (d && d.mounts) || []; let open = 1; while (open < TIERS.length && ms.some((m) => m.sp === zoneSp(open - 1) && m.r >= OPEN_R)) open++; return open; }   // (owner, 2026-11-13) each neighborhood's own animal
 // which tiers a courier's conveyor gives: only open districts; the more are open, the more of the higher tiers, and the
 // ridden mount's level lifts them too (owner, 2026-11-11: the higher level, the pricier the parcels and the farther the trips)
 export function spawnWeights(open, r = 0) {   // r: the ridden mount's rarity
@@ -141,7 +141,7 @@ export const bagSize = (m) => 1 + clamp(m.cap | 0, 0, CAP_MAX);
 // speed (spd, +5% a level)
 const petScale = (m) => (1 + 0.5 * clamp(m.r | 0, 0, 4)) * (1 + 0.5 * Math.max(0, ZONE_KIND.indexOf(m.sp)));
 export const petUpCost = (m, k) => (k === "cap" ? Math.round(150 * Math.pow(4, m.cap | 0) * petScale(m)) : Math.round(100 * Math.pow(1.7, m.spd | 0) * petScale(m)));
-export const homeZone = (sp) => Math.max(0, ZONE_KIND.indexOf(sp));
+export const homeZone = (sp) => { const n = zones.findIndex((z) => z.sp === sp); return n >= 0 ? n : Math.max(0, ZONE_KIND.indexOf(sp)); };   // the first neighborhood whose animal it is
 export const mountScale = (m) => 1 + 0.25 * clamp(m.r | 0, 0, 4);             // Common 1x to Legendary 2x
 export const abilityTier = (m) => [1, 1, 2, 2, 3][clamp(m.r | 0, 0, 4)];      // (owner, 2026-11-11) every rarity has its animal's ability: stronger at Rare and Legendary
 // (owner, 2026-11-12) around the post office every mount goes the same speed; the purple Aura pad across the way out
@@ -233,7 +233,7 @@ export function rewardRoll(tier, up, rnd = Math.random) {
 // what's inside a gift of rarity t from a parcel of tier pt (decided when it's opened, owner 2026-11-11)
 export function giftContents(t, pt, up, rnd = Math.random) {
   const R = ROLLS[t], coins = Math.round((R.coins[0] + rnd() * (R.coins[1] - R.coins[0])) * Math.sqrt(TIERS[pt].mult));
-  let pet = null; for (let r = t; r >= 0 && !pet; r--) if (rnd() < PET_CHANCE[r]) pet = { sp: ZONE_KIND[pt], r, va: skinRoll(rnd) };   // that rarity or lower
+  const Z = zoneCfg(pt); let pet = null; for (let r = t; r >= 0 && !pet; r--) if (rnd() < Z.chance[r]) pet = { sp: Z.sp, r, va: skinRoll(rnd, Z.shiny) };   // that rarity or lower; (owner, 2026-11-13) the neighborhood's own animal and chances
   return { coins, pet };
 }
 // (owner, 2026-11-11) four unopened gifts of one rarity merge into one of the next (its parcel tier: the best of the four)
@@ -247,7 +247,7 @@ export function mergeGifts(gifts, nextGid) {   // merges in place; returns the m
   }
   return out;
 }
-export const skinRoll = (rnd = Math.random) => (rnd() < SHINY ? 1 : 0);   // 1 in 10,000 Shiny
+export const skinRoll = (rnd = Math.random, p = SHINY) => (rnd() < p ? 1 : 0);   // 1 in 10,000 Shiny
 
 // ---------------------------------------------------------------------------------------------------------------------
 // The town (owner, 2026-11-11: one long line, harder the farther out): the post office at the west end, then one road east
@@ -290,7 +290,7 @@ const ISLE_LINKS = [[0, 1], [1, 2]];
 // reached by the zipline from the last island
 export const FAR = { x0: 600, len: 100, n: 5, z0: -30, z1: 30 }, farX = (d) => FAR.x0 + (d - 5) * FAR.len;
 // (owner, 2026-11-13) the zone a spot is in: the nearest mailbox's (the post office square is the first)
-export function districtAt(x, z, y = 0) { if (PO.on && hyp(x - PO.x, z - PO.z) < SAFE_R + 4) return 0; let best = Infinity, d = 0; for (const h of houses) { const k = hyp(h.mx - x, h.mz - z) + Math.abs(h.my - y); if (k < best) { best = k; d = h.d; } } return d; }
+export function districtAt(x, z, y = 0) { for (const a of areas) if (x >= a.x0 && x < a.x1 && z >= a.z0 && z < a.z1) return a.d; return 0; }   // (owner, 2026-11-13) the bounds it's in
 
 function rect(x0, x1, z0, z1, y, kind, b = y - 40) { slabs.push({ k: 0, x0, x1, z0, z1, y, b, kind }); }
 function disc(x, z, r, y, kind, b = y - 6) { slabs.push({ k: 1, x, z, r, x0: x - r, x1: x + r, z0: z - r, z1: z + r, y, b, kind }); }
@@ -317,9 +317,20 @@ const BASE_N = { slabs: slabs.length, solids: solids.length };
 // to anyone who hasn't opened zone d yet (the zone it leads into) ----
 export const BUILD_MAX = 6000, BLOCK_MAX = 60, HOUSE_S = 8, HOUSE_H = 5, GATE_W = 8, GATE_H = 7, GATE_T = 1;
 export const MATS = ["grass", "dirt", "stone", "brick", "wood", "road", "sand", "snow", "ice", "water"];
-export const PIECES = ["block", "house", "mailbox", "gate", "tree", "boost", "start", "podium", "spawn", "office"];
+export const PIECES = ["block", "house", "mailbox", "gate", "wall", "tree", "boost", "start", "podium", "spawn", "office", "area"];
+export const AREA_MAX = 1000;
 export const ONE_ONLY = ["spawn", "office"];   // the last one placed counts
-export const buildings = [], gates = [], starts = [];
+export const buildings = [], gates = [], starts = [], areas = [];
+// ---- (owner, 2026-11-13) neighborhoods: each one's name, its animal (the mount its parcels bring, the one that opens the
+// next), the chance of each rarity and of a Shiny; an admin sets them in the builder. Where a spot belongs: the bounds
+// (areas) drawn for each; the smallest one a spot is in wins; outside every bound, the first neighborhood ----
+export const zones = [];
+export function cleanZone(z, n) {
+  z = z || {}; const ch = Array.isArray(z.chance) ? z.chance : PET_CHANCE;
+  return { name: (typeof z.name === "string" && z.name.trim() ? z.name.trim() : DISTRICTS[n]).slice(0, 24), sp: MOUNTS[z.sp] ? z.sp : ZONE_KIND[n], chance: PET_CHANCE.map((v, r) => clamp(Number.isFinite(+ch[r]) ? +ch[r] : v, 0, 1)), shiny: clamp(Number.isFinite(+z.shiny) ? +z.shiny : SHINY, 0, 0.5) };
+}
+export const zoneCfg = (d) => zones[clamp(d | 0, 0, TIERS.length - 1)] || cleanZone(null, clamp(d | 0, 0, TIERS.length - 1));
+export const zoneName = (d) => zoneCfg(d).name, zoneSp = (d) => zoneCfg(d).sp;
 export const START_W = 8, START_D = 2;   // a start line: 8 m across, 2 m deep
 export const onStart = (x, z, y) => starts.some((g) => Math.abs(y - g.y) < 2 && Math.abs((x - g.x) * g.c - (z - g.z) * g.s) < START_W / 2 && Math.abs((x - g.x) * g.s + (z - g.z) * g.c) < START_D / 2 + 0.5);
 export let build = [];
@@ -327,21 +338,26 @@ export function cleanPiece(q) {
   if (!q || !PIECES.includes(q.k)) return null;
   const n = (v, a, b) => clamp(Math.round(+v || 0), a, b), o = { id: n(q.id, 1, 1e9), k: q.k, x: n(q.x, -GROUND.r, GROUND.r), z: n(q.z, -GROUND.r, GROUND.r), y: n(q.y, -40, 300) };
   if (q.k === "block") { o.w = n(q.w, 1, BLOCK_MAX); o.h = n(q.h, 1, BLOCK_MAX); o.d = n(q.d, 1, BLOCK_MAX); o.m = MATS.includes(q.m) ? q.m : "grass"; }
-  else { o.r = n(q.r, 0, 3); if (["house", "mailbox", "gate"].includes(q.k)) o.zone = n(q.zone, q.k === "gate" ? 1 : 0, TIERS.length - 1); }
+  else if (q.k === "area") { o.w = n(q.w, 1, AREA_MAX); o.d = n(q.d, 1, AREA_MAX); o.zone = n(q.zone, 0, TIERS.length - 1); }   // (owner, 2026-11-13) a neighborhood's bounds
+  else { o.r = n(q.r, 0, 3); if (q.k === "gate" || q.k === "wall") o.zone = n(q.zone, 1, TIERS.length - 1); if (q.k === "wall") o.w = n(q.w, 1, BLOCK_MAX); }
   return o;
 }
-const STREETS = ["Main Street", "Maple Lane", "Goose Way", "Cliff Road", "Cloud Isle", "Frost Lane", "Dune Road", "Vine Street", "Ember Way", "Star Lane"];
-export function setBuild(list) {
-  build = (Array.isArray(list) ? list : []).map(cleanPiece).filter(Boolean).slice(0, BUILD_MAX); if (!build.length) build = SEED.map((q) => ({ ...q }));
+export function setBuild(data) {   // data: { pieces, zones } (or, from before, just the pieces)
+  const list = Array.isArray(data) ? data : (data && data.pieces) || [], zs = (!Array.isArray(data) && data && data.zones) || [];
+  zones.length = 0; for (let n = 0; n < TIERS.length; n++) zones.push(cleanZone(zs[n], n));
+  build = list.map(cleanPiece).filter(Boolean).slice(0, BUILD_MAX); if (!build.length) build = SEED.map((q) => ({ ...q }));
+  areas.length = 0; for (const q of build) if (q.k === "area") areas.push({ id: q.id, x0: q.x, z0: q.z, x1: q.x + q.w, z1: q.z + q.d, d: q.zone, size: q.w * q.d });
+  areas.sort((a, b) => a.size - b.size);
   slabs.length = BASE_N.slabs; solids.length = BASE_N.solids; houses.length = 0; buildings.length = 0; gates.length = 0; starts.length = 0; boosts.length = 0; trees.length = 0; PODIUM.spots.length = 0; PO.on = false;
   Object.assign(SPAWN, { x: 0.5, z: 0.5, y: 0, yaw: 0 });
   const count = TIERS.map(() => 0);
   for (const q of build) {
     const yaw = (q.r | 0) * (Math.PI / 2);
     if (q.k === "block") rect(q.x, q.x + q.w, q.z, q.z + q.d, q.y + q.h, q.m, q.y);
-    else if (q.k === "house") { buildings.push({ id: q.id, x: q.x, z: q.z, y: q.y, yaw, d: q.zone }); solid(q.x, q.z, HOUSE_S / 2, HOUSE_S / 2, q.y - 1, q.y + HOUSE_H, yaw); }
-    else if (q.k === "mailbox") { houses.push({ id: q.id, x: q.x, z: q.z, y: q.y, yaw, d: q.zone, mx: q.x, mz: q.z, my: q.y, name: ++count[q.zone] + " " + STREETS[q.zone] }); solid(q.x, q.z, 0.2, 0.2, q.y - 1, q.y + 1.3); }
-    else if (q.k === "gate") gates.push({ id: q.id, x: q.x, z: q.z, y: q.y, yaw, d: q.zone, c: Math.cos(yaw), s: Math.sin(yaw) });
+    else if (q.k === "house") { buildings.push({ id: q.id, x: q.x, z: q.z, y: q.y, yaw, d: districtAt(q.x, q.z, q.y) }); solid(q.x, q.z, HOUSE_S / 2, HOUSE_S / 2, q.y - 1, q.y + HOUSE_H, yaw); }
+    else if (q.k === "mailbox") { const d = districtAt(q.x, q.z, q.y); houses.push({ id: q.id, x: q.x, z: q.z, y: q.y, yaw, d, mx: q.x, mz: q.z, my: q.y, name: ++count[d] + " " + zoneName(d) }); solid(q.x, q.z, 0.2, 0.2, q.y - 1, q.y + 1.3); }   // in whichever neighborhood's bounds it stands
+    else if (q.k === "wall") gates.push({ id: q.id, x: q.x, z: q.z, y: q.y, yaw, d: q.zone, c: Math.cos(yaw), s: Math.sin(yaw), w: q.w, wall: 1 });   // a bound wall: closed like a gate
+    else if (q.k === "gate") gates.push({ id: q.id, x: q.x, z: q.z, y: q.y, yaw, d: q.zone, c: Math.cos(yaw), s: Math.sin(yaw), w: GATE_W });
     else if (q.k === "tree") { trees.push({ id: q.id, x: q.x, z: q.z, y: q.y, s: 1, yaw }); solid(q.x, q.z, 0.45, 0.45, q.y - 1, q.y + 8); }
     else if (q.k === "boost") boosts.push({ id: q.id, x: q.x, z: q.z, y: q.y, yaw });   // x1.6 speed for a moment, the way it points
     else if (q.k === "start") starts.push({ id: q.id, x: q.x, z: q.z, y: q.y, yaw, c: Math.cos(yaw), s: Math.sin(yaw) });
@@ -358,7 +374,7 @@ export function setBuild(list) {
 export const addr = (id) => houses.find((h) => h.id === id) || null;   // a mailbox by its id
 // a closed gate in the way at (x, z, y), for someone with `open` zones open
 export function gateBlocked(x, z, y, open, r = 0.55) {
-  for (const g of gates) { if (g.d < open || y + 1.4 < g.y || y > g.y + GATE_H) continue; const dx = x - g.x, dz = z - g.z; if (Math.abs(dx * g.c - dz * g.s) < GATE_W / 2 + r && Math.abs(dx * g.s + dz * g.c) < GATE_T / 2 + r) return true; }
+  for (const g of gates) { if (g.d < open || y + 1.4 < g.y || y > g.y + GATE_H) continue; const dx = x - g.x, dz = z - g.z; if (Math.abs(dx * g.c - dz * g.s) < g.w / 2 + r && Math.abs(dx * g.s + dz * g.c) < GATE_T / 2 + r) return true; }
   return false;
 }
 
