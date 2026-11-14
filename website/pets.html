@@ -47,6 +47,7 @@
     .act::after { content: ""; position: absolute; inset: 0; border-radius: 50%; background: conic-gradient(rgba(35,48,59,.5) var(--cd, 0deg), transparent 0); pointer-events: none; }
     .act:active { transform: translateY(3px); box-shadow: 0 1px 0 rgba(0,0,0,.18); }
     #bwhistle { right: calc(26px + var(--sr)); bottom: calc(112px + var(--sb)); width: 62px; height: 62px; background: #ffd84a; }
+    #bkick { right: calc(112px + var(--sr)); bottom: calc(18px + var(--sb)); width: 66px; height: 66px; background: #ff7a59; }
     #bjump { right: calc(16px + var(--sr)); bottom: calc(18px + var(--sb)); width: 84px; height: 84px; background: #8fe08a; }   /* (owner, 2026-11-14) the big button now */
     /* menu buttons down the right edge */
     #menus { position: fixed; right: calc(10px + var(--sr)); top: calc(10px + var(--st)); display: flex; flex-direction: column; gap: 8px; }
@@ -223,6 +224,7 @@
       <button id="mbuild" class="mbtn" title="Build" hidden data-ico="build"></button>
     </div>
     <button id="bwhistle" class="act" title="Whistle" data-ico="whistle"></button>
+    <button id="bkick" class="act" title="Kick" data-ico="kick"></button>
     <button id="bjump" class="act" title="Jump" data-ico="jump"></button>
     <div id="gifts"><div id="gq"></div><button id="gall" class="disp">Open all</button><div id="gopen"><i id="grays"></i><div id="gbig"></div><b id="glabel" class="disp"></b></div><div id="gres"><button id="gx" title="Close">✕</button><div id="gtitle"></div><div id="glist"></div></div></div>
     <div id="announce"></div>
