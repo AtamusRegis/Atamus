@@ -6,6 +6,9 @@ and any rule decided. Use `git log` for the code detail (and for the older Atamu
 
 ## 2026-11-14
 
+- **Kicking other couriers (owner).** F (or the boot button) kicks the courier in front of you off their mount as a
+  ragdoll, with a short shot of it for the kicker; they get back up and whistle their mount, or respawn if thrown off
+  the edge.
 - **Gates reach the sky (owner).** A locked gate's or wall's boundary stops you at any height, fading out above and
   below; unlocked, it disappears.
 - **No Boost, Jump or Grip levels (owner).** Mounts no longer buy Boost (speed) levels; every mount jumps and grips

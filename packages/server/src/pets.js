@@ -352,6 +352,20 @@ export function attachPets(server, { origins = [], allowLocal = false, store = m
           const [mx, mz] = W.turn(0, W.TUBE.l / 2 + 0.7, q.yaw); if (hyp(me.x - q.x - mx, me.z - q.z - mz) > 5 || Math.abs(me.y - q.y) > 4) break;
           me.tubeAt = now; const e = W.pipeExit(o); teleport(me, e.x, e.z, e.y, "tube", e.yaw); all(room, { t: "fx", k: "tube", id: me.id, x: e.x, y: e.y, z: e.z }, me); break;
         }
+        case "kick": {   // (owner, 2026-11-14) kicking another courier: the nearest in reach and in front
+          if (now < (me.kickAt || 0) + W.KICK.cd * 1000 || now < me.stunUntil || W.inSafeZone(me.x, me.z, me.y)) break;
+          me.kickAt = now; all(room, { t: "fx", k: "kick", id: me.id }, me);
+          const fx = Math.sin(me.yaw), fz = Math.cos(me.yaw); let best = null, bd = Infinity;
+          for (const o of room.players.values()) {
+            if (o === me || o.gone || (me.party && me.party === o.party) || now < o.stunUntil || now < (o.kickSafe || 0) || W.inSafeZone(o.x, o.z, o.y) || Math.abs(o.y - me.y) > 2.5) continue;
+            const dx = o.x - me.x, dz = o.z - me.z, d = hyp(dx, dz); if (d > W.KICK.range || (d > 1.2 && (dx * fx + dz * fz) / d < 0.2)) continue; if (d < bd) { bd = d; best = o; }
+          }
+          if (!best) break;
+          const d = hyp(best.x - me.x, best.z - me.z), ux = d > 0.05 ? (best.x - me.x) / d : fx, uz = d > 0.05 ? (best.z - me.z) / d : fz;
+          best.kickSafe = now + (W.KICK.down + W.KICK.grace) * 1000; stun(best, W.KICK.down, "kick");
+          send(best.ws, { t: "kickfly", by: me.id, vx: r1(ux * W.KICK.fling), vy: W.KICK.up, vz: r1(uz * W.KICK.fling) }); send(me.ws, { t: "kickhit", id: best.id });
+          break;
+        }
         case "dropall": {   // (owner, 2026-11-14) letting go of the parcels you carry, to take new ones
           const all3 = [...me.bag, ...me.stolen, ...me.dropped.map((o) => o.parcel)]; for (const q of all3) lose(me, "drop", q); break;
         }

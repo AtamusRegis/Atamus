@@ -306,8 +306,14 @@ is one 1 m grass block (`SEED`) to stand on, with sky all round. Everything is a
 
 ## Couriers and each other
 
-- (owner, 2026-11-13) **No bonks:** couriers can't touch each other or each other's parcels (the old Kick / Bonk, its
-  Aura and the Friendly setting are gone; see Rejected / removed).
+- (owner, 2026-11-14) **Kicking is back, against other couriers:** F or the boot button (bottom right, beside Jump),
+  once in 4 s. The server picks the nearest courier within 3.6 m in front of you (any height within 2.5 m): it throws
+  them off their mount (14 m/s away from you, 9 m/s up), tumbling as a ragdoll (limbs flailing) for 1.4 s, then
+  they're on foot: they get up and whistle their mount back (Q, or it comes by itself a moment later); thrown off the
+  edge of the town, they're back at the respawn point (with their parcels). The kicker sees a short shot round the
+  courier they kicked ("KICK!" and their name). Never a party member, never at the post office, and a kicked courier
+  can't be kicked again for 4 s after getting up. No parcel damage, no Aura. (The 2026-11-13 bonk, its Aura and the
+  Friendly setting stay gone.)
 
 ## Courier upgrades
 
@@ -330,12 +336,12 @@ gets those coins back the next time their data loads.
   card's rows, with tier, pips, address, distance and countdown, are gone).
 - (owner, 2026-11-14) Admins only: the Odds button (players don't see the rarity chart), and B opens or closes the build
   menu.
-- Bottom right: Jump (the big button), Whistle above it.
+- Bottom right: Jump (the big button), Kick beside it, Whistle above.
 - (owner, 2026-11-13) **Icons are drawn symbols** (website/icons.js): a barn for the Stable, a green up arrow for
   Upgrades, a die for Odds, a cog for Settings, a hammer for Build, a speech bubble for chat, a whistle, an arrow for
   Jump; the builder's turn, close, neighborhood (cog) and shot point (pin) buttons too.
 - Right edge: Stable, Upgrades, Odds, Settings (music and SFX volume, shirt color, Admin for staff, Log out).
-- Controls: WASD or arrows, Space to jump, Q whistle, Enter chat; drag to look, wheel to zoom. Touch:
+- Controls: WASD or arrows, Space to jump, F kick, Q whistle, Enter chat; drag to look, wheel to zoom. Touch:
   a thumb joystick on the left, drag to look, pinch to zoom, the buttons.
 - No helper text anywhere; buttons and tooltips are names only.
 
