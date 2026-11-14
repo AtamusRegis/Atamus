@@ -6,6 +6,9 @@ and any rule decided. Use `git log` for the code detail (and for the older Atamu
 
 ## 2026-11-14
 
+- **Gates chain the neighborhoods (owner).** Gates and walls placed while editing a neighborhood lead into the next one,
+  and the next neighborhood opens for editing only once a gate into it exists. Each neighborhood's gates have their own
+  color, never the same as the one before.
 - **Respawn camera (owner).** At the respawn point the camera sits straight behind you, looking the way you face, 30
   degrees down.
 - **Hazards (owner).** Mud and turbine blocks (water blocks are now see-through walls), gusts with their own size,
