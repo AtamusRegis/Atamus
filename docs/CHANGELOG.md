@@ -6,6 +6,8 @@ and any rule decided. Use `git log` for the code detail (and for the older Atamu
 
 ## 2026-11-13
 
+- **Paint while building (owner).** In build mode a left-button drag keeps placing (or erasing) pieces; the right button
+  turns the camera. A right click never opens the browser's menu in the game.
 - **Builder tools (owner).** A Build button on screen for admins; blueprint holograms of each piece as the preview;
   every piece turns (the post office and the respawn point too); Q / E fly down and up; Ctrl+C / X / V copy, cut and
   paste a piece, Ctrl+Z undoes and Ctrl+Shift+Z redoes. Building is for a computer (no phone controls).
