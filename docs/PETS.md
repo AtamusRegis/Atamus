@@ -251,7 +251,11 @@ is one 1 m grass block (`SEED`) to stand on, with sky all round. Everything is a
   goes through each shot in order: the camera circles the point (about 4 s) with the shot's name over the
   neighborhood's. In the ⚙ panel: Shots, + (a new shot; the next left click in the world sets its point), each row's
   name, ▶ (plays that shot now, as typed, saved or not), 📍 (pick its point again) and ✕; Save keeps them. While building, the edited neighborhood's shot points show
-  as rings with a post and their number and name (defaults: the zone names, each zone's animal, 40 / 20 /
+  as rings with a post and their number and name ((owner, 2026-11-14) and a little camera; never shown to players). (owner, 2026-11-14)
+  **Shots are things in the world too:** the **Shot** tile places one where you click (up to 5 per neighborhood, saved
+  at once); click a shot to pick it and drag its **move arrows** (red east-west, blue north-south, green up-down, like
+  an editor's move tool, the same size on screen at any distance) to move it a meter at a time, saved as you let go;
+  Delete (or Backspace) takes the picked shot away (defaults: the zone names, each zone's animal, 40 / 20 /
   10 / 5 / 1%, 1 in 10,000). The Odds menu's tier names are the neighborhoods' names.
 - **Building** (admins; (owner, 2026-11-13) the Build button on screen, a hammer under the menu buttons; "no need for
   phone editor": building is for a computer, an exception to mobile parity): the freecam (fly where you look: WASD,
