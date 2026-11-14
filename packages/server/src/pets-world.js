@@ -162,8 +162,6 @@ export const podiumPay = (m) => Math.round(2 * Math.pow(2, clamp(m.r | 0, 0, 4))
 // Common one, a Rare Egg a Rare one, a Legendary Egg a Legendary one)
 const EGG_TO = { basic: ["dog", 0], rare: ["gator", 2], legendary: ["wolf", 4] };
 export const MOUNT_CAP = 60;
-// (owner, 2026-11-13) the Big Jump (instead of the bonk): every mount, this many times its jump, once in BIG_JUMP.cd s
-export const BIG_JUMP = { x: 1.7, cd: 3 };
 // dogs, geese (m and seconds)
 // (owner, 2026-11-11) the attack queue: a courier can be chased by at most `slots` animals at once (any kinds); after any
 // animal attacks, none can for `calm` s, counted from when the parcel is back or lost (a stolen or dropped one holds it)
