@@ -154,6 +154,8 @@ try {
     n.send({ t: "build", op: "add", piece: { k: "wall", x: -250, z: 0, y: 0, r: 0, w: 12, zone: 3 } }); await b.wait((m) => m.t === "build" && m.build.some((q) => q.k === "wall"), "a wall");
     ok(W.gateBlocked(-245, 0, 0, 1, 0.5) && !W.gateBlocked(-235, 0, 0, 1, 0.5) && !W.gateBlocked(-245, 0, 0, 4, 0.5), "a bound wall stops couriers along its length until its neighborhood is open");
     n.send({ t: "build", op: "del", id: W.build.find((q) => q.k === "wall").id }); await sleep(150); }
+  // (owner, 2026-11-13) the respawn point turns all the way round (degrees); older ones keep their quarter turns
+  ok(W.cleanPiece({ k: "spawn", x: 0, z: 0, y: 0, a: 200 }).a === 200 && W.cleanPiece({ k: "spawn", x: 0, z: 0, y: 0, r: 3 }).a === 270 && W.cleanPiece({ k: "spawn", x: 0, z: 0, y: 0, a: 999 }).a === 359, "the respawn point's angle");
   // (owner, 2026-11-13) a block's top reaches 5% past its sides for standing (its sides still the real block)
   { n.send({ t: "build", op: "add", piece: { k: "block", x: -400, z: -400, y: 10, w: 20, h: 2, d: 20, m: "stone" }, tag: 31 }); const id = (await n.wait((m) => m.t === "buildok" && m.tag === 31, "a block")).id; await sleep(100);
     ok(W.surfaceAt(-400.4, -390, 12.2) === 12 && W.surfaceAt(-379.6, -390, 12.2) === 12 && W.surfaceAt(-400.6, -390, 12.2) === -Infinity && !W.wallAt(-400.3, -390, 10.5) && W.wallAt(-399.7, -390, 10.5) && W.COYOTE > 0, "standing reaches 5% past a block's edges; bumping into it doesn't");

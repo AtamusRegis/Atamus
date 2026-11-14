@@ -4,7 +4,7 @@
 // deliveries, rolls, damage, coins, mounts; this page shows the town (pets-world.js, shared with the server), moves you
 // and asks. Phone first: a thumb joystick, drag to look, pinch to zoom, big buttons.
 import * as THREE from "./vendor/three.module.min.js";
-import * as World from "./pets-world.js?v=1794635641";
+import * as World from "./pets-world.js?v=1794636546";
 
 const $ = (id) => document.getElementById(id);
 const { TAU, clamp, hyp, MOUNTS, TIERS, RARITY, RARITY_C, MODS, UPGRADES } = World;
@@ -728,7 +728,7 @@ addEventListener("keydown", (e) => {
   if (e.code === "Enter") { openChat(); e.preventDefault(); return; }
   if (e.code === "Escape") { if (bm) { endBuild(); return; } if (free) setFree(false); closePanel(); return; }
   if (bm && !e.repeat && (e.code === "Delete" || e.code === "Backspace") && selArea()) { doDel(selArea()); bm.sel = 0; buildBar(); drawAreas(); return; }
-  if (bm && !e.repeat && e.code === "KeyR" && !e.ctrlKey && !e.metaKey) { bm.r = (bm.r + 1) % 4; buildAim(bm.px, bm.py); return; }
+  if (bm && e.code === "KeyR" && !e.ctrlKey && !e.metaKey) { if (bm.tool === "spawn") keys.add("KeyR"); else if (!e.repeat) { bm.r = (bm.r + 1) % 4; buildAim(bm.px, bm.py); } return; }   // (owner, 2026-11-13) the respawn point turns while R is held
   if (bm && (e.ctrlKey || e.metaKey) && !chatting) {   // (owner, 2026-11-13) the builder's copy, cut, paste, undo, redo
     const k = e.code; if (["KeyC", "KeyX", "KeyV", "KeyZ", "KeyY"].includes(k)) { e.preventDefault(); if (!e.repeat) { if (k === "KeyC") copyBuild(false); else if (k === "KeyX") copyBuild(true); else if (k === "KeyV") { if (bm.clip) { bm.tool = "paste"; buildBar(); buildAim(bm.px, bm.py); } } else if (k === "KeyY" || e.shiftKey) redoBuild(); else undoBuild(); } return; }
   }
@@ -1071,12 +1071,12 @@ setInterval(() => { if (invites.length) renderInvite(); }, 1000);
 let bm = null;
 const ray = new THREE.Raycaster(), ndc = new THREE.Vector2(), ground = new THREE.Plane(new THREE.Vector3(0, 1, 0), 0), hitV = new THREE.Vector3();
 $("mbuild").onclick = () => (bm ? endBuild() : startBuild());   // (owner, 2026-11-13) admins: the Build button on screen
-function startBuild() { closePanel(); if (!free) setFree(true); bm = { tool: "block", zone: 0, w: 2, h: 1, d: 2, m: "grass", r: 0, wl: 8, ly: 0, sel: 0, px: innerWidth / 2, py: innerHeight / 2, ghost: null, aim: null }; buildBar(); document.body.classList.add("building"); buildAim(bm.px, bm.py); drawAreas(); }
-function endBuild() { if (!bm) return; bm.zd = null; if (bm.ghost) scene.remove(bm.ghost); if (bm.pselG) scene.remove(bm.pselG); bm = null; $("buildbar").style.display = "none"; $("zpanel").style.display = "none"; $("pprompt").style.display = "none"; drawAreas(); document.body.classList.remove("building"); setFree(false); }
+function startBuild() { closePanel(); if (!free) setFree(true); if (spawnG) spawnG.visible = true; bm = { tool: "block", a: ((Math.round((World.SPAWN.yaw * 180) / Math.PI) % 360) + 360) % 360, zone: 0, w: 2, h: 1, d: 2, m: "grass", r: 0, wl: 8, ly: 0, sel: 0, px: innerWidth / 2, py: innerHeight / 2, ghost: null, aim: null }; buildBar(); document.body.classList.add("building"); buildAim(bm.px, bm.py); drawAreas(); }
+function endBuild() { if (!bm) return; bm.zd = null; if (spawnG) spawnG.visible = false; if (bm.ghost) scene.remove(bm.ghost); if (bm.pselG) scene.remove(bm.pselG); bm = null; $("buildbar").style.display = "none"; $("zpanel").style.display = "none"; $("pprompt").style.display = "none"; drawAreas(); document.body.classList.remove("building"); setFree(false); }
 function buildBar() {
   const B = $("buildbar"); B.innerHTML = ""; B.style.display = "flex"; const row0 = el("div", "brow"), row1 = el("div", "brow"), row2 = el("div", "brow");
   for (const [k, name, row] of [["block", "Block", row0], ["house", "House", row0], ["mailbox", "Mailbox", row0], ["gate", "Gate", row0], ["wall", "Wall", row0], ["tree", "Tree", row0], ["boost", "Boost", row0], ["start", "Start Line", row0], ["podium", "Podium", row1], ["spawn", "Respawn", row1], ["office", "Post Office", row1], ["pipe", "Pipe", row1], ["area", "Bounds", row1], ["erase", "Erase", row1]]) row.appendChild(btn(name, () => { bm.tool = k; if (k !== "area") bm.sel = 0; buildBar(); buildAim(bm.px, bm.py); drawAreas(); }, "bt" + (bm.tool === k ? " on" : "")));
-  row1.appendChild(btn("⟳", () => { bm.r = (bm.r + 1) % 4; buildAim(bm.px, bm.py); }, "bt")); row1.appendChild(btn("✕", endBuild, "bt")); B.appendChild(row0);
+  row1.appendChild(btn("⟳", () => { if (bm.tool === "spawn") bm.a = (Math.round(bm.a / 45) * 45 + 45) % 360; else bm.r = (bm.r + 1) % 4; buildAim(bm.px, bm.py); }, "bt")); row1.appendChild(btn("✕", endBuild, "bt")); B.appendChild(row0);
   const step = (label, get, set, lo, hi) => { const g = el("div", "bstep" + (label === zLabel ? " zone" : "")); g.appendChild(btn("−", () => { set(clamp(get() - 1, lo, hi)); buildBar(); buildAim(bm.px, bm.py); }, "bt")); g.appendChild(el("span", "", label())); g.appendChild(btn("+", () => { set(clamp(get() + 1, lo, hi)); buildBar(); buildAim(bm.px, bm.py); }, "bt")); row2.appendChild(g); };
   // (owner, 2026-11-13) the neighborhood you're editing: its bounds, gates and walls are placed for it; ⚙ its name, animal and chances
   const zLabel = () => World.zoneName(bm.zone); step(zLabel, () => bm.zone, (v) => { bm.zone = v; bm.zd = null; bm.shotPick = undefined; drawAreas(); if ($("zpanel").style.display === "block") zonePanel(); }, 0, World.TIERS.length - 1);
@@ -1122,6 +1122,7 @@ function buildPiece(a, base) {   // the piece the bar (or the clipboard: base) w
   const x = Math.round(p.x + n.x * 0.3), z = Math.round(p.z + n.z * 0.3), s = World.surfaceAt(x, z, p.y + 0.3), q = { k: T, x, z, y: Math.round(Number.isFinite(s) && s > -1e9 ? s : p.y), r: ((base ? base.r | 0 : 0) + bm.r) % 4 };
   if (T === "gate" || T === "wall") q.zone = Math.max(1, base ? base.zone : bm.zone);
   if (T === "wall") q.w = base ? base.w : bm.wl;
+  if (T === "spawn") q.a = base ? base.a | 0 : Math.round(bm.a) % 360;
   return q;
 }
 function buildAim(px, py) {
@@ -1318,7 +1319,7 @@ function onNet(m) {
       setTok(m.token); const again = loggedIn && myName === m.name; myName = m.name; myId = m.id; myRole = m.role || "player"; $("mbuild").hidden = myRole !== "admin"; netOk = true; loggedIn = true; clockOff = m.now - Date.now();
       $("login").style.display = "none"; $("hud").style.display = "block"; if (document.activeElement && document.activeElement.blur) document.activeElement.blur();
       save = World.cleanData(m.data); shownCoins = save.coins; $("coinn").textContent = fmt(save.coins); remount(); setVolumes(); giftsUi(); if (!again && !save.set.tut && !save.stats.del && tut < 0) setTimeout(() => tutShow(0), 900);
-      if (!again) { me.x = m.x; me.z = m.z; me.y = m.y || 0; me.yaw = World.SPAWN.yaw; cam.yaw = me.yaw - Math.PI; msgs.innerHTML = ""; }
+      if (!again) { me.x = m.x; me.z = m.z; me.y = m.y || 0; me.yaw = World.SPAWN.yaw; cam.yaw = me.yaw - Math.PI; cam.pitch = Math.PI / 4; msgs.innerHTML = ""; }
       me.foot = false; me.stun = 0; me.transit = null; me.hidden = false;
       setPods(m.pods || []); for (const p of m.players) addOther(p); setNpc(m); for (const g of gooseMesh) { g.x = g.tx; g.z = g.tz; g.y = g.ty; } for (const d of dogMesh) { d.x = d.tx; d.z = d.tz; d.y = d.ty; } for (const g of goatMesh) { g.x = g.tx; g.z = g.tz; } hudDirty = true; sendPos(true);
       break;
@@ -1364,7 +1365,7 @@ function onNet(m) {
     }
     case "stun": me.stun = m.s; if (me.transit && me.transit.k !== "pipe") me.transit = null; knockedOff(); sfx("stun"); cam.shake = Math.max(cam.shake, 0.5); flash(m.why === "kick" ? "#ffffff" : "#e5534b"); if (m.why === "dog") sfx("growl"); break;
     case "knock": me.px = m.x; me.pz = m.z; me.vy = m.y; me.ground = false; sfx("kick"); cam.shake = Math.max(cam.shake, 0.5); break;
-    case "tp": { const sp0 = hyp(me.vx, me.vz); if (m.why === "home" || m.why === "balloon") { me.yaw = World.SPAWN.yaw; cam.yaw = me.yaw - Math.PI; }   // (owner, 2026-11-13) facing the way the respawn point is turned
+    case "tp": { const sp0 = hyp(me.vx, me.vz); if (m.why === "home" || m.why === "balloon") { me.yaw = World.SPAWN.yaw; cam.yaw = me.yaw - Math.PI; cam.pitch = Math.PI / 4; }   /* (owner, 2026-11-13) the camera behind, looking down at 45 degrees */   // (owner, 2026-11-13) facing the way the respawn point is turned
       me.x = m.x; me.y = m.y; me.z = m.z; me.vx = me.vz = me.vy = me.px = me.pz = 0; me.transit = null; me.ground = true; me.armed = false; me.foot = false; camAt.y = m.y + 2; if (m.why === "fall") { flash("#ffffff"); sfx("pop"); } else if (m.why === "home") { cam.yaw = -Math.PI / 2; sfx("pad"); } else if (m.why === "tube") { me.yaw = m.yaw; cam.yaw = me.yaw - Math.PI; me.vx = Math.sin(me.yaw) * sp0; me.vz = Math.cos(me.yaw) * sp0; sfx("pipe"); emit(me.x, me.y + 1, me.z, 18, { colors: ["#5fb56b", "#ffffff"], speed: 4, up: 3, life: 0.5 }); } else { flash("#bfe6ff"); sfx("pad"); }   /* tube: (owner, 2026-11-13) out of a pipe shortcut, keeping your speed; home: (owner, 2026-11-11) the run's over, back at the post office */ sendPos(true); break; }
     case "piped": me.transit = { k: "pipe", until: now() + m.s, x: m.x, y: m.y, z: m.z }; me.hidden = true; me.vx = me.vz = me.px = me.pz = 0; sfx("pipe"); if (m.goose) setTimeout(() => sfx("honk"), 600); break;
     case "rock": { const r = new THREE.Mesh(new THREE.DodecahedronGeometry(1.3), mat("#8a8278")); r.position.set(m.x, m.y + 22, m.z); scene.add(r); fallers.push({ g: r, y0: m.y + 22, y1: m.y + 0.8, t: 0, s: m.s });
@@ -1567,7 +1568,7 @@ function pieceMesh(q, live) {
     else if (q.k === "boost") { const m = new THREE.Mesh(new THREE.PlaneGeometry(3.2, 3.2).rotateX(-Math.PI / 2), BOOST_M); m.position.set(q.x, q.y + 0.09, q.z); m.rotation.y = (q.r | 0) * Math.PI / 2 + Math.PI; m.receiveShadow = true; m.userData.pid = q.id; G.add(m); }
     else if (q.k === "start") { const t = START_T.clone(); t.needsUpdate = true; t.repeat.set(World.START_W / 2, 1); const m = new THREE.Mesh(new THREE.PlaneGeometry(World.START_W, World.START_D).rotateX(-Math.PI / 2), new THREE.MeshBasicMaterial({ map: t })); m.position.set(q.x, q.y + 0.1, q.z); m.rotation.y = (q.r | 0) * Math.PI / 2; m.userData.pid = q.id; G.add(m); }
     else if (q.k === "podium") { let n = World.PODIUM.spots.findIndex((p) => p.id === q.id); if (!live && n < 0) n = Math.min(2, World.PODIUM.spots.length); if (n >= 0) { const h = [1.6, 1.1, 0.7][n]; box(4.4, h, 4.4, POD_C[n], q.x, q.y + h / 2, q.z, G).userData.pid = q.id; } }
-    else if (q.k === "spawn") { const g = new THREE.Group(); g.position.set(q.x, q.y + 0.08, q.z); g.rotation.y = (q.r | 0) * Math.PI / 2; G.add(g); const sm = new THREE.MeshBasicMaterial({ color: "#7ef0c8", transparent: true, opacity: 0.85 });
+    else if (q.k === "spawn") { const g = new THREE.Group(); g.position.set(q.x, q.y + 0.08, q.z); g.rotation.y = q.a !== undefined ? (q.a * Math.PI) / 180 : (q.r | 0) * Math.PI / 2; G.add(g); if (live) { G.visible = !!bm; spawnG = G; }   /* (owner, 2026-11-13) only builders see it */ const sm = new THREE.MeshBasicMaterial({ color: "#7ef0c8", transparent: true, opacity: 0.85 });
       g.add(new THREE.Mesh(new THREE.RingGeometry(0.6, 0.9, 24).rotateX(-Math.PI / 2), sm)); const ar = new THREE.Mesh(new THREE.ConeGeometry(0.35, 0.8, 3).rotateX(Math.PI / 2), sm); ar.position.set(0, 0.05, 1.4); ar.scale.y = 0.15; g.add(ar); }   // which way couriers face
   G.traverse((o) => { o.userData.pid = q.id; });
   return G;
@@ -1583,6 +1584,7 @@ function pipeSel() {
   if (bm.psel.length < 2) return; const [a, b] = bm.psel, A = World.build.find((q) => q.id === a), joined = A.to === b && World.build.find((q) => q.id === b).to === a;
   P.innerHTML = ""; P.appendChild(btn(joined ? "Unlink" : "Link", () => { netSend(joined ? { t: "build", op: "unlink", a } : { t: "build", op: "link", a, b }); sfx("pad"); bm.psel = []; pipeSel(); }, "go")); P.appendChild(btn("✕", () => { bm.psel = []; pipeSel(); }, "bt")); P.style.display = "flex";
 }
+let spawnG = null;
 function drawBuild() {
   if (poG) { scene.remove(poG); poG = null; }
   if (buildG) scene.remove(buildG); buildG = new THREE.Group(); scene.add(buildG);
@@ -1681,6 +1683,7 @@ function frame(tms) {
   if (hitStop > 0) { hitStop -= dt; renderer.render(scene, camera); return; }   // a landed kick holds the picture for a beat
   if (loggedIn) {
     stepMe(dt);
+    if (bm && bm.tool === "spawn" && keys.has("KeyR")) { bm.a = (bm.a + 120 * dt) % 360; buildAim(bm.px, bm.py); }
     if (me.kickT > 0) me.kickT -= dt; if (me.squash > 0) me.squash -= dt; if (me.hop > 0) me.hop -= dt;
     if (me.stun > 0 && Math.random() < 0.35) emit(me.x, me.y + 2.2, me.z, 1, { colors: ["#ffd84a"], speed: 1.5, up: 0.5, life: 0.5, grav: 0, size: 0.16 });
     if (me.grace > 0) { me.grace -= dt; if (Math.random() < 0.5) emit(me.x, me.y + 1.2, me.z, 1, { colors: ["#ffffff", "#bfe6ff"], speed: 1.2, up: 1, life: 0.5, grav: -1, size: 0.1, spread: 1.6 }); }

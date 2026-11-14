@@ -6,6 +6,8 @@ and any rule decided. Use `git log` for the code detail (and for the older Atamu
 
 ## 2026-11-13
 
+- **Respawn point turns freely (owner).** Hold R to turn it to any angle; couriers come back facing its arrow with the
+  camera at 45 degrees. Only builders see it.
 - **Coyote time and landing forgiveness (owner).** Jumps still work for a moment after running off an edge; blocks and
   podiums count 5% wider for standing on.
 - **Neighborhood cinematic shots (owner).** Each neighborhood's panel holds up to 5 named shots, each a point on the map;

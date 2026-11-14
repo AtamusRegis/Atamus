@@ -327,7 +327,7 @@ export function cleanPiece(q) {
   const n = (v, a, b) => clamp(Math.round(+v || 0), a, b), o = { id: n(q.id, 1, 1e9), k: q.k, x: n(q.x, -GROUND.r, GROUND.r), z: n(q.z, -GROUND.r, GROUND.r), y: n(q.y, -40, 300) };
   if (q.k === "block") { o.w = n(q.w, 1, BLOCK_MAX); o.h = n(q.h, 1, BLOCK_MAX); o.d = n(q.d, 1, BLOCK_MAX); o.m = MATS.includes(q.m) ? q.m : "grass"; }
   else if (q.k === "area") { o.w = n(q.w, 1, AREA_MAX); o.d = n(q.d, 1, AREA_MAX); o.zone = n(q.zone, 0, TIERS.length - 1); }   // (owner, 2026-11-13) a neighborhood's bounds
-  else { o.r = n(q.r, 0, 3); if (q.k === "gate" || q.k === "wall") o.zone = n(q.zone, 1, TIERS.length - 1); if (q.k === "wall") o.w = n(q.w, 1, BLOCK_MAX); if (q.k === "pipe") o.to = n(q.to, 0, 1e9); }
+  else { o.r = n(q.r, 0, 3); if (q.k === "gate" || q.k === "wall") o.zone = n(q.zone, 1, TIERS.length - 1); if (q.k === "wall") o.w = n(q.w, 1, BLOCK_MAX); if (q.k === "pipe") o.to = n(q.to, 0, 1e9); if (q.k === "spawn") o.a = n(q.a === undefined ? o.r * 90 : q.a, 0, 359); }   // a: (owner, 2026-11-13) the respawn point turns all the way round, in degrees
   return o;
 }
 export function setBuild(data) {   // data: { pieces, zones } (or, from before, just the pieces)
@@ -340,7 +340,7 @@ export function setBuild(data) {   // data: { pieces, zones } (or, from before, 
   Object.assign(SPAWN, { x: 0.5, z: 0.5, y: 0, yaw: 0 });
   const count = TIERS.map(() => 0);
   for (const q of build) {
-    const yaw = (q.r | 0) * (Math.PI / 2);
+    const yaw = q.k === "spawn" && q.a !== undefined ? (q.a * Math.PI) / 180 : (q.r | 0) * (Math.PI / 2);
     if (q.k === "block") rect(q.x, q.x + q.w, q.z, q.z + q.d, q.y + q.h, q.m, q.y, STAND_X);
     else if (q.k === "house") { buildings.push({ id: q.id, x: q.x, z: q.z, y: q.y, yaw, d: districtAt(q.x, q.z, q.y) }); solid(q.x, q.z, HOUSE_S / 2, HOUSE_S / 2, q.y - 1, q.y + HOUSE_H, yaw); }
     else if (q.k === "mailbox") { const d = districtAt(q.x, q.z, q.y); houses.push({ id: q.id, x: q.x, z: q.z, y: q.y, yaw, d, mx: q.x, mz: q.z, my: q.y, name: ++count[d] + " " + zoneName(d) }); solid(q.x, q.z, 0.2, 0.2, q.y - 1, q.y + 1.3); }   // in whichever neighborhood's bounds it stands
