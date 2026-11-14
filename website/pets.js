@@ -5,11 +5,7 @@
 // and asks. Phone first: a thumb joystick, drag to look, pinch to zoom, big buttons.
 import * as THREE from "./vendor/three.module.min.js";
 import { svg, fillIcons, ICON } from "./icons.js?v=4";
-<<<<<<< HEAD
 import * as World from "./pets-world.js?v=1794651016";
-=======
-import * as World from "./pets-world.js?v=1794650816";
->>>>>>> origin/main
 
 const $ = (id) => document.getElementById(id);
 const { TAU, clamp, hyp, MOUNTS, TIERS, RARITY, RARITY_C, MODS, UPGRADES } = World;
