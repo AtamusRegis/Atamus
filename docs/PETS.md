@@ -247,6 +247,11 @@ is one 1 m grass block (`SEED`) to stand on, with sky all round. Everything is a
       and B at its Speed (m/s), resting 0.6 s at each end; riders standing on it go along. Selected (Select tile): its size, material, Speed, and the pin:
       (owner, 2026-11-14) while picking B a ghost of the platform follows the pointer with a dashed line from A showing
       the path, and a click sets B. Builders see B as a yellow ghost with a dashed line. Its sides don't stop you (only its top holds you).
+      (owner, 2026-11-14) **Breaking** (selected: the Never Breaks / Break On Step / Prolonged Step button, then Timer
+      and Respawn): **Break On Step** shakes once someone first stands on it and breaks Timer s later; **Prolonged
+      Step** shakes while stood on and breaks once it's been stood on for Timer s in all; broken, it's gone (riders on
+      it fall) until it comes back Respawn s later (No Respawn: gone until the town is rebuilt). The server keeps the
+      state for each room, so everyone sees the same.
   - **Bounds** (owner, 2026-11-13): a rectangle (up to 1000 x 1000 m, any height) for a neighborhood. **Anything inside
     belongs to that neighborhood** (where bounds overlap, the smallest wins); outside every bounds is Main Street.
 - **The neighborhood a spot is in** is its bounds' (above): it names the mailboxes and colors the houses, and sets the
@@ -268,7 +273,9 @@ is one 1 m grass block (`SEED`) to stand on, with sky all round. Everything is a
   Space or E up, C or Q down, Shift faster; drag to look) and a bar at the bottom, (owner, 2026-11-14) starting on **Select**: click any piece to select it (a yellow outline;
   empty space lets go) and the bar shows what it has to change: W / H / D, material, L (a wall), a gust's Every and
   Power, a platform's Speed and B, a turn (R too), Delete (the Delete key too) and Deselect; the other tiles place
-  pieces ((owner, 2026-11-13) every piece a rounded tile with a picture of
+  pieces; (owner, 2026-11-14) while a piece is selected the tiles go and the bar shows only its settings. The mouse
+  wheel (while building) raises or lowers where the next piece goes, a meter a notch (the blueprint shows it)
+  ((owner, 2026-11-13) every piece a rounded tile with a picture of
   the piece and its name under it): Block, House, Mailbox, Gate, Wall,
   Tree, Boost, Start Line / Podium, Respawn, Post Office, Bounds, Erase, ⟳ (turn; R) and ✕ (Escape or the Build
   button); under it **the neighborhood you're editing** (− name +) and ⚙, then W / H / D and the material for a block,

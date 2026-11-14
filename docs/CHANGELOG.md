@@ -8,6 +8,9 @@ and any rule decided. Use `git log` for the code detail (and for the older Atamu
 
 - **Zone slider (owner).** A slider at the bottom picks which open zone your parcels come from (the top step is the
   usual mix); a picked zone's gifts don't get the raise for zones opened past it.
+- **Breaking platforms; builder tidy-ups (owner).** Platforms can break on step or after being stood on a while, and
+  come back after a respawn time. A selected piece's settings replace the tiles in the build bar; the mouse wheel moves
+  the blueprint up or down.
 - **Kicking other couriers (owner).** F (or the boot button) kicks the courier in front of you off their mount as a
   ragdoll, with a short shot of it for the kicker; they get back up and whistle their mount, or respawn if thrown off
   the edge.

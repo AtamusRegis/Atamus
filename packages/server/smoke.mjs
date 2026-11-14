@@ -185,6 +185,12 @@ try {
   { ok(W.rollParcel(5, 0, Math.random, 2).tier === 2 && W.rollParcel(5, 0, Math.random, 7) && W.pickZones(3).join() === "0,1,2", "a picked zone's parcels come from it (an unopened pick is ignored)");
     const pa = who("smokeA"); a.send({ t: "set", pz: 0 }); await sleep(150); ok(pa.acct.data.set.pz === 0 && pa.ready.tier === 0 && pa.next.tier === 0, "the conveyor follows the zone picked");
     a.send({ t: "set", pz: -1 }); await sleep(100); ok(pa.acct.data.set.pz === -1, "back to the usual mix"); }
+  // (owner, 2026-11-14) breaking platforms: on step (a timer from the first step), prolonged (time stood on), and back after their respawn time
+  { n.send({ t: "build", op: "add", piece: { k: "mover", x: -600, z: -600, y: 5, w: 4, h: 1, d: 4, bx: 0, by: 0, bz: 0, brk: 1, bt: 0.5, rs: 1 }, tag: 51 }); const id = (await n.wait((m) => m.t === "buildok" && m.tag === 51, "a breaking platform")).id; await sleep(150);
+    ok(W.build.find((q) => q.id === id).brk === 1 && W.build.find((q) => q.id === id).rs === 1, "a platform's breaking settings are kept");
+    await put(a, "smokeA", -598, -598, 6); const wn = await a.wait((m) => m.t === "plat" && m.id === id && m.warn !== undefined, "it shakes"); const gn = await a.wait((m) => m.t === "plat" && m.id === id && m.gone > 0, "it breaks", 3000);
+    ok(gn.gone * 1000 > Date.now() && wn, "stood on, a platform shakes, then breaks"); const bk = await a.wait((m) => m.t === "plat" && m.id === id && m.gone === 0, "it's back", 3000); ok(bk, "it comes back after its respawn time");
+    await put(a, "smokeA", 0, 7.5); n.send({ t: "build", op: "del", id }); await sleep(150); }
   // (owner, 2026-11-13) pipe shortcuts: two pipes the builder links; riding into one's mouth comes out of the other's, facing out
   { n.send({ t: "build", op: "add", piece: { k: "pipe", x: -120, z: 0, y: 0, r: 0 }, tag: 21 }); const p1 = (await n.wait((m) => m.t === "buildok" && m.tag === 21, "a pipe")).id;
     n.send({ t: "build", op: "add", piece: { k: "pipe", x: -160, z: 30, y: 0, r: 1 }, tag: 22 }); const p2 = (await n.wait((m) => m.t === "buildok" && m.tag === 22, "another pipe")).id; await sleep(100);

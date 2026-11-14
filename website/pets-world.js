@@ -336,7 +336,8 @@ export function cleanPiece(q) {
   const n = (v, a, b) => clamp(Math.round(+v || 0), a, b), o = { id: n(q.id, 1, 1e9), k: q.k, x: n(q.x, -GROUND.r, GROUND.r), z: n(q.z, -GROUND.r, GROUND.r), y: n(q.y, -40, 300) };
   if (q.k === "block") { o.w = n(q.w, 1, BLOCK_MAX); o.h = n(q.h, 1, BLOCK_MAX); o.d = n(q.d, 1, BLOCK_MAX); o.m = MATS.includes(q.m) ? q.m : "grass"; }
   else if (q.k === "gust") { o.w = n(q.w, 1, BLOCK_MAX); o.h = n(q.h, 1, BLOCK_MAX); o.d = n(q.d, 1, BLOCK_MAX); o.a = n(q.a, 0, 359); o.iv = clamp(Math.round((+q.iv || GUST.iv) * 10) / 10, 0.5, 30); o.pw = n(q.pw === undefined ? GUST.pw : q.pw, 1, 60); }
-  else if (q.k === "mover") { o.w = n(q.w, 1, BLOCK_MAX); o.h = n(q.h, 1, BLOCK_MAX); o.d = n(q.d, 1, BLOCK_MAX); o.m = MATS.includes(q.m) && q.m !== "turbine" ? q.m : "wood"; o.bx = n(q.bx, -200, 200); o.by = n(q.by, -100, 100); o.bz = n(q.bz, -200, 200); o.sp = n(q.sp === undefined ? MOVER.sp : q.sp, 1, 30); }
+  else if (q.k === "mover") { o.w = n(q.w, 1, BLOCK_MAX); o.h = n(q.h, 1, BLOCK_MAX); o.d = n(q.d, 1, BLOCK_MAX); o.m = MATS.includes(q.m) && q.m !== "turbine" ? q.m : "wood"; o.bx = n(q.bx, -200, 200); o.by = n(q.by, -100, 100); o.bz = n(q.bz, -200, 200); o.sp = n(q.sp === undefined ? MOVER.sp : q.sp, 1, 30);
+    o.brk = n(q.brk, 0, 2); o.bt = clamp(Math.round((+q.bt || MOVER.bt) * 2) / 2, 0.5, 30); o.rs = clamp(Math.round((q.rs === undefined ? MOVER.rs : +q.rs || 0) * 2) / 2, 0, 120); }   // (owner, 2026-11-14) breaking: 0 never, 1 on step (bt s after it's first stood on), 2 on prolonged step (bt s stood on in all); back after rs s
   else if (q.k === "area") { o.w = n(q.w, 1, AREA_MAX); o.d = n(q.d, 1, AREA_MAX); o.zone = n(q.zone, 0, TIERS.length - 1); }   // (owner, 2026-11-13) a neighborhood's bounds
   else { o.r = n(q.r, 0, 3); if (q.k === "gate" || q.k === "wall") o.zone = n(q.zone, 1, TIERS.length - 1); if (q.k === "wall") o.w = n(q.w, 1, BLOCK_MAX); if (q.k === "pipe") o.to = n(q.to, 0, 1e9); if (q.k === "spawn") o.a = n(q.a === undefined ? o.r * 90 : q.a, 0, 359); }   // a: (owner, 2026-11-13) the respawn point turns all the way round, in degrees
   return o;
@@ -391,7 +392,9 @@ export function pipeExit(p) { const [ox, oz] = turn(0, TUBE.l / 2 + 2, p.yaw); r
 // TURBINE.h m high over its top lifts riders into the air. A mover: a platform going back and forth between where it was
 // placed (A) and A + (bx, by, bz) (B) at sp m/s, resting MOVER.rest s at each end; riders on it go along.
 export const gusts = [], movers = [], updrafts = [];
-export const GUST = { iv: 4, pw: 18, on: 1.6 }, TURBINE = { h: 12, lift: 34, max: 15 }, MOVER = { sp: 4, rest: 0.6 };
+export const GUST = { iv: 4, pw: 18, on: 1.6 }, TURBINE = { h: 12, lift: 34, max: 15 }, MOVER = { sp: 4, rest: 0.6, bt: 1, rs: 3 };
+// (owner, 2026-11-14) a breaking platform's state (the server says): gone until platGone[id] (server s), shaking until it goes
+export const platGone = {}, platWarn = {};
 export const gustOn = (g, tSec) => (((tSec % g.iv) + g.iv) % g.iv) < Math.min(GUST.on, g.iv * 0.6);
 export function gustAt(x, z, y, tSec) { for (const g of gusts) if (x >= g.x0 && x <= g.x1 && z >= g.z0 && z <= g.z1 && y >= g.y0 - 0.5 && y <= g.y1 && gustOn(g, tSec)) return g; return null; }
 export function updraftAt(x, z, y) { for (const u of updrafts) if (x >= u.x0 && x <= u.x1 && z >= u.z0 && z <= u.z1 && y >= u.y0 - 0.3 && y <= u.y1) return u; return null; }
@@ -403,7 +406,7 @@ export function moverPos(q, tSec) {   // the platform's corner (x, y, z) at tSec
 }
 export function moverUnder(x, z, y, tSec) {   // the highest moving platform top under (x, z) at most a step above y, with where it is
   let best = null;
-  for (const q of movers) { const p = moverPos(q, tSec), m = STAND_X / 2, top = p.y + q.h; if (x >= p.x - q.w * m && x <= p.x + q.w * (1 + m) && z >= p.z - q.d * m && z <= p.z + q.d * (1 + m) && top <= y + 0.6 && (!best || top > best.top)) best = { q, p, top }; }
+  for (const q of movers) { if ((platGone[q.id] || 0) > tSec) continue; const p = moverPos(q, tSec), m = STAND_X / 2, top = p.y + q.h; if (x >= p.x - q.w * m && x <= p.x + q.w * (1 + m) && z >= p.z - q.d * m && z <= p.z + q.d * (1 + m) && top <= y + 0.6 && (!best || top > best.top)) best = { q, p, top }; }
   return best;
 }
 export const addr = (id) => houses.find((h) => h.id === id) || null;   // a mailbox by its id
