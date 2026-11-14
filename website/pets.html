@@ -62,6 +62,10 @@
     #pbody { padding: 12px; overflow-y: auto; touch-action: pan-y; display: flex; flex-direction: column; gap: 10px; -webkit-overflow-scrolling: touch; }
     /* (owner, 2026-11-13) the zone builder's bar: pieces, turn and close on top; sizes, material or zone under */
     #buildbar { position: fixed; left: 50%; transform: translateX(-50%); bottom: calc(10px + var(--sb)); z-index: 26; display: none; flex-direction: column; gap: 6px; align-items: center; width: max-content; max-width: calc(100vw - 16px); }
+    #buildbar .btiles { display: flex; gap: 6px; flex-wrap: wrap; justify-content: center; max-width: min(820px, calc(100vw - 16px)); }
+    #buildbar .btile { width: 64px; height: 70px; padding: 4px 2px 3px; border-radius: 14px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 1px; background: var(--card); }
+    #buildbar .btile img { width: 46px; height: 46px; object-fit: contain; pointer-events: none; } #buildbar .btile span { font-size: 10px; line-height: 1.1; white-space: nowrap; } #buildbar .btile.on { background: #ffd84a; }
+    body.cinema #buildbar, body.cinema #zpanel, body.cinema #pprompt { opacity: 0; pointer-events: none; }
     #buildbar .brow { display: flex; gap: 6px; flex-wrap: wrap; justify-content: center; } #buildbar .bt { padding: 7px 11px; } #buildbar .bt.on { background: #ffd84a; }
     #buildbar .bstep { display: flex; align-items: center; gap: 4px; background: var(--card); border-radius: 12px; padding: 2px 4px; } #buildbar .bstep span { min-width: 54px; text-align: center; font-weight: 700; }
     #pprompt { position: fixed; left: 50%; top: 40%; transform: translate(-50%, -50%); z-index: 27; display: none; gap: 8px; background: var(--card); border-radius: 14px; padding: 10px; box-shadow: 0 6px 20px rgba(0,0,0,.25); } #pprompt .go { padding: 10px 26px; font-size: 18px; }

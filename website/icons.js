@@ -12,6 +12,7 @@ export const ICON = {
   bigjump: '<g fill="none" stroke="#fff" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M6 11l6-6 6 6"/><path d="M6 17l6-6 6 6"/></g><path d="M5 21.5h14" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-dasharray="1 3"/>',
   rotate: '<g fill="none" stroke="#23303b" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M19.5 12a7.5 7.5 0 1 1-2.2-5.3"/><path d="M18 3v4.5h-4.5"/></g>',
   close: '<path d="M6 6l12 12M18 6 6 18" stroke="#23303b" stroke-width="2.6" stroke-linecap="round"/>',
+  erase: '<g stroke="#23303b" stroke-width="1.3" stroke-linejoin="round"><path d="M14.2 3.8l6 6-8.7 8.7H8.3l-4.5-4.5z" fill="#ff8fa3"/><path d="M8.3 9.7l6 6" fill="none"/><path d="M3.8 14 8.3 18.5H6.2L3 15.2z" fill="#f2f4f7"/></g><path d="M11 20.5h9" stroke="#23303b" stroke-width="1.6" stroke-linecap="round"/>',
   play: '<path d="M7 4.5v15l12.5-7.5z" fill="#3fb34f" stroke="#23303b" stroke-width="1.4" stroke-linejoin="round"/>',
   pin: '<path d="M12 22s-7-7.2-7-12.2a7 7 0 0 1 14 0C19 14.8 12 22 12 22z" fill="#e5484d" stroke="#23303b" stroke-width="1.3" stroke-linejoin="round"/><circle cx="12" cy="9.8" r="2.6" fill="#fff" stroke="#23303b" stroke-width="1.1"/>',
 };
