@@ -303,10 +303,10 @@ const BASE_N = { slabs: slabs.length, solids: solids.length };
 // to anyone who hasn't opened zone d yet (the zone it leads into) ----
 export const BUILD_MAX = 6000, BLOCK_MAX = 60, HOUSE_S = 8, HOUSE_H = 5, GATE_W = 8, GATE_H = 7, GATE_T = 1;
 export const MATS = ["grass", "dirt", "stone", "brick", "wood", "road", "sand", "snow", "ice", "water"];
-export const PIECES = ["block", "house", "mailbox", "gate", "wall", "tree", "boost", "start", "podium", "spawn", "office", "area"];
+export const PIECES = ["block", "house", "mailbox", "gate", "wall", "tree", "boost", "start", "podium", "spawn", "office", "area", "pipe"];
 export const AREA_MAX = 1000;
 export const ONE_ONLY = ["spawn", "office"];   // the last one placed counts
-export const buildings = [], gates = [], starts = [], areas = [];
+export const buildings = [], gates = [], starts = [], areas = [], pipes = [];
 // ---- (owner, 2026-11-13) neighborhoods: each one's name, its animal (the mount its parcels bring, the one that opens the
 // next), the chance of each rarity and of a Shiny; an admin sets them in the builder. Where a spot belongs: the bounds
 // (areas) drawn for each; the smallest one a spot is in wins; outside every bound, the first neighborhood ----
@@ -327,7 +327,7 @@ export function cleanPiece(q) {
   const n = (v, a, b) => clamp(Math.round(+v || 0), a, b), o = { id: n(q.id, 1, 1e9), k: q.k, x: n(q.x, -GROUND.r, GROUND.r), z: n(q.z, -GROUND.r, GROUND.r), y: n(q.y, -40, 300) };
   if (q.k === "block") { o.w = n(q.w, 1, BLOCK_MAX); o.h = n(q.h, 1, BLOCK_MAX); o.d = n(q.d, 1, BLOCK_MAX); o.m = MATS.includes(q.m) ? q.m : "grass"; }
   else if (q.k === "area") { o.w = n(q.w, 1, AREA_MAX); o.d = n(q.d, 1, AREA_MAX); o.zone = n(q.zone, 0, TIERS.length - 1); }   // (owner, 2026-11-13) a neighborhood's bounds
-  else { o.r = n(q.r, 0, 3); if (q.k === "gate" || q.k === "wall") o.zone = n(q.zone, 1, TIERS.length - 1); if (q.k === "wall") o.w = n(q.w, 1, BLOCK_MAX); }
+  else { o.r = n(q.r, 0, 3); if (q.k === "gate" || q.k === "wall") o.zone = n(q.zone, 1, TIERS.length - 1); if (q.k === "wall") o.w = n(q.w, 1, BLOCK_MAX); if (q.k === "pipe") o.to = n(q.to, 0, 1e9); }
   return o;
 }
 export function setBuild(data) {   // data: { pieces, zones } (or, from before, just the pieces)
@@ -336,7 +336,7 @@ export function setBuild(data) {   // data: { pieces, zones } (or, from before, 
   build = list.map(cleanPiece).filter(Boolean).slice(0, BUILD_MAX); if (!build.length) build = SEED.map((q) => ({ ...q }));
   areas.length = 0; for (const q of build) if (q.k === "area") areas.push({ id: q.id, x0: q.x, z0: q.z, x1: q.x + q.w, z1: q.z + q.d, d: q.zone, size: q.w * q.d });
   areas.sort((a, b) => a.size - b.size);
-  slabs.length = BASE_N.slabs; solids.length = BASE_N.solids; houses.length = 0; buildings.length = 0; gates.length = 0; starts.length = 0; boosts.length = 0; trees.length = 0; PODIUM.spots.length = 0; PO.on = false;
+  slabs.length = BASE_N.slabs; solids.length = BASE_N.solids; houses.length = 0; buildings.length = 0; gates.length = 0; starts.length = 0; boosts.length = 0; trees.length = 0; pipes.length = 0; PODIUM.spots.length = 0; PO.on = false;
   Object.assign(SPAWN, { x: 0.5, z: 0.5, y: 0, yaw: 0 });
   const count = TIERS.map(() => 0);
   for (const q of build) {
@@ -346,6 +346,7 @@ export function setBuild(data) {   // data: { pieces, zones } (or, from before, 
     else if (q.k === "mailbox") { const d = districtAt(q.x, q.z, q.y); houses.push({ id: q.id, x: q.x, z: q.z, y: q.y, yaw, d, mx: q.x, mz: q.z, my: q.y, name: ++count[d] + " " + zoneName(d) }); solid(q.x, q.z, 0.2, 0.2, q.y - 1, q.y + 1.3); }   // in whichever neighborhood's bounds it stands
     else if (q.k === "wall") gates.push({ id: q.id, x: q.x, z: q.z, y: q.y, yaw, d: q.zone, c: Math.cos(yaw), s: Math.sin(yaw), w: q.w, wall: 1 });   // a bound wall: closed like a gate
     else if (q.k === "gate") gates.push({ id: q.id, x: q.x, z: q.z, y: q.y, yaw, d: q.zone, c: Math.cos(yaw), s: Math.sin(yaw), w: GATE_W });
+    else if (q.k === "pipe") { pipes.push({ id: q.id, x: q.x, z: q.z, y: q.y, yaw, to: q.to }); solid(q.x, q.z, TUBE.r, TUBE.l / 2, q.y - 1, q.y + TUBE.r * 2, yaw); }
     else if (q.k === "tree") { trees.push({ id: q.id, x: q.x, z: q.z, y: q.y, s: 1, yaw }); solid(q.x, q.z, 0.45, 0.45, q.y - 1, q.y + 8); }
     else if (q.k === "boost") boosts.push({ id: q.id, x: q.x, z: q.z, y: q.y, yaw });   // x1.6 speed for a moment, the way it points
     else if (q.k === "start") starts.push({ id: q.id, x: q.x, z: q.z, y: q.y, yaw, c: Math.cos(yaw), s: Math.sin(yaw) });
@@ -359,6 +360,19 @@ export function setBuild(data) {   // data: { pieces, zones } (or, from before, 
     solid(PO.x + cx, PO.z + cz, L.belt.hw, (L.belt.z1 - L.belt.z0) / 2, PO.y - 1, PO.y + L.belt.top + 0.05, PO.yaw);
   }
 }
+// (owner, 2026-11-13) pipe shortcuts: a pipe lies on its side, its mouth the way it's turned; two linked pipes (shift-click
+// both in the builder, then Link) take a rider who rides into one's mouth out of the other's, facing out of it
+export const TUBE = { r: 1.6, l: 4, cd: 1 };
+const tubeOf = (id) => pipes.find((p) => p.id === id);
+export const tubePartner = (p) => { const o = p && p.to ? tubeOf(p.to) : null; return o && o.to === p.id ? o : null; };
+export function pipeAt(x, z, y) {   // the linked pipe whose mouth (x, z, y) is riding into, if any
+  for (const p of pipes) {
+    if (y < p.y - 0.6 || y > p.y + TUBE.r * 2 || !tubePartner(p)) continue; const dx = x - p.x, dz = z - p.z, c = Math.cos(p.yaw), s = Math.sin(p.yaw), lx = dx * c - dz * s, lz = dx * s + dz * c;
+    if (Math.abs(lx) < TUBE.r && lz > TUBE.l / 2 - 0.2 && lz < TUBE.l / 2 + 1.6) return p;
+  }
+  return null;
+}
+export function pipeExit(p) { const [ox, oz] = turn(0, TUBE.l / 2 + 2, p.yaw); return { x: p.x + ox, z: p.z + oz, y: p.y, yaw: p.yaw }; }
 export const addr = (id) => houses.find((h) => h.id === id) || null;   // a mailbox by its id
 // a closed gate in the way at (x, z, y), for someone with `open` zones open
 export function gateBlocked(x, z, y, open, r = 0.55) {

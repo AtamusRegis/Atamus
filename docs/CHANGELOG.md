@@ -8,6 +8,8 @@ and any rule decided. Use `git log` for the code detail (and for the older Atamu
 
 - **Neighborhood cinematic shots (owner).** Each neighborhood's panel holds up to 5 named shots, each a point on the map;
   when the neighborhood opens, the showing circles each one in turn with its name.
+- **Pipe shortcuts (owner).** The builder places pipes; shift-click two and Link them, and riding into one's mouth
+  brings you out of the other's.
 - **Big Jump; no abilities or bonks (owner).** Every mount gets a Big Jump on the big button (F) where Bonk was; mount
   abilities and bonking (with its Aura and the Friendly setting) are gone. Jumps keep their speed in the air instead of
   stopping when you let go; steering in the air is gentle.

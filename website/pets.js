@@ -569,6 +569,7 @@ function stepTransit(dt) {
   else if (tr.k === "pipe") { if (now() >= tr.until) { me.transit = null; me.hidden = false; me.x = tr.x; me.y = tr.y; me.z = tr.z; me.ground = true; me.armed = false; sfx("pop"); emit(me.x, me.y + 0.6, me.z, 18, { colors: ["#5fb56b", "#ffffff"], speed: 4, up: 4, life: 0.6 }); } }
   me.moving = true;
 }
+let tubeAsk = 0;
 function stepMe(dt) {
   const t = now(); musicZone = World.districtAt(me.x, me.z, me.y);
   if (me.stun > 0) { me.stun -= dt; if (me.stun <= 0) { me.stun = 0; me.footT = 2.2; } }
@@ -626,6 +627,7 @@ function stepMe(dt) {
   if (me.foot && me.stun <= 0) { me.footT -= dt; if (me.footT <= 0 || hyp(me.x - me.mx, me.z - me.mz) < 1.4) doWhistle(); }
   if (!me.armed && !nearTrigger()) me.armed = true;
   if (me.stun <= 0) triggers(t);
+  if (me.stun <= 0 && t > tubeAsk) { const p = World.pipeAt(me.x, me.z, me.y); if (p) { tubeAsk = t + 0.5; netSend({ t: "tube", id: p.id }); } }   // (owner, 2026-11-13) riding into a linked pipe's mouth
   if (me.boost > 0 && me.moving) emit(me.x - Math.sin(me.yaw) * 1.4, me.y + 1, me.z - Math.cos(me.yaw) * 1.4, 1, { colors: ["#ffffff", "#ffd84a"], speed: 1, up: 0.3, life: 0.3, grav: 0, size: 0.16, spread: 1.4 });   // speed streaks
   // footsteps: dust; a Legendary leaves sparkles
   if (me.ground && me.moving) { me.stepT -= dt; if (me.stepT <= 0) { me.stepT = 0.16; trail(me.x, me.y, me.z, q, kind); } }
@@ -698,7 +700,7 @@ const drags = new Map(); let pinch = 0, tapStart = null;
 const joyEl = $("joy"), knob = $("knob");
 canvas.addEventListener("pointerdown", (e) => {
   canvas.setPointerCapture(e.pointerId);
-  if (bm && e.pointerType === "mouse" && e.button === 0) { paintStart(e.clientX, e.clientY); return; }   // (owner, 2026-11-13) building: the left button places (and keeps placing as you drag); the right one turns the camera
+  if (bm && e.pointerType === "mouse" && e.button === 0) { if (e.shiftKey) pipePick(e.clientX, e.clientY); else paintStart(e.clientX, e.clientY); return; }   // (owner, 2026-11-13) building: the left button places (and keeps placing as you drag); the right one turns the camera
   if (e.pointerType === "touch" && joy.id === null && e.clientX < innerWidth * 0.45 && e.clientY > innerHeight * 0.35) { joy.id = e.pointerId; joy.ox = e.clientX; joy.oy = e.clientY; joy.x = joy.y = 0; joyEl.style.display = "block"; joyEl.style.left = e.clientX - 60 + "px"; joyEl.style.top = e.clientY - 60 + "px"; knob.style.transform = ""; return; }
   drags.set(e.pointerId, { x: e.clientX, y: e.clientY }); tapStart = { x: e.clientX, y: e.clientY, t: performance.now() };
   if (drags.size === 2) { const [a, b] = [...drags.values()]; pinch = hyp(a.x - b.x, a.y - b.y); }
@@ -1068,10 +1070,10 @@ let bm = null;
 const ray = new THREE.Raycaster(), ndc = new THREE.Vector2(), ground = new THREE.Plane(new THREE.Vector3(0, 1, 0), 0), hitV = new THREE.Vector3();
 $("mbuild").onclick = () => (bm ? endBuild() : startBuild());   // (owner, 2026-11-13) admins: the Build button on screen
 function startBuild() { closePanel(); if (!free) setFree(true); bm = { tool: "block", zone: 0, w: 2, h: 1, d: 2, m: "grass", r: 0, wl: 8, ly: 0, sel: 0, px: innerWidth / 2, py: innerHeight / 2, ghost: null, aim: null }; buildBar(); document.body.classList.add("building"); buildAim(bm.px, bm.py); drawAreas(); }
-function endBuild() { if (!bm) return; bm.zd = null; if (bm.ghost) scene.remove(bm.ghost); bm = null; $("buildbar").style.display = "none"; $("zpanel").style.display = "none"; drawAreas(); document.body.classList.remove("building"); setFree(false); }
+function endBuild() { if (!bm) return; bm.zd = null; if (bm.ghost) scene.remove(bm.ghost); if (bm.pselG) scene.remove(bm.pselG); bm = null; $("buildbar").style.display = "none"; $("zpanel").style.display = "none"; $("pprompt").style.display = "none"; drawAreas(); document.body.classList.remove("building"); setFree(false); }
 function buildBar() {
   const B = $("buildbar"); B.innerHTML = ""; B.style.display = "flex"; const row0 = el("div", "brow"), row1 = el("div", "brow"), row2 = el("div", "brow");
-  for (const [k, name, row] of [["block", "Block", row0], ["house", "House", row0], ["mailbox", "Mailbox", row0], ["gate", "Gate", row0], ["wall", "Wall", row0], ["tree", "Tree", row0], ["boost", "Boost", row0], ["start", "Start Line", row0], ["podium", "Podium", row1], ["spawn", "Respawn", row1], ["office", "Post Office", row1], ["area", "Bounds", row1], ["erase", "Erase", row1]]) row.appendChild(btn(name, () => { bm.tool = k; if (k !== "area") bm.sel = 0; buildBar(); buildAim(bm.px, bm.py); drawAreas(); }, "bt" + (bm.tool === k ? " on" : "")));
+  for (const [k, name, row] of [["block", "Block", row0], ["house", "House", row0], ["mailbox", "Mailbox", row0], ["gate", "Gate", row0], ["wall", "Wall", row0], ["tree", "Tree", row0], ["boost", "Boost", row0], ["start", "Start Line", row0], ["podium", "Podium", row1], ["spawn", "Respawn", row1], ["office", "Post Office", row1], ["pipe", "Pipe", row1], ["area", "Bounds", row1], ["erase", "Erase", row1]]) row.appendChild(btn(name, () => { bm.tool = k; if (k !== "area") bm.sel = 0; buildBar(); buildAim(bm.px, bm.py); drawAreas(); }, "bt" + (bm.tool === k ? " on" : "")));
   row1.appendChild(btn("⟳", () => { bm.r = (bm.r + 1) % 4; buildAim(bm.px, bm.py); }, "bt")); row1.appendChild(btn("✕", endBuild, "bt")); B.appendChild(row0);
   const step = (label, get, set, lo, hi) => { const g = el("div", "bstep" + (label === zLabel ? " zone" : "")); g.appendChild(btn("−", () => { set(clamp(get() - 1, lo, hi)); buildBar(); buildAim(bm.px, bm.py); }, "bt")); g.appendChild(el("span", "", label())); g.appendChild(btn("+", () => { set(clamp(get() + 1, lo, hi)); buildBar(); buildAim(bm.px, bm.py); }, "bt")); row2.appendChild(g); };
   // (owner, 2026-11-13) the neighborhood you're editing: its bounds, gates and walls are placed for it; ⚙ its name, animal and chances
@@ -1093,7 +1095,7 @@ function pieceAt(px, py) {   // what's pointed at: the point, its face's normal 
 // the box a piece takes: [w, h, d, center x, y, z]
 function pieceBox(q) {
   const S = World.HOUSE_S, P = World.PO.b;
-  return q.k === "block" ? [q.w, q.h, q.d, q.x + q.w / 2, q.y + q.h / 2, q.z + q.d / 2] : q.k === "house" ? [S, 5, S, q.x, q.y + 2.5, q.z] : q.k === "gate" ? [World.GATE_W, World.GATE_H, World.GATE_T, q.x, q.y + World.GATE_H / 2, q.z] : q.k === "wall" ? [q.w, World.GATE_H, World.GATE_T, q.x, q.y + World.GATE_H / 2, q.z] : q.k === "area" ? [q.w, 1, q.d, q.x + q.w / 2, q.y, q.z + q.d / 2]
+  return q.k === "block" ? [q.w, q.h, q.d, q.x + q.w / 2, q.y + q.h / 2, q.z + q.d / 2] : q.k === "pipe" ? [World.TUBE.r * 2, World.TUBE.r * 2, World.TUBE.l, q.x, q.y + World.TUBE.r, q.z] : q.k === "house" ? [S, 5, S, q.x, q.y + 2.5, q.z] : q.k === "gate" ? [World.GATE_W, World.GATE_H, World.GATE_T, q.x, q.y + World.GATE_H / 2, q.z] : q.k === "wall" ? [q.w, World.GATE_H, World.GATE_T, q.x, q.y + World.GATE_H / 2, q.z] : q.k === "area" ? [q.w, 1, q.d, q.x + q.w / 2, q.y, q.z + q.d / 2]
     : q.k === "tree" ? [1.6, 6.5, 1.6, q.x, q.y + 3.25, q.z] : q.k === "boost" ? [3.2, 0.3, 3.2, q.x, q.y + 0.15, q.z] : q.k === "start" ? [World.START_W, 0.3, World.START_D, q.x, q.y + 0.15, q.z] : q.k === "podium" ? [4.4, 1.6, 4.4, q.x, q.y + 0.8, q.z]
     : q.k === "spawn" ? [1.8, 0.3, 1.8, q.x, q.y + 0.15, q.z] : q.k === "office" ? [P.hw * 2, P.h + 2, P.hd * 2 + 10, q.x, q.y + (P.h + 2) / 2, q.z - 9 + (P.hd * 2 + 10) / 2 - P.hd] : [0.6, 1.5, 0.6, q.x, q.y + 0.75, q.z];
 }
@@ -1360,8 +1362,8 @@ function onNet(m) {
     }
     case "stun": me.stun = m.s; if (me.transit && me.transit.k !== "pipe") me.transit = null; knockedOff(); sfx("stun"); cam.shake = Math.max(cam.shake, 0.5); flash(m.why === "kick" ? "#ffffff" : "#e5534b"); if (m.why === "dog") sfx("growl"); break;
     case "knock": me.px = m.x; me.pz = m.z; me.vy = m.y; me.ground = false; sfx("kick"); cam.shake = Math.max(cam.shake, 0.5); break;
-    case "tp": if (m.why === "home" || m.why === "balloon") { me.yaw = World.SPAWN.yaw; cam.yaw = me.yaw - Math.PI; }   // (owner, 2026-11-13) facing the way the respawn point is turned
-      me.x = m.x; me.y = m.y; me.z = m.z; me.vx = me.vz = me.vy = me.px = me.pz = 0; me.transit = null; me.ground = true; me.armed = false; me.foot = false; camAt.y = m.y + 2; if (m.why === "fall") { flash("#ffffff"); sfx("pop"); } else if (m.why === "home") { cam.yaw = -Math.PI / 2; sfx("pad"); } else { flash("#bfe6ff"); sfx("pad"); }   /* home: (owner, 2026-11-11) the run's over, back at the post office */ sendPos(true); break;
+    case "tp": { const sp0 = hyp(me.vx, me.vz); if (m.why === "home" || m.why === "balloon") { me.yaw = World.SPAWN.yaw; cam.yaw = me.yaw - Math.PI; }   // (owner, 2026-11-13) facing the way the respawn point is turned
+      me.x = m.x; me.y = m.y; me.z = m.z; me.vx = me.vz = me.vy = me.px = me.pz = 0; me.transit = null; me.ground = true; me.armed = false; me.foot = false; camAt.y = m.y + 2; if (m.why === "fall") { flash("#ffffff"); sfx("pop"); } else if (m.why === "home") { cam.yaw = -Math.PI / 2; sfx("pad"); } else if (m.why === "tube") { me.yaw = m.yaw; cam.yaw = me.yaw - Math.PI; me.vx = Math.sin(me.yaw) * sp0; me.vz = Math.cos(me.yaw) * sp0; sfx("pipe"); emit(me.x, me.y + 1, me.z, 18, { colors: ["#5fb56b", "#ffffff"], speed: 4, up: 3, life: 0.5 }); } else { flash("#bfe6ff"); sfx("pad"); }   /* tube: (owner, 2026-11-13) out of a pipe shortcut, keeping your speed; home: (owner, 2026-11-11) the run's over, back at the post office */ sendPos(true); break; }
     case "piped": me.transit = { k: "pipe", until: now() + m.s, x: m.x, y: m.y, z: m.z }; me.hidden = true; me.vx = me.vz = me.px = me.pz = 0; sfx("pipe"); if (m.goose) setTimeout(() => sfx("honk"), 600); break;
     case "rock": { const r = new THREE.Mesh(new THREE.DodecahedronGeometry(1.3), mat("#8a8278")); r.position.set(m.x, m.y + 22, m.z); scene.add(r); fallers.push({ g: r, y0: m.y + 22, y1: m.y + 0.8, t: 0, s: m.s });
       groundMark(m.x, m.y, m.z, World.ROCK.r, m.s, "#1d232a", (k) => { if (hyp(k.x - me.x, k.z - me.z) < 60) sfx("rock"); emit(k.x, k.y + 0.3, k.z, 22, { colors: ["#8a8278", "#c9bfae"], speed: 6, up: 4, life: 0.7 }); if (hyp(k.x - me.x, k.z - me.z) < 14) cam.shake = Math.max(cam.shake, 0.4); }); break; }
@@ -1372,7 +1374,7 @@ function onNet(m) {
     case "reset": location.reload(); break;   // (owner, 2026-11-11) staff made this a brand new courier
     case "petup": adopt(m.data); remount(); sfx("buy"); if (panel === "stable") renderPanel(); emit(me.x, me.y + 2, me.z, 30, { colors: ["#c77dff", "#ffffff", "#e2b8ff"], speed: 4, up: 5, life: 1 }); break;
     case "buildok": { const f = pend.get(m.tag); pend.delete(m.tag); if (f) f(m.id); break; }
-    case "build": World.setBuild({ pieces: m.build || [], zones: m.zones || [] }); drawBuild(); setPods(lastPods); if (bm) { buildAim(bm.px, bm.py); if (bm.sel && !World.build.some((q) => q.id === bm.sel)) bm.sel = 0; drawAreas(); if ($("zpanel").style.display === "block") zonePanel(); } break;   // (owner, 2026-11-13) someone built
+    case "build": World.setBuild({ pieces: m.build || [], zones: m.zones || [] }); drawBuild(); setPods(lastPods); if (bm) { buildAim(bm.px, bm.py); pipeSel(); if (bm.sel && !World.build.some((q) => q.id === bm.sel)) bm.sel = 0; drawAreas(); if ($("zpanel").style.display === "block") zonePanel(); } break;   // (owner, 2026-11-13) someone built
     case "aura": save.coins = m.coins; popup("+" + fmt(m.n), "#d9a6ff", me.x, me.y + 2.6, me.z); hudDirty = true; break;   // (owner, 2026-11-12) a podium paid
     case "podiums": setPods(m.pods); break;
     case "upgraded": adopt(m.data); remount(); sfx("buy"); emit(me.x, me.y + 2, me.z, 30, { colors: ["#ffd84a", "#ffffff", "#7ee08a"], speed: 4, up: 5, life: 1 }); break;
@@ -1553,6 +1555,12 @@ function pieceMesh(q, live) {
       for (const y of [0.05, H]) { const e = new THREE.Mesh(new THREE.BoxGeometry(W2, 0.08, 0.08), new THREE.MeshBasicMaterial({ color: "#bff0ff" })); e.position.y = y; sh.add(e); }
       const L = q.k === "gate" ? lock(sh, H / 2) : null; if (live) gates.push({ g: sh, w, L, d: q.zone, built: 1, at: q });
     }
+    else if (q.k === "pipe") {   // (owner, 2026-11-13) on its side, its mouth the way it's turned; bright green once linked
+      const g = new THREE.Group(), R = World.TUBE.r, L = World.TUBE.l, on = live && World.tubePartner(World.pipes.find((p) => p.id === q.id)); g.position.set(q.x, q.y, q.z); g.rotation.y = (q.r | 0) * Math.PI / 2; G.add(g);
+      const c = on ? "#3fb34f" : "#7d9482", body = new THREE.Mesh(new THREE.CylinderGeometry(R, R, L, 20, 1, true).rotateX(Math.PI / 2), new THREE.MeshLambertMaterial({ color: c, side: THREE.DoubleSide })); body.position.y = R; body.castShadow = true; g.add(body);
+      const rim = new THREE.Mesh(new THREE.TorusGeometry(R, 0.28, 8, 24), mat(on ? "#56d066" : "#90a895")); rim.position.set(0, R, L / 2); g.add(rim);
+      const back = new THREE.Mesh(new THREE.CircleGeometry(R, 20), new THREE.MeshBasicMaterial({ color: "#10241a" })); back.position.set(0, R, -L / 2 + 0.05); g.add(back);
+    }
     else if (q.k === "tree") { const g = new THREE.Group(); g.position.set(q.x, q.y, q.z); g.rotation.y = (q.r | 0) * Math.PI / 2; G.add(g); const tr = new THREE.Mesh(new THREE.CylinderGeometry(0.28, 0.36, 2.2, 7), mat("#8a5a34")); tr.position.y = 1.1; tr.castShadow = true; g.add(tr); const lf = new THREE.Mesh(new THREE.ConeGeometry(1.9, 4.6, 8), mat("#3fa650")); lf.position.y = 4.2; lf.castShadow = true; g.add(lf); tr.userData.pid = lf.userData.pid = q.id; }
     else if (q.k === "boost") { const m = new THREE.Mesh(new THREE.PlaneGeometry(3.2, 3.2).rotateX(-Math.PI / 2), BOOST_M); m.position.set(q.x, q.y + 0.09, q.z); m.rotation.y = (q.r | 0) * Math.PI / 2 + Math.PI; m.receiveShadow = true; m.userData.pid = q.id; G.add(m); }
     else if (q.k === "start") { const t = START_T.clone(); t.needsUpdate = true; t.repeat.set(World.START_W / 2, 1); const m = new THREE.Mesh(new THREE.PlaneGeometry(World.START_W, World.START_D).rotateX(-Math.PI / 2), new THREE.MeshBasicMaterial({ map: t })); m.position.set(q.x, q.y + 0.1, q.z); m.rotation.y = (q.r | 0) * Math.PI / 2; m.userData.pid = q.id; G.add(m); }
@@ -1561,6 +1569,17 @@ function pieceMesh(q, live) {
       g.add(new THREE.Mesh(new THREE.RingGeometry(0.6, 0.9, 24).rotateX(-Math.PI / 2), sm)); const ar = new THREE.Mesh(new THREE.ConeGeometry(0.35, 0.8, 3).rotateX(Math.PI / 2), sm); ar.position.set(0, 0.05, 1.4); ar.scale.y = 0.15; g.add(ar); }   // which way couriers face
   G.traverse((o) => { o.userData.pid = q.id; });
   return G;
+}
+// (owner, 2026-11-13) shift-click two pipes, then Link joins them into a shortcut (Unlink parts two already joined)
+function pipePick(px, py) {
+  buildAim(px, py); const q = aimed(); if (!q || q.k !== "pipe") return; const L = bm.psel || []; bm.psel = L.includes(q.id) ? L.filter((id) => id !== q.id) : [...L, q.id].slice(-2); sfx("tick"); pipeSel();
+}
+function pipeSel() {
+  if (bm && bm.pselG) { scene.remove(bm.pselG); bm.pselG = null; } const P = $("pprompt"); P.style.display = "none"; if (!bm || !bm.psel) return;
+  bm.psel = bm.psel.filter((id) => World.build.some((q) => q.id === id && q.k === "pipe")); bm.pselG = new THREE.Group(); scene.add(bm.pselG);
+  for (const id of bm.psel) bm.pselG.add(hologram(World.build.find((q) => q.id === id)));
+  if (bm.psel.length < 2) return; const [a, b] = bm.psel, A = World.build.find((q) => q.id === a), joined = A.to === b && World.build.find((q) => q.id === b).to === a;
+  P.innerHTML = ""; P.appendChild(btn(joined ? "Unlink" : "Link", () => { netSend(joined ? { t: "build", op: "unlink", a } : { t: "build", op: "link", a, b }); sfx("pad"); bm.psel = []; pipeSel(); }, "go")); P.appendChild(btn("✕", () => { bm.psel = []; pipeSel(); }, "bt")); P.style.display = "flex";
 }
 function drawBuild() {
   if (poG) { scene.remove(poG); poG = null; }

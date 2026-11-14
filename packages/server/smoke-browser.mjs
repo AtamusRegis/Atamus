@@ -103,8 +103,11 @@ try {
   await page.evaluate(() => window.Pets.teleport(60, 30)); await page2.evaluate(() => { window.Pets.teleport(60, 27.6); window.Pets.me.yaw = 0; });
   await until(page, () => { const o = [...window.Pets.others.values()][0]; return Math.abs(o.x - 60) < 1 && Math.abs(o.z - 27.6) < 1; }, "the second player looks frozen to the first");
   step = "see a Big Jump"; await page.waitForTimeout(400);   // (owner, 2026-11-13) the Big Jump replaced the bonk
+  await until(page2, () => window.Pets.me.ground, "the second player isn't on the ground");
+  await page.evaluate(() => { window.__maxY = 0; const f = () => { const o = [...window.Pets.others.values()][0]; if (o) window.__maxY = Math.max(window.__maxY, o.y); requestAnimationFrame(f); }; f(); });   // the highest the first player saw them
   await page2.keyboard.press("KeyF");
-  await until(page, () => [...window.Pets.others.values()][0].y > 2.3, "the second player's Big Jump wasn't seen");
+  await until(page2, () => window.Pets.me.y > 2.3, "the Big Jump didn't lift the second player");
+  await until(page, () => window.__maxY > 2, "the second player's Big Jump wasn't seen");
 } catch (e) { problems.push(`could not ${step}: ${e.message.split("\n")[0]}`); }
 await browser.close(); if (browser2) await browser2.close(); server.close();
 if (problems.length) { console.error("SMOKE FAILED (browser)\n" + problems.map((p) => "  " + p).join("\n")); process.exit(1); }

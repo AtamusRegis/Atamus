@@ -154,6 +154,18 @@ try {
     n.send({ t: "build", op: "add", piece: { k: "wall", x: -250, z: 0, y: 0, r: 0, w: 12, zone: 3 } }); await b.wait((m) => m.t === "build" && m.build.some((q) => q.k === "wall"), "a wall");
     ok(W.gateBlocked(-245, 0, 0, 1, 0.5) && !W.gateBlocked(-235, 0, 0, 1, 0.5) && !W.gateBlocked(-245, 0, 0, 4, 0.5), "a bound wall stops couriers along its length until its neighborhood is open");
     n.send({ t: "build", op: "del", id: W.build.find((q) => q.k === "wall").id }); await sleep(150); }
+  // (owner, 2026-11-13) pipe shortcuts: two pipes the builder links; riding into one's mouth comes out of the other's, facing out
+  { n.send({ t: "build", op: "add", piece: { k: "pipe", x: -120, z: 0, y: 0, r: 0 }, tag: 21 }); const p1 = (await n.wait((m) => m.t === "buildok" && m.tag === 21, "a pipe")).id;
+    n.send({ t: "build", op: "add", piece: { k: "pipe", x: -160, z: 30, y: 0, r: 1 }, tag: 22 }); const p2 = (await n.wait((m) => m.t === "buildok" && m.tag === 22, "another pipe")).id; await sleep(100);
+    ok(!W.pipeAt(-120, 2.6, 0.5), "an unlinked pipe goes nowhere");
+    b.send({ t: "build", op: "link", a: p1, b: p2 }); await sleep(120); ok(!W.tubePartner(W.pipes.find((p) => p.id === p1)), "a player can't link pipes");
+    n.send({ t: "build", op: "link", a: p1, b: p2 }); await b.wait((m) => m.t === "build" && m.build.some((q) => q.id === p1 && q.to === p2), "the pipes linked");
+    ok(W.pipeAt(-120, 2.6, 0.5) && W.pipeAt(-120, 2.6, 0.5).id === p1 && !W.pipeAt(-120, -2.6, 0.5) && W.blocked(-120, 0, 0.5), "linked: its mouth takes you in (not its back), and its body is solid");
+    for (let i = b.inbox.length - 1; i >= 0; i--) if (b.inbox[i].t === "tp") b.inbox.splice(i, 1); await put(b, "smokeB", -120, 2.8); who("smokeB").tpAt = 0; b.send({ t: "tube", id: p1 }); const tp = await b.wait((m) => m.t === "tp" && m.why === "tube", "out of the other pipe");
+    ok(Math.abs(tp.x - (-160 + W.TUBE.l / 2 + 2)) < 1e-6 && Math.abs(tp.z - 30) < 1e-6 && Math.abs(tp.yaw - Math.PI / 2) < 1e-9, "a rider comes out of the linked pipe's mouth, facing out of it");
+    for (let i = b.inbox.length - 1; i >= 0; i--) if (b.inbox[i].t === "build") b.inbox.splice(i, 1);
+    n.send({ t: "build", op: "unlink", a: p2 }); await b.wait((m) => m.t === "build" && m.build.some((q) => q.id === p1 && !q.to), "the pipes parted"); ok(!W.pipeAt(-120, 2.6, 0.5), "unlinked again");
+    n.send({ t: "build", op: "del", id: p1 }); n.send({ t: "build", op: "del", id: p2 }); await sleep(150); }
   b.send({ t: "admin", op: "quick", cmd: "coins", n: 5000, name: "smokeB" });   // a player: nothing happens
   n.send({ t: "admin", op: "quick", cmd: "coins", n: 5000, name: "smokeB" });
   ok((await b.wait((m) => m.t === "data", "B's coins")).data.coins === 5000, "an admin gives coins once; a player's command is ignored");

@@ -215,6 +215,11 @@ is one 1 m grass block (`SEED`) to stand on, with sky all round. Everything is a
     neighborhood's showing flies to its gate as it opens.
   - **Wall** (owner, 2026-11-13, "bound walls"): the same blue boundary, 7 m high and 1 to 60 m long (L), no posts:
     closed like a gate of its neighborhood until that's open, then gone.
+  - **Pipe** (owner, 2026-11-13, "pipe shortcuts"): a green pipe on its side (3.2 m across, 4 m long, solid), its mouth
+    the way it's turned. **Shift-click two pipes** in the builder (they show as holograms; a third replaces the first)
+    and a prompt offers **Link** (Unlink if those two are already joined); a pipe joins one other at a time. Linked
+    pipes are bright green: riding into one's mouth brings you out 2 m in front of the other's, facing out of it and
+    keeping your speed (once a second). Unlinked pipes are grey-green and go nowhere.
   - **Bounds** (owner, 2026-11-13): a rectangle (up to 1000 x 1000 m, any height) for a neighborhood. **Anything inside
     belongs to that neighborhood** (where bounds overlap, the smallest wins); outside every bounds is Main Street.
 - **The neighborhood a spot is in** is its bounds' (above): it names the mailboxes and colors the houses, and sets the
