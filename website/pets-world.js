@@ -139,13 +139,12 @@ export const mountScale = (m) => 1 + 0.25 * clamp(m.r | 0, 0, 4);             //
 // (owner, 2026-11-12) around the post office every mount goes the same speed; the purple Aura pad across the way out
 // (x AURA_PAD.x, all the way across) switches on its own speed for the run
 export const BASE_SPEED = 12, RARITY_UP = 0.2, ZONE_UP = 0.05, SPD_UP = 0.05;
-// (owner, 2026-11-12) speed: 20% more per rarity step; 5% more for each zone an animal is short of its own zone, 5% less
-// for each zone past it (a Wolf, from the fifth, goes 120% on Main Street, a Dog 80% on the Floating Islands); 5% more
-// per Aura speed level
-export const zoneSpeed = (sp, zone) => Math.max(0.2, 1 + ZONE_UP * (homeZone(sp) - (zone | 0)));
+// (owner, 2026-11-12) speed: 20% more per rarity step; 5% more per Aura speed level. (owner, 2026-11-14) each zone's
+// animal goes 5% faster than the one before (Dog 100%, Cat 105%, Gator 110%...), the same in every zone
+export const zoneSpeed = (sp) => Math.pow(1 + ZONE_UP, homeZone(sp));
 export function mountStats(m, zone) {   // m: { sp, r (rarity), spd }; zone: where it is (districtAt), or its own zone
-  const r = clamp(m.r | 0, 0, 4), z = homeZone(m.sp), here = zone === undefined ? z : zone;
-  return { speed: BASE_SPEED * (1 + RARITY_UP * r) * zoneSpeed(m.sp, here) * (1 + SPD_UP * clamp(m.spd | 0, 0, SPD_MAX)), jump: 8 + 0.5 * r + 0.25 * z, grip: Math.min(0.6, 0.1 * r + 0.03 * z) };
+  const r = clamp(m.r | 0, 0, 4), z = homeZone(m.sp); void zone;
+  return { speed: BASE_SPEED * (1 + RARITY_UP * r) * zoneSpeed(m.sp) * (1 + SPD_UP * clamp(m.spd | 0, 0, SPD_MAX)), jump: 8 + 0.5 * r + 0.25 * z, grip: Math.min(0.6, 0.1 * r + 0.03 * z) };
 }
 // (owner, 2026-11-11) trails: one more to unlock every five areas opened (with five areas, the first at the Floating
 // Islands); any mount can wear any trail you've unlocked
@@ -209,14 +208,20 @@ export function deliveryCoins(tier, mod, payoutLv, hits, late) {
 }
 // the reward roll. Returns { tier, coins, pet, near (it just missed Legendary) }. (owner, 2026-11-11) no
 // Stamp Meter (pity) any more: every roll is its own
-export function rewardRoll(tier, up, rnd = Math.random) {
+export function rewardRoll(tier, up, rnd = Math.random, open = tier + 1) {
   const odds = rollOdds(TIERS[tier].luck + stampLuck(up.stamps)); let r = rnd(), t = 0; for (let n = 0; n < odds.length; n++) { if (r < odds[n]) { t = n; break; } r -= odds[n]; t = n; }
   const near = t < 4 && r < 0.012 && t >= 3;
-  return { tier: t, near, ...giftContents(t, tier, up, rnd) };
+  return { tier: t, near, ...giftContents(t, tier, up, rnd, open) };
 }
-// what's inside a gift of rarity t from a parcel of tier pt (decided when it's opened, owner 2026-11-11)
-export function giftContents(t, pt, up, rnd = Math.random) {
-  const R = ROLLS[t], coins = Math.round((R.coins[0] + rnd() * (R.coins[1] - R.coins[0])) * Math.sqrt(TIERS[pt].mult));
+// (owner, 2026-11-14) a gift's coins from zone pt's parcel: the rarity's range, its top 5% higher for each zone further
+// out, and its bottom 5% higher (up to the top) for each zone the courier has opened past that one
+export function giftRange(t, pt, open = pt + 1) {
+  const R = ROLLS[t], g = Math.pow(1.05, pt | 0), hi = R.coins[1] * g, lo = Math.min(hi, R.coins[0] * g * Math.pow(1.05, Math.max(0, (open | 0) - 1 - (pt | 0))));
+  return [lo, hi];
+}
+// what's inside a gift of rarity t from a parcel of tier pt (decided when it's opened, owner 2026-11-11); open: how many zones the courier has open
+export function giftContents(t, pt, up, rnd = Math.random, open = pt + 1) {
+  const [lo, hi] = giftRange(t, pt, open), coins = Math.round(lo + rnd() * (hi - lo));
   const Z = zoneCfg(pt); let pet = null; for (let r = t; r >= 0 && !pet; r--) if (rnd() < Z.chance[r]) pet = { sp: Z.sp, r, va: skinRoll(rnd, Z.shiny) };   // that rarity or lower; (owner, 2026-11-13) the neighborhood's own animal and chances
   return { coins, pet };
 }

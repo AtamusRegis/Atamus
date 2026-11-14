@@ -5,7 +5,7 @@
 // and asks. Phone first: a thumb joystick, drag to look, pinch to zoom, big buttons.
 import * as THREE from "./vendor/three.module.min.js";
 import { svg, fillIcons, ICON } from "./icons.js?v=4";
-import * as World from "./pets-world.js?v=1794649685";
+import * as World from "./pets-world.js?v=1794650368";
 
 const $ = (id) => document.getElementById(id);
 const { TAU, clamp, hyp, MOUNTS, TIERS, RARITY, RARITY_C, MODS, UPGRADES } = World;
@@ -512,7 +512,7 @@ addEventListener("keydown", () => { const a = audio(); if (a && a.state === "sus
 // ---- the courier's data (the server's copy; this page only shows it) and me ----
 let save = World.cleanData({});
 const riding = () => save.mounts.find((m) => m.id === save.ride) || save.mounts[0];
-const myStats = () => World.mountStats(riding(), World.districtAt(me.x, me.z, me.y));   // (owner, 2026-11-12) faster short of its own zone, slower past it
+const myStats = () => World.mountStats(riding());   // (owner, 2026-11-14) the same speed in every zone
 const me = { x: World.SPAWN.x, y: 0, z: World.SPAWN.z, yaw: Math.PI / 2, vx: 0, vz: 0, vy: 0, px: 0, pz: 0, ground: true, moving: false, foot: false, footT: 0, stun: 0, grace: 0, jumps: 0, boost: 0, dash: 0, abilityAt: -99, bigAt: -99, kickT: 0, transit: null, armed: true, mx: 0, my: 0, mz: 0, myaw: 0, hidden: false, glide: false, stepT: 0 };
 let mine = null, walker = null, myTag = null, bag = [], stolen = [], dropped = [], cap = 1, belt = { ready: null, next: null };   // my parcels: on the saddle, with geese, on the ground
 function makeTag(name, rank, r) { return textSprite(String(name || "Courier").slice(0, 18), { size: 34, badge: rank ? World.RANK_C[rank] : "", glow: r >= 4 ? "#ffd84a" : "" }); }

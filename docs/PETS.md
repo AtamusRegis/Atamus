@@ -87,13 +87,17 @@ A parcel that breaks or is lost is gone; the conveyor always has the next one. *
 
 ## The reward roll
 
-| Roll | Chance | Coins (x square root of the tier's multiplier) | Also |
+| Roll | Chance | Coins (zone 0's range; see below) | Also |
 | --- | --- | --- | --- |
 | Common | 60% | 4-10 | |
 | Uncommon | 25% | 15-30 | |
 | Rare | 10% | 50-100 | |
 | Epic | 4% | 220-420 | |
 | Legendary | 1% | 1,500-2,600 | |
+
+- (owner, 2026-11-14) **A gift's coins by zone:** the top of its range is 5% higher for each zone further out the parcel
+  came from (x 1.05^zone), and the bottom is 5% higher for each zone you've opened past that one (x 1.05 per zone, up to
+  the top), so older zones pay more reliably as you go further.
 
 - (owner, 2026-11-11) **Mounts drop from parcels:** a parcel can bring its area's animal, at the parcel's rarity or
   lower (a Legendary parcel from Main Street: a Common, Uncommon, Rare, Epic or Legendary Dog). (owner, 2026-11-11)
@@ -136,8 +140,8 @@ A parcel that breaks or is lost is gone; the conveyor always has the next one. *
   pad its own speed switches on (a whoosh and purple sparks), for as long as you're east of it. Riding speeds up and
   stops quickly whatever the speed (grip 7x the speed, at least 70 m/s², so fast mounts don't drift; ice still slides).
 - **Stats** (rarity 0-4, area a 0-4 for Dog to Wolf): (owner, 2026-11-12) Speed 12 m/s x (1 + 20% per rarity step) x
-  (1 + 5% for each area its animal's own area is ahead of where it is, - 5% for each it's behind: a Wolf goes 120% on
-  Main Street, a Dog 80% on the Floating Islands) x (1 + 5% per Aura **Boost** level, up to 10: the Stable's Boost row,
+  (owner, 2026-11-14) 1.05^a (each zone's animal 5% faster than the one before: Dog 100%, Cat 105%, Gator 110%...,
+  the same in every zone) x (1 + 5% per Aura **Boost** level, up to 10: the Stable's Boost row,
   100 Aura x 1.7^level x (1 + 0.5 x rarity) x (1 + 0.5 x a)); Jump 8 + 0.5 x rarity + 0.25 x a; Grip (shortens stuns) 10%
   x rarity + 3% x a.
 - **Jumping** (owner, 2026-11-13): Space (or Jump, (owner, 2026-11-14) the big button now) jumps by the mount's Jump.
@@ -244,7 +248,7 @@ is one 1 m grass block (`SEED`) to stand on, with sky all round. Everything is a
   - **Bounds** (owner, 2026-11-13): a rectangle (up to 1000 x 1000 m, any height) for a neighborhood. **Anything inside
     belongs to that neighborhood** (where bounds overlap, the smallest wins); outside every bounds is Main Street.
 - **The neighborhood a spot is in** is its bounds' (above): it names the mailboxes and colors the houses, and sets the
-  speed rule (5% per neighborhood short of or past a mount's own), and the sky color.
+  the sky color.
 - **Each neighborhood's settings** (owner, 2026-11-13; saved with the pieces): its name, the animal its parcels bring and
   each rarity's chance and the Shiny chance for those mounts, and (owner, 2026-11-13) **up to 5 cinematic shots**: each a short name (what
   it shows: "Wind", "Platforms"...) and a point. When the neighborhood opens, after its gate bursts open, the showing
@@ -402,6 +406,9 @@ its own fresh saves, with the same logins. It is described in `docs/POKEMON.md`;
 Courier's rules.
 
 ## Rejected / removed
+
+- (owner, 2026-11-14) Mounts going faster short of their own zone and slower past it; gift coins scaling with the
+  square root of the tier's multiplier.
 
 - (owner, 2026-11-14) **The Big Jump** (F, the big button); losing your parcels when you fall off the town.
 
