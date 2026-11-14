@@ -46,7 +46,7 @@ website/              GitHub Pages site (atamus.io)
   pets.html           the game page and HUD; its <meta name="pets-server"> (and CSP connect-src) name the game server
   pets.js             the whole client: drawing the town, riding, the conveyor and parcels, the HUD and menus (Stable,
                       Upgrades, Odds, Settings, Admin), effects and sounds, the server connection
-  pets-world.js       the town and the rules, shared with the server: the fixed town (buildTown), tiers, modifiers,
+  pets-world.js       the town and the rules, shared with the server: the zone builder's pieces (setBuild), tiers, modifiers,
                       roll odds, mounts, upgrades, dogs / geese / hazard numbers, the courier-data rules
                       (cleanData). packages/server/src/pets-world.js must be an identical copy (scripts/check.sh
                       compares them)
@@ -70,7 +70,8 @@ packages/server/src/
                       column and poke_world table; the old data column and pet_world stay untouched), pets-world.js
 packages/server/pokemon/    Pet Delivery Co.'s tests (smoke, smoke-browser, smoke-both: both games on one server), run
                             by npm run smoke / smoke:browser
-packages/server/smoke.mjs   the smoke test (npm run smoke); smoke-browser.mjs the game page in headless Chrome
+packages/server/smoke.mjs   the smoke test (npm run smoke); smoke-browser.mjs the game page in headless Chrome; test-town.mjs a
+                            built town both use
                             (npm run smoke:browser)
 scripts/
   check.sh            syntax-check every JS file and compare the two pets-world.js copies

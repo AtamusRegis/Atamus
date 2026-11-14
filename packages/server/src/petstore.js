@@ -27,11 +27,14 @@ export function pgStore(pool) {
     async setVip(id, on) { await pool.query("UPDATE pet_accounts SET vip = $2 WHERE id = $1", [id, !!on]); },
     async search(q) { const { rows } = await pool.query("SELECT * FROM pet_accounts WHERE name_lc LIKE $1 ORDER BY name_lc LIMIT 30", [String(q).toLowerCase().replace(/[%_\\]/g, "\\$&") + "%"]); return rows.map(row); },
     async log(by, target, action, detail) { await pool.query("INSERT INTO pet_admin_log (by_name, target_name, action, detail) VALUES ($1, $2, $3, $4)", [by, target, action, detail || null]); },
+    // (owner, 2026-11-13) the town the zone builder places (table pet_build, one row)
+    async loadBuild() { const { rows } = await pool.query("SELECT data FROM pet_build WHERE id = 1"); return rows[0] ? rows[0].data : []; },
+    async saveBuild(list) { await pool.query("INSERT INTO pet_build (id, data, updated_at) VALUES (1, $1, now()) ON CONFLICT (id) DO UPDATE SET data = $1, updated_at = now()", [JSON.stringify(list)]); },
   };
 }
 
 export function memStore() {
-  const accts = new Map(), tokens = new Map(); let next = 1;
+  const accts = new Map(), tokens = new Map(); let next = 1, built = [];
   return {
     async byName(name) { for (const a of accts.values()) if (a.name.toLowerCase() === name.toLowerCase()) return { ...a }; return null; },
     async byId(id) { const a = accts.get(id); return a ? { ...a } : null; },
@@ -45,5 +48,7 @@ export function memStore() {
     async setVip(id, on) { const a = accts.get(id); if (a) a.vip = !!on; },
     async search(q) { q = String(q).toLowerCase(); return [...accts.values()].filter((a) => a.name.toLowerCase().startsWith(q)).slice(0, 30).map((a) => ({ ...a })); },
     async log() {},
+    async loadBuild() { return built; },
+    async saveBuild(list) { built = list; },
   };
 }

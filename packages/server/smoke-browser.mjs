@@ -25,7 +25,8 @@ if (!chrome) {
 const { attachPets } = await import("./src/pets.js");
 const app = express(); app.use(express.static(fileURLToPath(new URL("../../website/", import.meta.url))));
 const server = http.createServer(app);
-const game = attachPets(server, { allowLocal: true }).game;
+const { memStore } = await import("./src/petstore.js"), { TEST_TOWN } = await import("./test-town.mjs"), store = memStore(); await store.saveBuild(TEST_TOWN);   // (owner, 2026-11-13) a town placed with the zone builder
+const game = attachPets(server, { allowLocal: true, store }).game; await new Promise((r) => setTimeout(r, 50));
 await new Promise((r) => server.listen(0, "127.0.0.1", r));
 const base = `http://127.0.0.1:${server.address().port}`;
 const who = (name) => [...game.online.values()].find((p) => p.name === name);
@@ -69,7 +70,7 @@ try {
   if (card.shown === "none" || card.tier !== "Bronze" || !/Main Street/.test(card.addr) || card.pips !== 3 || card.timer === "none" || !card.way) problems.push("the parcel card is wrong: " + JSON.stringify(card));
   await until(page, () => document.getElementById("tutt").textContent === "Drop them off", "the tutorial didn't move on after the grab");
   step = "deliver it and see the roll";
-  await page.evaluate(() => { const P = window.Pets, h = P.World.houses[P.parcel.house]; P.teleport(h.mx, h.mz, h.my); });
+  await page.evaluate(() => { const P = window.Pets, h = P.World.addr(P.parcel.house); P.teleport(h.mx, h.mz, h.my); });
   await until(page, () => window.Pets.save.stats.del === 1 && !window.Pets.parcel, "the delivery didn't land");
   // (owner, 2026-11-11) the only parcel: it opens full screen by itself; taps hurry it, then move on
   await until(page, () => getComputedStyle(document.getElementById("reveal")).display !== "none", "the parcel didn't open full screen");
