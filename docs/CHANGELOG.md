@@ -6,6 +6,9 @@ and any rule decided. Use `git log` for the code detail (and for the older Atamu
 
 ## 2026-11-14
 
+- **Kicking other couriers (owner).** F (or the boot button) kicks the courier in front of you off their mount as a
+  ragdoll, with a short shot of it for the kicker; they get back up and whistle their mount, or respawn if thrown off
+  the edge.
 - **No Boost, Jump or Grip levels (owner).** Mounts no longer buy Boost (speed) levels; every mount jumps and grips
   the same; the Stable shows just the speed as a number.
 - **Zone rewards and speeds (owner).** A gift's best coins rise 5% per zone out, and older zones' lowest coins rise 5%

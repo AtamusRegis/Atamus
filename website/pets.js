@@ -4,8 +4,8 @@
 // deliveries, rolls, damage, coins, mounts; this page shows the town (pets-world.js, shared with the server), moves you
 // and asks. Phone first: a thumb joystick, drag to look, pinch to zoom, big buttons.
 import * as THREE from "./vendor/three.module.min.js";
-import { svg, fillIcons, ICON } from "./icons.js?v=4";
-import * as World from "./pets-world.js?v=1794650816";
+import { svg, fillIcons, ICON } from "./icons.js?v=5";
+import * as World from "./pets-world.js?v=1794651808";
 
 const $ = (id) => document.getElementById(id);
 const { TAU, clamp, hyp, MOUNTS, TIERS, RARITY, RARITY_C, MODS, UPGRADES } = World;
@@ -522,7 +522,7 @@ addEventListener("keydown", () => { const a = audio(); if (a && a.state === "sus
 let save = World.cleanData({});
 const riding = () => save.mounts.find((m) => m.id === save.ride) || save.mounts[0];
 const myStats = () => World.mountStats(riding());   // (owner, 2026-11-14) the same speed in every zone
-const me = { x: World.SPAWN.x, y: 0, z: World.SPAWN.z, yaw: Math.PI / 2, vx: 0, vz: 0, vy: 0, px: 0, pz: 0, ground: true, moving: false, foot: false, footT: 0, stun: 0, grace: 0, jumps: 0, boost: 0, dash: 0, abilityAt: -99, bigAt: -99, kickT: 0, transit: null, armed: true, mx: 0, my: 0, mz: 0, myaw: 0, hidden: false, glide: false, stepT: 0 };
+const me = { x: World.SPAWN.x, y: 0, z: World.SPAWN.z, yaw: Math.PI / 2, vx: 0, vz: 0, vy: 0, px: 0, pz: 0, ground: true, moving: false, foot: false, footT: 0, stun: 0, grace: 0, jumps: 0, boost: 0, dash: 0, abilityAt: -99, kickAt: -99, kickT: 0, transit: null, armed: true, mx: 0, my: 0, mz: 0, myaw: 0, hidden: false, glide: false, stepT: 0 };
 let mine = null, walker = null, myTag = null, bag = [], stolen = [], dropped = [], cap = 1, belt = { ready: null, next: null };   // my parcels: on the saddle, with geese, on the ground
 function makeTag(name, rank, r) { return textSprite(String(name || "Courier").slice(0, 18), { size: 34, badge: rank ? World.RANK_C[rank] : "", glow: r >= 4 ? "#ffd84a" : "" }); }
 function rigMount(sp, va, r, shirt, name, rank) {   // a mount with its rider, name tag and (hidden) walking courier
@@ -558,6 +558,8 @@ function tryJump() {
   if (me.stun > 0 || me.transit || !onGround()) return; const st = myStats();
   me.vy = me.foot ? 7.5 : st.jump; me.ground = false; me.coyote = 0; sfx("jump"); emit(me.x, me.y + 0.1, me.z, 5, { colors: ["#e9e2d2"], speed: 2, up: 1, life: 0.4, grav: 2 });
 }
+// (owner, 2026-11-14) kicking another courier (F, or the boot button): the server picks who's in reach
+function doKick() { const t = now(); if (me.stun > 0 || me.transit || t < me.kickAt + World.KICK.cd) return; me.kickAt = t; me.kickT = 0.28; sfx("kick"); netSend({ t: "kick" }); }
 function doWhistle() {   // (owner, 2026-11-11) instant: back on your mount at once, even while stunned
   sfx("whistle"); if (me.transit) return;
   if (me.foot) { me.foot = false; me.footT = 0; mine.m.g.visible = true; emit(me.x, me.y + 0.3, me.z, 14, { colors: ["#e9e2d2", "#ffffff"], speed: 4, up: 1.5, life: 0.5, grav: 3 }); me.vy = 4; me.ground = false; }
@@ -756,12 +758,12 @@ addEventListener("keydown", (e) => {
   if (e.repeat) return; keys.add(e.code); if (free) { e.preventDefault(); return; }   // the freecam takes the keys
   if (rewardLock()) return;   // (owner, 2026-11-12) nothing to do while the reward screen is up (or opening)
   if (e.code === "Space") { jumpHeld = true; jumpTap = true; e.preventDefault(); }
-  if (e.code === "KeyQ") doWhistle();
+  if (e.code === "KeyQ") doWhistle(); if (e.code === "KeyF") doKick();
 });
 addEventListener("keyup", (e) => { keys.delete(e.code); if (e.code === "Space") jumpHeld = false; });
 addEventListener("blur", () => { keys.clear(); jumpHeld = false; });
 function press(id, down, up) { const b = $(id); b.addEventListener("pointerdown", (e) => { e.preventDefault(); e.stopPropagation(); down(); }); if (up) for (const k of ["pointerup", "pointercancel", "pointerleave"]) b.addEventListener(k, up); }
-press("bwhistle", doWhistle); press("bjump", () => { jumpHeld = true; jumpTap = true; }, () => { jumpHeld = false; });
+press("bwhistle", doWhistle); press("bkick", doKick); press("bjump", () => { jumpHeld = true; jumpTap = true; }, () => { jumpHeld = false; });
 
 // ---- words and numbers that pop up: floating numbers (they rise and fade in 0.8 s), banners, toasts ----
 const pops = [], V = new THREE.Vector3();
@@ -1456,6 +1458,8 @@ function onNet(m) {
       save = World.cleanData(m.data);
       if (opening && opening.run) startReveal(m.list); else if (opening) { opening.res = { list: m.list }; tutDid("open"); } else { landGifts(m.list); tutDid("open"); } break;
     }
+    case "kickfly": me.px = m.vx; me.pz = m.vz; me.vy = m.vy; me.ground = false; me.rag = World.KICK.down; sfx("smash"); cam.shake = Math.max(cam.shake, 0.6); flash("#ffffff"); break;   // (owner, 2026-11-14) thrown off your mount, tumbling
+    case "kickhit": kickShot(m.id); break;
     case "stun": me.stun = m.s; if (me.transit && me.transit.k !== "pipe") me.transit = null; knockedOff(); sfx("stun"); cam.shake = Math.max(cam.shake, 0.5); flash(m.why === "kick" ? "#ffffff" : "#e5534b"); if (m.why === "dog") sfx("growl"); break;
     case "knock": me.px = m.x; me.pz = m.z; me.vy = m.y; me.ground = false; sfx("kick"); cam.shake = Math.max(cam.shake, 0.5); break;
     case "tp": { const sp0 = hyp(me.vx, me.vz); if (m.why === "home" || m.why === "balloon") faceSpawn();   // (owner, 2026-11-13) facing the way the respawn point is turned
@@ -1482,11 +1486,18 @@ function onNet(m) {
     case "reload": stale(m.web, true, m.by); break;
   }
 }
+// (owner, 2026-11-14) a kick that lands: a short shot round the courier you kicked, tumbling
+function kickShot(id) {
+  const o = others.get(id); if (!o || cine) return; sfx("smash"); const a0 = Math.atan2(camera.position.x - o.x, camera.position.z - o.z) + Math.PI / 2;   /* from the side, so the kicker isn't in the way */
+  cine = { shots: [{ dur: 1.6, cam: (u) => { const a = a0 + u * 1.4; return { x: o.x + Math.sin(a) * 9, y: o.y + 4, z: o.z + Math.cos(a) * 9 }; }, look: () => ({ x: o.x, y: o.y + 0.6, z: o.z }), title: "KICK!", sub: o.name || "" }], i: 0, t: 0 };
+  $("cine").classList.add("on"); document.body.classList.add("cinema"); keys.clear();
+}
 const fallers = [], divers = [];
 function onFx(m) {
   const o = whereOf(m.id), mineFx = m.id === myId, nearMe = o && hyp(o.x - me.x, o.z - me.z) < 50;
   switch (m.k) {
     case "stun": if (o && !mineFx) o.stunT = m.s; break;
+    case "kick": if (o && !mineFx) { o.kickT = 0.28; if (nearMe) sfx("kick"); } break;
     case "grace": if (mineFx) me.grace = m.s; else if (o) o.graceT = m.s; break;
     case "crack": if (o && nearMe) { sfx("crack"); emit(o.x, o.y + 1.4, o.z, 10, { colors: ["#c89a5e", "#8a5a34"], speed: 4, up: 3, life: 0.6, size: 0.14 }); } break;
     case "break": if (!mineFx && hyp(m.x - me.x, m.z - me.z) < 50) { sfx("smash"); emit(m.x, m.y + 1.4, m.z, 22, { colors: ["#c89a5e", "#8a5a34", "#fff8e6"], speed: 6, up: 5, life: 0.9 }); } break;
@@ -1542,7 +1553,8 @@ function pose(rig, s, dt, t, speed) {   // s: { x, y, z, yaw, moving, foot, air,
   g.visible = !s.hidden; w.g.visible = !s.hidden && s.foot; if (rig.m.rider) rig.m.rider.visible = !s.foot;
   if (s.foot) { g.position.set(s.mx, s.my, s.mz); g.rotation.y = s.myaw; animatePet(rig.m, t, false, 0, false);
     w.g.position.set(s.x, s.y, s.z); w.g.rotation.set(0, s.yaw, 0);
-    if (s.stun > 0) { w.g.rotation.x = -Math.PI / 2; w.g.rotation.z = t * 6; w.g.position.y = s.y + 0.35; }
+    if (s.stun > 0 && s.air) { w.g.rotation.set(t * 9, s.yaw, t * 5); const f = Math.sin(t * 22); w.legs[0].rotation.x = f; w.legs[1].rotation.x = -f; w.arms[0].rotation.x = -f * 1.4; w.arms[1].rotation.x = f * 1.4; }   // (owner, 2026-11-14) a ragdoll: tumbling, limbs flailing
+    else if (s.stun > 0) { w.g.rotation.x = -Math.PI / 2; w.g.rotation.z = t * 6; w.g.position.y = s.y + 0.35; const f = Math.sin(t * 9) * 0.5; w.arms[0].rotation.x = f; w.arms[1].rotation.x = -f; }
     else { const sw = s.moving ? Math.sin(t * 12) * 0.8 : 0; w.legs[0].rotation.x = sw; w.legs[1].rotation.x = -sw; w.arms[0].rotation.x = -sw; w.arms[1].rotation.x = sw; } }
   else { if (rig.spin > 0) rig.spin = Math.max(0, rig.spin - dt); const sp = rig.spin > 0 ? 1 - rig.spin / 0.7 : 0;   // a level up: a hop and a full spin
     g.position.set(s.x, s.y + (s.hop > 0 ? Math.sin((s.hop / 0.3) * Math.PI) * 0.5 : 0) + (sp ? Math.sin(sp * Math.PI) * 1.4 : 0), s.z); g.rotation.y = s.yaw + sp * TAU; animatePet(rig.m, t, s.moving, speed, s.air);
