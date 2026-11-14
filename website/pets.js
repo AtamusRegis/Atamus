@@ -5,7 +5,7 @@
 // and asks. Phone first: a thumb joystick, drag to look, pinch to zoom, big buttons.
 import * as THREE from "./vendor/three.module.min.js";
 import { svg, fillIcons, ICON } from "./icons.js?v=4";
-import * as World from "./pets-world.js?v=1794650368";
+import * as World from "./pets-world.js?v=1794650816";
 
 const $ = (id) => document.getElementById(id);
 const { TAU, clamp, hyp, MOUNTS, TIERS, RARITY, RARITY_C, MODS, UPGRADES } = World;
@@ -983,13 +983,13 @@ function renderPanel() {
     const m = save.mounts.find((k) => k.id === selMount) || riding(), S = World.mountStats(m), d = el("div", "mdetail");
     const im = el("img", "big"); im.src = portrait(m.sp, m.va, m.r); im.alt = ""; d.appendChild(im);
     const info = el("div", "minfo"); info.appendChild(el("h3", "", mountName(m))); const rr = el("div", "rar", RARITY[m.r]); rr.style.color = RARITY_C[m.r] === "#ffffff" ? "#6f7d8a" : RARITY_C[m.r]; info.appendChild(rr);
-    for (const [name, v, max] of [["Speed", S.speed, 33], ["Jump", S.jump, 11], ["Grip", S.grip * 100, 60]]) { const r = el("div", "stat"); r.appendChild(el("span", "", name)); const b = el("div", "bar"), f = el("i"); f.style.width = clamp((v / max) * 100, 4, 100) + "%"; b.appendChild(f); r.appendChild(b); r.appendChild(el("em", "", name === "Grip" ? Math.round(v) + "%" : v.toFixed(1))); info.appendChild(r); }
+    for (const [name, v, max] of [["Speed", S.speed, 0]]) { if (!max) { const r = el("div", "stat pup"); r.appendChild(el("span", "", name)); r.appendChild(el("em", "", v.toFixed(1))); info.appendChild(r); continue; }   /* (owner, 2026-11-14) just the speed, as a number */ const r = el("div", "stat"); r.appendChild(el("span", "", name)); const b = el("div", "bar"), f = el("i"); f.style.width = clamp((v / max) * 100, 4, 100) + "%"; b.appendChild(f); r.appendChild(b); r.appendChild(el("em", "", name === "Grip" ? Math.round(v) + "%" : v.toFixed(1))); info.appendChild(r); }
     const acts = el("div", "acts"); if (m.id !== save.ride) acts.appendChild(btn("Ride", () => netSend({ t: "equip", id: m.id }), "go"));
     if (World.fuseSet(save.mounts, m.id)) acts.appendChild(btn("Merge", () => netSend({ t: "fuse", id: m.id }), "fuse"));   // the same ones: the next coat up
     if (m.id !== save.ride && save.mounts.length > 1) { const b = coinBtn(World.sellPrice(m), () => netSend({ t: "sell", id: m.id }), true); b.insertBefore(document.createTextNode("Sell "), b.firstChild); acts.appendChild(b); }   // (owner, 2026-11-12)
     info.appendChild(acts);
     // (owner, 2026-11-12) Aura on this mount: how much it carries and how fast it goes
-    for (const [k, name, lv, max, show] of [["cap", "Carry", m.cap | 0, World.CAP_MAX, World.bagSize(m)], ["spd", "Boost", m.spd | 0, World.SPD_MAX, "+" + (m.spd | 0) * 5 + "%"]]) {
+    for (const [k, name, lv, max, show] of [["cap", "Carry", m.cap | 0, World.CAP_MAX, World.bagSize(m)]]) {
       const r = el("div", "stat pup"); r.appendChild(el("span", "", name)); r.appendChild(el("em", "", String(show)));
       if (lv < max) { const c = World.petUpCost(m, k); r.appendChild(coinBtn(c, () => netSend({ t: "petup", id: m.id, k }), save.coins >= c)); } else r.appendChild(el("span", "max", "MAX"));
       info.appendChild(r); }
