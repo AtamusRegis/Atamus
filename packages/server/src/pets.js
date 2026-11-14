@@ -352,6 +352,9 @@ export function attachPets(server, { origins = [], allowLocal = false, store = m
           const [mx, mz] = W.turn(0, W.TUBE.l / 2 + 0.7, q.yaw); if (hyp(me.x - q.x - mx, me.z - q.z - mz) > 5 || Math.abs(me.y - q.y) > 4) break;
           me.tubeAt = now; const e = W.pipeExit(o); teleport(me, e.x, e.z, e.y, "tube", e.yaw); all(room, { t: "fx", k: "tube", id: me.id, x: e.x, y: e.y, z: e.z }, me); break;
         }
+        case "dropall": {   // (owner, 2026-11-14) letting go of the parcels you carry, to take new ones
+          const all3 = [...me.bag, ...me.stolen, ...me.dropped.map((o) => o.parcel)]; for (const q of all3) lose(me, "drop", q); break;
+        }
         case "pipe": {   // the sewer pipe: in one end, out the other; a goose inside costs a hit
           if (PIPE.off || now < me.stunUntil || now - me.pipeAt < 2000) break;
           const a = hyp(me.x - PIPE.a.x, me.z - PIPE.a.z) < PIPE.r + 3 && Math.abs(me.y - PIPE.a.y) < 2, b = hyp(me.x - PIPE.b.x, me.z - PIPE.b.z) < PIPE.r + 3 && Math.abs(me.y - PIPE.b.y) < 2; if (!a && !b) break;
@@ -514,8 +517,8 @@ export function attachPets(server, { origins = [], allowLocal = false, store = m
     for (const p of players) {
       const dist = W.districtAt(p.x, p.z, p.y);
       if (dist === 8 && W.lavaAt(p.x, p.z, p.y) && now >= (p.lavaAt || 0) && now >= p.stunUntil && now - p.tpAt > 600) { p.lavaAt = now + W.LAVA.every * 1000; stun(p, W.LAVA.stun, "lava"); hit(p, "lava"); }   // (owner, 2026-11-12) a lava pool burns
-      if (p.y < W.EDGE_Y && !(ISLES.length && p.x > W.ISLE_X && p.x < W.FAR.x0 - 15) && now - p.tpAt > 600) {   // (owner, 2026-11-12) off the edge of the town: the run starts over at the post office
-        const held = [...p.bag, ...p.stolen, ...p.dropped.map((o) => o.parcel)]; p.tpAt = now; if (held.length) for (const q of held) lose(p, "fall", q); else runDone(p); continue;
+      if (p.y < W.EDGE_Y && !(ISLES.length && p.x > W.ISLE_X && p.x < W.FAR.x0 - 15) && now - p.tpAt > 600) {   // off the edge of the town: back to the respawn point, (owner, 2026-11-14) keeping the parcels you carry
+        p.tpAt = now; teleport(p, W.SPAWN.x + (Math.random() - 0.5) * 0.4, W.SPAWN.z + (Math.random() - 0.5) * 0.4, W.SPAWN.y, "home"); continue;
       }
       if (ISLES.length && dist === 3 && p.y > 1 && p.y < W.SKY_Y) {   // (the old town's Cliffside rocks and sky geese: gone with it)
         if (!p.nextRock) p.nextRock = now + between(ROCK.every) * 1000;
