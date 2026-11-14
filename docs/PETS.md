@@ -144,6 +144,9 @@ A parcel that breaks or is lost is gone; the conveyor always has the next one. *
 - **Jumping** (owner, 2026-11-13): Space (or Jump) jumps by the mount's Jump; **Big Jump** (F, or the big button where
   Bonk was), on every mount, from the ground, is 1.7x that jump, once in 3 s. **A jump keeps its speed:** in the air
   you carry on at the speed you left the ground with (letting go doesn't stop you), and the controls only steer gently.
+  (owner, 2026-11-13) **Coyote time:** both jumps still work for 0.15 s after you run off an edge. **Landing
+  forgiveness:** a block's or a podium's top reaches 5% past its sides for standing on (2.5% of its width on each side),
+  so a near miss still lands; bumping into its sides uses the real block. Roofs and other pieces aren't widened.
 - Legendary: a glowing name tag and sparkling footsteps.
 - **Whistle** calls your mount. A stun knocks you off; you get up on foot (5.5 m/s) and the mount comes back when you
   whistle (owner, 2026-11-11: instantly, even while still stunned), when you reach it, or by itself after about 2 s.

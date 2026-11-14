@@ -278,7 +278,7 @@ export const FAR = { x0: 600, len: 100, n: 5, z0: -30, z1: 30 }, farX = (d) => F
 // (owner, 2026-11-13) the zone a spot is in: the nearest mailbox's (the post office square is the first)
 export function districtAt(x, z, y = 0) { for (const a of areas) if (x >= a.x0 && x < a.x1 && z >= a.z0 && z < a.z1) return a.d; return 0; }   // (owner, 2026-11-13) the bounds it's in
 
-function rect(x0, x1, z0, z1, y, kind, b = y - 40) { slabs.push({ k: 0, x0, x1, z0, z1, y, b, kind }); }
+function rect(x0, x1, z0, z1, y, kind, b = y - 40, m = 0) { slabs.push({ k: 0, x0, x1, z0, z1, y, b, kind, m, mx: (m * (x1 - x0)) / 2, mz: (m * (z1 - z0)) / 2 }); }
 function disc(x, z, r, y, kind, b = y - 6) { slabs.push({ k: 1, x, z, r, x0: x - r, x1: x + r, z0: z - r, z1: z + r, y, b, kind }); }
 function ramp(x0, x1, z0, z1, y0, y1, kind) { slabs.push({ k: 2, x0, x1, z0, z1, y: Math.max(y0, y1), ya: y0, yb: y1, b: Math.min(y0, y1) - 40, kind }); }   // rises along z from ya (at z0) to yb (at z1)
 function rampX(x0, x1, z0, z1, y0, y1, kind) { slabs.push({ k: 3, x0, x1, z0, z1, y: Math.max(y0, y1), ya: y0, yb: y1, b: Math.min(y0, y1) - 40, kind }); }   // rises along x from ya (at x0) to yb (at x1)
@@ -341,7 +341,7 @@ export function setBuild(data) {   // data: { pieces, zones } (or, from before, 
   const count = TIERS.map(() => 0);
   for (const q of build) {
     const yaw = (q.r | 0) * (Math.PI / 2);
-    if (q.k === "block") rect(q.x, q.x + q.w, q.z, q.z + q.d, q.y + q.h, q.m, q.y);
+    if (q.k === "block") rect(q.x, q.x + q.w, q.z, q.z + q.d, q.y + q.h, q.m, q.y, STAND_X);
     else if (q.k === "house") { buildings.push({ id: q.id, x: q.x, z: q.z, y: q.y, yaw, d: districtAt(q.x, q.z, q.y) }); solid(q.x, q.z, HOUSE_S / 2, HOUSE_S / 2, q.y - 1, q.y + HOUSE_H, yaw); }
     else if (q.k === "mailbox") { const d = districtAt(q.x, q.z, q.y); houses.push({ id: q.id, x: q.x, z: q.z, y: q.y, yaw, d, mx: q.x, mz: q.z, my: q.y, name: ++count[d] + " " + zoneName(d) }); solid(q.x, q.z, 0.2, 0.2, q.y - 1, q.y + 1.3); }   // in whichever neighborhood's bounds it stands
     else if (q.k === "wall") gates.push({ id: q.id, x: q.x, z: q.z, y: q.y, yaw, d: q.zone, c: Math.cos(yaw), s: Math.sin(yaw), w: q.w, wall: 1 });   // a bound wall: closed like a gate
@@ -350,7 +350,7 @@ export function setBuild(data) {   // data: { pieces, zones } (or, from before, 
     else if (q.k === "tree") { trees.push({ id: q.id, x: q.x, z: q.z, y: q.y, s: 1, yaw }); solid(q.x, q.z, 0.45, 0.45, q.y - 1, q.y + 8); }
     else if (q.k === "boost") boosts.push({ id: q.id, x: q.x, z: q.z, y: q.y, yaw });   // x1.6 speed for a moment, the way it points
     else if (q.k === "start") starts.push({ id: q.id, x: q.x, z: q.z, y: q.y, yaw, c: Math.cos(yaw), s: Math.sin(yaw) });
-    else if (q.k === "podium") { if (PODIUM.spots.length < 3) { const h = [1.6, 1.1, 0.7][PODIUM.spots.length]; PODIUM.spots.push({ id: q.id, x: q.x, z: q.z, y: q.y + h }); rect(q.x - 2.2, q.x + 2.2, q.z - 2.2, q.z + 2.2, q.y + h, "pod" + (PODIUM.spots.length - 1), q.y); } }
+    else if (q.k === "podium") { if (PODIUM.spots.length < 3) { const h = [1.6, 1.1, 0.7][PODIUM.spots.length]; PODIUM.spots.push({ id: q.id, x: q.x, z: q.z, y: q.y + h }); rect(q.x - 2.2, q.x + 2.2, q.z - 2.2, q.z + 2.2, q.y + h, "pod" + (PODIUM.spots.length - 1), q.y, STAND_X); } }
     else if (q.k === "spawn") Object.assign(SPAWN, { x: q.x, z: q.z, y: q.y, yaw });   // couriers face the way it's turned
     else if (q.k === "office") { const L = PO_LOCAL, [bx, bz] = turn(L.b.x, L.b.z, yaw), [ex, ez] = turn(L.end.x, L.end.z, yaw); Object.assign(PO, { on: true, x: q.x, z: q.z, y: q.y, yaw, b: { ...L.b, x: q.x + bx, z: q.z + bz }, end: { x: q.x + ex, z: q.z + ez } }); }
   }
@@ -383,8 +383,12 @@ export function gateBlocked(x, z, y, open, r = 0.55) {
 // the ground's top under (x, z): the highest slab top at most a step (0.6 m) above y; -Infinity where there's nothing
 function topOf(s, x, z) { return s.k === 2 ? s.ya + ((s.yb - s.ya) * (z - s.z0)) / (s.z1 - s.z0) : s.k === 3 ? s.ya + ((s.yb - s.ya) * (x - s.x0)) / (s.x1 - s.x0) : s.y; }
 const inSlab = (s, x, z) => x >= s.x0 && x <= s.x1 && z >= s.z0 && z <= s.z1 && (s.k !== 1 || hyp(x - s.x, z - s.z) <= s.r);
-export function surfaceAt(x, z, y) { let best = -Infinity; for (const s of slabs) if (inSlab(s, x, z)) { const t = topOf(s, x, z); if (t <= y + 0.6 && t > best) best = t; } return best; }
-export function groundKind(x, z, y) { let best = -Infinity, kind = ""; for (const s of slabs) if (inSlab(s, x, z)) { const t = topOf(s, x, z); if (t <= y + 0.6 && t > best) { best = t; kind = s.kind; } } return kind; }
+// (owner, 2026-11-13) standing on a block or a podium: its top reaches 5% past its sides (a touch of forgiveness for a
+// near-miss landing); bumping into its sides still uses the real block
+export const STAND_X = 0.05, COYOTE = 0.15;   // COYOTE: s a jump still works after running off an edge
+const onSlab = (s, x, z) => (s.m ? x >= s.x0 - s.mx && x <= s.x1 + s.mx && z >= s.z0 - s.mz && z <= s.z1 + s.mz : inSlab(s, x, z));
+export function surfaceAt(x, z, y) { let best = -Infinity; for (const s of slabs) if (onSlab(s, x, z)) { const t = topOf(s, x, z); if (t <= y + 0.6 && t > best) best = t; } return best; }
+export function groundKind(x, z, y) { let best = -Infinity, kind = ""; for (const s of slabs) if (onSlab(s, x, z)) { const t = topOf(s, x, z); if (t <= y + 0.6 && t > best) { best = t; kind = s.kind; } } return kind; }
 export function inPond(x, z, y) { for (const p of ponds) if (Math.abs(y - p.y) < 1.5 && hyp(x - p.x, z - p.z) < p.r) return p; return null; }
 // is (x, z) at height y inside something solid: a slab's side (its top more than a step above) or a solid box?
 export function wallAt(x, z, y) {
