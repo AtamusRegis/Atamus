@@ -6,6 +6,8 @@ and any rule decided. Use `git log` for the code detail (and for the older Atamu
 
 ## 2026-11-14
 
+- **Zone slider (owner).** A slider at the bottom picks which open zone your parcels come from (the top step is the
+  usual mix); a picked zone's gifts don't get the raise for zones opened past it.
 - **Kicking other couriers (owner).** F (or the boot button) kicks the courier in front of you off their mount as a
   ragdoll, with a short shot of it for the kicker; they get back up and whistle their mount, or respawn if thrown off
   the edge.

@@ -332,6 +332,10 @@ gets those coins back the next time their data loads.
 ## The screen
 
 - Aura top left (it counts up; orbs fly to it). Chat button under it. Delivered parcels down the left.
+- (owner, 2026-11-14) **The zone slider**, bottom center (once two or more zones with mailboxes are open): one step
+  per open zone with mailboxes, its name above. The top step (where it starts) is the usual mix; a lower step picks that
+  zone and every parcel on the conveyor comes from it (the conveyor follows at once), to farm it. While a zone is
+  picked, its gifts don't get the bottom-of-range raise for the zones opened past it.
 - (owner, 2026-11-14) The parcel counter top center: a parcel icon and how many you carry of how many (the old parcel
   card's rows, with tier, pips, address, distance and countdown, are gone).
 - (owner, 2026-11-14) Admins only: the Odds button (players don't see the rarity chart), and B opens or closes the build

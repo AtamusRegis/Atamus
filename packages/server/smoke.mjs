@@ -181,6 +181,10 @@ try {
     const mv = W.build.find((q) => q.k === "mover"); ok(W.moverPos(mv, 0).x === -540 && Math.abs(W.moverPos(mv, 2 + W.MOVER.rest).x - -530) < 1e-9 && W.moverUnder(-538, -498, 3.2, 0).top === 3 && !W.moverUnder(-538, -498, 3.2, 2 + W.MOVER.rest), "a platform goes from A to B and back, and can be stood on where it is");
     n.send({ t: "build", op: "set", piece: { ...W.build.find((q) => q.k === "gust"), iv: 2.5, pw: 40 } }); await b.wait((m) => m.t === "build" && m.build.some((q) => q.k === "gust" && q.pw === 40), "the gust edited"); ok(W.gusts[0].iv === 2.5 && W.gusts[0].pw === 40, "a gust's interval and power change after it's placed");
     for (const id of ids) n.send({ t: "build", op: "del", id }); await sleep(150); }
+  // (owner, 2026-11-14) the zone slider: a picked zone gives every parcel from it, and its gifts skip the bottom-raising bonus
+  { ok(W.rollParcel(5, 0, Math.random, 2).tier === 2 && W.rollParcel(5, 0, Math.random, 7) && W.pickZones(3).join() === "0,1,2", "a picked zone's parcels come from it (an unopened pick is ignored)");
+    const pa = who("smokeA"); a.send({ t: "set", pz: 0 }); await sleep(150); ok(pa.acct.data.set.pz === 0 && pa.ready.tier === 0 && pa.next.tier === 0, "the conveyor follows the zone picked");
+    a.send({ t: "set", pz: -1 }); await sleep(100); ok(pa.acct.data.set.pz === -1, "back to the usual mix"); }
   // (owner, 2026-11-13) pipe shortcuts: two pipes the builder links; riding into one's mouth comes out of the other's, facing out
   { n.send({ t: "build", op: "add", piece: { k: "pipe", x: -120, z: 0, y: 0, r: 0 }, tag: 21 }); const p1 = (await n.wait((m) => m.t === "buildok" && m.tag === 21, "a pipe")).id;
     n.send({ t: "build", op: "add", piece: { k: "pipe", x: -160, z: 30, y: 0, r: 1 }, tag: 22 }); const p2 = (await n.wait((m) => m.t === "buildok" && m.tag === 22, "another pipe")).id; await sleep(100);

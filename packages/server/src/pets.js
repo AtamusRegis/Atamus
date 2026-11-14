@@ -62,7 +62,7 @@ export function attachPets(server, { origins = [], allowLocal = false, store = m
   const showMount = (p) => { const m = mountOf(p); all(p.room, { t: "mount", id: p.id, sp: m.sp, r: m.r, va: m.va, tr: m.tr || "" }, p); };
 
   // ---- parcels ----
-  const fillBelt = (p) => { const open = W.openFor(p.acct.data), rr = mountOf(p).r | 0; for (const k of ["ready", "next"]) if (p[k] && p[k].tier >= open) p[k] = null;   /* (owner, 2026-11-11) never a parcel for an area that isn't open (after a reset, say) */ if (!p.ready) { p.ready = p.next || W.rollParcel(open, rr); p.next = null; } if (!p.next) p.next = W.rollParcel(open, rr); send(p.ws, { t: "belt", ready: p.ready, next: p.next }); };
+  const fillBelt = (p) => { const open = W.openFor(p.acct.data), rr = mountOf(p).r | 0; for (const k of ["ready", "next"]) if (p[k] && p[k].tier >= open) p[k] = null;   /* (owner, 2026-11-11) never a parcel for an area that isn't open (after a reset, say) */ if (!p.ready) { p.ready = p.next || W.rollParcel(open, rr, Math.random, p.acct.data.set.pz); p.next = null; } if (!p.next) p.next = W.rollParcel(open, rr, Math.random, p.acct.data.set.pz); send(p.ws, { t: "belt", ready: p.ready, next: p.next }); };
   // (owner, 2026-11-11) a mount carries 1 to 5 parcels by its level: p.bag (on the saddle), p.stolen (geese have them), p.dropped (on the ground after a busted goose)
   const carry = (p) => all(p.room, { t: "carry", id: p.id, c: p.bag.map((q) => [q.tier, q.mod]) }, p);
   const held = (p) => p.bag.length + p.stolen.length + p.dropped.length;
@@ -107,7 +107,7 @@ export function attachPets(server, { origins = [], allowLocal = false, store = m
   // it's opened. Four unopened gifts of one rarity merge into one of the next.
   function deliver(p, q) {
     const d = p.acct.data, m = mountOf(p), now = Date.now(), late = q.mod === "express" && now > q.due;
-    const coins = W.deliveryCoins(q.tier, q.mod, d.up.payout, q.hits, late), roll = W.rewardRoll(q.tier, d.up, Math.random, W.openFor(d));
+    const coins = W.deliveryCoins(q.tier, q.mod, d.up.payout, q.hits, late), roll = W.rewardRoll(q.tier, d.up, Math.random, d.set.pz === q.tier ? q.tier + 1 : W.openFor(d));
     d.coins += coins; d.stats.del++; d.fails = 0;
     const gift = { gid: d.nextGid++, r: roll.tier, pt: q.tier };
     // a courier's second delivery brings a new mount, revealed when that gift is opened: (owner, 2026-11-11) the parcel's
@@ -127,7 +127,7 @@ export function attachPets(server, { origins = [], allowLocal = false, store = m
     const d = p.acct.data, list = [];
     for (const gid of new Set(gids)) {
       const g = d.gifts.find((k) => k.gid === gid); if (!g) continue; d.gifts.splice(d.gifts.indexOf(g), 1);
-      const c = W.giftContents(g.r, g.pt, d.up, Math.random, W.openFor(d)); d.coins += c.coins;
+      const c = W.giftContents(g.r, g.pt, d.up, Math.random, d.set.pz === g.pt ? g.pt + 1 : W.openFor(d)); d.coins += c.coins;   // (owner, 2026-11-14) no bottom-raising bonus for the zone picked
       let mount = g.m ? d.mounts.find((k) => k.id === g.m) || null : null; if (mount) mount.r = g.r;   // the second delivery's mount: the gift's rarity
       else if (c.pet && d.mounts.length < W.MOUNT_CAP) { mount = { id: d.nextId++, sp: c.pet.sp, r: c.pet.r, va: c.pet.va }; d.mounts.push(mount); if (mount.va || mount.r >= 3) announce(p, mount); }   // (owner, 2026-11-11) a mount, the parcel's area's animal at its rarity
       delete c.pet; list.push({ gid, r: g.r, pt: g.pt, ...c, mount });
@@ -345,6 +345,7 @@ export function attachPets(server, { origins = [], allowLocal = false, store = m
           if (Number.isFinite(+m.sfx)) s.sfx = clamp(Math.floor(+m.sfx), 0, 10);
           if (/^#[0-9a-f]{6}$/i.test(m.shirt)) s.shirt = m.shirt;
           if (m.tut === true) s.tut = true;
+          if (m.pz !== undefined && Number.isFinite(+m.pz)) { const v = clamp(Math.floor(+m.pz), -1, W.TIERS.length - 1); if (v !== s.pz) { s.pz = v; me.ready = me.next = null; fillBelt(me); } }   // (owner, 2026-11-14) the zone picked for parcels: the conveyor follows at once
           changed(me); if (was !== s.friendly || shirt !== s.shirt) all(room, { t: "look", id: me.id, friendly: s.friendly, shirt: s.shirt }, me); break;
         }
         case "tube": {   // (owner, 2026-11-13) a pipe shortcut the builder linked: in its mouth, out of the other's
