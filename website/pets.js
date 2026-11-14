@@ -573,6 +573,8 @@ function stepTransit(dt) {
   me.moving = true;
 }
 let tubeAsk = 0;
+// (owner, 2026-11-14) at the respawn point: facing its arrow, the camera straight behind you looking the same way, 30 degrees down
+function faceSpawn() { me.yaw = World.SPAWN.yaw; cam.yaw = me.yaw + Math.PI; cam.pitch = Math.PI / 6; cam.d = undefined; camAt.y = me.y + 2.4; }
 function stepMe(dt) {
   const t = now(); musicZone = World.districtAt(me.x, me.z, me.y);
   if (me.stun > 0) { me.stun -= dt; if (me.stun <= 0) { me.stun = 0; me.footT = 2.2; } }
@@ -634,7 +636,7 @@ function stepMe(dt) {
   if (mv && mv.top >= s) { s = mv.top; me.onMv = me.onMv && me.onMv.q.id === mv.q.id ? me.onMv : { q: mv.q, p: mv.p }; } else me.onMv = null;
   if (s > -1e9 && me.vy <= 0 && (me.y <= s || (was && me.y - s < 0.45))) { if (!was && me.vy < -9) { emit(me.x, s + 0.1, me.z, 8, { colors: ["#e9e2d2"], speed: 3, up: 1, life: 0.4, grav: 3 }); } me.y = s; me.vy = 0; me.ground = true; me.jumps = 0; me.coyote = World.COYOTE; }
   else { me.ground = false; me.coyote = (me.coyote || 0) - dt; }
-  if (me.y < -45) { me.x = World.SPAWN.x; me.z = World.SPAWN.z; me.y = World.SPAWN.y; me.vy = 0; }   // nothing below the town (the server sets you back on an island)
+  if (me.y < -45) { me.x = World.SPAWN.x; me.z = World.SPAWN.z; me.y = World.SPAWN.y; me.vy = 0; faceSpawn(); }   // nothing below the town (the server sets you back on an island)
   // off the mount after a stun: on foot until the mount's back under you (it comes on its own, or at a whistle)
   if (me.foot && me.stun <= 0) { me.footT -= dt; if (me.footT <= 0 || hyp(me.x - me.mx, me.z - me.mz) < 1.4) doWhistle(); }
   if (!me.armed && !nearTrigger()) me.armed = true;
@@ -1363,7 +1365,7 @@ function onNet(m) {
       setTok(m.token); const again = loggedIn && myName === m.name; myName = m.name; myId = m.id; myRole = m.role || "player"; $("mbuild").hidden = myRole !== "admin"; netOk = true; loggedIn = true; clockOff = m.now - Date.now();
       $("login").style.display = "none"; $("hud").style.display = "block"; if (document.activeElement && document.activeElement.blur) document.activeElement.blur();
       save = World.cleanData(m.data); shownCoins = save.coins; $("coinn").textContent = fmt(save.coins); remount(); setVolumes(); giftsUi(); if (!again && !save.set.tut && !save.stats.del && tut < 0) setTimeout(() => tutShow(0), 900);
-      if (!again) { me.x = m.x; me.z = m.z; me.y = m.y || 0; me.yaw = World.SPAWN.yaw; cam.yaw = me.yaw - Math.PI; cam.pitch = Math.PI / 4; msgs.innerHTML = ""; }
+      if (!again) { me.x = m.x; me.z = m.z; me.y = m.y || 0; faceSpawn(); msgs.innerHTML = ""; }
       me.foot = false; me.stun = 0; me.transit = null; me.hidden = false;
       setPods(m.pods || []); for (const p of m.players) addOther(p); setNpc(m); for (const g of gooseMesh) { g.x = g.tx; g.z = g.tz; g.y = g.ty; } for (const d of dogMesh) { d.x = d.tx; d.z = d.tz; d.y = d.ty; } for (const g of goatMesh) { g.x = g.tx; g.z = g.tz; } hudDirty = true; sendPos(true);
       break;
@@ -1409,7 +1411,7 @@ function onNet(m) {
     }
     case "stun": me.stun = m.s; if (me.transit && me.transit.k !== "pipe") me.transit = null; knockedOff(); sfx("stun"); cam.shake = Math.max(cam.shake, 0.5); flash(m.why === "kick" ? "#ffffff" : "#e5534b"); if (m.why === "dog") sfx("growl"); break;
     case "knock": me.px = m.x; me.pz = m.z; me.vy = m.y; me.ground = false; sfx("kick"); cam.shake = Math.max(cam.shake, 0.5); break;
-    case "tp": { const sp0 = hyp(me.vx, me.vz); if (m.why === "home" || m.why === "balloon") { me.yaw = World.SPAWN.yaw; cam.yaw = me.yaw - Math.PI; cam.pitch = Math.PI / 4; }   /* (owner, 2026-11-13) the camera behind, looking down at 45 degrees */   // (owner, 2026-11-13) facing the way the respawn point is turned
+    case "tp": { const sp0 = hyp(me.vx, me.vz); if (m.why === "home" || m.why === "balloon") faceSpawn();   // (owner, 2026-11-13) facing the way the respawn point is turned
       me.x = m.x; me.y = m.y; me.z = m.z; me.vx = me.vz = me.vy = me.px = me.pz = 0; me.transit = null; me.ground = true; me.armed = false; me.foot = false; camAt.y = m.y + 2; if (m.why === "fall") { flash("#ffffff"); sfx("pop"); } else if (m.why === "home") { cam.yaw = -Math.PI / 2; sfx("pad"); } else if (m.why === "tube") { me.yaw = m.yaw; cam.yaw = me.yaw - Math.PI; me.vx = Math.sin(me.yaw) * sp0; me.vz = Math.cos(me.yaw) * sp0; sfx("pipe"); emit(me.x, me.y + 1, me.z, 18, { colors: ["#5fb56b", "#ffffff"], speed: 4, up: 3, life: 0.5 }); } else { flash("#bfe6ff"); sfx("pad"); }   /* tube: (owner, 2026-11-13) out of a pipe shortcut, keeping your speed; home: (owner, 2026-11-11) the run's over, back at the post office */ sendPos(true); break; }
     case "piped": me.transit = { k: "pipe", until: now() + m.s, x: m.x, y: m.y, z: m.z }; me.hidden = true; me.vx = me.vz = me.px = me.pz = 0; sfx("pipe"); if (m.goose) setTimeout(() => sfx("honk"), 600); break;
     case "rock": { const r = new THREE.Mesh(new THREE.DodecahedronGeometry(1.3), mat("#8a8278")); r.position.set(m.x, m.y + 22, m.z); scene.add(r); fallers.push({ g: r, y0: m.y + 22, y1: m.y + 0.8, t: 0, s: m.s });

@@ -6,6 +6,8 @@ and any rule decided. Use `git log` for the code detail (and for the older Atamu
 
 ## 2026-11-14
 
+- **Respawn camera (owner).** At the respawn point the camera sits straight behind you, looking the way you face, 30
+  degrees down.
 - **Hazards (owner).** Mud and turbine blocks (water blocks are now see-through walls), gusts with their own size,
   direction, interval and power, and moving platforms between two points, all placed and edited in the builder.
 
