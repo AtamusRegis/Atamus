@@ -65,9 +65,10 @@ try {
   step = "grab a parcel off the conveyor";
   for (let i = 0; i < 40 && !(await page.evaluate(() => !!window.Pets.parcel)); i++) { await page.evaluate(() => { const P = window.Pets, q = P.readyAt(), d = Math.hypot(q.x, q.z); P.teleport(q.x * (1 + 1.6 / d), q.z * (1 + 1.6 / d)); }); await page.waitForTimeout(250); }
   await until(page, () => !!window.Pets.parcel, "no parcel grabbed");
-  await until(page, () => getComputedStyle(document.getElementById("card")).display !== "none" && / m$/.test(document.querySelector("#card .cdist").textContent), "the parcel card didn't show");
-  const card = await page.evaluate(() => ({ shown: getComputedStyle(document.getElementById("card")).display, tier: document.querySelector("#card .ctier").textContent, addr: document.querySelector("#card .caddr").textContent, pips: document.querySelectorAll("#card .cpips i.on").length, timer: document.querySelector("#card .ctimer") ? "block" : "none", way: window.Pets.arrow.visible }));
-  if (card.shown === "none" || card.tier !== "Bronze" || !/Main Street/.test(card.addr) || card.pips !== 3 || card.timer === "none" || !card.way) problems.push("the parcel card is wrong: " + JSON.stringify(card));
+  // (owner, 2026-11-14) the parcel counter: how many you carry, of how many you can
+  await until(page, () => getComputedStyle(document.getElementById("card")).display !== "none" && /^\d+ \/ \d+$/.test(document.querySelector("#card b").textContent), "the parcel counter didn't show");
+  const card = await page.evaluate(() => ({ text: document.querySelector("#card b").textContent, odds: document.getElementById("modds").hidden === (window.Pets.role !== "admin"), way: window.Pets.arrow.visible }));
+  if (!/^1 \/ \d+$/.test(card.text) || !card.odds || !card.way) problems.push("the parcel counter is wrong (or the Odds button shows to a player): " + JSON.stringify(card));
   await until(page, () => document.getElementById("tutt").textContent === "Drop them off", "the tutorial didn't move on after the grab");
   step = "deliver it and see the roll";
   await page.evaluate(() => { const P = window.Pets, h = P.World.addr(P.parcel.house); P.teleport(h.mx, h.mz, h.my); });
@@ -81,7 +82,7 @@ try {
   await until(page, () => document.getElementById("coinn").textContent !== "0", "the coin counter didn't move");
   await page.click("#tutskip"); await until(page, () => getComputedStyle(document.getElementById("tut")).display === "none" && window.Pets.save.set.tut, "the tutorial didn't skip");
   step = "open the menus";
-  for (const [id, title] of [["mstable", "Stable"], ["mup", "Upgrades"], ["modds", "Odds"], ["mset", "Settings"]]) {
+  for (const [id, title] of [["mstable", "Stable"], ["mup", "Upgrades"], ["mset", "Settings"]]) {
     await page.click("#" + id); await page.locator("#ptitle", { hasText: title }).waitFor({ timeout: 5000 });
     if (!(await page.evaluate(() => document.getElementById("pbody").children.length))) problems.push(title + " is empty");
     await page.click("#pclose");
