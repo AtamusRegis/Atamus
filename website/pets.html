@@ -32,7 +32,7 @@
     #bchat svg, .mbtn svg { width: 26px; height: 26px; } .ico { display: block; } #pclose svg { width: 18px; height: 18px; margin: auto; } #party button svg { width: 12px; height: 12px; display: block; }
     .act svg { position: relative; z-index: 1; width: 55%; height: 55%; } #bbig svg { width: 58%; height: 58%; } #buildbar .bt svg, #zpanel .bt svg, #pprompt .bt svg { width: 18px; height: 18px; vertical-align: middle; }
     /* the parcel card, top center */
-    #card { position: fixed; left: 50%; top: calc(10px + var(--st)); transform: translateX(-50%); display: none; flex-direction: column; align-items: stretch; gap: 4px; padding: 6px 10px; border-radius: 16px; background: var(--card); box-shadow: 0 3px 0 rgba(0,0,0,.14); max-width: calc(100vw - 150px); }
+    #card { position: fixed; left: 50%; top: calc(10px + var(--st)); transform: translateX(-50%); display: none; align-items: center; gap: 8px; padding: 6px 14px 6px 10px; border-radius: 16px; background: var(--card); box-shadow: 0 3px 0 rgba(0,0,0,.15); z-index: 20; } #card svg { width: 26px; height: 26px; } #card b { font-size: 22px; }
     .prow { display: flex; align-items: center; gap: 6px; white-space: nowrap; } .prow.gone { opacity: .45; filter: grayscale(.8); }
     .ctier { padding: 1px 8px; border-radius: 7px; color: #fff; text-shadow: 0 1px 0 rgba(0,0,0,.35); font-size: 14px; }
     .mod { padding: 1px 6px; border-radius: 7px; color: #fff; font-size: 11px; }
@@ -219,7 +219,7 @@
     <div id="menus">
       <button id="mstable" class="mbtn" title="Stable" data-ico="stable"></button>
       <button id="mup" class="mbtn" title="Upgrades" data-ico="upgrades"></button>
-      <button id="modds" class="mbtn" title="Odds" data-ico="odds"></button>
+      <button id="modds" class="mbtn" title="Odds" hidden data-ico="odds"></button>
       <button id="mset" class="mbtn" title="Settings" data-ico="settings"></button>
       <button id="mbuild" class="mbtn" title="Build" hidden data-ico="build"></button>
     </div>
@@ -251,6 +251,6 @@
     <button id="lgo" class="btn go" type="submit">Log in</button>
     <button id="lnew" class="btn" type="button">Create account</button>
   </form>
-  <script type="module" src="pets.js?v=1794640140"></script>
+  <script type="module" src="pets.js?v=1794640868"></script>
 </body>
 </html>
