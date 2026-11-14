@@ -189,114 +189,54 @@ text"): **Pick up parcels** (the ground arrow points at your parcel on the count
 parcels** (the parcels on the left outlined), **Stable** and **Upgrades** (their buttons outlined in pink). The first three move on when you do them; the rest with Next. Skip ends it. It's shown once (saved
 as a setting).
 
-## The town
+## The town: the zone builder
 
-(owner, 2026-11-11) **Areas you haven't opened are there to see but closed off:** a shimmering wall with a padlock
-across the town at each one's start (the Floating Islands: a bubble over the Sky Cannon). Heading east stops at it;
-heading west is always fine. Ziplines, the sewer pipe and the Sky Cannon don't take you into a closed area. They go
-when you open the area (an Uncommon or better of the area before's animal; see Parcels).
+(owner, 2026-11-13) **The world is in the sky and an admin places everything** ("you make the mechanics, I place
+them"; "start the world on one 1m block, and let me place EVERYTHING"). Nothing is fixed: a world with nothing placed
+is one 1 m grass block (`SEED`) to stand on, with sky all round. Everything is a placed piece kept on the server (table
+`pet_build`, one row; `W.build` / `setBuild`), the same for everyone, and changes for everyone at once.
 
-A fixed town made in code (`buildTown` in pets-world.js); 30 houses. (owner, 2026-11-11) **One line, short
-neighborhoods, harder the farther out:** the post office at the west end, then one road east through every district;
-each district is three houses long, three each side of the road (owner: "do like 3 houses long per neighbourhood").
-The world is narrow (owner, 2026-11-11): 60 m across, the road down the middle, houses both sides, no back alleys, and
-the going gets rougher farther out.
-Each has more (and quicker) dangers than the last. (owner, 2026-11-11) Each area's animals are quicker and
-trickier: dogs notice a parcel within 8 / 10 / 11 / 12 / 12 m, bark for 0.7 / 0.55 / 0.45 / 0.35 / 0.3 s, run 10.5 /
-11.5 / 12.5 / 13.5 / 14.5 m/s and chase for 4 / 5 / 6 / 7 / 7 s; geese see you from 6 / 7 / 8 / 9 / 9 m, honk for
-1.2 / 1 / 0.8 / 0.65 / 0.6 s and lunge at 11.5 / 13 / 14.5 / 15.5 / 16 m/s. **A mount outgrows the easier areas'
-animals:** its chance to shake off a bite or a goose's grab (no stun, no hit, "SHAKEN OFF!") is 8% for every point its
-power (4 x (rarity + half its area's number)) is past 4 x the animal's area number + 2 x the animal's rarity, up to 85%.
-
-- **Post office** at the west end, on its square: the counter under an open frame. Within 20 m is the **safe zone**.
-  You start just south of it, facing east down the road.
-- **Main Street** (Bronze, x 40-90): 6 houses; 2 dogs.
-- **Maple Suburbs** (Silver, x 120-170): 6 houses, fenced yards by the first two, two small ponds between houses
-  (6 geese), 4 dogs, 4 sprinklers beside the road, and low hedges across half the road, side to side (jump or weave).
-- **Goose Marsh** (Gold, x 190-290): over the bridge where the road leaves town. Mud (25% slower; 40% in a pond), a
-  broken boardwalk on (gaps of mud to jump), one across the middle, 6 houses on platforms, three ponds (11 geese), 5 dogs.
-- **Cliffside** (Diamond, x 290-415): three steps up the road, 6 m each, a ramp up the road onto each; a house each side
-  on each step; boulders on each step to ride round; 6 dogs; 4 goats; falling rocks. The **Sky Cannon** at the top.
-- (owner, 2026-11-11) The sewer pipe's mouth and the balloon take you from farther off: the pipe from 3.5 m round its
-  middle (it was 1.7). (owner, 2026-11-11: no threading a needle) The balloon is 1.8x bigger and takes you from
-  anywhere inside the red ring round it, 9 m (it was 3).
-- **Floating Islands** (Sky): three islands 32 to 44 m up off Cliffside's far side, two houses each, joined by jump
-  pads; 3 dogs, wind and sky geese (every 8 to 14 s). Each island's houses stand as far as they can from its pads,
-  landing spots and middle (owner, 2026-11-12: and the zipline down, and the first island's houses clear of the cannon's
-  landing and the way in); anyone who somehow ends up inside something solid is moved out to the nearest
-  clear spot. Falling off costs a parcel 1 hit and puts you back on the last island you stood on.
-- (owner, 2026-11-12) **Zones 6 to 10**, on the ground past the islands (`FAR`: x 600 to 1100, 100 m each), reached
-  by the **zipline** from the last island (closed in a bubble until Frostbite Fields opens). (owner, 2026-11-12) The one
-  **balloon** home to the post office is at the very end of the Moon Garden. One road down the middle, three houses each side, five of each zone's animal. Express
-  parcels get 70 / 75 / 80 / 85 / 90 s on top. Each has its own going:
-  - **Frostbite Fields** (Fox): ice everywhere: slow to start, turn and stop (12% grip).
-  - **Sunscorch Dunes** (Raptor): sand (80% speed) and sandstorms: gusts like the islands' wind, 1.4x as strong.
-  - **Jungle Ruins** (Trike): three rivers across it (50% speed) and thick trees.
-  - **Lava Flats** (T-Rex): six lava pools: stepping in bounces you up, and the server burns a parcel (1 hit, a 0.6 s
-    stun; once every 2 s).
-  - **Moon Garden** (Unicorn): low gravity (45%).
-  Falling off the islands only counts over the islands, not the zones below or the zipline down.
-- (owner, 2026-11-12) **Each far zone its own place** (`props`, the slabs, and its own sky, fog and air):
-  - **Frostbite Fields:** snow drifts across the road (1 m humps, snow grips), ice spikes, snowmen, snowy pines,
-    snow falling; a pale blue sky.
-  - **Sunscorch Dunes:** five 2 m dunes the road climbs over, cacti, palms, three pyramids beyond the edge, sand
-    blowing with the gusts; an orange sky.
-  - **Jungle Ruins:** a log bridge over each river (the fast line: no river slow), ruined pillars, a three-step
-    temple with a shrine on top, fireflies; a green sky.
-  - **Lava Flats:** rock spires with glowing cracks, a volcano smoking beyond the edge, embers rising; a dark red sky.
-  - **Moon Garden:** four craters (half a meter down, with rims), crystals and glowing mushrooms, motes, a night sky
-    full of stars.
-
-**Shortcuts:** (owner, 2026-11-12) none any more (the sewer pipe and the zipline tower went; the only zipline is the
-way down to Frostbite Fields). **No walls round the outside:** ride or jump off any edge of the town (anywhere but
-the islands, which put you back on the last one) and the run starts over: every parcel you hold is lost and you're
-back at the post office (below 20 m down, `EDGE_Y`). Still there: boost pads (x1.6 speed for 2.5 s) on the road, the alleys and the marsh's main
-boardwalk, and rooftop hops (three roofs, each 2 m higher, up the side of each Cliffside step's face: they need a jump
-of about 2 m).
+- **Pieces** (on a 1 m grid; quarter turns):
+  - **Block:** W x H x D metres (1 to 60 each) of a material: grass, dirt, stone, brick, wood, road, sand, snow, ice,
+    water. You stand on its top and it stops you from the side (you can go under one in the air). Ice is slippery
+    (12% grip), sand 80% speed, water 50%.
+  - **Post Office:** the building, its conveyor and counter, and the safe zone (20 m round it). One counts (the last
+    placed). None: no conveyor, no parcels, no safe zone.
+  - **Respawn:** where couriers appear and come back to (after a run, a fall, the balloon). One counts (the last
+    placed); none: on the first block.
+  - **Podium:** up to three (gold, silver, bronze in the order placed; 1.6 / 1.1 / 0.7 m high): the server's best mounts
+    stand on them (see Aura and the podiums).
+  - **Start Line:** a purple chevron strip 8 m across, 2 m deep: crossing one switches on your mount's own speed until
+    you're back at the post office (before it, every mount goes 12 m/s). No start lines: always its own speed.
+  - **Boost:** a yellow chevron pad: x1.6 speed for a moment, the way it points.
+  - **Tree:** solid, 6.5 m tall.
+  - **House:** 8 x 8 m, solid, in a zone's colors; turned to face its door.
+  - **Mailbox:** an **address** in a zone: parcels of that zone's tier go to that zone's mailboxes, named in order of
+    placing ("1 Main Street", "2 Main Street", "1 Maple Lane"...). No mailboxes in a zone: no parcels for it. A mailbox
+    taken away loses the parcels going to it.
+  - **Gate:** 8 m wide, 7 m high: a shimmering wall with a padlock, closed (it stops you) until you've opened the zone it
+    leads into (an Uncommon or better of the zone before's animal; see Parcels); then only its posts and beam. A newly
+    opened zone's showing flies to its gate as it opens.
+- **The zone a spot is in** is the nearest mailbox's (the post office's surroundings are the first): it sets the speed
+  rule (5% per zone short of or past a mount's own), the sky color and a bonk's pay.
+- **Building** (admins; the Admin panel's Build): the freecam (fly where you look: WASD or the stick, Space up, C down,
+  Shift faster; drag to look) and a bar at the bottom: Block, House, Mailbox, Gate, Tree, Boost / Start Line, Podium,
+  Respawn, Post Office, Erase, ⟳ (turn; R) and ✕ (Escape); under it W / H / D and the material for a block, the zone
+  for a house, mailbox or gate (a gate's zone is the one it leads into). A see-through preview shows where the piece
+  goes (red: what Erase takes); a tap or click places it. A block goes against the face pointed at (on top, under, or
+  beside it), or on the level of the first block (y 0) in open air; the rest stand on what's pointed at, a small marker
+  on the side they face. Up to 6,000 pieces. Erasing everything leaves the one block.
+- **Falling off** (below 20 m down, `EDGE_Y`) starts the run over: every parcel you hold is lost and you're back at the
+  respawn point.
 
 ## Danger
 
-- (owner, 2026-11-11) **Each area has its own chasers:** Main Street dogs, Maple Suburbs cats, Goose Marsh gators,
-  Cliffside bears, the Floating Islands wolves (all run as "dogs" below, with that area's numbers). **Every animal
-  (chasers, geese, goats) has a rarity**, Common to Legendary, fixed for the town and a little likelier rarer farther
-  out (weights 50 / 25 / 14 / 8 / 3, each rank x (1 + 0.12 x the area's number)). Each rank: a bit bigger (+8%), a ring
-  of its rarity's color at its feet (none for Common), sparkles for Epic and Legendary; chasers +6% speed, +0.8 m
-  notice, 10% less warning, +0.5 s chase; geese +0.6 m sight, 10% less warning, +6% lunge; goats +5% charge. A rank
-  counts as half an area against a mount shaking it off. Each chaser has its own call when it spots you (a bark, a meow, a hiss, a growl, a howl).
-- (owner, 2026-11-11) **The attack queue:** a courier has 2 slots. An animal (any kind) has to take a free one to go
-  after them, and leaves it when it attacks or gives up, so at most two are after you at once. **The calm:** no animal
-  attacks while one of your parcels is with a goose or on the ground, nor for 3 s after it's back (picked up) or lost,
-  or after a bite, a butt or a sky goose's snatch; an animal can still join the queue and chase in the meantime, it
-  just can't bite, grab or butt. Sky geese don't dive in the calm either.
-
-- (owner, 2026-11-11: dangers roam, and more of them) **Dogs** (20) roam their district: a short trot somewhere, now
-  and then a pause, staying within 45 m of where they started, off the post office's safe zone, out of ponds. A
-  courier carrying a parcel within 10 m sets one off: a bark and a red "!" for 0.5 s, then it chases for up to 6 s at
-  11.5 m/s. A bite (not while you're jumping over it) stuns for 1.5 s and takes 1 hit. It gives up if you outrun it, get a wall between you, take it 38 m
-  from where it started or reach the safe zone; then it rests 8 s. Scared off (a kick, Bark), it bolts away for 2.5 s.
-- **Geese** (15) roam up to 34 m out from their pond, round houses and fences. One that sees a parcel within 7 m honks and flaps for 1 s, then lunges (13 m/s for
-  up to 2.2 s). Touching you it takes one of your parcels (no stun) and waddles to its pond (7.2 m/s), then takes 3 s out in the
-  middle to sink it: then it's lost. (owner, 2026-11-11) A stolen parcel has a visible countdown (over the goose, and
-  on the parcel card): the goose's walk to its pond plus 4 s; when it runs out the parcel's gone, wherever the goose
-  is. **Kick the goose** and the parcel drops where it stands, unharmed: pick it up for 15 coins x the tier. "GOOSE
-  BUSTED!" (owner, 2026-11-11) **A parcel has 15 s on the ground** in all, counted down over it and on the card: picked
-  up, its time stops; dropped again, it carries on from there (drop it with 8 s left and you have 8 s next time).
-- (owner, 2026-11-11: animals have the same blocks couriers have) Houses, fences, hedges and trees stop geese as they
-  stop couriers (and dogs): a goose slides along them; one stuck for over a second with a parcel squeezes through. A
-  goose that would start inside something stands at a clear spot round its pond instead. Dogs, geese and goats face the
-  way they actually move.
-- (owner, 2026-11-11) A mount is as wide as it looks: the bigger it has grown, the farther from a wall, hedge or tree it
-  stops (0.55 m on foot and when Common, up to about 1 m).
-- **Sprinklers** (Suburbs): on 3 s in every 6, they shove you sideways.
-- **Falling rocks** (Cliffside): every 3 to 6 s near a courier on the mountain; a shadow for 1 s, then a 1.5 s stun and
-  1 hit within 2.3 m.
-- **Goats** (Cliffside, 4): they wander their terrace; a goat that sees anyone within 9 m stomps for 0.8 s, then
-  charges (owner, 2026-11-11: faster, 20 m/s for under a second) and knocks them back toward the ledge (no hit); it won't run off its own ledge.
-- **Wind** (Islands): a gust for 3.5 s in every 11 pushes everyone the same way.
-- **Sky geese** (Islands): every 9 to 16 s one dives at a courier carrying a parcel; a shadow circle for 1.4 s, then it
-  takes one of your parcels for good if you're still within 2.2 m.
-- **Hidden help:** after three failed runs in a row the dogs chasing you are 20% slower until you deliver.
-- Animals sleep while nobody is near.
+- (owner, 2026-11-13) **No animals roam the town any more** (no chasers, geese or goats; no falling rocks or sky geese).
+  Each zone's animal is still the mount its parcels bring (see Mounts). The dangers left: other couriers' bonks, the
+  edges, and what's built (ice, water, sand). The attack-queue, calm and shake-off rules stay in the code for when
+  hazards come back.
+- (owner, 2026-11-11) A mount is as wide as it looks: the bigger it has grown, the farther from a wall it stops (0.55 m
+  on foot and when Common, up to about 1 m).
 
 ## Bonks
 
@@ -405,6 +345,12 @@ its own fresh saves, with the same logins. It is described in `docs/POKEMON.md`;
 Courier's rules.
 
 ## Rejected / removed
+
+- (owner, 2026-11-13) **The hand-built town** (Main Street, Maple Suburbs, Goose Marsh, Cliffside, the Floating Islands
+  and zones 6 to 10 with their houses, roads, hedges, ponds, mud, sprinklers, boost pads, jump pads, the Sky Cannon,
+  the zipline, the balloon, wind, ice, sand, rivers, lava, low gravity and scenery; the gates across it) and **every
+  roaming animal** (each zone's chasers, geese, goats, falling rocks, sky geese); the fixed post office square and the
+  Aura pad round it: replaced by the zone builder, starting from one block in the sky. The zones' sky colors stay.
 
 - (owner, 2026-11-12) The sewer pipe and the zipline tower (shortcuts); the walls round the outside of the town (ride
   off the edge to start a run over).

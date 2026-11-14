@@ -4,6 +4,15 @@ Critter Courier (Pet Delivery Co. until 2026-11-11). Newest first. Add one entry
 and any rule decided. Use `git log` for the code detail (and for the older Atamus prototypes, removed from the tree on
 2026-11-08).
 
+## 2026-11-13
+
+- **The zone builder (owner).** The hand-built town, the fixed post office square and every roaming animal are gone:
+  the world is in the sky and starts as one 1 m block, and an admin places everything in the game (Admin panel, Build):
+  blocks of ten materials, the post office, the respawn point, podiums, start lines, boosts, trees, houses, mailboxes
+  (the addresses, by zone) and gates that stay closed until their zone is open, on a 1 m grid with quarter turns. It's
+  kept on the server (table `pet_build`) and everyone sees each change at once. Each zone's animal is still earned from
+  its parcels.
+
 ## 2026-11-12
 
 - **Bonks pay Aura; no riding during rewards (owner).** The kick is now the bonk, and a landed bonk pays Aura (couriers

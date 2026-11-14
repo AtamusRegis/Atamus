@@ -61,6 +61,12 @@
     #ptitle { margin: 0; font-size: 26px; }
     #pclose { width: 34px; height: 34px; border: 0; border-radius: 10px; background: rgba(255,255,255,.7); }
     #pbody { padding: 12px; overflow-y: auto; touch-action: pan-y; display: flex; flex-direction: column; gap: 10px; -webkit-overflow-scrolling: touch; }
+    /* (owner, 2026-11-13) the zone builder's bar: pieces, turn and close on top; sizes, material or zone under */
+    #buildbar { position: fixed; left: 50%; transform: translateX(-50%); bottom: calc(10px + var(--sb)); z-index: 26; display: none; flex-direction: column; gap: 6px; align-items: center; max-width: calc(100vw - 16px); }
+    #buildbar .brow { display: flex; gap: 6px; flex-wrap: wrap; justify-content: center; } #buildbar .bt { padding: 7px 11px; } #buildbar .bt.on { background: #ffd84a; }
+    #buildbar .bstep { display: flex; align-items: center; gap: 4px; background: var(--card); border-radius: 12px; padding: 2px 4px; } #buildbar .bstep span { min-width: 54px; text-align: center; font-weight: 700; }
+    #buildbar .mat { color: #1d232a; text-shadow: 0 1px 0 rgba(255,255,255,.6); }
+    body.building .act, body.building #gifts { display: none !important; }
     .btn { border: 0; border-radius: 12px; padding: 8px 14px; background: #e6edf3; box-shadow: 0 3px 0 rgba(0,0,0,.14); display: inline-flex; align-items: center; gap: 6px; white-space: nowrap; }
     .btn.go { background: var(--green); color: #fff; } .btn.buy { background: #ffe9a8; } .btn.coupon { background: #ffd1f0; }
     .btn:disabled { opacity: .45; box-shadow: none; cursor: default; }
@@ -216,6 +222,7 @@
     <div id="announce"></div>
     <form id="chatbar" autocomplete="off"><input id="chatin" maxlength="120" placeholder="Chat" enterkeyhint="send"></form>
   </div>
+  <div id="buildbar"></div>
   <div id="banner"><b></b><i></i></div>
   <div id="flash"></div>
   <div id="reveal"><i id="rrays"></i><div id="rgrid"></div></div>
@@ -234,6 +241,6 @@
     <button id="lgo" class="btn go" type="submit">Log in</button>
     <button id="lnew" class="btn" type="button">Create account</button>
   </form>
-  <script type="module" src="pets.js?v=1794515578"></script>
+  <script type="module" src="pets.js?v=1794622578"></script>
 </body>
 </html>
