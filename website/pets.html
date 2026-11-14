@@ -66,7 +66,7 @@
     #buildbar .brow { display: flex; gap: 6px; flex-wrap: wrap; justify-content: center; } #buildbar .bt { padding: 7px 11px; } #buildbar .bt.on { background: #ffd84a; }
     #buildbar .bstep { display: flex; align-items: center; gap: 4px; background: var(--card); border-radius: 12px; padding: 2px 4px; } #buildbar .bstep span { min-width: 54px; text-align: center; font-weight: 700; }
     #buildbar .mat { color: #1d232a; text-shadow: 0 1px 0 rgba(255,255,255,.6); }
-    body.building .act, body.building #gifts { display: none !important; }
+    body.building .act, body.building #gifts { display: none !important; } body.building #mbuild { background: #ffd84a; }
     .btn { border: 0; border-radius: 12px; padding: 8px 14px; background: #e6edf3; box-shadow: 0 3px 0 rgba(0,0,0,.14); display: inline-flex; align-items: center; gap: 6px; white-space: nowrap; }
     .btn.go { background: var(--green); color: #fff; } .btn.buy { background: #ffe9a8; } .btn.coupon { background: #ffd1f0; }
     .btn:disabled { opacity: .45; box-shadow: none; cursor: default; }
@@ -213,6 +213,7 @@
       <button id="mup" class="mbtn" title="Upgrades"><svg viewBox="0 0 24 24"><path d="M12 20V6M5 12l7-7 7 7"/></svg></button>
       <button id="modds" class="mbtn" title="Odds"><svg viewBox="0 0 24 24"><rect x="4" y="4" width="16" height="16" rx="3"/><path d="M9 9h.01M15 9h.01M12 12h.01M9 15h.01M15 15h.01"/></svg></button>
       <button id="mset" class="mbtn" title="Settings"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M12 3v3M12 18v3M3 12h3M18 12h3M5.6 5.6l2.1 2.1M16.3 16.3l2.1 2.1M5.6 18.4l2.1-2.1M16.3 7.7l2.1-2.1"/></svg></button>
+      <button id="mbuild" class="mbtn" title="Build" hidden><svg viewBox="0 0 24 24"><path d="M14 6l4 4M4 20l9-9M12 4l8 8-3 3-8-8z"/></svg></button>
     </div>
     <button id="bwhistle" class="act" title="Whistle"><span>Whistle</span></button>
     <button id="bjump" class="act" title="Jump"><span>Jump</span></button>
@@ -241,6 +242,6 @@
     <button id="lgo" class="btn go" type="submit">Log in</button>
     <button id="lnew" class="btn" type="button">Create account</button>
   </form>
-  <script type="module" src="pets.js?v=1794622578"></script>
+  <script type="module" src="pets.js?v=1794625121"></script>
 </body>
 </html>
