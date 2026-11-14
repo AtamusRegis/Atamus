@@ -4,7 +4,7 @@
 // deliveries, rolls, damage, coins, mounts; this page shows the town (pets-world.js, shared with the server), moves you
 // and asks. Phone first: a thumb joystick, drag to look, pinch to zoom, big buttons.
 import * as THREE from "./vendor/three.module.min.js";
-import { svg, fillIcons, ICON } from "./icons.js?v=4";
+import { svg, fillIcons, ICON } from "./icons.js?v=6";
 import * as World from "./pets-world.js?v=1794652110";
 
 const $ = (id) => document.getElementById(id);
