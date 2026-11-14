@@ -147,6 +147,9 @@ A parcel that breaks or is lost is gone; the conveyor always has the next one. *
   (owner, 2026-11-13) **Coyote time:** both jumps still work for 0.15 s after you run off an edge. **Landing
   forgiveness:** a block's or a podium's top reaches 5% past its sides for standing on (2.5% of its width on each side),
   so a near miss still lands; bumping into its sides uses the real block. Roofs and other pieces aren't widened.
+  (owner, 2026-11-13) **No sliding off edges by accident:** on the ground with no direction held (say, just after a
+  landing), you can still slide, but you stop at the edge of whatever you're standing on instead of going over; holding
+  a direction (or jumping) takes you off as usual.
 - Legendary: a glowing name tag and sparkling footsteps.
 - **Whistle** calls your mount. A stun knocks you off; you get up on foot (5.5 m/s) and the mount comes back when you
   whistle (owner, 2026-11-11: instantly, even while still stunned), when you reach it, or by itself after about 2 s.
