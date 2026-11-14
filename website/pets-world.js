@@ -195,11 +195,14 @@ export function cleanData(d) {
   out.gifts = (Array.isArray(d.gifts) ? d.gifts : []).slice(0, GIFT_CAP).filter((g) => g && Number.isFinite(+g.gid)).map((g) => ({ gid: int(g.gid, 1, 1e9, 1), r: int(g.r, 0, 4, 0), pt: int(g.pt, 0, TIERS.length - 1, 0), ...(Number.isFinite(+g.m) ? { m: int(g.m, 1, 1e9, 1) } : {}) }));
   out.nextGid = Math.max(int(d.nextGid, 1, 1e9, 1), ...out.gifts.map((g) => g.gid + 1));
   for (const k of ["del", "golden", "geese", "kicks"]) out.stats[k] = int(d.stats && d.stats[k], 0, 1e9, 0);
-  out.set = { friendly: !!(d.set && d.set.friendly), music: int(d.set && d.set.music, 0, 10, 5), sfx: int(d.set && d.set.sfx, 0, 10, 7), shirt: /^#[0-9a-f]{6}$/i.test(d.set && d.set.shirt) ? d.set.shirt : "#f2a33a", tut: !!(d.set && d.set.tut) };   // tut: the new-courier tutorial is done
+  out.set = { friendly: !!(d.set && d.set.friendly), music: int(d.set && d.set.music, 0, 10, 5), sfx: int(d.set && d.set.sfx, 0, 10, 7), shirt: /^#[0-9a-f]{6}$/i.test(d.set && d.set.shirt) ? d.set.shirt : "#f2a33a", tut: !!(d.set && d.set.tut), pz: int(d.set && d.set.pz, -1, TIERS.length - 1, -1) };   /* pz: (owner, 2026-11-14) the zone picked for parcels (-1: none, the usual mix) */   // tut: the new-courier tutorial is done
   return out;
 }
 // a new parcel for the conveyor: its tier by the districts open (and the ridden mount's level), maybe timed
-export function rollParcel(open, mr = 0, rnd = Math.random) {   // mr: the ridden mount's rarity
+// (owner, 2026-11-14) the zones a courier can pick for parcels: the open ones with mailboxes
+export const pickZones = (open) => TIERS.map((t, n) => n).filter((n) => n < (open | 0) && houses.some((h) => h.d === n));
+export function rollParcel(open, mr = 0, rnd = Math.random, pz = -1) {   // mr: the ridden mount's rarity; pz: a picked zone (every parcel from it)
+  if (pz >= 0 && pickZones(open).includes(pz)) return { tier: pz, mod: rnd() < MOD_CHANCE ? "express" : "" };
   const w = spawnWeights(open, mr); if (!w.some((v) => v > 0)) return null; let r = rnd(), tier = 0; for (let n = 0; n < w.length; n++) { if (r < w[n]) { tier = n; break; } r -= w[n]; }
   const mod = rnd() < MOD_CHANCE ? "express" : "";
   return { tier, mod };

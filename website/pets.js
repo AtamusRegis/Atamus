@@ -5,7 +5,7 @@
 // and asks. Phone first: a thumb joystick, drag to look, pinch to zoom, big buttons.
 import * as THREE from "./vendor/three.module.min.js";
 import { svg, fillIcons, ICON } from "./icons.js?v=6";
-import * as World from "./pets-world.js?v=1794652110";
+import * as World from "./pets-world.js?v=1794652378";
 
 const $ = (id) => document.getElementById(id);
 const { TAU, clamp, hyp, MOUNTS, TIERS, RARITY, RARITY_C, MODS, UPGRADES } = World;
@@ -943,13 +943,20 @@ function stepGifts(dt) {   // the build-up: three shakes, each bigger, the spark
   if (r >= 3) cam.shake = Math.max(cam.shake, u * 0.05 * r);
   if (o.t >= T && o.res) landGifts(o.res.list);
 }
-let hudDirty = true, shownCoins = 0, cardKey = "", myName = "", myRole = "player", myId = null, loggedIn = false;
+let hudDirty = true, shownCoins = 0, cardKey = "", zpickKey = "", myName = "", myRole = "player", myId = null, loggedIn = false;
 function hud(dt) {
   watchZones();
   // coins count up to what the server says
   const coinsNow = save.coins;
   if (shownCoins !== coinsNow) { const d = coinsNow - shownCoins; shownCoins = Math.abs(d) < 1 ? coinsNow : shownCoins + d * Math.min(1, dt * 8); $("coinn").textContent = fmt(Math.round(shownCoins)); }
   const t = now();
+  // (owner, 2026-11-14) the zone slider, bottom center: one step per open zone with mailboxes; the top step is the usual
+  // mix, a lower one asks for every parcel from that zone
+  { const Z = World.pickZones(World.openFor(save)), k = Z.join() + "|" + save.set.pz + "|" + !!bm, S = $("zpick");
+    if (k !== zpickKey) { zpickKey = k; S.style.display = Z.length > 1 && !bm ? "flex" : "none"; const inp = S.querySelector("input"), i = Z.indexOf(save.set.pz), v = i >= 0 ? i : Z.length - 1;
+      inp.max = Z.length - 1; inp.value = v; S.querySelector("b").textContent = World.zoneName(Z[v]); S.querySelector("b").style.boxShadow = "inset 0 -3px 0 " + World.TIERS[Z[v]].c;
+      inp.oninput = () => { const n = +inp.value; S.querySelector("b").textContent = World.zoneName(Z[n]); };
+      inp.onchange = () => { const n = +inp.value, pz = n === Z.length - 1 ? -1 : Z[n]; save.set.pz = pz; netSend({ t: "set", pz }); }; } }
   // (owner, 2026-11-14) the parcel counter: how many parcels you're carrying, of how many you can
   const key = bag.length + "/" + cap;
   if (key !== cardKey) { cardKey = key; const c = $("card"); c.style.display = bag.length ? "flex" : "none"; c.innerHTML = svg("parcel") + `<b class="disp">${bag.length} / ${cap}</b>`; const dz = el("button", "cdrop"); dz.innerHTML = svg("erase"); dz.title = "Drop"; dz.onclick = (e) => { e.stopPropagation(); netSend({ t: "dropall" }); }; c.appendChild(dz); }   // (owner, 2026-11-14) Drop lets go of them
