@@ -225,7 +225,9 @@ is one 1 m grass block (`SEED`) to stand on, with sky all round. Everything is a
   Boost / Start Line, Podium, Respawn, Post Office, Erase, ⟳ (turn; R) and ✕ (Escape or the Build button); under it
   W / H / D and the material for a block, the zone for a house, mailbox or gate (a gate's zone is the one it leads
   into). **The preview is a blueprint hologram** of the piece itself (see-through blue with glowing edges; red for what
-  Erase or Cut takes); a click places it. **Everything turns** in quarter turns (a block's W and D swap; the post office
+  Erase or Cut takes); (owner, 2026-11-13) the left button places, and **dragging with it keeps placing** on the level
+  the drag started at (never on top of what the same drag placed; with Erase it erases what it passes over); the right
+  button turns the camera. No browser menu on a right click anywhere in the game. **Everything turns** in quarter turns (a block's W and D swap; the post office
   with its conveyor; the respawn point sets the way couriers face, an arrow on it). A block goes against the face
   pointed at (on top, under, or beside it), or on the level of the first block (y 0) in open air; the rest stand on
   what's pointed at. **Ctrl+C** copies the pointed-at piece, **Ctrl+X** cuts it, **Ctrl+V** pastes (a hologram of it

@@ -717,6 +717,7 @@ const drags = new Map(); let pinch = 0, tapStart = null;
 const joyEl = $("joy"), knob = $("knob");
 canvas.addEventListener("pointerdown", (e) => {
   canvas.setPointerCapture(e.pointerId);
+  if (bm && e.pointerType === "mouse" && e.button === 0) { paintStart(e.clientX, e.clientY); return; }   // (owner, 2026-11-13) building: the left button places (and keeps placing as you drag); the right one turns the camera
   if (e.pointerType === "touch" && joy.id === null && e.clientX < innerWidth * 0.45 && e.clientY > innerHeight * 0.35) { joy.id = e.pointerId; joy.ox = e.clientX; joy.oy = e.clientY; joy.x = joy.y = 0; joyEl.style.display = "block"; joyEl.style.left = e.clientX - 60 + "px"; joyEl.style.top = e.clientY - 60 + "px"; knob.style.transform = ""; return; }
   drags.set(e.pointerId, { x: e.clientX, y: e.clientY }); tapStart = { x: e.clientX, y: e.clientY, t: performance.now() };
   if (drags.size === 2) { const [a, b] = [...drags.values()]; pinch = hyp(a.x - b.x, a.y - b.y); }
@@ -732,10 +733,11 @@ const endPointer = (e) => {
   if (drags.delete(e.pointerId) && tapStart && performance.now() - tapStart.t < 300 && hyp(e.clientX - tapStart.x, e.clientY - tapStart.y) < 8) tapAt(e.clientX, e.clientY);
   pinch = 0;
 };
-canvas.addEventListener("pointermove", (e) => { if (bm && e.pointerType === "mouse") buildAim(e.clientX, e.clientY); });
+canvas.addEventListener("pointermove", (e) => { if (bm && e.pointerType === "mouse") { if (bm.paint) paintMove(e.clientX, e.clientY); else buildAim(e.clientX, e.clientY); } });
+addEventListener("pointerup", (e) => { if (bm && bm.paint && e.button === 0) bm.paint = null; });
 canvas.addEventListener("pointerup", endPointer); canvas.addEventListener("pointercancel", endPointer);
 canvas.addEventListener("wheel", (e) => { cam.dist = clamp(cam.dist * (e.deltaY > 0 ? 1.1 : 0.9), 5, 26); e.preventDefault(); }, { passive: false });
-canvas.addEventListener("contextmenu", (e) => e.preventDefault());
+addEventListener("contextmenu", (e) => { if (!/^(INPUT|TEXTAREA)$/.test(e.target.tagName)) e.preventDefault(); });   // (owner, 2026-11-13) no browser menu on a right click, anywhere in the game
 addEventListener("keydown", (e) => {
   if (e.target && (e.target.tagName === "INPUT" || e.target.tagName === "SELECT")) return;
   if (e.code === "Enter") { openChat(); e.preventDefault(); return; }
@@ -1153,6 +1155,31 @@ function undoBuild() { const e = hist.pop(); if (!e) return; if (e.add) { netSen
 function redoBuild() { const e = redos.pop(); if (!e) return; if (e.add) sendAdd(e.add, (id) => { e.add.id = id; }); else netSend({ t: "build", op: "del", id: e.del.id }); hist.push(e); sfx("pad"); }
 const aimed = () => bm && bm.aim && bm.aim.id && World.build.find((o) => o.id === bm.aim.id);
 function copyBuild(cut) { const q = aimed(); if (!q) return; bm.clip = strip(q); bm.r = 0; if (cut) doDel(q); bm.tool = "paste"; buildBar(); buildAim(bm.px, bm.py); sfx("pad"); }
+// painting: a left-button drag keeps placing on the level it started at (or erasing what it passes over), never on top
+// of what this same drag just placed
+const overlaps = (a, b) => a.x < b.x + b.w && b.x < a.x + a.w && a.z < b.z + b.d && b.z < a.z + a.d && a.y < b.y + b.h && b.y < a.y + a.h;
+function paintPiece(px, py) {
+  const P = bm.paint; ndc.set((px / innerWidth) * 2 - 1, -(py / innerHeight) * 2 + 1); ray.setFromCamera(ndc, camera);
+  const pl = new THREE.Plane(new THREE.Vector3(0, 1, 0), -P.y), v = new THREE.Vector3(); if (!ray.ray.intersectPlane(pl, v)) return null;
+  const base = bm.tool === "paste" ? bm.clip : null, q = buildPiece({ p: v, n: new THREE.Vector3(0, 1, 0), id: 0 }, base); q.y = P.y; return q;
+}
+function placeOnce(q) {
+  const P = bm.paint, [w0, h, d0, cx, cy, cz] = pieceBox(q), odd = q.k !== "block" && q.k !== "office" && q.r % 2, w = odd ? d0 : w0, d = odd ? w0 : d0, bx = { x: cx - w / 2 + 0.01, z: cz - d / 2 + 0.01, y: cy - h / 2, w: w - 0.02, h, d: d - 0.02 };   // what each piece takes up
+  if (P.done.some((o) => overlaps(o, bx))) return; P.done.push(bx); doAdd(q); sfx("pad");
+}
+function paintStart(px, py) {
+  buildAim(px, py); const a = bm.aim; if (!a) return;
+  if (bm.tool === "erase") { bm.paint = { erase: new Set() }; paintMove(px, py); return; }
+  if (bm.tool === "copy" || bm.tool === "cut") { copyBuild(bm.tool === "cut"); return; }
+  if (bm.tool === "paste" && !bm.clip) return;
+  const q = buildPiece(a, bm.tool === "paste" ? bm.clip : null); bm.paint = { y: q.y, done: [] }; placeOnce(q);
+}
+function paintMove(px, py) {
+  const P = bm.paint; buildAim(px, py);
+  if (P.erase) { const q = aimed(); if (q && !P.erase.has(q.id)) { P.erase.add(q.id); doDel(q); sfx("pop"); } return; }
+  const q = paintPiece(px, py); if (!q) return; placeOnce(q);
+  if (bm.ghost) scene.remove(bm.ghost); bm.ghost = hologram({ ...q, id: 0 }); scene.add(bm.ghost);
+}
 function buildTap(px, py) {
   buildAim(px, py); const a = bm.aim; if (!a) return;
   if (bm.tool === "erase") { const q = aimed(); if (q) { doDel(q); sfx("pop"); } return; }
