@@ -264,9 +264,12 @@ export const slabs = [], solids = [], houses = [], dogs = [], ponds = [], geese 
 // (owner, 2026-11-11) the post office is a building with a conveyor belt coming out of its door, pushing your parcel to
 // the end, where you grab it. (x, z: the middle of its square; b: the building; belt: the conveyor; end: where your parcel waits)
 // (owner, 2026-11-13) placed with the zone builder (none until then: no conveyor, no safe zone); setBuild moves it
-export const PO = { on: false, x: 0, z: 0, y: 0, b: { x: 0, z: -9, hw: 8, hd: 5, h: 6.5 }, belt: { z0: -4, z1: 5.2, hw: 1.3, top: 1.1 }, end: { x: 0, z: 3.9 } };
+// PO_LOCAL: its parts as if it stood at (0, 0) facing +z; (owner, 2026-11-13) it can be turned (yaw)
+export const PO_LOCAL = { x: 0, z: 0, b: { x: 0, z: -9, hw: 8, hd: 5, h: 6.5 }, belt: { z0: -4, z1: 5.2, hw: 1.3, top: 1.1 }, end: { x: 0, z: 3.9 } };
+export const PO = { on: false, x: 0, z: 0, y: 0, yaw: 0, b: { ...PO_LOCAL.b }, belt: { ...PO_LOCAL.belt }, end: { ...PO_LOCAL.end } };
+export const turn = (lx, lz, yaw) => [lx * Math.cos(yaw) + lz * Math.sin(yaw), -lx * Math.sin(yaw) + lz * Math.cos(yaw)];   // a local offset turned as a model turned yaw
 // (owner, 2026-11-11: neighborhoods three houses long) every district is short: three houses down each side of the road
-export const SPAWN = { x: 0.5, z: 0.5, y: 0 },   /* (owner, 2026-11-13) the respawn point, placed with the zone builder */ SUBURBS_X = 110, TOWN = { x0: -45, x1: 190, z0: -30, z1: 30 }, MARSH = { x0: 190, x1: 290, z0: -30, z1: 30 }, CLIFF = { x0: 290, x1: 415, z0: -30, z1: 30 };   // (owner, 2026-11-11) narrow: the road down the middle, houses both sides
+export const SPAWN = { x: 0.5, z: 0.5, y: 0, yaw: 0 },   /* (owner, 2026-11-13) the respawn point, placed with the zone builder */ SUBURBS_X = 110, TOWN = { x0: -45, x1: 190, z0: -30, z1: 30 }, MARSH = { x0: 190, x1: 290, z0: -30, z1: 30 }, CLIFF = { x0: 290, x1: 415, z0: -30, z1: 30 };   // (owner, 2026-11-11) narrow: the road down the middle, houses both sides
 export const TERRACE = (n) => ({ x0: 300 + 38 * (n - 1), x1: n === 3 ? 414 : 300 + 38 * n, z0: -27, z1: 27, y: 6 * n });   // n = 1..3: Cliffside's three steps, each with a ramp up the road onto it
 export const ISLES = [];   // (owner, 2026-11-13) gone with the hand-built town
 export const ISLE_X = 425, FALL_Y = 22, EDGE_Y = -20;   // EDGE_Y: (owner, 2026-11-12) below it anywhere but the islands, you rode off the edge;   // past ISLE_X and high up: the Floating Islands; below FALL_Y there, you've fallen off
@@ -331,7 +334,7 @@ const STREETS = ["Main Street", "Maple Lane", "Goose Way", "Cliff Road", "Cloud 
 export function setBuild(list) {
   build = (Array.isArray(list) ? list : []).map(cleanPiece).filter(Boolean).slice(0, BUILD_MAX); if (!build.length) build = SEED.map((q) => ({ ...q }));
   slabs.length = BASE_N.slabs; solids.length = BASE_N.solids; houses.length = 0; buildings.length = 0; gates.length = 0; starts.length = 0; boosts.length = 0; trees.length = 0; PODIUM.spots.length = 0; PO.on = false;
-  Object.assign(SPAWN, { x: 0.5, z: 0.5, y: 0 });
+  Object.assign(SPAWN, { x: 0.5, z: 0.5, y: 0, yaw: 0 });
   const count = TIERS.map(() => 0);
   for (const q of build) {
     const yaw = (q.r | 0) * (Math.PI / 2);
@@ -339,16 +342,17 @@ export function setBuild(list) {
     else if (q.k === "house") { buildings.push({ id: q.id, x: q.x, z: q.z, y: q.y, yaw, d: q.zone }); solid(q.x, q.z, HOUSE_S / 2, HOUSE_S / 2, q.y - 1, q.y + HOUSE_H, yaw); }
     else if (q.k === "mailbox") { houses.push({ id: q.id, x: q.x, z: q.z, y: q.y, yaw, d: q.zone, mx: q.x, mz: q.z, my: q.y, name: ++count[q.zone] + " " + STREETS[q.zone] }); solid(q.x, q.z, 0.2, 0.2, q.y - 1, q.y + 1.3); }
     else if (q.k === "gate") gates.push({ id: q.id, x: q.x, z: q.z, y: q.y, yaw, d: q.zone, c: Math.cos(yaw), s: Math.sin(yaw) });
-    else if (q.k === "tree") { trees.push({ id: q.id, x: q.x, z: q.z, y: q.y, s: 1 }); solid(q.x, q.z, 0.45, 0.45, q.y - 1, q.y + 8); }
+    else if (q.k === "tree") { trees.push({ id: q.id, x: q.x, z: q.z, y: q.y, s: 1, yaw }); solid(q.x, q.z, 0.45, 0.45, q.y - 1, q.y + 8); }
     else if (q.k === "boost") boosts.push({ id: q.id, x: q.x, z: q.z, y: q.y, yaw });   // x1.6 speed for a moment, the way it points
     else if (q.k === "start") starts.push({ id: q.id, x: q.x, z: q.z, y: q.y, yaw, c: Math.cos(yaw), s: Math.sin(yaw) });
     else if (q.k === "podium") { if (PODIUM.spots.length < 3) { const h = [1.6, 1.1, 0.7][PODIUM.spots.length]; PODIUM.spots.push({ id: q.id, x: q.x, z: q.z, y: q.y + h }); rect(q.x - 2.2, q.x + 2.2, q.z - 2.2, q.z + 2.2, q.y + h, "pod" + (PODIUM.spots.length - 1), q.y); } }
-    else if (q.k === "spawn") Object.assign(SPAWN, { x: q.x, z: q.z, y: q.y });
-    else if (q.k === "office") Object.assign(PO, { on: true, x: q.x, z: q.z, y: q.y, b: { ...PO.b, x: q.x, z: q.z - 9 }, belt: { ...PO.belt, z0: q.z - 4, z1: q.z + 5.2 }, end: { x: q.x, z: q.z + 3.9 } });
+    else if (q.k === "spawn") Object.assign(SPAWN, { x: q.x, z: q.z, y: q.y, yaw });   // couriers face the way it's turned
+    else if (q.k === "office") { const L = PO_LOCAL, [bx, bz] = turn(L.b.x, L.b.z, yaw), [ex, ez] = turn(L.end.x, L.end.z, yaw); Object.assign(PO, { on: true, x: q.x, z: q.z, y: q.y, yaw, b: { ...L.b, x: q.x + bx, z: q.z + bz }, end: { x: q.x + ex, z: q.z + ez } }); }
   }
-  if (PO.on) {   // the post office: the building, its floor and the conveyor out of its door
-    solid(PO.b.x, PO.b.z, PO.b.hw, PO.b.hd, PO.y - 1, PO.y + PO.b.h + 3); rect(PO.b.x - PO.b.hw, PO.b.x + PO.b.hw, PO.b.z - PO.b.hd, PO.b.z + PO.b.hd, PO.y + 0.3, "plaza", PO.y - 0.5);
-    solid(PO.x, (PO.belt.z0 + PO.belt.z1) / 2, PO.belt.hw, (PO.belt.z1 - PO.belt.z0) / 2, PO.y - 1, PO.y + PO.belt.top + 0.05);
+  if (PO.on) {   // the post office: the building and the conveyor out of its door, turned as it stands
+    const L = PO_LOCAL, [cx, cz] = turn(0, (L.belt.z0 + L.belt.z1) / 2, PO.yaw);
+    solid(PO.b.x, PO.b.z, PO.b.hw, PO.b.hd, PO.y - 1, PO.y + PO.b.h + 3, PO.yaw);
+    solid(PO.x + cx, PO.z + cz, L.belt.hw, (L.belt.z1 - L.belt.z0) / 2, PO.y - 1, PO.y + L.belt.top + 0.05, PO.yaw);
   }
 }
 export const addr = (id) => houses.find((h) => h.id === id) || null;   // a mailbox by its id

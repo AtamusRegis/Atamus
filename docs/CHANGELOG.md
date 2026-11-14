@@ -6,6 +6,9 @@ and any rule decided. Use `git log` for the code detail (and for the older Atamu
 
 ## 2026-11-13
 
+- **Builder tools (owner).** A Build button on screen for admins; blueprint holograms of each piece as the preview;
+  every piece turns (the post office and the respawn point too); Q / E fly down and up; Ctrl+C / X / V copy, cut and
+  paste a piece, Ctrl+Z undoes and Ctrl+Shift+Z redoes. Building is for a computer (no phone controls).
 - **The zone builder (owner).** The hand-built town, the fixed post office square and every roaming animal are gone:
   the world is in the sky and starts as one 1 m block, and an admin places everything in the game (Admin panel, Build):
   blocks of ten materials, the post office, the respawn point, podiums, start lines, boosts, trees, houses, mailboxes

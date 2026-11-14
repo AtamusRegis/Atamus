@@ -200,10 +200,10 @@ is one 1 m grass block (`SEED`) to stand on, with sky all round. Everything is a
   - **Block:** W x H x D metres (1 to 60 each) of a material: grass, dirt, stone, brick, wood, road, sand, snow, ice,
     water. You stand on its top and it stops you from the side (you can go under one in the air). Ice is slippery
     (12% grip), sand 80% speed, water 50%.
-  - **Post Office:** the building, its conveyor and counter, and the safe zone (20 m round it). One counts (the last
-    placed). None: no conveyor, no parcels, no safe zone.
-  - **Respawn:** where couriers appear and come back to (after a run, a fall, the balloon). One counts (the last
-    placed); none: on the first block.
+  - **Post Office:** the building, its conveyor and counter, and the safe zone (20 m round it), turned as placed. One
+    at a time (a new one replaces it). None: no conveyor, no parcels, no safe zone.
+  - **Respawn:** where couriers appear and come back to (after a run, a fall, the balloon), facing the way it's turned.
+    One at a time; none: on the first block.
   - **Podium:** up to three (gold, silver, bronze in the order placed; 1.6 / 1.1 / 0.7 m high): the server's best mounts
     stand on them (see Aura and the podiums).
   - **Start Line:** a purple chevron strip 8 m across, 2 m deep: crossing one switches on your mount's own speed until
@@ -219,13 +219,19 @@ is one 1 m grass block (`SEED`) to stand on, with sky all round. Everything is a
     opened zone's showing flies to its gate as it opens.
 - **The zone a spot is in** is the nearest mailbox's (the post office's surroundings are the first): it sets the speed
   rule (5% per zone short of or past a mount's own), the sky color and a bonk's pay.
-- **Building** (admins; the Admin panel's Build): the freecam (fly where you look: WASD or the stick, Space up, C down,
-  Shift faster; drag to look) and a bar at the bottom: Block, House, Mailbox, Gate, Tree, Boost / Start Line, Podium,
-  Respawn, Post Office, Erase, ⟳ (turn; R) and ✕ (Escape); under it W / H / D and the material for a block, the zone
-  for a house, mailbox or gate (a gate's zone is the one it leads into). A see-through preview shows where the piece
-  goes (red: what Erase takes); a tap or click places it. A block goes against the face pointed at (on top, under, or
-  beside it), or on the level of the first block (y 0) in open air; the rest stand on what's pointed at, a small marker
-  on the side they face. Up to 6,000 pieces. Erasing everything leaves the one block.
+- **Building** (admins; (owner, 2026-11-13) the Build button on screen, a hammer under the menu buttons; "no need for
+  phone editor": building is for a computer, an exception to mobile parity): the freecam (fly where you look: WASD,
+  Space or E up, C or Q down, Shift faster; drag to look) and a bar at the bottom: Block, House, Mailbox, Gate, Tree,
+  Boost / Start Line, Podium, Respawn, Post Office, Erase, ⟳ (turn; R) and ✕ (Escape or the Build button); under it
+  W / H / D and the material for a block, the zone for a house, mailbox or gate (a gate's zone is the one it leads
+  into). **The preview is a blueprint hologram** of the piece itself (see-through blue with glowing edges; red for what
+  Erase or Cut takes); a click places it. **Everything turns** in quarter turns (a block's W and D swap; the post office
+  with its conveyor; the respawn point sets the way couriers face, an arrow on it). A block goes against the face
+  pointed at (on top, under, or beside it), or on the level of the first block (y 0) in open air; the rest stand on
+  what's pointed at. **Ctrl+C** copies the pointed-at piece, **Ctrl+X** cuts it, **Ctrl+V** pastes (a hologram of it
+  follows; a click places it, turned with ⟳), **Ctrl+Z** undoes your last place or erase, **Ctrl+Shift+Z** (or Ctrl+Y)
+  redoes. Placing a post office or respawn point replaces the old one (undo brings it back). Up to 6,000 pieces.
+  Erasing everything leaves the one block.
 - **Falling off** (below 20 m down, `EDGE_Y`) starts the run over: every parcel you hold is lost and you're back at the
   respawn point.
 

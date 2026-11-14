@@ -147,6 +147,9 @@ try {
     n.send({ t: "build", op: "add", piece: { k: "mailbox", x: 5, z: 40, y: 0, zone: 0 } }); const bb = await b.wait((m) => m.t === "build" && m.build.length === n0 + 1, "the new mailbox"); const id = bb.build[bb.build.length - 1].id;
     ok(W.addr(id) && W.addr(id).name === "3 Main Street" && (await store.loadBuild()).length === n0 + 1, "an admin places a mailbox: everyone gets it, it's saved, it's an address");
     n.send({ t: "build", op: "del", id }); await b.wait((m) => m.t === "build" && m.build.length === n0, "the mailbox erased"); ok(!W.addr(id) && (await store.loadBuild()).length === n0, "and erases it"); }
+  { n.send({ t: "build", op: "add", piece: { k: "office", x: 0, z: 100, y: 0, r: 1 }, tag: 7 }); const ack = await n.wait((m) => m.t === "buildok" && m.tag === 7, "the builder's id back");
+    await sleep(100); ok(W.build.filter((q) => q.k === "office").length === 1 && W.PO.z === 100 && W.PO.yaw === Math.PI / 2 && Math.abs(W.PO.end.x - 3.9) < 1e-9 && W.addr && ack.id > 0, "one post office at a time (a new one replaces it), turnable; the builder gets the new piece's id");
+    n.send({ t: "build", op: "del", id: ack.id }); n.send({ t: "build", op: "add", piece: { k: "office", x: 0, z: 0, y: 0, r: 0 } }); await sleep(150); }
   who("smokeB").acct.data.coins = 0;   // (its bonks paid Aura)
   b.send({ t: "admin", op: "quick", cmd: "coins", n: 5000, name: "smokeB" });   // a player: nothing happens
   n.send({ t: "admin", op: "quick", cmd: "coins", n: 5000, name: "smokeB" });

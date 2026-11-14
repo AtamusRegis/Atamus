@@ -428,7 +428,7 @@ export function attachPets(server, { origins = [], allowLocal = false, store = m
         case "build": {   // (owner, 2026-11-13) the zone builder: admins only
           if (rankOf(me.acct) < 2) break;
           let list = W.build.slice();
-          if (m.op === "add") { const q = W.cleanPiece({ ...m.piece, id: list.reduce((a, b) => Math.max(a, b.id), 0) + 1 }); if (!q || list.length >= W.BUILD_MAX) break; list.push(q); }
+          if (m.op === "add") { const q = W.cleanPiece({ ...m.piece, id: list.reduce((a, b) => Math.max(a, b.id), 0) + 1 }); if (!q || list.length >= W.BUILD_MAX) break; if (W.ONE_ONLY.includes(q.k)) list = list.filter((o) => o.k !== q.k); list.push(q); send(ws, { t: "buildok", tag: m.tag, id: q.id }); }   // (owner, 2026-11-13) the id back, for undo; one post office, one respawn point
           else if (m.op === "del") { const n = list.length; list = list.filter((q) => q.id !== +m.id); if (list.length === n) break; }
           else break;
           W.setBuild(list); store.saveBuild(W.build).catch((e) => console.error("[pets] saveBuild", e.message));
