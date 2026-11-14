@@ -1471,12 +1471,12 @@ function onNet(m) {
       save = World.cleanData(m.data);
       if (opening && opening.run) startReveal(m.list); else if (opening) { opening.res = { list: m.list }; tutDid("open"); } else { landGifts(m.list); tutDid("open"); } break;
     }
-    case "kickfly": me.px = m.vx; me.pz = m.vz; me.vy = m.vy; me.ground = false; me.rag = World.KICK.down; sfx("smash"); cam.shake = Math.max(cam.shake, 0.6); flash("#ffffff"); break;   // (owner, 2026-11-14) thrown off your mount, tumbling
-    case "kickhit": kickShot(m.id); break;
+    case "kickfly": me.px = m.vx; me.pz = m.vz; me.vy = m.vy; me.ground = false; me.rag = World.KICK.down; sfx("smash"); cam.shake = Math.max(cam.shake, 0.6); flash("#ffffff"); ragCam(m.by); break;   // (owner, 2026-11-14) thrown off your mount, tumbling
+    case "kickhit": kickHit(m.id); break;
     case "stun": me.stun = m.s; if (me.transit && me.transit.k !== "pipe") me.transit = null; knockedOff(); sfx("stun"); cam.shake = Math.max(cam.shake, 0.5); flash(m.why === "kick" ? "#ffffff" : "#e5534b"); if (m.why === "dog") sfx("growl"); break;
     case "knock": me.px = m.x; me.pz = m.z; me.vy = m.y; me.ground = false; sfx("kick"); cam.shake = Math.max(cam.shake, 0.5); break;
     case "tp": { const sp0 = hyp(me.vx, me.vz); if (m.why === "home" || m.why === "balloon") faceSpawn();   // (owner, 2026-11-13) facing the way the respawn point is turned
-      me.x = m.x; me.y = m.y; me.z = m.z; me.vx = me.vz = me.vy = me.px = me.pz = 0; me.transit = null; me.ground = true; me.armed = false; me.foot = false; camAt.y = m.y + 2; if (m.why === "fall") { flash("#ffffff"); sfx("pop"); } else if (m.why === "home") { cam.yaw = -Math.PI / 2; sfx("pad"); } else if (m.why === "tube") { me.yaw = m.yaw; cam.yaw = me.yaw - Math.PI; me.vx = Math.sin(me.yaw) * sp0; me.vz = Math.cos(me.yaw) * sp0; sfx("pipe"); emit(me.x, me.y + 1, me.z, 18, { colors: ["#5fb56b", "#ffffff"], speed: 4, up: 3, life: 0.5 }); } else { flash("#bfe6ff"); sfx("pad"); }   /* tube: (owner, 2026-11-13) out of a pipe shortcut, keeping your speed; home: (owner, 2026-11-11) the run's over, back at the post office */ sendPos(true); break; }
+      me.x = m.x; me.y = m.y; me.z = m.z; me.vx = me.vz = me.vy = me.px = me.pz = 0; me.transit = null; me.ground = true; me.armed = false; me.foot = false; camAt.y = m.y + 2; if (m.why === "fall") { flash("#ffffff"); sfx("pop"); } else if (m.why === "home") sfx("pad"); else if (m.why === "tube") { me.yaw = m.yaw; cam.yaw = me.yaw - Math.PI; me.vx = Math.sin(me.yaw) * sp0; me.vz = Math.cos(me.yaw) * sp0; sfx("pipe"); emit(me.x, me.y + 1, me.z, 18, { colors: ["#5fb56b", "#ffffff"], speed: 4, up: 3, life: 0.5 }); } else { flash("#bfe6ff"); sfx("pad"); }   /* tube: (owner, 2026-11-13) out of a pipe shortcut, keeping your speed; home: (owner, 2026-11-11) the run's over, back at the post office */ sendPos(true); break; }
     case "piped": me.transit = { k: "pipe", until: now() + m.s, x: m.x, y: m.y, z: m.z }; me.hidden = true; me.vx = me.vz = me.px = me.pz = 0; sfx("pipe"); if (m.goose) setTimeout(() => sfx("honk"), 600); break;
     case "rock": { const r = new THREE.Mesh(new THREE.DodecahedronGeometry(1.3), mat("#8a8278")); r.position.set(m.x, m.y + 22, m.z); scene.add(r); fallers.push({ g: r, y0: m.y + 22, y1: m.y + 0.8, t: 0, s: m.s });
       groundMark(m.x, m.y, m.z, World.ROCK.r, m.s, "#1d232a", (k) => { if (hyp(k.x - me.x, k.z - me.z) < 60) sfx("rock"); emit(k.x, k.y + 0.3, k.z, 22, { colors: ["#8a8278", "#c9bfae"], speed: 6, up: 4, life: 0.7 }); if (hyp(k.x - me.x, k.z - me.z) < 14) cam.shake = Math.max(cam.shake, 0.4); }); break; }
@@ -1501,10 +1501,14 @@ function onNet(m) {
   }
 }
 // (owner, 2026-11-14) a kick that lands: a short shot round the courier you kicked, tumbling
-function kickShot(id) {
-  const o = others.get(id); if (!o || cine) return; sfx("smash"); const a0 = Math.atan2(camera.position.x - o.x, camera.position.z - o.z) + Math.PI / 2;   /* from the side, so the kicker isn't in the way */
-  cine = { shots: [{ dur: 1.6, cam: (u) => { const a = a0 + u * 1.4; return { x: o.x + Math.sin(a) * 9, y: o.y + 4, z: o.z + Math.cos(a) * 9 }; }, look: () => ({ x: o.x, y: o.y + 0.6, z: o.z }), title: "KICK!", sub: o.name || "" }], i: 0, t: 0 };
+function ragCam(by) {   /* (owner, 2026-11-14) the kicked courier watches their own ragdoll fly, from the side */
+  if (cine) return; const o = others.get(by), a0 = o ? Math.atan2(o.x - me.x, o.z - me.z) + Math.PI / 2 : cam.yaw;
+  cine = { shots: [{ dur: 1.6, cam: (u) => { const a = a0 + u * 1.4; return { x: me.x + Math.sin(a) * 9, y: me.y + 4, z: me.z + Math.cos(a) * 9 }; }, look: () => ({ x: me.x, y: me.y + 0.6, z: me.z }), title: "KICKED!", sub: (o && o.name) || "" }], i: 0, t: 0 };
   $("cine").classList.add("on"); document.body.classList.add("cinema"); keys.clear();
+}
+function kickHit(id) {   /* (owner, 2026-11-14) the kicker: a heavy hit, no cinematic */
+  const o = others.get(id); sfx("smash"); sfx("kick"); cam.shake = Math.max(cam.shake, 0.9); hitStop = 0.12; flash("#ffffff");
+  if (o) { emit(o.x, o.y + 1, o.z, 34, { colors: ["#ffffff", "#ffd84a", "#ff8a3d"], speed: 9, up: 5, life: 0.5 }); popup("KICK!", "#ffd84a", o.x, o.y + 2.4, o.z, true); }
 }
 const fallers = [], divers = [];
 function onFx(m) {
