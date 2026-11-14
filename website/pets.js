@@ -4,6 +4,7 @@
 // deliveries, rolls, damage, coins, mounts; this page shows the town (pets-world.js, shared with the server), moves you
 // and asks. Phone first: a thumb joystick, drag to look, pinch to zoom, big buttons.
 import * as THREE from "./vendor/three.module.min.js";
+import { svg, fillIcons } from "./icons.js?v=1";
 import * as World from "./pets-world.js?v=1794636546";
 
 const $ = (id) => document.getElementById(id);
@@ -955,6 +956,8 @@ const panelOpen = () => !!panel;
 function openPanel(k) { panel = panel === k ? "" : k; $("panel").style.display = panel ? "flex" : "none"; if (panel) { if (k === "stable") selMount = save.ride; if (k === "admin") netSend({ t: "admin", op: "list", q: adminQ }); renderPanel(); } keys.clear(); }
 function closePanel() { panel = ""; $("panel").style.display = "none"; }
 const btn = (text, fn, cls) => { const b = el("button", "btn " + (cls || ""), text); b.onclick = fn; return b; };
+const ibtn = (ico, name, fn, cls) => { const b = btn("", fn, cls); b.innerHTML = svg(ico); b.title = name; return b; };   // (owner, 2026-11-13) an icon button
+fillIcons();
 const coinBtn = (cost, fn, ok) => { const b = el("button", "btn buy"); b.appendChild(el("i", "coin")); b.appendChild(document.createTextNode(fmt(cost))); b.disabled = !ok; b.onclick = fn; return b; };
 const mountName = (m) => (m.va ? "Shiny " : "") + World.coatName(m.sp, m.r) + " " + MOUNTS[m.sp].name;   // (owner, 2026-11-11) e.g. Shiny Spirit Wolf
 const pct = (v) => (v >= 0.1 ? (v * 100).toFixed(0) : v >= 0.01 ? (v * 100).toFixed(1) : (v * 100).toFixed(2)) + "%";
@@ -1063,7 +1066,7 @@ function addOther(p) {
   others.set(p.id, Object.assign(old || { buf: [], x: p.x, y: p.y || 0, z: p.z, yaw: p.yaw || 0, mv: 0, stunT: 0, graceT: 0, kickT: 0, hideT: 0, stepT: 0, mx: p.x, my: p.y || 0, mz: p.z, myaw: 0, wasFoot: false }, { id: p.id, name: p.name, sp: p.sp, r: p.r | 0, va: p.va | 0, tr: p.tr || "", shirt: p.shirt, rank: p.rank | 0, friendly: !!p.friendly, carry: p.carry || null, rig }));
 }
 function dropOther(id) { const o = others.get(id); if (!o) return; unrig(o.rig); others.delete(id); }
-function renderParty() { const d = $("party"); d.innerHTML = ""; d.style.display = party.length ? "flex" : "none"; for (const q of party) d.appendChild(el("span", q.id === myId ? "me" : "", q.name)); if (party.length) { const x = el("button", "", "✕"); x.title = "Leave"; x.onclick = () => netSend({ t: "party_leave" }); d.appendChild(x); } }
+function renderParty() { const d = $("party"); d.innerHTML = ""; d.style.display = party.length ? "flex" : "none"; for (const q of party) d.appendChild(el("span", q.id === myId ? "me" : "", q.name)); if (party.length) { const x = el("button", ""); x.innerHTML = svg("close"); x.title = "Leave"; x.onclick = () => netSend({ t: "party_leave" }); d.appendChild(x); } }
 function renderInvite() { const d = $("invite"), t = performance.now(); invites = invites.filter((i) => i.until > t); const i = invites[0]; d.style.display = i ? "flex" : "none"; if (!i) return; d.innerHTML = ""; d.appendChild(el("b", "", i.name)); d.appendChild(el("span", "", "Party")); const ans = (yes) => { netSend({ t: "answer", from: i.from, yes }); invites.shift(); renderInvite(); }; d.appendChild(btn("✓", () => ans(true), "go")); d.appendChild(btn("✕", () => ans(false))); }
 setInterval(() => { if (invites.length) renderInvite(); }, 1000);
 // ---- (owner, 2026-11-13) the zone builder (admins): flying freely, a bar of pieces at the bottom; a see-through
@@ -1078,11 +1081,11 @@ function endBuild() { if (!bm) return; bm.zd = null; if (spawnG) spawnG.visible 
 function buildBar() {
   const B = $("buildbar"); B.innerHTML = ""; B.style.display = "flex"; const row0 = el("div", "brow"), row1 = el("div", "brow"), row2 = el("div", "brow");
   for (const [k, name, row] of [["block", "Block", row0], ["house", "House", row0], ["mailbox", "Mailbox", row0], ["gate", "Gate", row0], ["wall", "Wall", row0], ["tree", "Tree", row0], ["boost", "Boost", row0], ["start", "Start Line", row0], ["podium", "Podium", row1], ["spawn", "Respawn", row1], ["office", "Post Office", row1], ["pipe", "Pipe", row1], ["area", "Bounds", row1], ["erase", "Erase", row1]]) row.appendChild(btn(name, () => { bm.tool = k; if (k !== "area") bm.sel = 0; buildBar(); buildAim(bm.px, bm.py); drawAreas(); }, "bt" + (bm.tool === k ? " on" : "")));
-  row1.appendChild(btn("⟳", () => { if (bm.tool === "spawn") bm.a = (Math.round(bm.a / 45) * 45 + 45) % 360; else bm.r = (bm.r + 1) % 4; buildAim(bm.px, bm.py); }, "bt")); row1.appendChild(btn("✕", endBuild, "bt")); B.appendChild(row0);
+  row1.appendChild(ibtn("rotate", "Turn", () => { if (bm.tool === "spawn") bm.a = (Math.round(bm.a / 45) * 45 + 45) % 360; else bm.r = (bm.r + 1) % 4; buildAim(bm.px, bm.py); }, "bt")); row1.appendChild(ibtn("close", "Close", endBuild, "bt")); B.appendChild(row0);
   const step = (label, get, set, lo, hi) => { const g = el("div", "bstep" + (label === zLabel ? " zone" : "")); g.appendChild(btn("−", () => { set(clamp(get() - 1, lo, hi)); buildBar(); buildAim(bm.px, bm.py); }, "bt")); g.appendChild(el("span", "", label())); g.appendChild(btn("+", () => { set(clamp(get() + 1, lo, hi)); buildBar(); buildAim(bm.px, bm.py); }, "bt")); row2.appendChild(g); };
   // (owner, 2026-11-13) the neighborhood you're editing: its bounds, gates and walls are placed for it; ⚙ its name, animal and chances
   const zLabel = () => World.zoneName(bm.zone); step(zLabel, () => bm.zone, (v) => { bm.zone = v; bm.zd = null; bm.shotPick = undefined; drawAreas(); if ($("zpanel").style.display === "block") zonePanel(); }, 0, World.TIERS.length - 1);
-  row2.lastChild.querySelector("span").style.boxShadow = "inset 0 -4px 0 " + World.TIERS[bm.zone].c; row2.appendChild(btn("⚙", () => { const P = $("zpanel"); if (P.style.display === "block") { P.style.display = "none"; bm.zd = null; bm.shotPick = undefined; drawAreas(); } else zonePanel(); }, "bt"));
+  row2.lastChild.querySelector("span").style.boxShadow = "inset 0 -4px 0 " + World.TIERS[bm.zone].c; row2.appendChild(ibtn("settings", "Neighborhood", () => { const P = $("zpanel"); if (P.style.display === "block") { P.style.display = "none"; bm.zd = null; bm.shotPick = undefined; drawAreas(); } else zonePanel(); }, "bt"));
   if (bm.tool === "block") {
     step(() => "W " + bm.w, () => bm.w, (v) => (bm.w = v), 1, World.BLOCK_MAX); step(() => "H " + bm.h, () => bm.h, (v) => (bm.h = v), 1, World.BLOCK_MAX); step(() => "D " + bm.d, () => bm.d, (v) => (bm.d = v), 1, World.BLOCK_MAX);
     const mb = btn(bm.m[0].toUpperCase() + bm.m.slice(1), () => { bm.m = World.MATS[(World.MATS.indexOf(bm.m) + 1) % World.MATS.length]; buildBar(); buildAim(bm.px, bm.py); }, "bt mat"); mb.style.background = MAT_C[bm.m]; row2.appendChild(mb);
@@ -1244,7 +1247,7 @@ function zonePanel() {   // (what's typed is kept while you pick shot points or 
   D.shots.forEach((q, k) => {
     const r = el("div", "zshot" + (bm.shotPick === k ? " pick" : "")); r.appendChild(el("i", "", String(k + 1)));
     const t = document.createElement("input"); t.maxLength = 24; t.value = q.name; t.oninput = () => { q.name = t.value; drawAreas(); }; r.appendChild(t);
-    r.appendChild(btn("📍", () => { bm.shotPick = bm.shotPick === k ? undefined : k; zonePanel(); }, "bt")); r.appendChild(btn("✕", () => { D.shots.splice(k, 1); bm.shotPick = undefined; zonePanel(); drawAreas(); }, "bt")); P.appendChild(r);
+    r.appendChild(ibtn("pin", "Point", () => { bm.shotPick = bm.shotPick === k ? undefined : k; zonePanel(); }, "bt")); r.appendChild(ibtn("close", "Remove", () => { D.shots.splice(k, 1); bm.shotPick = undefined; zonePanel(); drawAreas(); }, "bt")); P.appendChild(r);
   });
   if (D.shots.length < World.SHOTS_MAX) P.appendChild(btn("+", () => { const a = bm.aim ? bm.aim.p : { x: me.x, y: me.y, z: me.z }; D.shots.push({ name: "", x: Math.round(a.x), y: Math.round(a.y), z: Math.round(a.z) }); bm.shotPick = D.shots.length - 1; zonePanel(); drawAreas(); }, "bt zadd"));
   const go = btn("Save", () => { const N = D.shinyN; netSend({ t: "build", op: "zone", n, zone: { name: D.name, sp: D.sp, chance: D.chance.map((v) => v / 100), shiny: N >= 2 ? 1 / N : 0, shots: D.shots } }); sfx("pad"); bm.zd = null; bm.shotPick = undefined; P.style.display = "none"; drawAreas(); }, "go"); P.appendChild(go);
@@ -1584,7 +1587,7 @@ function pipeSel() {
   bm.psel = bm.psel.filter((id) => World.build.some((q) => q.id === id && q.k === "pipe")); bm.pselG = new THREE.Group(); scene.add(bm.pselG);
   for (const id of bm.psel) bm.pselG.add(hologram(World.build.find((q) => q.id === id)));
   if (bm.psel.length < 2) return; const [a, b] = bm.psel, A = World.build.find((q) => q.id === a), joined = A.to === b && World.build.find((q) => q.id === b).to === a;
-  P.innerHTML = ""; P.appendChild(btn(joined ? "Unlink" : "Link", () => { netSend(joined ? { t: "build", op: "unlink", a } : { t: "build", op: "link", a, b }); sfx("pad"); bm.psel = []; pipeSel(); }, "go")); P.appendChild(btn("✕", () => { bm.psel = []; pipeSel(); }, "bt")); P.style.display = "flex";
+  P.innerHTML = ""; P.appendChild(btn(joined ? "Unlink" : "Link", () => { netSend(joined ? { t: "build", op: "unlink", a } : { t: "build", op: "link", a, b }); sfx("pad"); bm.psel = []; pipeSel(); }, "go")); P.appendChild(ibtn("close", "Close", () => { bm.psel = []; pipeSel(); }, "bt")); P.style.display = "flex";
 }
 let spawnG = null;
 function drawBuild() {
