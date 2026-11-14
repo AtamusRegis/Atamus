@@ -6,6 +6,8 @@ and any rule decided. Use `git log` for the code detail (and for the older Atamu
 
 ## 2026-11-14
 
+- **Gates reach the sky (owner).** A locked gate's or wall's boundary stops you at any height, fading out above and
+  below; unlocked, it disappears.
 - **No Boost, Jump or Grip levels (owner).** Mounts no longer buy Boost (speed) levels; every mount jumps and grips
   the same; the Stable shows just the speed as a number.
 - **Zone rewards and speeds (owner).** A gift's best coins rise 5% per zone out, and older zones' lowest coins rise 5%

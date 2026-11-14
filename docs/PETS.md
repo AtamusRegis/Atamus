@@ -226,6 +226,9 @@ is one 1 m grass block (`SEED`) to stand on, with sky all round. Everything is a
     blue, scan lines drifting up) and a padlock: closed (it stops you) until you've opened the neighborhood it leads into
     (an Uncommon or better of the one before's animal; see Parcels); then only its posts and beam. A newly opened
     neighborhood's showing flies to its gate as it opens.
+  - (owner, 2026-11-14) **A locked gate's (or wall's) boundary runs all the way up and down:** it stops you at any
+    height (no jumping over or dropping under it) and is drawn fading out within 24 m above and below; unlocked, it's
+    gone completely (a gate keeps its posts and beam).
   - **Wall** (owner, 2026-11-13, "bound walls"): the same blue boundary, 7 m high and 1 to 60 m long (L), no posts:
     closed like a gate of its neighborhood until that's open, then gone.
   - **Pipe** (owner, 2026-11-13, "pipe shortcuts"): a green pipe on its side (3.2 m across, 4 m long, solid), its mouth
