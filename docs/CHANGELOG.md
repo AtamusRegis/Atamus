@@ -6,6 +6,9 @@ and any rule decided. Use `git log` for the code detail (and for the older Atamu
 
 ## 2026-11-14
 
+- **Kick camera; respawn facing (owner).** The ragdoll shot now goes to the courier who was kicked; the kicker gets a
+  heavy hit instead. Coming back to the respawn point now really faces the way it's turned (an old turn left over from
+  the post office overrode it).
 - **Zone slider (owner).** A slider at the bottom picks which open zone your parcels come from (the top step is the
   usual mix); a picked zone's gifts don't get the raise for zones opened past it.
 - **Breaking platforms; builder tidy-ups (owner).** Platforms can break on step or after being stood on a while, and

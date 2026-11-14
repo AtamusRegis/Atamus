@@ -317,8 +317,9 @@ is one 1 m grass block (`SEED`) to stand on, with sky all round. Everything is a
   once in 4 s. The server picks the nearest courier within 3.6 m in front of you (any height within 2.5 m): it throws
   them off their mount (14 m/s away from you, 9 m/s up), tumbling as a ragdoll (limbs flailing) for 1.4 s, then
   they're on foot: they get up and whistle their mount back (Q, or it comes by itself a moment later); thrown off the
-  edge of the town, they're back at the respawn point (with their parcels). The kicker sees a short shot round the
-  courier they kicked ("KICK!" and their name). Never a party member, never at the post office, and a kicked courier
+  edge of the town, they're back at the respawn point (with their parcels). (owner, 2026-11-14) The kicked courier
+  sees a short shot round their own tumbling ragdoll ("KICKED!" and the kicker's name); the kicker gets no shot, just a
+  heavy hit (a held frame, a hard shake, a white flash, a burst and "KICK!" over the courier kicked). Never a party member, never at the post office, and a kicked courier
   can't be kicked again for 4 s after getting up. No parcel damage, no Aura. (The 2026-11-13 bonk, its Aura and the
   Friendly setting stay gone.)
 
