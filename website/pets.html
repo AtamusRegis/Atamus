@@ -64,8 +64,9 @@
     #buildbar .brow { display: flex; gap: 6px; flex-wrap: wrap; justify-content: center; } #buildbar .bt { padding: 7px 11px; } #buildbar .bt.on { background: #ffd84a; }
     #buildbar .bstep { display: flex; align-items: center; gap: 4px; background: var(--card); border-radius: 12px; padding: 2px 4px; } #buildbar .bstep span { min-width: 54px; text-align: center; font-weight: 700; }
     #pprompt { position: fixed; left: 50%; top: 40%; transform: translate(-50%, -50%); z-index: 27; display: none; gap: 8px; background: var(--card); border-radius: 14px; padding: 10px; box-shadow: 0 6px 20px rgba(0,0,0,.25); } #pprompt .go { padding: 10px 26px; font-size: 18px; }
-    #zpanel { position: fixed; left: calc(12px + var(--sl)); bottom: calc(150px + var(--sb)); z-index: 27; display: none; background: var(--card); border-radius: 14px; padding: 12px; width: 270px; box-shadow: 0 6px 20px rgba(0,0,0,.25); }
+    #zpanel { position: fixed; left: calc(12px + var(--sl)); bottom: calc(150px + var(--sb)); z-index: 27; display: none; background: var(--card); border-radius: 14px; padding: 12px; width: 270px; max-height: calc(100vh - 170px); overflow-y: auto; box-shadow: 0 6px 20px rgba(0,0,0,.25); }
     #zpanel > b { display: inline-block; font-size: 16px; margin-bottom: 8px; } #zpanel .zrow { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin: 5px 0; font-weight: 700; white-space: nowrap; }
+    #zpanel .zsub { display: block; margin: 10px 0 4px; } #zpanel .zshot { display: flex; align-items: center; gap: 4px; margin: 4px 0; } #zpanel .zshot i { font-style: normal; font-weight: 700; width: 14px; } #zpanel .zshot input { flex: 1; width: auto; min-width: 0; } #zpanel .zshot .bt { padding: 4px 7px; } #zpanel .zshot.pick .bt:first-of-type { background: #ffd84a; } #zpanel .zadd { width: 100%; }
     #zpanel input, #zpanel select { width: 120px; padding: 4px 6px; border-radius: 8px; border: 1px solid #c9d2da; font: inherit; } #zpanel .go { width: 100%; margin-top: 8px; }
     #buildbar .mat { color: #1d232a; text-shadow: 0 1px 0 rgba(255,255,255,.6); }
     body.building .act, body.building #gifts { display: none !important; } body.building #mbuild { background: #ffd84a; }
@@ -245,6 +246,6 @@
     <button id="lgo" class="btn go" type="submit">Log in</button>
     <button id="lnew" class="btn" type="button">Create account</button>
   </form>
-  <script type="module" src="pets.js?v=1794628734"></script>
+  <script type="module" src="pets.js?v=1794629324"></script>
 </body>
 </html>
