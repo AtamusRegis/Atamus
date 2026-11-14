@@ -4,7 +4,7 @@
 // deliveries, rolls, damage, coins, mounts; this page shows the town (pets-world.js, shared with the server), moves you
 // and asks. Phone first: a thumb joystick, drag to look, pinch to zoom, big buttons.
 import * as THREE from "./vendor/three.module.min.js";
-import { svg, fillIcons, ICON } from "./icons.js?v=2";
+import { svg, fillIcons, ICON } from "./icons.js?v=3";
 import * as World from "./pets-world.js?v=1794639926";
 
 const $ = (id) => document.getElementById(id);
@@ -739,6 +739,7 @@ addEventListener("contextmenu", (e) => { if (!/^(INPUT|TEXTAREA)$/.test(e.target
 addEventListener("keydown", (e) => {
   if (e.target && (e.target.tagName === "INPUT" || e.target.tagName === "SELECT")) return;
   if (e.code === "Enter") { openChat(); e.preventDefault(); return; }
+  if (e.code === "KeyB" && !e.repeat && myRole === "admin" && !chatting && !e.ctrlKey && !e.metaKey) { if (bm) endBuild(); else startBuild(); return; }   // (owner, 2026-11-14) admins: B opens (and closes) the build menu
   if (e.code === "Escape") { if (bm) { endBuild(); return; } if (free) setFree(false); closePanel(); return; }
   if (bm && !e.repeat && (e.code === "Delete" || e.code === "Backspace") && selArea()) { doDel(selArea()); bm.sel = 0; buildBar(); drawAreas(); return; }
   if (bm && e.code === "KeyR" && !e.ctrlKey && !e.metaKey) { if (bm.tool === "spawn" || bm.tool === "gust") keys.add("KeyR"); else if (!e.repeat) { bm.r = (bm.r + 1) % 4; buildAim(bm.px, bm.py); } return; }   // (owner, 2026-11-13) the respawn point turns while R is held
@@ -940,17 +941,9 @@ function hud(dt) {
   const coinsNow = save.coins;
   if (shownCoins !== coinsNow) { const d = coinsNow - shownCoins; shownCoins = Math.abs(d) < 1 ? coinsNow : shownCoins + d * Math.min(1, dt * 8); $("coinn").textContent = fmt(Math.round(shownCoins)); }
   const t = now(); cdBtn("bbig", me.bigAt + World.BIG_JUMP.cd - t, World.BIG_JUMP.cd);
-  // the parcel cards: one row per parcel (a stolen or dropped one faded)
-  const all = [...bag, ...dropped.map((q) => ({ ...q, gone: 1 })), ...stolen.map((q) => ({ ...q, gone: 1 }))], key = all.map((P) => [P.pid, P.dur, P.gone ? 1 : 0].join(":")).join() + "/" + cap;
-  if (key !== cardKey) {
-    cardKey = key; const c = $("card"); c.style.display = all.length ? "flex" : "none"; c.innerHTML = "";
-    for (const P of all) { const T = TIERS[P.tier], r = el("div", "prow" + (P.gone ? " gone" : "")); r.dataset.pid = P.pid; const tc = el("span", "ctier disp", T.name); tc.style.background = T.c; r.appendChild(tc);
-      if (P.mod) r.appendChild(el("span", "mod " + P.mod, MODS[P.mod].name)); const pp = el("span", "cpips"); for (let k = 0; k < P.max; k++) pp.appendChild(el("i", k < P.dur ? "on" : "")); r.appendChild(pp);
-      r.appendChild(el("span", "caddr disp", addrOf(P.house).name)); r.appendChild(el("span", "cdist disp")); if (P.mod === "express" || P.gone) r.appendChild(el("span", "ctimer disp")); c.appendChild(r); }
-    if (all.length) { const n = el("div", "pcount disp", all.length + " / " + cap); c.appendChild(n); }
-  }
-  for (const r of $("card").children) { const P = all.find((q) => String(q.pid) === r.dataset.pid); if (!P) continue; const h = addrOf(P.house), d = r.querySelector(".cdist"); d.textContent = Math.round(hyp(h.mx - me.x, h.mz - me.z, h.my - me.y)) + " m";
-    const tm = r.querySelector(".ctimer"); if (tm) { const left = Math.max(0, P.gone ? P.endAt - performance.now() / 1000 : (P.due - (Date.now() + clockOff)) / 1000); tm.textContent = left.toFixed(1); tm.classList.toggle("late", left <= 5); } }
+  // (owner, 2026-11-14) the parcel counter: how many parcels you're carrying, of how many you can
+  const key = bag.length + "/" + cap;
+  if (key !== cardKey) { cardKey = key; const c = $("card"); c.style.display = bag.length ? "flex" : "none"; c.innerHTML = svg("parcel") + `<b class="disp">${bag.length} / ${cap}</b>`; }
   // the way there: the arrow on the ground round you points at the nearest address (or a dropped parcel, or a goose with one)
   let tg = null, best = Infinity; const consider = (x, y, z, c) => { const d = hyp(x - me.x, z - me.z); if (d < best) { best = d; tg = { x, y, z, c }; } };
   for (const q of bag) { const h = addrOf(q.house); consider(h.mx, h.my, h.mz, POI); }
@@ -1364,7 +1357,7 @@ function onNet(m) {
     case "welcome": {
       if (stale(m.web, false, m.by)) return;
       World.setBuild({ pieces: m.build || [], zones: m.zones || [] }); drawBuild();   // (owner, 2026-11-13) the town the zone builder placed
-      setTok(m.token); const again = loggedIn && myName === m.name; myName = m.name; myId = m.id; myRole = m.role || "player"; $("mbuild").hidden = myRole !== "admin"; netOk = true; loggedIn = true; clockOff = m.now - Date.now();
+      setTok(m.token); const again = loggedIn && myName === m.name; myName = m.name; myId = m.id; myRole = m.role || "player"; $("mbuild").hidden = $("modds").hidden = myRole !== "admin"; netOk = true; loggedIn = true; clockOff = m.now - Date.now();
       $("login").style.display = "none"; $("hud").style.display = "block"; if (document.activeElement && document.activeElement.blur) document.activeElement.blur();
       save = World.cleanData(m.data); shownCoins = save.coins; $("coinn").textContent = fmt(save.coins); remount(); setVolumes(); giftsUi(); if (!again && !save.set.tut && !save.stats.del && tut < 0) setTimeout(() => tutShow(0), 900);
       if (!again) { me.x = m.x; me.z = m.z; me.y = m.y || 0; faceSpawn(); msgs.innerHTML = ""; }
@@ -1375,7 +1368,7 @@ function onNet(m) {
     case "auth_err": if (m.why === "expired") { setTok(null); showLogin(); } else showLogin(m.why === "banned" ? "Banned" + untilText(m.until) : ERR[m.why] || ERR.server); break;
     case "kicked": kicked = true; loggedIn = false; $("hud").style.display = "none"; showLogin(m.why === "kick" ? "Kicked" : m.why === "banned" ? "Banned" + untilText(m.until) : ERR.kicked); break;
     case "muted": if (m.until) toast("Muted" + untilText(m.until), "#e5534b"); break;
-    case "role": myRole = m.role; $("mbuild").hidden = myRole !== "admin"; if (myRole !== "admin" && bm) endBuild(); if (panel) renderPanel(); break;
+    case "role": myRole = m.role; $("mbuild").hidden = $("modds").hidden = myRole !== "admin"; if (myRole !== "admin" && bm) endBuild(); if (panel) renderPanel(); break;
     case "admin_list": adminList = m.list; if (panel === "admin") renderPanel(); break;
     case "admin_msg": toast(m.msg); break;
     case "admin_data": if (adminSel === m.id) { adminData = m.data; if (panel === "admin") renderPanel(); } break;
@@ -1786,6 +1779,6 @@ function frame(tms) {
 }
 buildTown(); buildProps(); buildAnimals(); buildGates(); beltShow(); stepCamera(0.016);
 // for the tests and the console
-window.Pets = { World, me, cam, others, show: { playZones, levelFx, hatchShow, startReveal, auraPop, get cine() { return cine; } }, get save() { return save; }, get parcel() { return bag[0] || null; }, get bag() { return bag; }, get cap() { return cap; }, get belt() { return belt; }, get stolen() { return stolen; }, get dropped() { return dropped; }, get loggedIn() { return loggedIn; }, get panel() { return panel; }, dogMesh, gooseMesh, goatMesh, get arrow() { return wayArrow; }, readyAt, onNet, teleport(x, z, y = 0) { me.x = x; me.z = z; me.y = y; me.vx = me.vz = me.vy = 0; me.transit = null; me.ground = false; sendPos(true); }, netSend, openPanel };
+window.Pets = { World, me, cam, others, show: { playZones, levelFx, hatchShow, startReveal, auraPop, get cine() { return cine; } }, get save() { return save; }, get parcel() { return bag[0] || null; }, get bag() { return bag; }, get cap() { return cap; }, get belt() { return belt; }, get stolen() { return stolen; }, get dropped() { return dropped; }, get loggedIn() { return loggedIn; }, get role() { return myRole; }, get panel() { return panel; }, dogMesh, gooseMesh, goatMesh, get arrow() { return wayArrow; }, readyAt, onNet, teleport(x, z, y = 0) { me.x = x; me.z = z; me.y = y; me.vx = me.vz = me.vy = 0; me.transit = null; me.ground = false; sendPos(true); }, netSend, openPanel };
 $("lgo").disabled = $("lnew").disabled = true;
 connect(); requestAnimationFrame(frame);
