@@ -6,6 +6,8 @@ and any rule decided. Use `git log` for the code detail (and for the older Atamu
 
 ## 2026-11-14
 
+- **Gates reach the sky (owner).** A locked gate's or wall's boundary stops you at any height, fading out above and
+  below; unlocked, it disappears.
 - **Zone rewards and speeds (owner).** A gift's best coins rise 5% per zone out, and older zones' lowest coins rise 5%
   for every zone opened past them. Each zone's animal is 5% faster than the one before, the same in every zone.
 - **Five tunes (owner).** The music takes turns between five tunes; each zone changes a small part of them.

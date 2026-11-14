@@ -5,7 +5,7 @@
 // and asks. Phone first: a thumb joystick, drag to look, pinch to zoom, big buttons.
 import * as THREE from "./vendor/three.module.min.js";
 import { svg, fillIcons, ICON } from "./icons.js?v=4";
-import * as World from "./pets-world.js?v=1794650368";
+import * as World from "./pets-world.js?v=1794651016";
 
 const $ = (id) => document.getElementById(id);
 const { TAU, clamp, hyp, MOUNTS, TIERS, RARITY, RARITY_C, MODS, UPGRADES } = World;
@@ -1670,8 +1670,9 @@ function pieceMesh(q, live) {
     else if (q.k === "gate" || q.k === "wall") {   // (owner, 2026-11-13) a blue holographic boundary while it's closed to you: a gate has posts, a beam and a padlock; a bound wall is just the boundary
       const g = new THREE.Group(), W2 = q.k === "gate" ? World.GATE_W : q.w, H = World.GATE_H; g.position.set(q.x, q.y, q.z); g.rotation.y = (q.r | 0) * Math.PI / 2; G.add(g);
       if (q.k === "gate") { for (const x of [-W2 / 2, W2 / 2]) box(0.7, H, 0.7, "#6f7d8a", x, H / 2, 0, g); box(W2 + 0.7, 0.6, 0.7, "#6f7d8a", 0, H, 0, g); }
-      const sh = new THREE.Group(); g.add(sh); const w = holoWall(W2, H, gateC(q.zone)); w.position.y = H / 2; sh.add(w);
-      for (const y of [0.05, H]) { const e = new THREE.Mesh(new THREE.BoxGeometry(W2, 0.08, 0.08), new THREE.MeshBasicMaterial({ color: new THREE.Color(gateC(q.zone)).lerp(new THREE.Color("#ffffff"), 0.5) })); e.position.y = y; sh.add(e); }
+      // (owner, 2026-11-14) while locked the boundary runs all the way up and all the way down (it stops you at any height),
+      // fading out above and below; unlocked it's gone
+      const sh = new THREE.Group(); g.add(sh); const w = holoWall(W2, H + 2 * HOLO_FADE, gateC(q.zone)); w.material.alphaMap = HOLO_ALPHA; w.position.y = H / 2; sh.add(w);
       const L = q.k === "gate" ? lock(sh, H / 2) : null; if (live) gates.push({ g: sh, w, L, d: q.zone, built: 1, at: q });
     }
     else if (q.k === "pipe") {   // (owner, 2026-11-13) on its side, its mouth the way it's turned; bright green once linked
@@ -1727,6 +1728,8 @@ function drawBuild() {
 const HOLO_TEX = (() => { const cv = document.createElement("canvas"); cv.width = cv.height = 64; const g = cv.getContext("2d"); g.fillStyle = "rgba(255,255,255,0.5)"; g.fillRect(0, 0, 64, 64); g.fillStyle = "rgba(255,255,255,1)"; g.fillRect(0, 0, 64, 3); g.fillRect(0, 30, 64, 2); g.fillStyle = "rgba(255,255,255,0.7)"; g.fillRect(0, 0, 2, 64); const t = new THREE.CanvasTexture(cv); t.wrapS = t.wrapT = THREE.RepeatWrapping; return t; })();
 // (owner, 2026-11-14) each neighborhood's gates (and walls) their own color, never the same as the one before
 const GATE_C = ["#3fa9ff", "#ff5fa8", "#ffd23f", "#46e07a", "#a970ff", "#ff8a3d", "#2fe0d6", "#ff4f4f", "#b5f23d"], gateC = (d) => GATE_C[(Math.max(1, d) - 1) % GATE_C.length];
+const HOLO_FADE = 24, HOLO_ALPHA = (() => { const cv = document.createElement("canvas"); cv.width = 4; cv.height = 256; const g = cv.getContext("2d"), H = World.GATE_H, T = H + 2 * HOLO_FADE, gr = g.createLinearGradient(0, 0, 0, 256);
+  gr.addColorStop(0, "#000"); gr.addColorStop(HOLO_FADE / T, "#fff"); gr.addColorStop((HOLO_FADE + H) / T, "#fff"); gr.addColorStop(1, "#000"); g.fillStyle = gr; g.fillRect(0, 0, 4, 256); return new THREE.CanvasTexture(cv); })();   // opaque over the gate's own height, fading to nothing 24 m above and below
 function holoWall(w, h, c = GATE_C[0]) { const t = HOLO_TEX.clone(); t.needsUpdate = true; t.repeat.set(w / 2, h / 2); return new THREE.Mesh(new THREE.PlaneGeometry(w, h), new THREE.MeshBasicMaterial({ map: t, color: c, transparent: true, opacity: 0.8, side: THREE.DoubleSide, depthWrite: false })); }
 function stepGates(t) { const open = World.openFor(save); for (const q of gates) { q.g.visible = q.d >= open || q.d === gateHold || !!bm; if (q.g.visible) { q.w.material.opacity = 0.62 + Math.sin(t * 2 + q.d) * 0.1; q.w.material.map.offset.y = -t * 0.25; if (q.L) q.L.rotation.y = Math.sin(t * 0.8 + q.d) * 0.4; } } }
 // (owner, 2026-11-11) a newly opened area gets a short showing: letterbox bars, the camera flies to its gate as it
