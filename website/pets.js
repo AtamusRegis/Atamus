@@ -4,7 +4,7 @@
 // deliveries, rolls, damage, coins, mounts; this page shows the town (pets-world.js, shared with the server), moves you
 // and asks. Phone first: a thumb joystick, drag to look, pinch to zoom, big buttons.
 import * as THREE from "./vendor/three.module.min.js";
-import { svg, fillIcons, ICON } from "./icons.js?v=3";
+import { svg, fillIcons, ICON } from "./icons.js?v=4";
 import * as World from "./pets-world.js?v=1794639926";
 
 const $ = (id) => document.getElementById(id);
@@ -744,6 +744,8 @@ addEventListener("keydown", (e) => {
   if (e.code === "Escape") { if (bm) { endBuild(); return; } if (free) setFree(false); closePanel(); return; }
   if (bm && !e.repeat && (e.code === "Delete" || e.code === "Backspace") && bm.shotSel !== undefined && shotList()[bm.shotSel]) { const L = shotList(); L.splice(bm.shotSel, 1); bm.shotSel = undefined; saveShots(L); setTimeout(drawAreas, 150); return; }   // (owner, 2026-11-14) a picked shot taken away
   if (bm && !e.repeat && (e.code === "Delete" || e.code === "Backspace") && selArea()) { doDel(selArea()); bm.sel = 0; buildBar(); drawAreas(); return; }
+  if (bm && e.code === "KeyR" && !e.ctrlKey && !e.metaKey && bm.tool === "select" && hazSel()) { const q = hazSel(); if (q.k === "gust" || q.k === "spawn") keys.add("KeyR"); else if (!e.repeat && q.k !== "block" && q.k !== "mover") doSet(q, { ...q, r: ((q.r | 0) + 1) % 4 }); return; }   // (owner, 2026-11-14) R turns the selected piece
+  if (bm && !e.repeat && (e.code === "Delete" || e.code === "Backspace") && bm.tool === "select" && hazSel()) { doDel(hazSel()); bm.hsel = 0; buildBar(); drawHazSel(); return; }
   if (bm && e.code === "KeyR" && !e.ctrlKey && !e.metaKey) { if (bm.tool === "spawn" || bm.tool === "gust") keys.add("KeyR"); else if (!e.repeat) { bm.r = (bm.r + 1) % 4; buildAim(bm.px, bm.py); } return; }   // (owner, 2026-11-13) the respawn point turns while R is held
   if (bm && (e.ctrlKey || e.metaKey) && !chatting) {   // (owner, 2026-11-13) the builder's copy, cut, paste, undo, redo
     const k = e.code; if (["KeyC", "KeyX", "KeyV", "KeyZ", "KeyY"].includes(k)) { e.preventDefault(); if (!e.repeat) { if (k === "KeyC") copyBuild(false); else if (k === "KeyX") copyBuild(true); else if (k === "KeyV") { if (bm.clip) { bm.tool = "paste"; buildBar(); buildAim(bm.px, bm.py); } } else if (k === "KeyY" || e.shiftKey) redoBuild(); else undoBuild(); } return; }
@@ -1081,14 +1083,14 @@ setInterval(() => { if (invites.length) renderInvite(); }, 1000);
 let bm = null;
 const ray = new THREE.Raycaster(), ndc = new THREE.Vector2(), ground = new THREE.Plane(new THREE.Vector3(0, 1, 0), 0), hitV = new THREE.Vector3();
 $("mbuild").onclick = () => (bm ? endBuild() : startBuild());   // (owner, 2026-11-13) admins: the Build button on screen
-function startBuild() { closePanel(); if (!free) setFree(true); if (spawnG) spawnG.visible = true; for (const g of buildOnly) g.visible = true; bm = { tool: "block", a: ((Math.round((World.SPAWN.yaw * 180) / Math.PI) % 360) + 360) % 360, zone: 0, w: 2, h: 1, d: 2, m: "grass", r: 0, wl: 8, ly: 0, sel: 0, px: innerWidth / 2, py: innerHeight / 2, ghost: null, aim: null }; buildBar(); document.body.classList.add("building"); buildAim(bm.px, bm.py); drawAreas(); }
+function startBuild() { closePanel(); if (!free) setFree(true); if (spawnG) spawnG.visible = true; for (const g of buildOnly) g.visible = true; bm = { tool: "select", a: ((Math.round((World.SPAWN.yaw * 180) / Math.PI) % 360) + 360) % 360, zone: 0, w: 2, h: 1, d: 2, m: "grass", r: 0, wl: 8, ly: 0, sel: 0, px: innerWidth / 2, py: innerHeight / 2, ghost: null, aim: null }; buildBar(); document.body.classList.add("building"); buildAim(bm.px, bm.py); drawAreas(); }
 function endBuild() { if (!bm) return; bm.zd = null; if (spawnG) spawnG.visible = false; for (const g of buildOnly) g.visible = false; if (bm.ghost) scene.remove(bm.ghost); if (bm.pselG) scene.remove(bm.pselG); bm = null; $("buildbar").style.display = "none"; $("zpanel").style.display = "none"; $("pprompt").style.display = "none"; drawAreas(); document.body.classList.remove("building"); setFree(false); }
-const BUILD_TOOLS = [["block", "Block"], ["house", "House"], ["mailbox", "Mailbox"], ["gate", "Gate"], ["wall", "Wall"], ["tree", "Tree"], ["boost", "Boost"], ["start", "Start Line"], ["podium", "Podium"], ["spawn", "Respawn"], ["office", "Post Office"], ["pipe", "Pipe"], ["gust", "Gust"], ["mover", "Platform"], ["shot", "Shot"], ["area", "Bounds"], ["erase", "Erase"]];
+const BUILD_TOOLS = [["select", "Select"], ["block", "Block"], ["house", "House"], ["mailbox", "Mailbox"], ["gate", "Gate"], ["wall", "Wall"], ["tree", "Tree"], ["boost", "Boost"], ["start", "Start Line"], ["podium", "Podium"], ["spawn", "Respawn"], ["office", "Post Office"], ["pipe", "Pipe"], ["gust", "Gust"], ["mover", "Platform"], ["shot", "Shot"], ["area", "Bounds"], ["erase", "Erase"]];
 // each tile's picture: the piece itself, drawn once (with the mount portraits' renderer)
 const THUMB = {}, THUMB_Q = { block: { w: 2, h: 1, d: 2, m: "grass" }, gate: { zone: 1 }, wall: { w: 6, zone: 1 }, area: { w: 6, d: 6, zone: 1 }, gust: { w: 4, h: 3, d: 4, a: 0, iv: 4, pw: 18 }, mover: { w: 4, h: 1, d: 4, m: "wood", bx: 0, by: 0, bz: 0, sp: 4 } };
 function thumb(k) {
   if (THUMB[k]) return THUMB[k];
-  if (k === "erase") return (THUMB[k] = "data:image/svg+xml," + encodeURIComponent(`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24">${ICON.erase}</svg>`));
+  if (k === "erase" || k === "select") return (THUMB[k] = "data:image/svg+xml," + encodeURIComponent(`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24">${ICON[k === "select" ? "cursor" : "erase"]}</svg>`));
   const q = { id: 0, k, x: 0, y: 0, z: 0, r: 0, ...(THUMB_Q[k] || {}) }; let g;
   if (k === "shot") { g = new THREE.Group(); g.add(new THREE.Mesh(new THREE.RingGeometry(1.2, 1.6, 28).rotateX(-Math.PI / 2), new THREE.MeshBasicMaterial({ color: "#ffd84a", side: THREE.DoubleSide }))); const p = new THREE.Mesh(new THREE.CylinderGeometry(0.1, 0.1, 3, 6), mat("#ffffff")); p.position.y = 1.5; g.add(p); box(0.9, 0.6, 1.1, "#23303b", 0, 3.1, 0, g, false); const l = new THREE.Mesh(new THREE.CylinderGeometry(0.22, 0.3, 0.4, 10).rotateX(Math.PI / 2), mat("#23303b")); l.position.set(0, 3.1, 0.75); g.add(l); }
   else if (k === "area") { g = new THREE.Group(); const bx = new THREE.Mesh(new THREE.BoxGeometry(6, 3, 6), new THREE.MeshBasicMaterial({ color: World.TIERS[1].c, transparent: true, opacity: 0.35 })); bx.position.y = 1.5; g.add(bx, new THREE.LineSegments(new THREE.EdgesGeometry(bx.geometry), new THREE.LineBasicMaterial({ color: "#23303b" }))); g.children[1].position.y = 1.5; }
@@ -1110,12 +1112,17 @@ function buildBar() {
   // (owner, 2026-11-14) the next neighborhood can be edited only once a gate into it is placed
   bm.zone = Math.min(bm.zone, zoneReach()); const zLabel = () => World.zoneName(bm.zone); step(zLabel, () => bm.zone, (v) => { bm.zone = v; bm.zd = null; bm.shotPick = undefined; drawAreas(); if ($("zpanel").style.display === "block") zonePanel(); }, 0, zoneReach());
   row2.lastChild.querySelector("span").style.boxShadow = "inset 0 -4px 0 " + World.TIERS[bm.zone].c; row2.appendChild(ibtn("settings", "Neighborhood", () => { const P = $("zpanel"); if (P.style.display === "block") { P.style.display = "none"; bm.zd = null; bm.shotPick = undefined; drawAreas(); } else zonePanel(); }, "bt"));
-  if ((bm.tool === "gust" || bm.tool === "mover") && hazSel()) {   // (owner, 2026-11-13) the selected gust or platform's settings
+  if (bm.tool === "select" && hazSel()) {   // (owner, 2026-11-14) the selected piece's settings: whatever it has, a turn, Delete
     const q = hazSel(), ch = (f) => (v) => { const a = { ...q }; f(a, v); doSet(q, a); };
-    step(() => "W " + q.w, () => q.w, ch((a, v) => (a.w = v)), 1, World.BLOCK_MAX); step(() => "H " + q.h, () => q.h, ch((a, v) => (a.h = v)), 1, World.BLOCK_MAX); step(() => "D " + q.d, () => q.d, ch((a, v) => (a.d = v)), 1, World.BLOCK_MAX);
+    if ("h" in q && "w" in q && "d" in q) { step(() => "W " + q.w, () => q.w, ch((a, v) => (a.w = v)), 1, World.BLOCK_MAX); step(() => "H " + q.h, () => q.h, ch((a, v) => (a.h = v)), 1, World.BLOCK_MAX); step(() => "D " + q.d, () => q.d, ch((a, v) => (a.d = v)), 1, World.BLOCK_MAX); }
+    if (q.k === "wall") step(() => "L " + q.w, () => q.w, ch((a, v) => (a.w = v)), 1, World.BLOCK_MAX);
+    if (q.k === "block" || q.k === "mover") { const mb = btn(q.m[0].toUpperCase() + q.m.slice(1), () => { let m = q.m; do m = World.MATS[(World.MATS.indexOf(m) + 1) % World.MATS.length]; while (q.k === "mover" && m === "turbine"); doSet(q, { ...q, m }); }, "bt mat"); mb.style.background = MAT_C[q.m]; row2.appendChild(mb); }
+    if (q.k !== "gust" && q.k !== "mover" && q.k !== "block") row2.appendChild(ibtn("rotate", "Turn", () => doSet(q, q.k === "spawn" ? { ...q, a: ((q.a | 0) + 45) % 360 } : { ...q, r: ((q.r | 0) + 1) % 4 }), "bt"));
+    if (q.k === "gust") row2.appendChild(ibtn("rotate", "Turn", () => doSet(q, { ...q, a: ((q.a | 0) + 45) % 360 }), "bt"));
     if (q.k === "gust") { step(() => "Every " + q.iv + "s", () => Math.round(q.iv * 2), ch((a, v) => (a.iv = v / 2)), 1, 60); step(() => "Power " + q.pw, () => q.pw, ch((a, v) => (a.pw = v)), 1, 60); }
-    else { step(() => "Speed " + q.sp, () => q.sp, ch((a, v) => (a.sp = v)), 1, 30); const pb = ibtn("pin", "B", () => { bm.bPick = !bm.bPick; buildBar(); }, "bt" + (bm.bPick ? " on" : "")); row2.appendChild(pb); }
-    row2.appendChild(ibtn("close", "Deselect", () => { bm.hsel = 0; bm.bPick = false; buildBar(); drawHazSel(); }, "bt"));
+    else if (q.k === "mover") { step(() => "Speed " + q.sp, () => q.sp, ch((a, v) => (a.sp = v)), 1, 30); const pb = ibtn("pin", "B", () => { bm.bPick = !bm.bPick; buildBar(); }, "bt" + (bm.bPick ? " on" : "")); row2.appendChild(pb); }
+    row2.appendChild(ibtn("erase", "Delete", () => { doDel(q); bm.hsel = 0; bm.bPick = false; buildBar(); drawHazSel(); }, "bt"));
+    row2.appendChild(ibtn("close", "Deselect", () => { bm.hsel = 0; bm.bPick = false; buildBar(); drawHazSel(); buildAim(bm.px, bm.py); }, "bt"));
   } else if (bm.tool === "block" || bm.tool === "gust" || bm.tool === "mover") {
     step(() => "W " + bm.w, () => bm.w, (v) => (bm.w = v), 1, World.BLOCK_MAX); step(() => "H " + bm.h, () => bm.h, (v) => (bm.h = v), 1, World.BLOCK_MAX); step(() => "D " + bm.d, () => bm.d, (v) => (bm.d = v), 1, World.BLOCK_MAX);
     if (bm.tool !== "gust") { const mb = btn(bm.m[0].toUpperCase() + bm.m.slice(1), () => { do bm.m = World.MATS[(World.MATS.indexOf(bm.m) + 1) % World.MATS.length]; while (bm.tool === "mover" && bm.m === "turbine"); buildBar(); buildAim(bm.px, bm.py); }, "bt mat"); mb.style.background = MAT_C[bm.m]; row2.appendChild(mb); }
@@ -1162,10 +1169,14 @@ function buildPiece(a, base) {   // the piece the bar (or the clipboard: base) w
   if (T === "spawn") q.a = base ? base.a | 0 : Math.round(bm.a) % 360;
   return q;
 }
+const moverB = (a, s) => { const r0 = bm.r; bm.r = 0; const t = buildPiece(a, { ...s, k: "mover" }); bm.r = r0; return t; };   // where a platform's B would go, at the pointer
 function buildAim(px, py) {
   if (!bm) return; bm.px = px; bm.py = py; if (bm.ghost) { scene.remove(bm.ghost); bm.ghost = null; }
   const a = pieceAt(px, py); bm.aim = a; if (!a) return; let g = null;
-  if (bm.tool === "erase" || bm.tool === "cut" || bm.tool === "copy") { const q = a.id && World.build.find((o) => o.id === a.id); if (q) g = hologram(q, bm.tool !== "copy"); }
+  if (bm.tool === "select") {   // (owner, 2026-11-14) picking a platform's B: a ghost where it would go, and the path there
+    const s = hazSel(); if (bm.bPick && s && s.k === "mover") { const t = moverB(a, s); g = hologram({ ...t, id: 0 }); const ln = new THREE.Line(new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(s.x + s.w / 2, s.y + s.h, s.z + s.d / 2), new THREE.Vector3(t.x + s.w / 2, t.y + s.h, t.z + s.d / 2)]), new THREE.LineDashedMaterial({ color: "#ffd84a", dashSize: 0.6, gapSize: 0.4, depthTest: false })); ln.computeLineDistances(); ln.renderOrder = 6; g.add(ln); }
+  }
+  else if (bm.tool === "erase" || bm.tool === "cut" || bm.tool === "copy") { const q = a.id && World.build.find((o) => o.id === a.id); if (q) g = hologram(q, bm.tool !== "copy"); }
   else if (bm.tool === "paste") { if (bm.clip) g = hologram({ ...buildPiece(a, bm.clip), id: 0 }); }
   else if (bm.tool !== "area" && bm.tool !== "shot") g = hologram({ ...buildPiece(a), id: 0 });
   if (g) { scene.add(g); bm.ghost = g; }
@@ -1198,11 +1209,10 @@ function paintStart(px, py) {
   if (bm.shotPick !== undefined && bm.zd && bm.zd.shots[bm.shotPick]) { const a = pieceAt(px, py); if (a) { Object.assign(bm.zd.shots[bm.shotPick], { x: Math.round(a.p.x), y: Math.round(a.p.y), z: Math.round(a.p.z) }); bm.shotPick = undefined; sfx("pad"); zonePanel(); drawAreas(); } return; }   // (owner, 2026-11-13) a shot's point
   if (bm.tool === "area") { areaStart(px, py); return; }
   if (bm.tool === "shot") { const a = pieceAt(px, py), L = shotList(); if (a && L.length < World.SHOTS_MAX) { L.push({ name: "", x: Math.round(a.p.x), y: Math.round(a.p.y), z: Math.round(a.p.z) }); saveShots(L); bm.shotSel = L.length - 1; sfx("pad"); setTimeout(drawAreas, 150); } return; }
-  if (bm.tool === "gust" || bm.tool === "mover") {   // (owner, 2026-11-13) click one to select it; with B picking, the click sets the platform's B
+  if (bm.tool === "select") {   // (owner, 2026-11-14) Select: click a piece to select it (empty space lets go); with B picking, the click sets the platform's B
     const a = pieceAt(px, py), s = hazSel();
-    if (bm.bPick && s && s.k === "mover" && a) { const t = buildPiece(a, { ...s, k: "mover" }); doSet(s, { ...s, bx: t.x - s.x, by: t.y - s.y, bz: t.z - s.z }); bm.bPick = false; sfx("pad"); buildBar(); return; }
-    const q = a && a.id && World.build.find((o) => o.id === a.id && o.k === bm.tool); if (q) { bm.hsel = q.id; bm.bPick = false; sfx("tick"); buildBar(); drawHazSel(); return; }
-    if (s) { bm.hsel = 0; bm.bPick = false; buildBar(); drawHazSel(); }
+    if (bm.bPick && s && s.k === "mover" && a) { const t = moverB(a, s); doSet(s, { ...s, bx: t.x - s.x, by: t.y - s.y, bz: t.z - s.z }); bm.bPick = false; sfx("pad"); buildBar(); buildAim(px, py); return; }
+    const q = a && a.id && World.build.find((o) => o.id === a.id && o.k !== "area"); bm.hsel = q ? q.id : 0; bm.bPick = false; if (q) sfx("tick"); buildBar(); drawHazSel(); return;
   }
   buildAim(px, py); const a = bm.aim; if (!a) return;
   if (bm.tool === "erase") { bm.paint = { erase: new Set() }; paintMove(px, py); return; }
@@ -1458,7 +1468,7 @@ function onNet(m) {
     case "reset": location.reload(); break;   // (owner, 2026-11-11) staff made this a brand new courier
     case "petup": adopt(m.data); remount(); sfx("buy"); if (panel === "stable") renderPanel(); emit(me.x, me.y + 2, me.z, 30, { colors: ["#c77dff", "#ffffff", "#e2b8ff"], speed: 4, up: 5, life: 1 }); break;
     case "buildok": { const f = pend.get(m.tag); pend.delete(m.tag); if (f) f(m.id); break; }
-    case "build": World.setBuild({ pieces: m.build || [], zones: m.zones || [] }); drawBuild(); setPods(lastPods); if (bm) { buildAim(bm.px, bm.py); pipeSel(); drawHazSel(); if (bm.sel && !World.build.some((q) => q.id === bm.sel)) bm.sel = 0; drawAreas(); if ($("zpanel").style.display === "block") zonePanel(); } break;   // (owner, 2026-11-13) someone built
+    case "build": World.setBuild({ pieces: m.build || [], zones: m.zones || [] }); drawBuild(); setPods(lastPods); if (bm) { if (bm.tool === "select" && bm.hsel) buildBar(); buildAim(bm.px, bm.py); pipeSel(); drawHazSel(); if (bm.sel && !World.build.some((q) => q.id === bm.sel)) bm.sel = 0; drawAreas(); if ($("zpanel").style.display === "block") zonePanel(); } break;   // (owner, 2026-11-13) someone built
     case "aura": save.coins = m.coins; popup("+" + fmt(m.n), "#d9a6ff", me.x, me.y + 2.6, me.z); hudDirty = true; break;   // (owner, 2026-11-12) a podium paid
     case "podiums": setPods(m.pods); break;
     case "upgraded": adopt(m.data); remount(); sfx("buy"); emit(me.x, me.y + 2, me.z, 30, { colors: ["#ffd84a", "#ffffff", "#7ee08a"], speed: 4, up: 5, life: 1 }); break;
@@ -1675,6 +1685,7 @@ function pieceMesh(q, live) {
     else if (q.k === "spawn") { const g = new THREE.Group(); g.position.set(q.x, q.y + 0.08, q.z); g.rotation.y = q.a !== undefined ? (q.a * Math.PI) / 180 : (q.r | 0) * Math.PI / 2; G.add(g); if (live) { G.visible = !!bm; spawnG = G; }   /* (owner, 2026-11-13) only builders see it */ const sm = new THREE.MeshBasicMaterial({ color: "#7ef0c8", transparent: true, opacity: 0.85 });
       g.add(new THREE.Mesh(new THREE.RingGeometry(0.6, 0.9, 24).rotateX(-Math.PI / 2), sm)); const ar = new THREE.Mesh(new THREE.ConeGeometry(0.35, 0.8, 3).rotateX(Math.PI / 2), sm); ar.position.set(0, 0.05, 1.4); ar.scale.y = 0.15; g.add(ar); }   // which way couriers face
   G.traverse((o) => { o.userData.pid = q.id; });
+  G.traverse((o) => { o.userData.pid = q.id; });
   return G;
 }
 // (owner, 2026-11-13) shift-click two pipes, then Link joins them into a shortcut (Unlink parts two already joined)
@@ -1689,7 +1700,7 @@ function pipeSel() {
   P.innerHTML = ""; P.appendChild(btn(joined ? "Unlink" : "Link", () => { netSend(joined ? { t: "build", op: "unlink", a } : { t: "build", op: "link", a, b }); sfx("pad"); bm.psel = []; pipeSel(); }, "go")); P.appendChild(ibtn("close", "Close", () => { bm.psel = []; pipeSel(); }, "bt")); P.style.display = "flex";
 }
 let spawnG = null; const buildOnly = [], fans = [], moverMeshes = [];   // (owner, 2026-11-13) what only builders see; turbines' fans; moving platforms
-const hazSel = () => (bm && bm.hsel && World.build.find((q) => q.id === bm.hsel && (q.k === "gust" || q.k === "mover"))) || null;
+const hazSel = () => (bm && bm.hsel && World.build.find((q) => q.id === bm.hsel && q.k !== "area")) || null;   // (owner, 2026-11-14) the selected piece (Select)
 function drawHazSel() { if (bm && bm.hselG) { scene.remove(bm.hselG); bm.hselG = null; } const q = hazSel(); if (!q) return; const [w, h, d, x, y, z] = pieceBox(q); const e = new THREE.LineSegments(new THREE.EdgesGeometry(new THREE.BoxGeometry(w + 0.2, h + 0.2, d + 0.2)), new THREE.LineBasicMaterial({ color: "#ffd84a" })); e.position.set(x, y, z); bm.hselG = e; scene.add(e); }
 // each frame: moving platforms where they are now, fans spinning, a gust's wind while it blows, a turbine's updraft
 function stepHazards(dt) {
@@ -1805,8 +1816,8 @@ function frame(tms) {
   if (hitStop > 0) { hitStop -= dt; renderer.render(scene, camera); return; }   // a landed kick holds the picture for a beat
   if (loggedIn) {
     stepMe(dt);
-    if (bm && (bm.tool === "spawn" || bm.tool === "gust") && keys.has("KeyR")) { const s = hazSel(); if (s && s.k === "gust") { bm.hdraft = { ...(bm.hdraft || s), a: Math.round(((bm.hdraft || s).a + 120 * dt) % 360) }; } else { bm.a = (bm.a + 120 * dt) % 360; buildAim(bm.px, bm.py); } }
-    else if (bm && bm.hdraft) { const s = hazSel(); if (s) doSet(s, bm.hdraft); bm.hdraft = null; }   // a selected gust turned with R: sent when R comes up
+    if (bm && (bm.tool === "spawn" || bm.tool === "gust" || bm.tool === "select") && keys.has("KeyR")) { const s = bm.tool === "select" ? hazSel() : null; if (s && (s.k === "gust" || s.k === "spawn")) { bm.hdraft = { ...(bm.hdraft || s), a: Math.round(((bm.hdraft || s).a + 120 * dt) % 360) }; } else { bm.a = (bm.a + 120 * dt) % 360; buildAim(bm.px, bm.py); } }
+    else if (bm && bm.hdraft) { const s = hazSel(); if (s) doSet(s, bm.hdraft); bm.hdraft = null; }   // a selected gust or respawn point turned with R: sent when R comes up
     stepHazards(dt);
     if (me.kickT > 0) me.kickT -= dt; if (me.squash > 0) me.squash -= dt; if (me.hop > 0) me.hop -= dt;
     if (me.stun > 0 && Math.random() < 0.35) emit(me.x, me.y + 2.2, me.z, 1, { colors: ["#ffd84a"], speed: 1.5, up: 0.5, life: 0.5, grav: 0, size: 0.16 });
@@ -1820,6 +1831,6 @@ function frame(tms) {
 }
 buildTown(); buildProps(); buildAnimals(); buildGates(); beltShow(); stepCamera(0.016);
 // for the tests and the console
-window.Pets = { World, me, cam, others, show: { playZones, levelFx, hatchShow, startReveal, auraPop, get cine() { return cine; } }, get save() { return save; }, get parcel() { return bag[0] || null; }, get bag() { return bag; }, get cap() { return cap; }, get belt() { return belt; }, get stolen() { return stolen; }, get dropped() { return dropped; }, get loggedIn() { return loggedIn; }, get role() { return myRole; }, THREE, camera, get panel() { return panel; }, dogMesh, gooseMesh, goatMesh, get arrow() { return wayArrow; }, readyAt, onNet, teleport(x, z, y = 0) { me.x = x; me.z = z; me.y = y; me.vx = me.vz = me.vy = 0; me.transit = null; me.ground = false; sendPos(true); }, netSend, openPanel };
+window.Pets = { World, me, cam, others, show: { playZones, levelFx, hatchShow, startReveal, auraPop, get cine() { return cine; } }, get save() { return save; }, get parcel() { return bag[0] || null; }, get bag() { return bag; }, get cap() { return cap; }, get belt() { return belt; }, get stolen() { return stolen; }, get dropped() { return dropped; }, get loggedIn() { return loggedIn; }, get role() { return myRole; }, get free() { return free; }, THREE, camera, get panel() { return panel; }, dogMesh, gooseMesh, goatMesh, get arrow() { return wayArrow; }, readyAt, onNet, teleport(x, z, y = 0) { me.x = x; me.z = z; me.y = y; me.vx = me.vz = me.vy = 0; me.transit = null; me.ground = false; sendPos(true); }, netSend, openPanel };
 $("lgo").disabled = $("lnew").disabled = true;
 connect(); requestAnimationFrame(frame);

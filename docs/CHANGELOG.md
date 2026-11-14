@@ -6,6 +6,8 @@ and any rule decided. Use `git log` for the code detail (and for the older Atamu
 
 ## 2026-11-14
 
+- **Select in the builder (owner).** The builder opens on Select: click any piece to select it and change its settings,
+  turn it or delete it. Picking a platform's B shows a ghost of where it would go and the path there.
 - **Cinematic shots in the world (owner).** A Shot tile places a neighborhood's cinematic points in the world; picking
   one shows move arrows (east-west, north-south, up-down) to drag it, saved as you let go. Only builders see them.
 - **Gates chain the neighborhoods (owner).** Gates and walls placed while editing a neighborhood lead into the next one,

@@ -235,12 +235,12 @@ is one 1 m grass block (`SEED`) to stand on, with sky all round. Everything is a
       Turbine (a spinning fan on top; its updraft, 12 m high over the block, blows you up into the air).
     - **Gust:** a box of wind (W / H / D, like a block) that blows the way it's turned (hold R to turn it, any angle)
       for 1.6 s out of every few seconds (the same moment for everyone), pushing riders inside. Players see its wind
-      streaks; only builders see its box and arrow. Click a placed gust (with the Gust tool) to select it: its size,
-      Every (the interval, 0.5 to 30 s) and Power (1 to 60), and R turns it.
+      streaks; only builders see its box and arrow. Selected (Select tile): its size, Every (the interval, 0.5 to
+      30 s) and Power (1 to 60), and R (held) or the turn button turns it.
     - **Platform:** a block (W / H / D, any material but Turbine) going back and forth between where it was placed (A)
-      and B at its Speed (m/s), resting 0.6 s at each end; riders standing on it go along. Click a placed platform
-      (with the Platform tool) to select it: its size, Speed, and the pin (then click where B goes). Builders see B as
-      a yellow ghost with a dashed line. Its sides don't stop you (only its top holds you).
+      and B at its Speed (m/s), resting 0.6 s at each end; riders standing on it go along. Selected (Select tile): its size, material, Speed, and the pin:
+      (owner, 2026-11-14) while picking B a ghost of the platform follows the pointer with a dashed line from A showing
+      the path, and a click sets B. Builders see B as a yellow ghost with a dashed line. Its sides don't stop you (only its top holds you).
   - **Bounds** (owner, 2026-11-13): a rectangle (up to 1000 x 1000 m, any height) for a neighborhood. **Anything inside
     belongs to that neighborhood** (where bounds overlap, the smallest wins); outside every bounds is Main Street.
 - **The neighborhood a spot is in** is its bounds' (above): it names the mailboxes and colors the houses, and sets the
@@ -259,7 +259,10 @@ is one 1 m grass block (`SEED`) to stand on, with sky all round. Everything is a
   10 / 5 / 1%, 1 in 10,000). The Odds menu's tier names are the neighborhoods' names.
 - **Building** (admins; (owner, 2026-11-13) the Build button on screen, a hammer under the menu buttons; "no need for
   phone editor": building is for a computer, an exception to mobile parity): the freecam (fly where you look: WASD,
-  Space or E up, C or Q down, Shift faster; drag to look) and a bar at the bottom ((owner, 2026-11-13) every piece a rounded tile with a picture of
+  Space or E up, C or Q down, Shift faster; drag to look) and a bar at the bottom, (owner, 2026-11-14) starting on **Select**: click any piece to select it (a yellow outline;
+  empty space lets go) and the bar shows what it has to change: W / H / D, material, L (a wall), a gust's Every and
+  Power, a platform's Speed and B, a turn (R too), Delete (the Delete key too) and Deselect; the other tiles place
+  pieces ((owner, 2026-11-13) every piece a rounded tile with a picture of
   the piece and its name under it): Block, House, Mailbox, Gate, Wall,
   Tree, Boost, Start Line / Podium, Respawn, Post Office, Bounds, Erase, ⟳ (turn; R) and ✕ (Escape or the Build
   button); under it **the neighborhood you're editing** (− name +) and ⚙, then W / H / D and the material for a block,
