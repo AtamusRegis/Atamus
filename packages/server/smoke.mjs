@@ -181,6 +181,12 @@ try {
     const mv = W.build.find((q) => q.k === "mover"); ok(W.moverPos(mv, 0).x === -540 && Math.abs(W.moverPos(mv, 2 + W.MOVER.rest).x - -530) < 1e-9 && W.moverUnder(-538, -498, 3.2, 0).top === 3 && !W.moverUnder(-538, -498, 3.2, 2 + W.MOVER.rest), "a platform goes from A to B and back, and can be stood on where it is");
     n.send({ t: "build", op: "set", piece: { ...W.build.find((q) => q.k === "gust"), iv: 2.5, pw: 40 } }); await b.wait((m) => m.t === "build" && m.build.some((q) => q.k === "gust" && q.pw === 40), "the gust edited"); ok(W.gusts[0].iv === 2.5 && W.gusts[0].pw === 40, "a gust's interval and power change after it's placed");
     for (const id of ids) n.send({ t: "build", op: "del", id }); await sleep(150); }
+  // (owner, 2026-11-14) breaking platforms: on step (a timer from the first step), prolonged (time stood on), and back after their respawn time
+  { n.send({ t: "build", op: "add", piece: { k: "mover", x: -600, z: -600, y: 5, w: 4, h: 1, d: 4, bx: 0, by: 0, bz: 0, brk: 1, bt: 0.5, rs: 1 }, tag: 51 }); const id = (await n.wait((m) => m.t === "buildok" && m.tag === 51, "a breaking platform")).id; await sleep(150);
+    ok(W.build.find((q) => q.id === id).brk === 1 && W.build.find((q) => q.id === id).rs === 1, "a platform's breaking settings are kept");
+    await put(a, "smokeA", -598, -598, 6); const wn = await a.wait((m) => m.t === "plat" && m.id === id && m.warn !== undefined, "it shakes"); const gn = await a.wait((m) => m.t === "plat" && m.id === id && m.gone > 0, "it breaks", 3000);
+    ok(gn.gone * 1000 > Date.now() && wn, "stood on, a platform shakes, then breaks"); const bk = await a.wait((m) => m.t === "plat" && m.id === id && m.gone === 0, "it's back", 3000); ok(bk, "it comes back after its respawn time");
+    await put(a, "smokeA", 0, 7.5); n.send({ t: "build", op: "del", id }); await sleep(150); }
   // (owner, 2026-11-13) pipe shortcuts: two pipes the builder links; riding into one's mouth comes out of the other's, facing out
   { n.send({ t: "build", op: "add", piece: { k: "pipe", x: -120, z: 0, y: 0, r: 0 }, tag: 21 }); const p1 = (await n.wait((m) => m.t === "buildok" && m.tag === 21, "a pipe")).id;
     n.send({ t: "build", op: "add", piece: { k: "pipe", x: -160, z: 30, y: 0, r: 1 }, tag: 22 }); const p2 = (await n.wait((m) => m.t === "buildok" && m.tag === 22, "another pipe")).id; await sleep(100);

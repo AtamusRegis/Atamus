@@ -35,7 +35,7 @@ const rankOf = (a) => (a.name.toLowerCase() === OWNER ? 3 : RANK[a.role] || 0);
 const between = ([a, b]) => a + Math.random() * (b - a);
 
 function makeRoom() {
-  const r = { players: new Map(), last: Date.now(), tick: 0, slow: 0, rocks: [], dives: [], pods: [null, null, null], podAt: 0, podPay: Date.now() + W.PODIUM.every * 1000 };
+  const r = { players: new Map(), last: Date.now(), tick: 0, slow: 0, rocks: [], dives: [], plats: new Map(), pods: [null, null, null], podAt: 0, podPay: Date.now() + W.PODIUM.every * 1000 };
   r.dogs = W.dogs.map((d) => ({ id: d.id, x: d.hx, z: d.hz, y: d.y, yaw: 0, mode: 0, t: 0, target: null, cool: 0, pause: 0, stuck: 0, awake: false }));
   r.geese = W.geese.map((g) => ({ id: g.id, x: g.x, z: g.z, y: g.y, yaw: 0, mode: 0, t: 0, target: null, carry: null, wx: g.x, wz: g.z, awake: false }));
   r.goats = W.goats.map((g) => ({ id: g.id, x: g.hx, z: g.hz, y: g.y, yaw: Math.PI / 2, mode: 0, t: 0, dx: 0, dz: 0, cool: 0, stuck: 0, awake: false }));
@@ -256,7 +256,7 @@ export function attachPets(server, { origins = [], allowLocal = false, store = m
           lastChat: 0, party: null, ready: null, next: null, bag: [], stolen: [], dropped: [], slots: new Set(), calmUntil: 0, pids: 0, stunUntil: 0, graceUntil: 0, lastIsle: -1, nextRock: 0, nextDive: 0, pipeAt: 0 };
         me.lx = me.x; me.lz = me.z; me.lt = now;
         online.set(acct.id, me);
-        send(ws, { t: "welcome", build: W.build, zones: W.zones, web: websiteBuild(), by: websiteBy(), now, id: me.id, name: me.name, role: rankOf(acct) >= 2 ? "admin" : acct.role, token, data: acct.data, x: me.x, y: me.y, z: me.z, players: [...room.players.values()].map(pub),
+        send(ws, { t: "welcome", plats: [...room.plats].filter(([, st]) => st.goneUntil).map(([id, st]) => [id, st.goneUntil === Infinity ? 1e12 : r1(st.goneUntil / 1000)]), build: W.build, zones: W.zones, web: websiteBuild(), by: websiteBy(), now, id: me.id, name: me.name, role: rankOf(acct) >= 2 ? "admin" : acct.role, token, data: acct.data, x: me.x, y: me.y, z: me.z, players: [...room.players.values()].map(pub),
           dogs: room.dogs.map(dogView), geese: room.geese.map(gooseView), goats: room.goats.map(goatView), pods: podView(room) });
         room.players.set(me.id, me);
         all(room, { t: "join", p: pub(me) }, me);
@@ -407,7 +407,7 @@ export function attachPets(server, { origins = [], allowLocal = false, store = m
           else if (m.op === "zone") { const n = +m.n; if (!(n >= 0 && n < W.TIERS.length)) break; W.zones[n] = W.cleanZone(m.zone, n); }   // a neighborhood's name, animal and chances
           else break;
           W.setBuild({ pieces: list, zones: W.zones.slice() }); store.saveBuild({ pieces: W.build, zones: W.zones }).catch((e) => console.error("[pets] saveBuild", e.message));
-          for (const r of rooms) { all(r, { t: "build", build: W.build, zones: W.zones }); for (const p of r.players.values()) { for (const k of ["ready", "next"]) if (p[k] && !W.housesIn(p[k].tier).length) p[k] = null; fillBelt(p); } }
+          for (const r of rooms) { r.plats.clear(); all(r, { t: "build", build: W.build, zones: W.zones }); for (const p of r.players.values()) { for (const k of ["ready", "next"]) if (p[k] && !W.housesIn(p[k].tier).length) p[k] = null; fillBelt(p); } }
           break;
         }
         case "admin": admin(me, m).catch((e) => { console.error("[pets] admin", e.message); send(ws, { t: "admin_msg", msg: "Failed" }); }); break;
@@ -527,6 +527,20 @@ export function attachPets(server, { origins = [], allowLocal = false, store = m
       g.mode = 0; g.wx = undefined;   // kicked: it thinks better of it
     }
   }
+  // (owner, 2026-11-14) breaking platforms (per room): stood on, a platform shakes and then breaks (on step: bt s after
+  // it's first stood on; prolonged: once it's been stood on for bt s in all), and comes back rs s later (never with rs 0)
+  function stepPlats(r, players, now) {
+    const t = now / 1000;
+    for (const q of W.movers) {
+      if (!q.brk) continue; let st = r.plats.get(q.id); if (!st) r.plats.set(q.id, (st = { on: 0, warnAt: 0, goneUntil: 0, last: now }));
+      const dt = (now - st.last) / 1000; st.last = now;
+      if (st.goneUntil) { if (now >= st.goneUntil && st.goneUntil !== Infinity) { st.goneUntil = 0; st.on = 0; st.warnAt = 0; all(r, { t: "plat", id: q.id, gone: 0 }); } continue; }
+      const p0 = W.moverPos(q, t), top = p0.y + q.h, stood = players.some((p) => !p.gone && Math.abs(p.y - top) < 0.45 && p.x >= p0.x - 0.3 && p.x <= p0.x + q.w + 0.3 && p.z >= p0.z - 0.3 && p.z <= p0.z + q.d + 0.3);
+      if (q.brk === 1) { if (!st.warnAt && stood) { st.warnAt = now + q.bt * 1000; all(r, { t: "plat", id: q.id, warn: r1(st.warnAt / 1000) }); } }
+      else if (stood) { st.on += dt; if (!st.warnAt) { st.warnAt = 1; all(r, { t: "plat", id: q.id, warn: 0 }); } }
+      if ((q.brk === 1 && st.warnAt && now >= st.warnAt) || (q.brk === 2 && st.on >= q.bt)) { st.goneUntil = q.rs > 0 ? now + q.rs * 1000 : Infinity; all(r, { t: "plat", id: q.id, gone: q.rs > 0 ? r1(st.goneUntil / 1000) : 1e12 }); }
+    }
+  }
   function stepSky(r, players, now) {   // falling rocks on Cliffside; diving sky geese and the long drop on the islands
     for (const p of players) {
       const dist = W.districtAt(p.x, p.z, p.y);
@@ -576,7 +590,7 @@ export function attachPets(server, { origins = [], allowLocal = false, store = m
     for (const r of rooms) {
       const dt = Math.min(0.25, (now - r.last) / 1000); r.last = now;
       const players = [...r.players.values()];
-      stepDogs(r, players, dt, now); stepGeese(r, players, dt, now); stepGoats(r, players, dt, now); stepSky(r, players, now);
+      stepDogs(r, players, dt, now); stepGeese(r, players, dt, now); stepGoats(r, players, dt, now); stepSky(r, players, now); stepPlats(r, players, now);
       if ((r.tick = (r.tick + 1) % 2)) continue;
       const dg = r.dogs.filter((d) => d.awake), gs = r.geese.filter((g) => g.awake), gt = r.goats.filter((g) => g.awake);
       r.slow = (r.slow + 1) % 10; const ps = players.length > 1 ? players.filter((p) => p.fresh || !r.slow).map((p) => { p.fresh = false; return [p.id, r2(p.x), r2(p.z), r2(p.yaw), p.mv, r2(p.y), p.ct || 0]; }) : [];
