@@ -4,7 +4,7 @@
 // deliveries, rolls, damage, coins, mounts; this page shows the town (pets-world.js, shared with the server), moves you
 // and asks. Phone first: a thumb joystick, drag to look, pinch to zoom, big buttons.
 import * as THREE from "./vendor/three.module.min.js";
-import * as World from "./pets-world.js?v=1794628368";
+import * as World from "./pets-world.js?v=1794629324";
 
 const $ = (id) => document.getElementById(id);
 const { TAU, clamp, hyp, MOUNTS, TIERS, RARITY, RARITY_C, MODS, UPGRADES } = World;
@@ -1068,15 +1068,15 @@ let bm = null;
 const ray = new THREE.Raycaster(), ndc = new THREE.Vector2(), ground = new THREE.Plane(new THREE.Vector3(0, 1, 0), 0), hitV = new THREE.Vector3();
 $("mbuild").onclick = () => (bm ? endBuild() : startBuild());   // (owner, 2026-11-13) admins: the Build button on screen
 function startBuild() { closePanel(); if (!free) setFree(true); bm = { tool: "block", zone: 0, w: 2, h: 1, d: 2, m: "grass", r: 0, wl: 8, ly: 0, sel: 0, px: innerWidth / 2, py: innerHeight / 2, ghost: null, aim: null }; buildBar(); document.body.classList.add("building"); buildAim(bm.px, bm.py); drawAreas(); }
-function endBuild() { if (!bm) return; if (bm.ghost) scene.remove(bm.ghost); bm = null; $("buildbar").style.display = "none"; $("zpanel").style.display = "none"; drawAreas(); document.body.classList.remove("building"); setFree(false); }
+function endBuild() { if (!bm) return; bm.zd = null; if (bm.ghost) scene.remove(bm.ghost); bm = null; $("buildbar").style.display = "none"; $("zpanel").style.display = "none"; drawAreas(); document.body.classList.remove("building"); setFree(false); }
 function buildBar() {
   const B = $("buildbar"); B.innerHTML = ""; B.style.display = "flex"; const row0 = el("div", "brow"), row1 = el("div", "brow"), row2 = el("div", "brow");
   for (const [k, name, row] of [["block", "Block", row0], ["house", "House", row0], ["mailbox", "Mailbox", row0], ["gate", "Gate", row0], ["wall", "Wall", row0], ["tree", "Tree", row0], ["boost", "Boost", row0], ["start", "Start Line", row0], ["podium", "Podium", row1], ["spawn", "Respawn", row1], ["office", "Post Office", row1], ["area", "Bounds", row1], ["erase", "Erase", row1]]) row.appendChild(btn(name, () => { bm.tool = k; if (k !== "area") bm.sel = 0; buildBar(); buildAim(bm.px, bm.py); drawAreas(); }, "bt" + (bm.tool === k ? " on" : "")));
   row1.appendChild(btn("⟳", () => { bm.r = (bm.r + 1) % 4; buildAim(bm.px, bm.py); }, "bt")); row1.appendChild(btn("✕", endBuild, "bt")); B.appendChild(row0);
   const step = (label, get, set, lo, hi) => { const g = el("div", "bstep" + (label === zLabel ? " zone" : "")); g.appendChild(btn("−", () => { set(clamp(get() - 1, lo, hi)); buildBar(); buildAim(bm.px, bm.py); }, "bt")); g.appendChild(el("span", "", label())); g.appendChild(btn("+", () => { set(clamp(get() + 1, lo, hi)); buildBar(); buildAim(bm.px, bm.py); }, "bt")); row2.appendChild(g); };
   // (owner, 2026-11-13) the neighborhood you're editing: its bounds, gates and walls are placed for it; ⚙ its name, animal and chances
-  const zLabel = () => World.zoneName(bm.zone); step(zLabel, () => bm.zone, (v) => { bm.zone = v; drawAreas(); if ($("zpanel").style.display === "block") zonePanel(); }, 0, World.TIERS.length - 1);
-  row2.lastChild.querySelector("span").style.boxShadow = "inset 0 -4px 0 " + World.TIERS[bm.zone].c; row2.appendChild(btn("⚙", () => { const P = $("zpanel"); if (P.style.display === "block") P.style.display = "none"; else zonePanel(); }, "bt"));
+  const zLabel = () => World.zoneName(bm.zone); step(zLabel, () => bm.zone, (v) => { bm.zone = v; bm.zd = null; bm.shotPick = undefined; drawAreas(); if ($("zpanel").style.display === "block") zonePanel(); }, 0, World.TIERS.length - 1);
+  row2.lastChild.querySelector("span").style.boxShadow = "inset 0 -4px 0 " + World.TIERS[bm.zone].c; row2.appendChild(btn("⚙", () => { const P = $("zpanel"); if (P.style.display === "block") { P.style.display = "none"; bm.zd = null; bm.shotPick = undefined; drawAreas(); } else zonePanel(); }, "bt"));
   if (bm.tool === "block") {
     step(() => "W " + bm.w, () => bm.w, (v) => (bm.w = v), 1, World.BLOCK_MAX); step(() => "H " + bm.h, () => bm.h, (v) => (bm.h = v), 1, World.BLOCK_MAX); step(() => "D " + bm.d, () => bm.d, (v) => (bm.d = v), 1, World.BLOCK_MAX);
     const mb = btn(bm.m[0].toUpperCase() + bm.m.slice(1), () => { bm.m = World.MATS[(World.MATS.indexOf(bm.m) + 1) % World.MATS.length]; buildBar(); buildAim(bm.px, bm.py); }, "bt mat"); mb.style.background = MAT_C[bm.m]; row2.appendChild(mb);
@@ -1153,6 +1153,7 @@ function placeOnce(q) {
   if (P.done.some((o) => overlaps(o, bx))) return; P.done.push(bx); doAdd(q); sfx("pad");
 }
 function paintStart(px, py) {
+  if (bm.shotPick !== undefined && bm.zd && bm.zd.shots[bm.shotPick]) { const a = pieceAt(px, py); if (a) { Object.assign(bm.zd.shots[bm.shotPick], { x: Math.round(a.p.x), y: Math.round(a.p.y), z: Math.round(a.p.z) }); bm.shotPick = undefined; sfx("pad"); zonePanel(); drawAreas(); } return; }   // (owner, 2026-11-13) a shot's point
   if (bm.tool === "area") { areaStart(px, py); return; }
   buildAim(px, py); const a = bm.aim; if (!a) return;
   if (bm.tool === "erase") { bm.paint = { erase: new Set() }; paintMove(px, py); return; }
@@ -1212,18 +1213,34 @@ function drawAreas() {
     const e = new THREE.LineSegments(new THREE.EdgesGeometry(sides.geometry), new THREE.LineBasicMaterial({ color: sel ? "#ffd84a" : dk, transparent: true, opacity: on || sel ? 1 : 0.4 })); e.position.copy(sides.position); areaG.add(e);
     const t = textSprite(World.zoneName(q.zone), { size: 30, color: dk }); t.position.set(q.x + q.w / 2, y + H + 1, q.z + q.d / 2); areaG.add(t);
   }
+  // the neighborhood's shot points: a ring and a post with its number and name (what's being edited, if the panel's open)
+  const shots = bm.zd && bm.zd.n === bm.zone ? bm.zd.shots : World.zoneCfg(bm.zone).shots, sc = World.TIERS[bm.zone].c;
+  shots.forEach((q, k) => {
+    const ring = new THREE.Mesh(new THREE.RingGeometry(1.2, 1.6, 28).rotateX(-Math.PI / 2), new THREE.MeshBasicMaterial({ color: bm.shotPick === k ? "#ffd84a" : sc, transparent: true, opacity: 0.9, depthWrite: false, side: THREE.DoubleSide })); ring.position.set(q.x, q.y + 0.08, q.z); areaG.add(ring);
+    const post = new THREE.Mesh(new THREE.CylinderGeometry(0.08, 0.08, 3, 6), new THREE.MeshBasicMaterial({ color: "#ffffff" })); post.position.set(q.x, q.y + 1.5, q.z); areaG.add(post);
+    const t = textSprite((k + 1) + (q.name ? " · " + q.name : ""), { size: 28 }); t.position.set(q.x, q.y + 3.8, q.z); areaG.add(t);
+  });
 }
 // the neighborhood panel: its name, the animal it gives, each rarity's chance and the shiny chance
-function zonePanel() {
+function zonePanel() {   // (what's typed is kept while you pick shot points or the town changes, until Save or another neighborhood)
   const P = $("zpanel"), n = bm.zone, Z = World.zoneCfg(n); P.innerHTML = ""; P.style.display = "block";
-  const row = (name, node) => { const r = el("label", "zrow"); r.appendChild(el("span", "", name)); r.appendChild(node); P.appendChild(r); return node; };
-  const num = (v, step, lo, hi) => { const i = document.createElement("input"); i.type = "number"; i.step = step; i.min = lo; i.max = hi; i.value = v; return i; };
+  if (!bm.zd || bm.zd.n !== n) bm.zd = { n, name: Z.name, sp: Z.sp, chance: Z.chance.map((v) => +(v * 100).toFixed(3)), shinyN: Z.shiny > 0 ? Math.round(1 / Z.shiny) : 0, shots: Z.shots.map((q) => ({ ...q })) };
+  const D = bm.zd, row = (name, node) => { const r = el("label", "zrow"); r.appendChild(el("span", "", name)); r.appendChild(node); P.appendChild(r); return node; };
+  const num = (v, step, lo, hi, set) => { const i = document.createElement("input"); i.type = "number"; i.step = step; i.min = lo; i.max = hi; i.value = v; i.oninput = () => set(+i.value || 0); return i; };
   const h = el("b", "", World.zoneName(n)); h.style.boxShadow = "inset 0 -4px 0 " + World.TIERS[n].c; P.appendChild(h);
-  const nm = row("Name", document.createElement("input")); nm.maxLength = 24; nm.value = Z.name;
-  const sp = row("Animal", document.createElement("select")); for (const k of Object.keys(World.MOUNTS)) { const o = document.createElement("option"); o.value = k; o.textContent = World.MOUNTS[k].name; if (k === Z.sp) o.selected = true; sp.appendChild(o); }
-  const ch = World.RARITY.map((r, i) => { const inp = row(r + " %", num(+(Z.chance[i] * 100).toFixed(3), 0.1, 0, 100)); inp.previousSibling.style.color = World.RARITY_C[i] === "#ffffff" ? "" : "#" + new THREE.Color(World.RARITY_C[i]).multiplyScalar(0.8).getHexString(); return inp; });
-  const sh = row("Shiny 1 in", num(Z.shiny > 0 ? Math.round(1 / Z.shiny) : 0, 1, 0, 1e7));
-  const go = btn("Save", () => { const N = +sh.value; netSend({ t: "build", op: "zone", n, zone: { name: nm.value, sp: sp.value, chance: ch.map((i) => (+i.value || 0) / 100), shiny: N >= 2 ? 1 / N : 0 } }); sfx("pad"); P.style.display = "none"; }, "go"); P.appendChild(go);
+  const nm = row("Name", document.createElement("input")); nm.maxLength = 24; nm.value = D.name; nm.oninput = () => (D.name = nm.value);
+  const sp = row("Animal", document.createElement("select")); for (const k of Object.keys(World.MOUNTS)) { const o = document.createElement("option"); o.value = k; o.textContent = World.MOUNTS[k].name; if (k === D.sp) o.selected = true; sp.appendChild(o); } sp.onchange = () => (D.sp = sp.value);
+  World.RARITY.forEach((r, i) => { const inp = row(r + " %", num(D.chance[i], 0.1, 0, 100, (v) => (D.chance[i] = v))); inp.previousSibling.style.color = World.RARITY_C[i] === "#ffffff" ? "" : "#" + new THREE.Color(World.RARITY_C[i]).multiplyScalar(0.8).getHexString(); });
+  row("Shiny 1 in", num(D.shinyN, 1, 0, 1e7, (v) => (D.shinyN = v)));
+  // (owner, 2026-11-13) the cinematic shots shown when the neighborhood opens: 1 to 5, each a short name and a point the camera circles
+  P.appendChild(el("b", "zsub", "Shots"));
+  D.shots.forEach((q, k) => {
+    const r = el("div", "zshot" + (bm.shotPick === k ? " pick" : "")); r.appendChild(el("i", "", String(k + 1)));
+    const t = document.createElement("input"); t.maxLength = 24; t.value = q.name; t.oninput = () => { q.name = t.value; drawAreas(); }; r.appendChild(t);
+    r.appendChild(btn("📍", () => { bm.shotPick = bm.shotPick === k ? undefined : k; zonePanel(); }, "bt")); r.appendChild(btn("✕", () => { D.shots.splice(k, 1); bm.shotPick = undefined; zonePanel(); drawAreas(); }, "bt")); P.appendChild(r);
+  });
+  if (D.shots.length < World.SHOTS_MAX) P.appendChild(btn("+", () => { const a = bm.aim ? bm.aim.p : { x: me.x, y: me.y, z: me.z }; D.shots.push({ name: "", x: Math.round(a.x), y: Math.round(a.y), z: Math.round(a.z) }); bm.shotPick = D.shots.length - 1; zonePanel(); drawAreas(); }, "bt zadd"));
+  const go = btn("Save", () => { const N = D.shinyN; netSend({ t: "build", op: "zone", n, zone: { name: D.name, sp: D.sp, chance: D.chance.map((v) => v / 100), shiny: N >= 2 ? 1 / N : 0, shots: D.shots } }); sfx("pad"); bm.zd = null; bm.shotPick = undefined; P.style.display = "none"; drawAreas(); }, "go"); P.appendChild(go);
 }
 function tapAt(sx, sy) {   // tapping a courier: their name and a party invitation
   if (bm) { buildTap(sx, sy); return; }
@@ -1564,7 +1581,9 @@ let cine = null, gateHold = -1, lastOpen = 0, lastOpenFor = "", zoneCalm = 0;
 function zoneShow(d) {
   const G = World.gates.find((q) => q.d === d), gx = G ? G.x : me.x, gy = G ? G.y : me.y, gz = G ? G.z : me.z, nx = G ? G.s : 1, nz = G ? G.c : 0, wx = G ? G.c : 0, wz = G ? -G.s : 1;
   return [{ dur: 2.6, cam: (u) => ({ x: gx - nx * (20 - 8 * u) + wx * 6, y: gy + 10 - 3 * u, z: gz - nz * (20 - 8 * u) + wz * 6 }), look: () => ({ x: gx, y: gy + 2, z: gz }), title: World.zoneName(d).toUpperCase(), sub: "OPEN!", at: 1.0,
-    fx: () => { gateHold = -1; sfx("unlock"); flash("#ffffff"); cam.shake = 0.5; for (let k = 0; k < 60; k++) { const u = (Math.random() - 0.5) * World.GATE_W; emit(gx + wx * u, gy + 1 + Math.random() * 6, gz + wz * u, 1, { colors: ["#9aa8ff", "#ffffff", "#ffd84a"], speed: 6, up: 4, life: 1.2, size: 0.3 }); } } }];
+    fx: () => { gateHold = -1; sfx("unlock"); flash("#ffffff"); cam.shake = 0.5; for (let k = 0; k < 60; k++) { const u = (Math.random() - 0.5) * World.GATE_W; emit(gx + wx * u, gy + 1 + Math.random() * 6, gz + wz * u, 1, { colors: ["#9aa8ff", "#ffffff", "#ffd84a"], speed: 6, up: 4, life: 1.2, size: 0.3 }); } } },
+    // (owner, 2026-11-13) then each of the neighborhood's shots the builder set: the camera circles its point, its name up
+    ...World.zoneCfg(d).shots.map((q, k) => { const a0 = k * 2.1 + Math.atan2(q.x - gx, q.z - gz); return { dur: 4.2, cam: (u) => { const a = a0 + u * 2.2; return { x: q.x + Math.sin(a) * 15, y: q.y + 8 - 2 * u, z: q.z + Math.cos(a) * 15 }; }, look: () => ({ x: q.x, y: q.y + 1, z: q.z }), title: (q.name || World.zoneName(d)).toUpperCase(), sub: q.name ? World.zoneName(d) : "" }; })];
 }
 function playZones(ds) { if (!ds.length) return; const shots = ds.flatMap(zoneShow); gateHold = ds[0]; cine = { shots, i: 0, t: 0 }; $("cine").classList.add("on"); document.body.classList.add("cinema"); keys.clear(); }
 function endCine() { cine = null; gateHold = -1; $("cine").classList.remove("on"); document.body.classList.remove("cinema"); cam.d = undefined; }

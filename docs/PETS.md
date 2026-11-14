@@ -220,7 +220,12 @@ is one 1 m grass block (`SEED`) to stand on, with sky all round. Everything is a
 - **The neighborhood a spot is in** is its bounds' (above): it names the mailboxes and colors the houses, and sets the
   speed rule (5% per neighborhood short of or past a mount's own), and the sky color.
 - **Each neighborhood's settings** (owner, 2026-11-13; saved with the pieces): its name, the animal its parcels bring and
-  each rarity's chance and the Shiny chance for those mounts (defaults: the zone names, each zone's animal, 40 / 20 /
+  each rarity's chance and the Shiny chance for those mounts, and (owner, 2026-11-13) **up to 5 cinematic shots**: each a short name (what
+  it shows: "Wind", "Platforms"...) and a point. When the neighborhood opens, after its gate bursts open, the showing
+  goes through each shot in order: the camera circles the point (about 4 s) with the shot's name over the
+  neighborhood's. In the ⚙ panel: Shots, + (a new shot; the next left click in the world sets its point), each row's
+  name, 📍 (pick its point again) and ✕; Save keeps them. While building, the edited neighborhood's shot points show
+  as rings with a post and their number and name (defaults: the zone names, each zone's animal, 40 / 20 /
   10 / 5 / 1%, 1 in 10,000). The Odds menu's tier names are the neighborhoods' names.
 - **Building** (admins; (owner, 2026-11-13) the Build button on screen, a hammer under the menu buttons; "no need for
   phone editor": building is for a computer, an exception to mobile parity): the freecam (fly where you look: WASD,

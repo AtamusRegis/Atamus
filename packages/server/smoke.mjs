@@ -146,6 +146,8 @@ try {
     ok(W.build.find((q) => q.id === ack.id).k === "area" && W.addr(mb.id).d === 0, "bounds move after the fact (keeping their kind), and what's left outside goes back to Main Street");
     n.send({ t: "build", op: "zone", n: 4, zone: { name: "Hilltop", sp: "gator", chance: [1, 0, 0, 0, 0], shiny: 0.5 } }); const zb = await b.wait((m) => m.t === "build" && m.zones && m.zones[4].name === "Hilltop", "the neighborhood renamed");
     ok(W.zoneName(4) === "Hilltop" && W.zoneSp(4) === "gator" && W.zoneCfg(4).chance[0] === 1 && W.zoneCfg(4).shiny === 0.5 && (await store.loadBuild()).zones[4].name === "Hilltop" && zb.zones.length === W.TIERS.length, "a neighborhood's name, animal, chances and shiny are set and saved");
+    n.send({ t: "build", op: "zone", n: 4, zone: { ...W.zoneCfg(4), shots: [...Array.from({ length: 6 }, (_, k) => ({ name: "Wind " + k, x: k * 10, y: 5, z: -3 })), "junk"] } }); await b.wait((m) => m.t === "build" && m.zones && m.zones[4].shots.length, "the neighborhood's shots");
+    ok(W.zoneCfg(4).shots.length === 5 && W.zoneCfg(4).shots[1].name === "Wind 1" && W.zoneCfg(4).shots[1].x === 10 && W.zoneCfg(4).name === "Hilltop" && (await store.loadBuild()).zones[4].shots.length === 5 && W.zoneCfg(5).shots.length === 0, "a neighborhood keeps up to 5 cinematic shots, each a name and a point (saved)");
     const g = W.giftContents(0, 4, null, () => 0.3).pet; ok(g && g.sp === "gator" && g.r === 0, "its gifts are its animal");
     b.send({ t: "build", op: "zone", n: 4, zone: { name: "Nope" } }); await sleep(120); ok(W.zoneName(4) === "Hilltop", "a player can't change a neighborhood");
     n.send({ t: "build", op: "zone", n: 4, zone: {} }); n.send({ t: "build", op: "del", id: ack.id }); n.send({ t: "build", op: "del", id: mb.id });

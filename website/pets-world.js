@@ -311,9 +311,11 @@ export const buildings = [], gates = [], starts = [], areas = [];
 // next), the chance of each rarity and of a Shiny; an admin sets them in the builder. Where a spot belongs: the bounds
 // (areas) drawn for each; the smallest one a spot is in wins; outside every bound, the first neighborhood ----
 export const zones = [];
+export const SHOTS_MAX = 5;   // (owner, 2026-11-13) a neighborhood's cinematic shots, each { name, x, y, z }
 export function cleanZone(z, n) {
   z = z || {}; const ch = Array.isArray(z.chance) ? z.chance : PET_CHANCE;
-  return { name: (typeof z.name === "string" && z.name.trim() ? z.name.trim() : DISTRICTS[n]).slice(0, 24), sp: MOUNTS[z.sp] ? z.sp : ZONE_KIND[n], chance: PET_CHANCE.map((v, r) => clamp(Number.isFinite(+ch[r]) ? +ch[r] : v, 0, 1)), shiny: clamp(Number.isFinite(+z.shiny) ? +z.shiny : SHINY, 0, 0.5) };
+  return { name: (typeof z.name === "string" && z.name.trim() ? z.name.trim() : DISTRICTS[n]).slice(0, 24), sp: MOUNTS[z.sp] ? z.sp : ZONE_KIND[n], chance: PET_CHANCE.map((v, r) => clamp(Number.isFinite(+ch[r]) ? +ch[r] : v, 0, 1)), shiny: clamp(Number.isFinite(+z.shiny) ? +z.shiny : SHINY, 0, 0.5),
+    shots: (Array.isArray(z.shots) ? z.shots : []).filter((q) => q && typeof q === "object").slice(0, SHOTS_MAX).map((q) => ({ name: (typeof q.name === "string" ? q.name.trim() : "").slice(0, 24), x: clamp(Math.round(+q.x || 0), -GROUND.r, GROUND.r), y: clamp(Math.round(+q.y || 0), -40, 300), z: clamp(Math.round(+q.z || 0), -GROUND.r, GROUND.r) })) };
 }
 export const zoneCfg = (d) => zones[clamp(d | 0, 0, TIERS.length - 1)] || cleanZone(null, clamp(d | 0, 0, TIERS.length - 1));
 export const zoneName = (d) => zoneCfg(d).name, zoneSp = (d) => zoneCfg(d).sp;
