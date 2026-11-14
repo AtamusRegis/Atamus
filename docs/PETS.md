@@ -251,7 +251,10 @@ is one 1 m grass block (`SEED`) to stand on, with sky all round. Everything is a
       and Respawn): **Break On Step** shakes once someone first stands on it and breaks Timer s later; **Prolonged
       Step** shakes while stood on and breaks once it's been stood on for Timer s in all; broken, it's gone (riders on
       it fall) until it comes back Respawn s later (No Respawn: gone until the town is rebuilt). The server keeps the
-      state for each room, so everyone sees the same.
+      state for each room, so everyone sees the same. (owner, 2026-11-14) While it's about to break it shakes harder
+      as its timer runs out and dark cracks spread over it. **Its kind is picked before placing** (the Platform tile's
+      bar: Moving or Static, Speed, the breaking button, Timer, Respawn); placing a Moving one selects it and goes
+      straight on to picking its B.
   - **Bounds** (owner, 2026-11-13): a rectangle (up to 1000 x 1000 m, any height) for a neighborhood. **Anything inside
     belongs to that neighborhood** (where bounds overlap, the smallest wins); outside every bounds is Main Street.
 - **The neighborhood a spot is in** is its bounds' (above): it names the mailboxes and colors the houses, and sets the
@@ -263,8 +266,8 @@ is one 1 m grass block (`SEED`) to stand on, with sky all round. Everything is a
   neighborhood's. In the ⚙ panel: Shots, + (a new shot; the next left click in the world sets its point), each row's
   name, ▶ (plays that shot now, as typed, saved or not), 📍 (pick its point again) and ✕; Save keeps them. While building, the edited neighborhood's shot points show
   as rings with a post and their number and name ((owner, 2026-11-14) and a little camera; never shown to players). (owner, 2026-11-14)
-  **Shots are things in the world too:** the **Shot** tile places one where you click (up to 5 per neighborhood, saved
-  at once); click a shot to pick it and drag its **move arrows** (red east-west, blue north-south, green up-down, like
+  **Shots are things in the world too:** (owner, 2026-11-14) they're added only from the panel's shot list (no Shot
+  tile); click a shot to pick it and drag its **move arrows** (red east-west, blue north-south, green up-down, like
   an editor's move tool, the same size on screen at any distance) to move it a meter at a time, saved as you let go;
   Delete (or Backspace) takes the picked shot away (defaults: the zone names, each zone's animal, 40 / 20 /
   10 / 5 / 1%, 1 in 10,000). The Odds menu's tier names are the neighborhoods' names.
@@ -277,9 +280,12 @@ is one 1 m grass block (`SEED`) to stand on, with sky all round. Everything is a
   wheel (while building) raises or lowers where the next piece goes, a meter a notch (the blueprint shows it)
   ((owner, 2026-11-13) every piece a rounded tile with a picture of
   the piece and its name under it): Block, House, Mailbox, Gate, Wall,
-  Tree, Boost, Start Line / Podium, Respawn, Post Office, Bounds, Erase, ⟳ (turn; R) and ✕ (Escape or the Build
-  button); under it **the neighborhood you're editing** (− name +) and ⚙, then W / H / D and the material for a block,
-  L for a wall. (owner, 2026-11-13) Bounds are placed for the neighborhood you're editing; (owner, 2026-11-14) gates and
+  Tree, Boost, Start Line / Podium, Respawn, Post Office, Pipe, Gust, Platform, Bounds, Erase ((owner, 2026-11-14) no
+  turn or close buttons: R turns, Escape, B or the Build button closes); under it **the neighborhood you're editing**
+  (− name +) and ⚙, then (owner, 2026-11-14) W / H / L typed into one box side by side and the material for a block,
+  L for a wall (W / L for bounds). (owner, 2026-11-14) **A piece placed inside a neighborhood's bounds makes that the
+  neighborhood you're editing** (gates and walls keep the neighborhood they lead into). **The ⚙ panel opens on the
+  right of the screen.** (owner, 2026-11-13) Bounds are placed for the neighborhood you're editing; (owner, 2026-11-14) gates and
   walls placed while editing a neighborhood lead into the next one, and **the next neighborhood can't be picked for
   editing until a gate into it is placed** (take the last gate into one away and the picker can't go past the one
   before). **⚙** opens that neighborhood's panel: name, animal, each rarity's
