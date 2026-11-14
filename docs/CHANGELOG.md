@@ -6,6 +6,9 @@ and any rule decided. Use `git log` for the code detail (and for the older Atamu
 
 ## 2026-11-14
 
+- **Gates chain the neighborhoods (owner).** Gates and walls placed while editing a neighborhood lead into the next one,
+  and the next neighborhood opens for editing only once a gate into it exists. Each neighborhood's gates have their own
+  color, never the same as the one before.
 - **Parcel counter; Odds and B for admins (owner).** The parcel card is now just a counter of parcels carried; only
   admins see the Odds button, and B opens or closes the build menu for them.
 - **Respawn camera (owner).** At the respawn point the camera sits straight behind you, looking the way you face, 30

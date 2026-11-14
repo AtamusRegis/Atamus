@@ -217,7 +217,9 @@ is one 1 m grass block (`SEED`) to stand on, with sky all round. Everything is a
   - **Mailbox:** an **address** in the neighborhood it stands in: parcels of that neighborhood's tier go to its
     mailboxes, named in order of placing with the neighborhood's name ("1 Main Street", "2 Main Street", "1 Maple
     Suburbs"...). No mailboxes in a neighborhood: no parcels for it. A mailbox taken away loses the parcels going to it.
-  - **Gate:** 8 m wide, 7 m high, posts and a beam with (owner, 2026-11-13) **a blue holographic boundary** (see-through
+  - **Gate:** 8 m wide, 7 m high, posts and a beam with (owner, 2026-11-13) **a holographic boundary**
+    ((owner, 2026-11-14) in the neighborhood's own gate color: blue, pink, yellow, green, purple, orange, cyan, red,
+    lime for neighborhoods 1 to 9, so two gates in a row never match; a bound wall takes its gate's color) (see-through
     blue, scan lines drifting up) and a padlock: closed (it stops you) until you've opened the neighborhood it leads into
     (an Uncommon or better of the one before's animal; see Parcels); then only its posts and beam. A newly opened
     neighborhood's showing flies to its gate as it opens.
@@ -257,8 +259,10 @@ is one 1 m grass block (`SEED`) to stand on, with sky all round. Everything is a
   the piece and its name under it): Block, House, Mailbox, Gate, Wall,
   Tree, Boost, Start Line / Podium, Respawn, Post Office, Bounds, Erase, ⟳ (turn; R) and ✕ (Escape or the Build
   button); under it **the neighborhood you're editing** (− name +) and ⚙, then W / H / D and the material for a block,
-  L for a wall. (owner, 2026-11-13) Gates, walls and bounds are placed for the neighborhood you're editing (a gate or
-  wall in Main Street's leads into the next one). **⚙** opens that neighborhood's panel: name, animal, each rarity's
+  L for a wall. (owner, 2026-11-13) Bounds are placed for the neighborhood you're editing; (owner, 2026-11-14) gates and
+  walls placed while editing a neighborhood lead into the next one, and **the next neighborhood can't be picked for
+  editing until a gate into it is placed** (take the last gate into one away and the picker can't go past the one
+  before). **⚙** opens that neighborhood's panel: name, animal, each rarity's
   chance (%), Shiny "1 in" (0: never), Save. **Bounds** (seen only while building: a see-through box in the
   neighborhood's color with its name; the edited neighborhood's brighter, the picked one outlined yellow): a left drag
   on open space draws new ones; **they can be edited after**: click bounds to pick them (that neighborhood becomes the

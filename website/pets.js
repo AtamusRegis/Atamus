@@ -1096,6 +1096,7 @@ function thumb(k) {
   portraitR.render(pScene, pCam); pScene.remove(g); pCam.far = 60; pCam.updateProjectionMatrix();
   return (THUMB[k] = portraitR.domElement.toDataURL());
 }
+const zoneReach = () => { let z = 0; while (z < World.TIERS.length - 1 && World.build.some((q) => q.k === "gate" && q.zone === z + 1)) z++; return z; };
 function buildBar() {
   const B = $("buildbar"); B.innerHTML = ""; B.style.display = "flex"; const row0 = el("div", "brow"), row2 = el("div", "brow");
   // (owner, 2026-11-13) every piece a rounded tile with its picture
@@ -1103,7 +1104,8 @@ function buildBar() {
   const turnB = (ibtn("rotate", "Turn", () => { if (bm.tool === "spawn") bm.a = (Math.round(bm.a / 45) * 45 + 45) % 360; else bm.r = (bm.r + 1) % 4; buildAim(bm.px, bm.py); }, "bt")), closeB = ibtn("close", "Close", endBuild, "bt"); row0.className = "btiles"; B.appendChild(row0);
   const step = (label, get, set, lo, hi) => { const g = el("div", "bstep" + (label === zLabel ? " zone" : "")); g.appendChild(btn("−", () => { set(clamp(get() - 1, lo, hi)); buildBar(); buildAim(bm.px, bm.py); }, "bt")); g.appendChild(el("span", "", label())); g.appendChild(btn("+", () => { set(clamp(get() + 1, lo, hi)); buildBar(); buildAim(bm.px, bm.py); }, "bt")); row2.appendChild(g); };
   // (owner, 2026-11-13) the neighborhood you're editing: its bounds, gates and walls are placed for it; ⚙ its name, animal and chances
-  const zLabel = () => World.zoneName(bm.zone); step(zLabel, () => bm.zone, (v) => { bm.zone = v; bm.zd = null; bm.shotPick = undefined; drawAreas(); if ($("zpanel").style.display === "block") zonePanel(); }, 0, World.TIERS.length - 1);
+  // (owner, 2026-11-14) the next neighborhood can be edited only once a gate into it is placed
+  bm.zone = Math.min(bm.zone, zoneReach()); const zLabel = () => World.zoneName(bm.zone); step(zLabel, () => bm.zone, (v) => { bm.zone = v; bm.zd = null; bm.shotPick = undefined; drawAreas(); if ($("zpanel").style.display === "block") zonePanel(); }, 0, zoneReach());
   row2.lastChild.querySelector("span").style.boxShadow = "inset 0 -4px 0 " + World.TIERS[bm.zone].c; row2.appendChild(ibtn("settings", "Neighborhood", () => { const P = $("zpanel"); if (P.style.display === "block") { P.style.display = "none"; bm.zd = null; bm.shotPick = undefined; drawAreas(); } else zonePanel(); }, "bt"));
   if ((bm.tool === "gust" || bm.tool === "mover") && hazSel()) {   // (owner, 2026-11-13) the selected gust or platform's settings
     const q = hazSel(), ch = (f) => (v) => { const a = { ...q }; f(a, v); doSet(q, a); };
@@ -1152,7 +1154,7 @@ function buildPiece(a, base) {   // the piece the bar (or the clipboard: base) w
     return { k: "block", x, z, y, w, h, d, m: B.m };
   }
   const x = Math.round(p.x + n.x * 0.3), z = Math.round(p.z + n.z * 0.3), s = World.surfaceAt(x, z, p.y + 0.3), q = { k: T, x, z, y: Math.round(Number.isFinite(s) && s > -1e9 ? s : p.y), r: ((base ? base.r | 0 : 0) + bm.r) % 4 };
-  if (T === "gate" || T === "wall") q.zone = Math.max(1, base ? base.zone : bm.zone);
+  if (T === "gate" || T === "wall") q.zone = base ? base.zone : Math.min(World.TIERS.length - 1, bm.zone + 1);   // (owner, 2026-11-14) the neighborhood you're editing places the gates (and walls) into the next
   if (T === "wall") q.w = base ? base.w : bm.wl;
   if (T === "spawn") q.a = base ? base.a | 0 : Math.round(bm.a) % 360;
   return q;
@@ -1616,8 +1618,8 @@ function pieceMesh(q, live) {
     else if (q.k === "gate" || q.k === "wall") {   // (owner, 2026-11-13) a blue holographic boundary while it's closed to you: a gate has posts, a beam and a padlock; a bound wall is just the boundary
       const g = new THREE.Group(), W2 = q.k === "gate" ? World.GATE_W : q.w, H = World.GATE_H; g.position.set(q.x, q.y, q.z); g.rotation.y = (q.r | 0) * Math.PI / 2; G.add(g);
       if (q.k === "gate") { for (const x of [-W2 / 2, W2 / 2]) box(0.7, H, 0.7, "#6f7d8a", x, H / 2, 0, g); box(W2 + 0.7, 0.6, 0.7, "#6f7d8a", 0, H, 0, g); }
-      const sh = new THREE.Group(); g.add(sh); const w = holoWall(W2, H); w.position.y = H / 2; sh.add(w);
-      for (const y of [0.05, H]) { const e = new THREE.Mesh(new THREE.BoxGeometry(W2, 0.08, 0.08), new THREE.MeshBasicMaterial({ color: "#bff0ff" })); e.position.y = y; sh.add(e); }
+      const sh = new THREE.Group(); g.add(sh); const w = holoWall(W2, H, gateC(q.zone)); w.position.y = H / 2; sh.add(w);
+      for (const y of [0.05, H]) { const e = new THREE.Mesh(new THREE.BoxGeometry(W2, 0.08, 0.08), new THREE.MeshBasicMaterial({ color: new THREE.Color(gateC(q.zone)).lerp(new THREE.Color("#ffffff"), 0.5) })); e.position.y = y; sh.add(e); }
       const L = q.k === "gate" ? lock(sh, H / 2) : null; if (live) gates.push({ g: sh, w, L, d: q.zone, built: 1, at: q });
     }
     else if (q.k === "pipe") {   // (owner, 2026-11-13) on its side, its mouth the way it's turned; bright green once linked
@@ -1668,8 +1670,10 @@ function drawBuild() {
   if (readyMesh && poG) poG.add(readyMesh); if (nextMesh && poG) poG.add(nextMesh);
 }
 // the holographic boundary: see-through blue with scan lines that drift up and a fine grid
-const HOLO_TEX = (() => { const cv = document.createElement("canvas"); cv.width = cv.height = 64; const g = cv.getContext("2d"); g.fillStyle = "rgba(40,150,255,0.55)"; g.fillRect(0, 0, 64, 64); g.fillStyle = "rgba(191,240,255,0.9)"; g.fillRect(0, 0, 64, 3); g.fillRect(0, 30, 64, 2); g.fillStyle = "rgba(191,240,255,0.35)"; g.fillRect(0, 0, 2, 64); const t = new THREE.CanvasTexture(cv); t.wrapS = t.wrapT = THREE.RepeatWrapping; return t; })();
-function holoWall(w, h) { const t = HOLO_TEX.clone(); t.needsUpdate = true; t.repeat.set(w / 2, h / 2); return new THREE.Mesh(new THREE.PlaneGeometry(w, h), new THREE.MeshBasicMaterial({ map: t, color: "#5cc8ff", transparent: true, opacity: 0.8, side: THREE.DoubleSide, depthWrite: false })); }
+const HOLO_TEX = (() => { const cv = document.createElement("canvas"); cv.width = cv.height = 64; const g = cv.getContext("2d"); g.fillStyle = "rgba(255,255,255,0.5)"; g.fillRect(0, 0, 64, 64); g.fillStyle = "rgba(255,255,255,1)"; g.fillRect(0, 0, 64, 3); g.fillRect(0, 30, 64, 2); g.fillStyle = "rgba(255,255,255,0.7)"; g.fillRect(0, 0, 2, 64); const t = new THREE.CanvasTexture(cv); t.wrapS = t.wrapT = THREE.RepeatWrapping; return t; })();
+// (owner, 2026-11-14) each neighborhood's gates (and walls) their own color, never the same as the one before
+const GATE_C = ["#3fa9ff", "#ff5fa8", "#ffd23f", "#46e07a", "#a970ff", "#ff8a3d", "#2fe0d6", "#ff4f4f", "#b5f23d"], gateC = (d) => GATE_C[(Math.max(1, d) - 1) % GATE_C.length];
+function holoWall(w, h, c = GATE_C[0]) { const t = HOLO_TEX.clone(); t.needsUpdate = true; t.repeat.set(w / 2, h / 2); return new THREE.Mesh(new THREE.PlaneGeometry(w, h), new THREE.MeshBasicMaterial({ map: t, color: c, transparent: true, opacity: 0.8, side: THREE.DoubleSide, depthWrite: false })); }
 function stepGates(t) { const open = World.openFor(save); for (const q of gates) { q.g.visible = q.d >= open || q.d === gateHold || !!bm; if (q.g.visible) { q.w.material.opacity = 0.62 + Math.sin(t * 2 + q.d) * 0.1; q.w.material.map.offset.y = -t * 0.25; if (q.L) q.L.rotation.y = Math.sin(t * 0.8 + q.d) * 0.4; } } }
 // (owner, 2026-11-11) a newly opened area gets a short showing: letterbox bars, the camera flies to its gate as it
 // bursts open, then to its chasers (the rarest one), then to its other dangers. A tap or a key skips it. Your mount stays put.
