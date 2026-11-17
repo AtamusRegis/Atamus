@@ -5,7 +5,7 @@
 // and asks. Phone first: a thumb joystick, drag to look, pinch to zoom, big buttons.
 import * as THREE from "./vendor/three.module.min.js";
 import { svg, fillIcons, ICON } from "./icons.js?v=6";
-import * as World from "./pets-world.js?v=1794652378";
+import * as World from "./pets-world.js?v=1794652381";
 
 const $ = (id) => document.getElementById(id);
 const { TAU, clamp, hyp, MOUNTS, TIERS, RARITY, RARITY_C, MODS, UPGRADES } = World;
@@ -214,7 +214,7 @@ function sparkle(x, y, z, sc, dt) { if (Math.random() < dt * 10) emit(x, y + 0.9
 const RAINBOW = ["#ff6b6b", "#ffb84d", "#ffe66b", "#7ee08a", "#6bb8ff", "#b48cff"];
 // (owner, 2026-11-09) a pet grows with its level but its rider stays the same size, so a big pet feels big
 function sizePet(m, sc) { m.g.scale.setScalar(sc); if (m.rider) { m.rider.scale.setScalar(0.8 / sc); m.rider.position.y = m.seat - 0.52 / sc; m.top = m.seat * sc + 1.4; } else m.top *= sc; }
-function petModel(sp, rider, va, r = 0) {   // sp: a mount's kind (r: its rarity, for its coat), or { look, c, a, size }; va: 1 Shiny (the same coat: it sparkles)
+function petModel(sp, rider, va, r = 0) { let riderM = null;   // sp: a mount's kind (r: its rarity, for its coat), or { look, c, a, size }; va: 1 Shiny (the same coat: it sparkles)
   let riderG = null;
   if (typeof sp !== "object") { const M = World.MOUNTS[sp] || World.MOUNTS.dog, [c, a] = World.coat(sp, r); sp = { look: M.look, c, a, size: M.size }; }
   const s = sp, L = LOOK[s.look] || LOOK.pup, k = s.size, g = new THREE.Group(), body = new THREE.Group(); g.add(body);
@@ -353,9 +353,9 @@ function petModel(sp, rider, va, r = 0) {   // sp: a mount's kind (r: its rarity
   }
   let top = seat;
   if (rider) {   // the courier, seated (a little smaller): hips just above the pet's back
-    const r = courierModel(rider, true); r.g.scale.setScalar(0.8); r.g.position.set(0, seat - 0.52, seatZ); body.add(r.g); top = seat + 1.4; riderG = r.g;
+    const r = courierModel(rider, true); r.g.scale.setScalar(0.8); r.g.position.set(0, seat - 0.52, seatZ); body.add(r.g); top = seat + 1.4; riderG = r.g; riderM = r;
   }
-  return { g, body, legs, wings, head, tails, k, top, seat, rider: riderG, butterfly: L.plan === "butterfly", fly: s.ab === "glide", hop: !!L.hop, plan: L.plan };
+  return { g, body, legs, wings, head, tails, k, top, seat, rider: riderG, riderM, butterfly: L.plan === "butterfly", fly: s.ab === "glide", hop: !!L.hop, plan: L.plan };
 }
 function animatePet(m, t, moving, speed, airborne) {
   const f = 6 + speed * 0.5, sw = moving && !airborne ? Math.sin(t * f) * 0.6 : 0;
@@ -534,17 +534,22 @@ function rigMount(sp, va, r, shirt, name, rank) {   // a mount with its rider, n
 function unrig(r) { if (!r) return; scene.remove(r.m.g, r.w.g); }
 function setCarry(r, c) { r.slot.clear(); let y = 0; for (const [tier, mod] of c || []) { const b = parcelMesh(tier, mod); b.scale.setScalar(1.4); b.position.y = y; b.rotation.y = (y * 1.7) % 0.6 - 0.3; y += b.userData.s * 1.4; r.slot.add(b); } }   // (owner, 2026-11-11) a box for each parcel, stacked, and big
 const bagCarry = () => bag.map((q) => [q.tier, q.mod]);
-// (owner, 2026-11-12) the podiums by the post office: the server's three best mounts, each with its courier's name
-const podMesh = [null, null, null];
-let lastPods = [];
-function setPods(pods) { lastPods = pods; for (let n = World.PODIUM.spots.length; n < podMesh.length; n++) if (podMesh[n]) { scene.remove(podMesh[n].m.g); podMesh[n] = null; }
-  World.PODIUM.spots.forEach((q, n) => { const P = pods[n] || null, o = podMesh[n], key = P ? [P.id, P.sp, P.r, P.va, P.name, q.x, q.y, q.z].join() : "";
-    if (o && o.key === key) return; if (o) scene.remove(o.m.g); podMesh[n] = null; if (!P) return;
-    const m = petModel(MOUNTS[P.sp] ? P.sp : "dog", null, P.va, P.r); sizePet(m, World.mountScale(P)); m.g.position.set(q.x, q.y, q.z); m.g.rotation.y = 0;
-    const tag = textSprite(String(P.name || "").slice(0, 18), { size: 30, glow: P.va ? "#bfe6ff" : P.r >= 4 ? "#ffd84a" : "" }); tag.position.y = (m.top + 0.8) / m.g.scale.x; tag.scale.multiplyScalar(1 / m.g.scale.x); m.g.add(tag);
-    scene.add(m.g); podMesh[n] = { m, key, va: P.va, sc: World.mountScale(P) * MOUNTS[P.sp].size, x: q.x, y: q.y, z: q.z }; });
+// (owner, 2026-11-16) the podiums: marble, for Aura Farming; whoever holds one strikes poses on their mount
+let lastPods = [], podIds = new Set();
+function setPods(pods) { lastPods = pods; podIds = new Set(pods.filter(Boolean).map((P) => P.id)); }
+// a pose for each few seconds, different couriers out of step: arms up, a flex, a wave, standing up surfing, a point
+function striking(rig, id, on, t) {
+  const R = rig.m.riderM; if (!R) return; const [aL, aR] = R.arms, g = R.g;
+  if (!on) { if (rig.posed) { rig.posed = false; aL.rotation.set(-0.55, 0, 0); aR.rotation.set(-0.55, 0, 0); g.rotation.set(0, 0, 0); g.position.y = rig.m.seat - 0.52 / rig.sc; rig.m.body.rotation.y = 0; R.legs.forEach((l, i) => l.rotation.set(-1.05, 0, (i ? 1 : -1) * 0.5)); } return; }
+  rig.posed = true; const k = (id | 0) * 1.7, u = t / 2.6 + k, n = Math.floor(u) % 5, f = u % 1, ease = Math.min(1, f * 6), b = Math.sin(t * 7) * 0.08;
+  g.rotation.set(0, 0, 0); g.position.y = rig.m.seat - 0.52 / rig.sc; rig.m.body.rotation.y = Math.sin(t * 1.3 + k) * 0.25; const up = n === 3 ? ease : 0; R.legs.forEach((l, i) => l.rotation.set(lerp(-1.05, 0, up), 0, (i ? 1 : -1) * lerp(0.5, 0.15, up)));
+  const set = (a, x, z) => a.rotation.set(lerp(-0.55, x, ease), 0, lerp(0, z, ease));
+  if (n === 0) { set(aL, -2.9 + b, -0.35); set(aR, -2.9 - b, 0.35); }   // arms up
+  else if (n === 1) { set(aL, -1.6, -1.5); set(aR, -1.6, 1.5); aL.rotation.y = aR.rotation.y = 0; g.rotation.x = -0.1 * ease; }   // a flex
+  else if (n === 2) { set(aL, -0.3, 0); set(aR, -2.8, 0.4 + Math.sin(t * 12) * 0.35); }   // a wave
+  else if (n === 3) { g.position.y += (0.75 / rig.sc) * ease; g.rotation.y = 1.2 * ease; set(aL, -0.2, -1.4); set(aR, -0.2, 1.4); }   // standing up, surfing
+  else { set(aL, -0.4, 0); set(aR, -1.6, 0.1); g.rotation.y = -0.4 * ease; }   // a point
 }
-function stepPods(dt, t) { for (const P of podMesh) if (P) { P.m.g.rotation.y = Math.sin(t * 0.6) * 0.5; if (P.va) sparkle(P.x, P.y, P.z, P.sc, dt); } }
 function remount() { unrig(mine); const q = riding(); mine = rigMount(q.sp, q.va, q.r, save.set.shirt, myName, World.rankOf(World.upTotal(save.up))); setCarry(mine, bagCarry()); }
 
 // ---- moving ----
@@ -1602,6 +1607,7 @@ function stepOthers(dt, t) {
     if (o.graceT > 0) { o.graceT -= dt; if (Math.random() < 0.4) emit(o.x, o.y + 1.2, o.z, 1, { colors: ["#ffffff", "#bfe6ff"], speed: 1.2, up: 1, life: 0.5, grav: -1, size: 0.1, spread: 1.6 }); }
     if (o.kickT > 0) o.kickT -= dt; if (o.hideT > 0) o.hideT -= dt;
     pose(o.rig, { x: o.x, y: o.y, z: o.z, yaw: o.yaw, moving: !!(o.mv & 1), foot, air: !!(o.mv & 4), stun: o.stunT, mx: o.mx, my: o.my, mz: o.mz, myaw: o.myaw, kickT: o.kickT, hidden: o.hideT > 0, glide: !!(o.mv & 16) }, dt, t, 10);
+    striking(o.rig, o.id, podIds.has(o.id) && !foot && !(o.mv & 1) && !(o.stunT > 0), t);
     if (o.va && !(o.hideT > 0)) { const f = foot; sparkle(f ? o.mx : o.x, f ? o.my : o.y, f ? o.mz : o.z, World.mountScale({ r: o.r | 0 }), dt); }
     if ((o.mv & 1) && !(o.mv & 6) && (o.r >= 4 || o.tr)) { o.stepT -= dt; if (o.stepT <= 0) { o.stepT = 0.18; trail(o.x, o.y, o.z, o, ""); } }
   }
@@ -1664,7 +1670,12 @@ function officeMeshes() { const P = World.PO_LOCAL, B = P.b, BT = P.belt, W2 = B
 const chevrons = (bg, fg, right) => { const cv = document.createElement("canvas"); cv.width = cv.height = 128; const g = cv.getContext("2d"); g.fillStyle = bg; g.fillRect(0, 0, 128, 128); g.strokeStyle = fg; g.lineWidth = 14; g.lineCap = "round"; g.lineJoin = "round";
   for (const v of [92, 58, 24]) { g.beginPath(); if (right) { g.moveTo(128 - v - 18, 30); g.lineTo(128 - v + 8, 64); g.lineTo(128 - v - 18, 98); } else { g.moveTo(30, v + 18); g.lineTo(64, v - 8); g.lineTo(98, v + 18); } g.stroke(); }
   const t = new THREE.CanvasTexture(cv); t.colorSpace = THREE.SRGBColorSpace; t.wrapS = t.wrapT = THREE.RepeatWrapping; return t; };
-const BOOST_M = new THREE.MeshLambertMaterial({ map: chevrons("#ffd84a", "#e0701a") }), START_T = chevrons("#a45be0", "#f3e3ff"), POD_C = ["#e8b923", "#c9d1d9", "#c98a4b"];
+function marble() {   // (owner, 2026-11-16) white stone with soft grey veins
+  const c = document.createElement("canvas"); c.width = c.height = 256; const x = c.getContext("2d"); x.fillStyle = "#f4f1ec"; x.fillRect(0, 0, 256, 256);
+  for (let k = 0; k < 9; k++) { x.strokeStyle = `rgba(120,118,125,${0.18 + Math.random() * 0.25})`; x.lineWidth = 0.8 + Math.random() * 2.2; x.beginPath(); let px = Math.random() * 256, py = 0; x.moveTo(px, py); while (py < 256) { py += 12; px += (Math.random() - 0.5) * 22; x.lineTo(px, py); } x.stroke(); }
+  const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace; return t;
+}
+const BOOST_M = new THREE.MeshLambertMaterial({ map: chevrons("#ffd84a", "#e0701a") }), START_T = chevrons("#a45be0", "#f3e3ff"), POD_C = ["#e8b923", "#c9d1d9", "#c98a4b"], MARBLE_M = new THREE.MeshLambertMaterial({ map: marble() });
 let buildG = null, poG = null;
 // one piece's model (live: the real one, registered for mailbox shakes and gate locks; else a blueprint)
 function pieceMesh(q, live) {
@@ -1726,7 +1737,7 @@ function pieceMesh(q, live) {
     else if (q.k === "tree") { const g = new THREE.Group(); g.position.set(q.x, q.y, q.z); g.rotation.y = (q.r | 0) * Math.PI / 2; G.add(g); const tr = new THREE.Mesh(new THREE.CylinderGeometry(0.28, 0.36, 2.2, 7), mat("#8a5a34")); tr.position.y = 1.1; tr.castShadow = true; g.add(tr); const lf = new THREE.Mesh(new THREE.ConeGeometry(1.9, 4.6, 8), mat("#3fa650")); lf.position.y = 4.2; lf.castShadow = true; g.add(lf); tr.userData.pid = lf.userData.pid = q.id; }
     else if (q.k === "boost") { const m = new THREE.Mesh(new THREE.PlaneGeometry(3.2, 3.2).rotateX(-Math.PI / 2), BOOST_M); m.position.set(q.x, q.y + 0.09, q.z); m.rotation.y = (q.r | 0) * Math.PI / 2 + Math.PI; m.receiveShadow = true; m.userData.pid = q.id; G.add(m); }
     else if (q.k === "start") { const t = START_T.clone(); t.needsUpdate = true; t.repeat.set(World.START_W / 2, 1); const m = new THREE.Mesh(new THREE.PlaneGeometry(World.START_W, World.START_D).rotateX(-Math.PI / 2), new THREE.MeshBasicMaterial({ map: t })); m.position.set(q.x, q.y + 0.1, q.z); m.rotation.y = (q.r | 0) * Math.PI / 2; m.userData.pid = q.id; G.add(m); }
-    else if (q.k === "podium") { let n = World.PODIUM.spots.findIndex((p) => p.id === q.id); if (!live && n < 0) n = Math.min(2, World.PODIUM.spots.length); if (n >= 0) { const h = [1.6, 1.1, 0.7][n]; box(4.4, h, 4.4, POD_C[n], q.x, q.y + h / 2, q.z, G).userData.pid = q.id; } }
+    else if (q.k === "podium") { let n = World.PODIUM.spots.findIndex((p) => p.id === q.id); if (!live && n < 0) n = Math.min(2, World.PODIUM.spots.length); if (n >= 0) { const h = [1.6, 1.1, 0.7][n]; const pm = box(4.4, h, 4.4, POD_C[n], q.x, q.y + h / 2, q.z, G); pm.material = MARBLE_M; pm.userData.pid = q.id; box(4.6, 0.12, 4.6, "#ffffff", q.x, q.y + h + 0.06, q.z, G).material = MARBLE_M; } }
     else if (q.k === "spawn") { const g = new THREE.Group(); g.position.set(q.x, q.y + 0.08, q.z); g.rotation.y = q.a !== undefined ? (q.a * Math.PI) / 180 : (q.r | 0) * Math.PI / 2; G.add(g); if (live) { G.visible = !!bm; spawnG = G; }   /* (owner, 2026-11-13) only builders see it */ const sm = new THREE.MeshBasicMaterial({ color: "#7ef0c8", transparent: true, opacity: 0.85 });
       g.add(new THREE.Mesh(new THREE.RingGeometry(0.6, 0.9, 24).rotateX(-Math.PI / 2), sm)); const ar = new THREE.Mesh(new THREE.ConeGeometry(0.35, 0.8, 3).rotateX(Math.PI / 2), sm); ar.position.set(0, 0.05, 1.4); ar.scale.y = 0.15; g.add(ar); }   // which way couriers face
   G.traverse((o) => { o.userData.pid = q.id; });
@@ -1880,9 +1891,10 @@ function frame(tms) {
     if (me.stun > 0 && Math.random() < 0.35) emit(me.x, me.y + 2.2, me.z, 1, { colors: ["#ffd84a"], speed: 1.5, up: 0.5, life: 0.5, grav: 0, size: 0.16 });
     if (me.grace > 0) { me.grace -= dt; if (Math.random() < 0.5) emit(me.x, me.y + 1.2, me.z, 1, { colors: ["#ffffff", "#bfe6ff"], speed: 1.2, up: 1, life: 0.5, grav: -1, size: 0.1, spread: 1.6 }); }
     if (mine) pose(mine, { x: me.x, y: me.y, z: me.z, yaw: me.yaw, moving: me.moving, foot: me.foot, air: !me.ground, stun: me.stun, mx: me.mx, my: me.my, mz: me.mz, myaw: me.myaw, kickT: me.kickT, hidden: me.hidden, squash: me.squash, hop: me.hop, glide: me.glide }, dt, t, myStats().speed);
+    if (mine) striking(mine, myId, podIds.has(myId) && !me.foot && !me.moving && !(me.stun > 0), t);
     if (tms - lastSent > 66) sendPos();
   }
-  if (loggedIn) stepAir(dt); stepOthers(dt, t); stepNpcs(dt, t); stepPods(dt, t); stepParts(dt); stepMarks(dt); blobStep(); stepCamera(dt);
+  if (loggedIn) stepAir(dt); stepOthers(dt, t); stepNpcs(dt, t); stepParts(dt); stepMarks(dt); blobStep(); stepCamera(dt);
   renderer.render(scene, camera);
   if (loggedIn) { hud(dt); stepGifts(dt); stepReveal(dt); maybeOpenRun(); } stepPops(dt);
 }

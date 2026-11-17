@@ -4,6 +4,11 @@ Critter Courier (Pet Delivery Co. until 2026-11-11). Newest first. Add one entry
 and any rule decided. Use `git log` for the code detail (and for the older Atamus prototypes, removed from the tree on
 2026-11-08).
 
+## 2026-11-16
+
+- **Aura Farming on the podiums (owner).** The podiums are plain marble with no mounts on them; stand on a free one to
+  hold it and earn Aura while you're there, striking poses on your mount.
+
 ## 2026-11-14
 
 - **Builder flow; cracking platforms (owner).** Platforms get their kind (moving or static, breaking, timer, respawn)
