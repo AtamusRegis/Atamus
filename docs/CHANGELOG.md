@@ -6,6 +6,8 @@ and any rule decided. Use `git log` for the code detail (and for the older Atamu
 
 ## 2026-11-16
 
+- **Face handles on bounds and respawn boxes (owner).** A picked one shows a white square on each face to drag that face
+  out or in; the Respawn Box tile picks existing boxes like Bounds does.
 - **An Uncommon Dog early (owner).** The second delivery's mount (a new courier's second run) is now always a Main
   Street Dog, Uncommon or better.
 - **Abilities; one speed for every mount (owner).** Every mount goes the same speed. Each animal has a movement ability:

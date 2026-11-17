@@ -745,7 +745,7 @@ const joyEl = $("joy"), knob = $("knob");
 canvas.addEventListener("pointerdown", (e) => {
   canvas.setPointerCapture(e.pointerId);
   if (bm && cine) return;
-  if (bm && e.pointerType === "mouse" && e.button === 0 && shotDown(e.clientX, e.clientY)) return;
+  if (bm && e.pointerType === "mouse" && e.button === 0 && (handleDown(e.clientX, e.clientY) || shotDown(e.clientX, e.clientY))) return;
   if (bm && e.pointerType === "mouse" && e.button === 0) { if (e.shiftKey) pipePick(e.clientX, e.clientY); else paintStart(e.clientX, e.clientY); return; }   // (owner, 2026-11-13) building: the left button places (and keeps placing as you drag); the right one turns the camera
   if (e.pointerType === "touch" && joy.id === null && e.clientX < innerWidth * 0.45 && e.clientY > innerHeight * 0.35) { joy.id = e.pointerId; joy.ox = e.clientX; joy.oy = e.clientY; joy.x = joy.y = 0; joyEl.style.display = "block"; joyEl.style.left = e.clientX - 60 + "px"; joyEl.style.top = e.clientY - 60 + "px"; knob.style.transform = ""; return; }
   drags.set(e.pointerId, { x: e.clientX, y: e.clientY }); tapStart = { x: e.clientX, y: e.clientY, t: performance.now() };
@@ -762,8 +762,8 @@ const endPointer = (e) => {
   if (drags.delete(e.pointerId) && tapStart && performance.now() - tapStart.t < 300 && hyp(e.clientX - tapStart.x, e.clientY - tapStart.y) < 8) tapAt(e.clientX, e.clientY);
   pinch = 0;
 };
-canvas.addEventListener("pointermove", (e) => { if (bm && e.pointerType === "mouse") { if (bm.gdrag) shotMove(e.clientX, e.clientY); else if (bm.adrag) areaMove(e.clientX, e.clientY); else if (bm.paint) paintMove(e.clientX, e.clientY); else buildAim(e.clientX, e.clientY); } });
-addEventListener("pointerup", (e) => { if (bm && e.button === 0) { if (bm.gdrag) shotUp(); if (bm.adrag) areaEnd(); bm.paint = null; } });
+canvas.addEventListener("pointermove", (e) => { if (bm && e.pointerType === "mouse") { if (bm.hdrag) handleMove(e.clientX, e.clientY); else if (bm.gdrag) shotMove(e.clientX, e.clientY); else if (bm.adrag) areaMove(e.clientX, e.clientY); else if (bm.paint) paintMove(e.clientX, e.clientY); else buildAim(e.clientX, e.clientY); } });
+addEventListener("pointerup", (e) => { if (bm && e.button === 0) { if (bm.hdrag) handleUp(); if (bm.gdrag) shotUp(); if (bm.adrag) areaEnd(); bm.paint = null; } });
 canvas.addEventListener("pointerup", endPointer); canvas.addEventListener("pointercancel", endPointer);
 canvas.addEventListener("wheel", (e) => { if (bm) { bm.lift = clamp((bm.lift || 0) + (e.deltaY > 0 ? -1 : 1), -100, 100); buildAim(bm.px, bm.py); e.preventDefault(); return; }   // (owner, 2026-11-14) building: the wheel raises or lowers where a piece goes
   cam.dist = clamp(cam.dist * (e.deltaY > 0 ? 1.1 : 0.9), 5, 26); e.preventDefault(); }, { passive: false });
@@ -1157,13 +1157,13 @@ function buildBar() {
   // (owner, 2026-11-14) the next neighborhood can be edited only once a gate into it is placed
   bm.zone = Math.min(bm.zone, zoneReach()); const zLabel = () => World.zoneName(bm.zone); step(zLabel, () => bm.zone, (v) => { bm.zone = v; bm.zd = null; bm.shotPick = undefined; drawAreas(); if ($("zpanel").style.display === "block") zonePanel(); }, 0, zoneReach());
   row2.lastChild.querySelector("span").style.boxShadow = "inset 0 -4px 0 " + World.TIERS[bm.zone].c; row2.appendChild(ibtn("settings", "Neighborhood", () => { const P = $("zpanel"); if (P.style.display === "block") { P.style.display = "none"; bm.zd = null; bm.shotPick = undefined; drawAreas(); } else zonePanel(); }, "bt"));
-  B.appendChild(row2); inspector();
+  B.appendChild(row2); inspector(); drawAreas();
 }
 // ---- (owner, 2026-11-16) the inspector, on the right: everything about the selected piece (or bounds), or the settings
 // the tile picked will place with; typed in, picked from lists ----
 const KIND_NAME = Object.fromEntries(BUILD_TOOLS);
 function inspector() {
-  const P = $("insp"); P.innerHTML = ""; const piece = bm && bm.tool === "select" ? hazSel() : bm && bm.tool === "area" ? selArea() : null, tool = bm && !piece && ["block", "gust", "mover", "wall", "void"].includes(bm.tool) ? bm.tool : null;
+  const P = $("insp"); P.innerHTML = ""; const piece = bm && bm.tool === "select" ? hazSel() : bm && bm.tool === "area" ? selArea() : bm && bm.tool === "void" ? selVoid() : null, tool = bm && !piece && ["block", "gust", "mover", "wall", "void"].includes(bm.tool) ? bm.tool : null;
   document.body.classList.toggle("insp", !!(piece || tool)); P.style.display = piece || tool ? "block" : "none"; if (!piece && !tool) return;
   const re = () => { buildBar(); buildAim(bm.px, bm.py); };
   const row = (name, ...nodes) => { const r = el("label", "zrow"); r.appendChild(el("span", "", name)); const g = el("div", "ival"); g.append(...nodes); r.appendChild(g); P.appendChild(r); };
@@ -1193,8 +1193,8 @@ function inspector() {
     }
     if (q.k === "house" && q.on) row("Owner", el("span", "", q.on));
     const acts = el("div", "iacts"); P.appendChild(acts);
-    acts.appendChild(ibtn("erase", "Delete", () => { doDel(q); bm.hsel = 0; bm.sel = 0; bm.bPick = false; buildBar(); drawHazSel(); drawAreas(); }, "bt"));
-    acts.appendChild(ibtn("close", "Deselect", () => { bm.hsel = 0; bm.sel = 0; bm.bPick = false; buildBar(); drawHazSel(); drawAreas(); buildAim(bm.px, bm.py); }, "bt"));
+    acts.appendChild(ibtn("erase", "Delete", () => { doDel(q); bm.hsel = 0; bm.sel = 0; bm.vsel = 0; bm.bPick = false; buildBar(); drawHazSel(); drawAreas(); }, "bt"));
+    acts.appendChild(ibtn("close", "Deselect", () => { bm.hsel = 0; bm.sel = 0; bm.vsel = 0; bm.bPick = false; buildBar(); drawHazSel(); drawAreas(); buildAim(bm.px, bm.py); }, "bt"));
     return;
   }
   if (tool === "wall") { row("Length", num(bm.wl, 1, 1, BX, (v) => { bm.wl = Math.round(v); re(); })); return; }
@@ -1209,7 +1209,7 @@ function inspector() {
   }
 }
 // (owner, 2026-11-16) aiming passes through what builders only see (a cannon's arrow, a platform's B) and anything hidden
-const unpickable = (o) => { for (; o; o = o.parent) if (o.userData.noPick || !o.visible || (o.userData.selOnly && bm && bm.tool !== "select" && bm.tool !== "erase")) return true; return false; };   /* a respawn box: only to select or erase it */
+const unpickable = (o) => { for (; o; o = o.parent) if (o.userData.noPick || !o.visible || (o.userData.selOnly && bm && bm.tool !== "select" && bm.tool !== "erase" && bm.tool !== "void")) return true; return false; };   /* a respawn box: only to select or erase it */
 function pieceAt(px, py) {   // what's pointed at: the point, its face's normal and the piece's id (0: the ground)
   ndc.set((px / innerWidth) * 2 - 1, -(py / innerHeight) * 2 + 1); ray.setFromCamera(ndc, camera);
   const hits = buildG ? ray.intersectObjects([...buildG.children, ...(poG ? [poG] : [])], true) : []; for (const h of hits) { if (unpickable(h.object)) continue; let o = h.object; while (o && !o.userData.pid && o.parent) o = o.parent; if (o && o.userData.pid) { const n = h.face ? h.face.normal.clone().transformDirection(h.object.matrixWorld) : new THREE.Vector3(0, 1, 0); return { p: h.point, n, id: o.userData.pid }; } }
@@ -1290,11 +1290,16 @@ function placeOnce(q) {
   if (q.k !== "gate" && q.k !== "wall") { const ar = World.build.find((o) => o.k === "area" && cx >= o.x && cx < o.x + o.w && cz >= o.z && cz < o.z + o.d); if (ar && ar.zone !== bm.zone && ar.zone <= zoneReach()) { bm.zone = ar.zone; bm.zd = null; bm.shotPick = undefined; buildBar(); drawAreas(); if ($("zpanel").style.display === "block") zonePanel(); } }
   // (owner, 2026-11-14) a moving platform: straight on to picking where it goes
   const follow = q.k === "mover" && bm.tool === "mover" && bm.pm.mv && !P.followed; if (follow) P.followed = true;
+  if (q.k === "void" && !P.followed) { P.followed = true; doAdd(q, (id) => { if (bm && bm.tool === "void") { bm.vsel = id; buildBar(); } }); sfx("pad"); return; }
   doAdd(q, follow ? (id) => { if (!bm) return; bm.tool = "select"; bm.hsel = id; bm.bPick = true; bm.paint = null; buildBar(); drawHazSel(); buildAim(bm.px, bm.py); } : undefined); sfx("pad");
 }
 function paintStart(px, py) {
   if (bm.shotPick !== undefined && bm.zd && bm.zd.shots[bm.shotPick]) { const a = pieceAt(px, py); if (a) { Object.assign(bm.zd.shots[bm.shotPick], { x: Math.round(a.p.x), y: Math.round(a.p.y), z: Math.round(a.p.z) }); bm.shotPick = undefined; sfx("pad"); zonePanel(); drawAreas(); } return; }   // (owner, 2026-11-13) a shot's point
   if (bm.tool === "area") { areaStart(px, py); return; }
+  if (bm.tool === "void") {   // (owner, 2026-11-16) like Bounds: click one to pick it; open space lets go and places a new one (picked)
+    const a = pieceAt(px, py), q = a && a.id && World.build.find((o) => o.id === a.id && o.k === "void");
+    if (q) { bm.vsel = q.id; sfx("tick"); buildBar(); return; } if (bm.vsel) { bm.vsel = 0; buildBar(); }
+  }
   if (bm.tool === "select") {   // (owner, 2026-11-14) Select: click a piece to select it (empty space lets go); with B picking, the click sets the platform's B
     const a = pieceAt(px, py), s = hazSel();
     if (bm.bPick && s && s.k === "mover" && a) { const t = moverB(a, s); doSet(s, { ...s, bx: t.x - s.x, by: t.y - s.y, bz: t.z - s.z }); bm.bPick = false; sfx("pad"); buildBar(); buildAim(px, py); return; }
@@ -1325,6 +1330,37 @@ function buildTap(px, py) {
 // inside belongs to that neighborhood (the smallest bounds win where they overlap). Seen only while building.
 let areaG = null;
 const selArea = () => (bm && bm.sel && World.build.find((q) => q.id === bm.sel && q.k === "area")) || null;
+const selVoid = () => (bm && bm.vsel && World.build.find((q) => q.id === bm.vsel && q.k === "void")) || null;
+// (owner, 2026-11-16) the picked bounds or respawn box has a small white square in the middle of each face: drag one to
+// move that face out or in (the opposite face stays; a meter at a time, at least 1 m)
+const faceHandles = [];
+function boundSel() {
+  if (!bm) return null; const q = bm.tool === "area" ? selArea() : bm.tool === "void" ? selVoid() : bm.tool === "select" ? hazSel() : null;
+  return q && (q.k === "area" || q.k === "void") ? q : null;
+}
+const boundBox = (q) => q.k === "area" ? { x: q.x, y: bm.ly + 0.06, z: q.z, w: q.w, h: 6, d: q.d } : { x: q.x, y: q.y, z: q.z, w: q.w, h: q.h, d: q.d };
+function drawHandles() {
+  faceHandles.length = 0; const q0 = boundSel(); if (!q0) return; const q = bm.hdrag && bm.hdrag.q0.id === q0.id ? bm.hdrag.cur : q0, b = boundBox(q), cx = b.x + b.w / 2, cy = b.y + b.h / 2, cz = b.z + b.d / 2;
+  if (q.k === "void") { const e = new THREE.LineSegments(new THREE.EdgesGeometry(new THREE.BoxGeometry(b.w, b.h, b.d)), new THREE.LineBasicMaterial({ color: "#ffd84a", depthTest: false })); e.position.set(cx, cy, cz); e.renderOrder = 6; areaG.add(e); }
+  const faces = [["x", 1, b.x + b.w, cy, cz], ["x", -1, b.x, cy, cz], ["z", 1, cx, cy, b.z + b.d], ["z", -1, cx, cy, b.z]]; if (q.k === "void") faces.push(["y", 1, cx, b.y + b.h, cz], ["y", -1, cx, b.y, cz]);
+  for (const [ax, sg, x, y, z] of faces) {
+    const k = clamp(camera.position.distanceTo(new THREE.Vector3(x, y, z)) / 22, 0.5, 6), m = new THREE.Mesh(new THREE.BoxGeometry(0.7, 0.7, 0.7), new THREE.MeshBasicMaterial({ color: "#ffffff", depthTest: false, transparent: true }));
+    m.scale.setScalar(k); m.position.set(x, y, z); m.renderOrder = 7; const o = new THREE.LineSegments(new THREE.EdgesGeometry(m.geometry), new THREE.LineBasicMaterial({ color: "#23303b", depthTest: false, transparent: true })); o.renderOrder = 8; m.add(o);
+    m.userData.face = { ax, sg }; areaG.add(m); faceHandles.push(m);
+  }
+}
+function handleDown(px, py) {
+  if (!faceHandles.length) return false; ndc.set((px / innerWidth) * 2 - 1, -(py / innerHeight) * 2 + 1); ray.setFromCamera(ndc, camera);
+  const h = ray.intersectObjects(faceHandles, false)[0]; if (!h) return false; const q = boundSel(); if (!q) return false; const { ax, sg } = h.object.userData.face;
+  const a = new THREE.Vector3(ax === "x" ? sg : 0, ax === "y" ? sg : 0, ax === "z" ? sg : 0), p0 = h.object.position.clone();
+  bm.hdrag = { q0: { ...q }, cur: { ...q }, ax, sg, a, p0, t0: axisT(px, py, p0, a) }; return true;
+}
+function handleMove(px, py) {
+  const D = bm.hdrag, u = Math.round(axisT(px, py, D.p0, D.a) - D.t0), q = D.q0, c = { ...q }, M = World.AREA_MAX;
+  const L = D.ax === "x" ? "w" : D.ax === "y" ? "h" : "d", P = D.ax, max = L === "h" ? 200 : M, n = clamp(q[L] + u, 1, max);
+  c[L] = n; if (D.sg < 0) c[P] = q[P] + q[L] - n; D.cur = c; drawAreas();
+}
+function handleUp() { const D = bm.hdrag; bm.hdrag = null; const c = D.cur, q = D.q0; if (c.x !== q.x || c.y !== q.y || c.z !== q.z || c.w !== q.w || c.h !== q.h || c.d !== q.d) { doSet(q, c); sfx("pad"); } drawAreas(); }
 function areaPt(px, py) { ndc.set((px / innerWidth) * 2 - 1, -(py / innerHeight) * 2 + 1); ray.setFromCamera(ndc, camera); const v = new THREE.Vector3(); return ray.ray.intersectPlane(new THREE.Plane(new THREE.Vector3(0, 1, 0), -bm.ly), v) ? v : null; }
 const inArea = (q, p, m = 0) => p.x >= q.x - m && p.x <= q.x + q.w + m && p.z >= q.z - m && p.z <= q.z + q.d + m;
 function areaStart(px, py) {
@@ -1381,7 +1417,7 @@ function shotMove(px, py) {
 function shotUp() { const D = bm.gdrag; bm.gdrag = null; const q = D.list[bm.shotSel]; if (q.x !== D.q0.x || q.y !== D.q0.y || q.z !== D.q0.z) { saveShots(D.list); sfx("pad"); } }
 function drawAreas() {
   if (areaG) { scene.remove(areaG); areaG = null; } if (!bm) return; areaG = new THREE.Group(); scene.add(areaG);
-  const D = bm.adrag, list = World.build.filter((q) => q.k === "area").map((q) => (D && D.cur && D.cur.id === q.id ? D.cur : q)); if (D && D.cur && !D.cur.id) list.push(D.cur);
+  const D = bm.adrag, H0 = bm.hdrag, list = World.build.filter((q) => q.k === "area").map((q) => (D && D.cur && D.cur.id === q.id ? D.cur : H0 && H0.cur.id === q.id ? H0.cur : q)); if (D && D.cur && !D.cur.id) list.push(D.cur);
   const y = bm.ly + 0.06, H = 6;
   for (const q of list) {
     const c = World.TIERS[q.zone].c, dk = "#" + new THREE.Color(c).multiplyScalar(0.62).getHexString(), sel = q.id && q.id === bm.sel || (D && q === D.cur), on = q.zone === bm.zone;
@@ -1401,6 +1437,7 @@ function drawAreas() {
     const cm = new THREE.Group(); cm.position.set(q.x, q.y + 3, q.z); box(0.7, 0.5, 0.9, "#23303b", 0, 0, 0, cm, false); const lens = new THREE.Mesh(new THREE.CylinderGeometry(0.18, 0.24, 0.35, 10).rotateX(Math.PI / 2), mat("#23303b")); lens.position.z = 0.6; cm.add(lens); areaG.add(cm);   // a little camera on the post
     if (bm.shotSel === k) gizmo(q);
   });
+  drawHandles();
 }
 // the neighborhood panel: its name, the animal it gives, each rarity's chance and the shiny chance
 function zonePanel() {   // (what's typed is kept while you pick shot points or the town changes, until Save or another neighborhood)
@@ -1562,7 +1599,7 @@ function onNet(m) {
     case "petup": adopt(m.data); remount(); sfx("buy"); if (panel === "stable") renderPanel(); emit(me.x, me.y + 2, me.z, 30, { colors: ["#c77dff", "#ffffff", "#e2b8ff"], speed: 4, up: 5, life: 1 }); break;
     case "buildok": { const f = pend.get(m.tag); pend.delete(m.tag); if (f) f(m.id); break; }
     case "plat": if (m.gone !== undefined) { const q = World.movers.find((o) => o.id === m.id); delete World.platWarn[m.id]; World.platGone[m.id] = m.gone; if (m.gone && q) { const p = World.moverPos(q, srvNow()); if (hyp(p.x - me.x, p.z - me.z) < 80) { sfx("crack"); emit(p.x + q.w / 2, p.y + q.h, p.z + q.d / 2, 26, { colors: [MAT_C[q.m] || "#a87a4a", "#ffffff"], speed: 5, up: 3, life: 0.8, spread: Math.max(q.w, q.d) / 2 }); } } } else if (m.warn !== undefined) World.platWarn[m.id] = now(); break;   // (owner, 2026-11-14) a breaking platform
-    case "build": for (const k in World.platGone) delete World.platGone[k]; for (const k in World.platWarn) delete World.platWarn[k]; World.setBuild({ pieces: m.build || [], zones: m.zones || [] }); drawBuild(); setPods(lastPods); if (bm) { if (bm.tool === "select" && bm.hsel) buildBar(); buildAim(bm.px, bm.py); pipeSel(); drawHazSel(); if (bm.sel && !World.build.some((q) => q.id === bm.sel)) bm.sel = 0; drawAreas(); if ($("zpanel").style.display === "block") zonePanel(); } break;   // (owner, 2026-11-13) someone built
+    case "build": for (const k in World.platGone) delete World.platGone[k]; for (const k in World.platWarn) delete World.platWarn[k]; World.setBuild({ pieces: m.build || [], zones: m.zones || [] }); drawBuild(); setPods(lastPods); if (bm) { if ((bm.tool === "select" && bm.hsel) || (bm.tool === "void" && bm.vsel)) buildBar(); drawAreas(); buildAim(bm.px, bm.py); pipeSel(); drawHazSel(); if (bm.sel && !World.build.some((q) => q.id === bm.sel)) bm.sel = 0; drawAreas(); if ($("zpanel").style.display === "block") zonePanel(); } break;   // (owner, 2026-11-13) someone built
     case "aura": save.coins = m.coins; popup("+" + fmt(m.n), "#d9a6ff", me.x, me.y + 2.6, me.z); hudDirty = true; break;   // (owner, 2026-11-12) a podium paid
     case "podiums": setPods(m.pods); break;
     case "upgraded": adopt(m.data); remount(); sfx("buy"); emit(me.x, me.y + 2, me.z, 30, { colors: ["#ffd84a", "#ffffff", "#7ee08a"], speed: 4, up: 5, life: 1 }); break;
