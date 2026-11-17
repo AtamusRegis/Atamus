@@ -5,7 +5,7 @@
 // and asks. Phone first: a thumb joystick, drag to look, pinch to zoom, big buttons.
 import * as THREE from "./vendor/three.module.min.js";
 import { svg, fillIcons, ICON } from "./icons.js?v=7";
-import * as World from "./pets-world.js?v=1794652397";
+import * as World from "./pets-world.js?v=1794652398";
 
 const $ = (id) => document.getElementById(id);
 const { TAU, clamp, hyp, MOUNTS, TIERS, RARITY, RARITY_C, MODS, UPGRADES } = World;
@@ -1110,7 +1110,7 @@ $("bchat").onclick = () => (chatting ? closeChat() : openChat());
 function bubble(rig, text) { if (!rig) return; if (rig.bub) { rig.m.g.remove(rig.bub); clearTimeout(rig.bubT); } const s = textSprite(text.slice(0, 40), { size: 30 }); s.scale.multiplyScalar(1 / rig.sc); s.position.y = (rig.m.top + 2.2) / rig.sc; rig.m.g.add(s); rig.bub = s; rig.bubT = setTimeout(() => { rig.m.g.remove(s); rig.bub = null; }, 5000); }
 
 // ---- other couriers, parties ----
-const others = new Map(); let party = [], invites = [];
+const others = new Map(); let party = [], invites = [], blockedIds = new Set();
 function addOther(p) {
   if (p.id === myId) return; const old = others.get(p.id); if (old) unrig(old.rig);
   const rig = rigMount(p.sp, p.va | 0, p.r | 0, p.shirt || "#3a8ee6", p.name, p.rank | 0); rig.m.g.position.set(p.x, p.y || 0, p.z); setCarry(rig, p.carry);
@@ -1548,7 +1548,9 @@ function tapAt(sx, sy) {   // tapping a courier: their name and a party invitati
   const pm = $("pmenu"); let best = null, bd = 70;
   for (const o of others.values()) { const s = toScreen(o.x, o.y + 1.5 * o.rig.sc, o.z); if (!s.front) continue; const d = hyp(s.x - sx, s.y - sy); if (d < bd && hyp(o.x - me.x, o.z - me.z) < 60) { bd = d; best = o; } }
   if (!best) { pm.style.display = "none"; return; }
-  pm.innerHTML = ""; pm.appendChild(el("b", "", best.name)); if (!party.some((q) => q.id === best.id)) pm.appendChild(btn("Party", () => { netSend({ t: "invite", id: best.id }); pm.style.display = "none"; }, "go")); pm.style.display = "flex"; pm.style.left = clamp(sx, 80, innerWidth - 80) + "px"; pm.style.top = clamp(sy - 50, 40, innerHeight - 60) + "px";
+  pm.innerHTML = ""; pm.appendChild(el("b", "", best.name)); if (!party.some((q) => q.id === best.id)) pm.appendChild(btn("Party", () => { netSend({ t: "invite", id: best.id }); pm.style.display = "none"; }, "go"));
+  pm.appendChild(btn(blockedIds.has(best.id) ? "Unblock" : "Block", () => { netSend({ t: "block", id: best.id }); pm.style.display = "none"; }, "bt"));   // (owner, 2026-11-17) no kicks either way, no chat
+  pm.style.display = "flex"; pm.style.left = clamp(sx, 80, innerWidth - 80) + "px"; pm.style.top = clamp(sy - 50, 40, innerHeight - 60) + "px";
 }
 
 // ---- the server ----
@@ -1634,6 +1636,7 @@ function onNet(m) {
       me.transit = { k: "fuse", until: now() + World.CANNONS.fuse, c, pad: m }; cam.yaw = (c ? c.yaw : 0) + Math.PI * 0.72; cam.pitch = 0.3; break;   /* from behind and to the side: the fuse in view */
     }
     case "join": addOther(m.p); hudDirty = true; break;
+    case "blocks": blockedIds = new Set(m.ids); break;
     case "leave": dropOther(m.id); hudDirty = true; break;
     case "snap": {
       clockOff = Math.max(clockOff, m.ts - Date.now());

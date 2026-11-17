@@ -165,6 +165,10 @@ export const MOUNT_CAP = 60;
 // (owner, 2026-11-14) kicking another courier (m, s, m/s): in reach and in front; it throws them off their mount and
 // tumbling (down s), then a moment safe from kicks (grace s); one kick every cd s; never a party member or at the post office
 export const KICK = { range: 3.6, cd: 4, fling: 14, up: 9, down: 1.4, grace: 4 };
+// (owner, 2026-11-17) fair kicking: kicking the same courier again within KICK_FAIR.win s gets weaker (x weak per repeat)
+// and past `max` kicks doesn't work on them till the window's clear; couriers with fewer than `rookie` deliveries
+// can't be kicked; a courier you've blocked can't kick you, you can't kick them, and you don't see their chat
+export const KICK_FAIR = { win: 60, weak: 0.65, max: 3, rookie: 5, blocks: 200 };
 // dogs, geese (m and seconds)
 // (owner, 2026-11-11) the attack queue: a courier can be chased by at most `slots` animals at once (any kinds); after any
 // animal attacks, none can for `calm` s, counted from when the parcel is back or lost (a stolen or dropped one holds it)
@@ -196,6 +200,7 @@ export function cleanData(d) {
   out.trails = (Array.isArray(d.trails) ? d.trails : []).filter((k, n, a) => TRAILS.some((t) => t.k === k && t.cost) && a.indexOf(k) === n);
   out.gifts = (Array.isArray(d.gifts) ? d.gifts : []).slice(0, GIFT_CAP).filter((g) => g && Number.isFinite(+g.gid)).map((g) => ({ gid: int(g.gid, 1, 1e9, 1), r: int(g.r, 0, 4, 0), pt: int(g.pt, 0, TIERS.length - 1, 0), ...(Number.isFinite(+g.m) ? { m: int(g.m, 1, 1e9, 1) } : {}) }));
   out.nextGid = Math.max(int(d.nextGid, 1, 1e9, 1), ...out.gifts.map((g) => g.gid + 1));
+  out.blocked = (Array.isArray(d.blocked) ? d.blocked : []).map((v) => int(v, 1, 1e9, 0)).filter((v, n, a) => v && a.indexOf(v) === n).slice(0, KICK_FAIR.blocks);   // (owner, 2026-11-17) blocked couriers (account ids)
   for (const k of ["del", "golden", "geese", "kicks"]) out.stats[k] = int(d.stats && d.stats[k], 0, 1e9, 0);
   out.set = { friendly: !!(d.set && d.set.friendly), music: int(d.set && d.set.music, 0, 10, 5), sfx: int(d.set && d.set.sfx, 0, 10, 7), shirt: /^#[0-9a-f]{6}$/i.test(d.set && d.set.shirt) ? d.set.shirt : "#f2a33a", tut: !!(d.set && d.set.tut), pz: int(d.set && d.set.pz, -1, TIERS.length - 1, -1) };   /* pz: (owner, 2026-11-14) the zone picked for parcels (-1: none, the usual mix) */   // tut: the new-courier tutorial is done
   return out;

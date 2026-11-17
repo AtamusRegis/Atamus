@@ -260,6 +260,7 @@ export function attachPets(server, { origins = [], allowLocal = false, store = m
           dogs: room.dogs.map(dogView), geese: room.geese.map(gooseView), goats: room.goats.map(goatView), pods: podView(room) });
         room.players.set(me.id, me);
         all(room, { t: "join", p: pub(me) }, me);
+        sendBlocks(me); for (const o of room.players.values()) if (o !== me && o.acct.data.blocked.includes(acct.id)) sendBlocks(o);
         fillBelt(me); sendBag(me, { k: "mount" });
       } catch (e) { console.error("[pets] auth", e.message); authErr("server"); }
       finally { busy = false; }
@@ -363,12 +364,14 @@ export function attachPets(server, { origins = [], allowLocal = false, store = m
           const fx = Math.sin(me.yaw), fz = Math.cos(me.yaw); let best = null, bd = Infinity;
           for (const o of room.players.values()) {
             if (o === me || o.gone || (me.party && me.party === o.party) || now < o.stunUntil || now < (o.kickSafe || 0) || W.inSafeZone(o.x, o.z, o.y) || Math.abs(o.y - me.y) > 2.5) continue;
+            if (blocks(me, o) || o.acct.data.stats.del < W.KICK_FAIR.rookie || kicksOn(me, o, now) >= W.KICK_FAIR.max) continue;   // (owner, 2026-11-17) fair kicking
             const dx = o.x - me.x, dz = o.z - me.z, d = hyp(dx, dz); if (d > W.KICK.range || (d > 1.2 && (dx * fx + dz * fz) / d < 0.2)) continue; if (d < bd) { bd = d; best = o; }
           }
           if (!best) break;
           const d = hyp(best.x - me.x, best.z - me.z), ux = d > 0.05 ? (best.x - me.x) / d : fx, uz = d > 0.05 ? (best.z - me.z) / d : fz;
+          const pw = Math.pow(W.KICK_FAIR.weak, kicksOn(me, best, now)); me.kicked.push([best.acct.id, now]);   // each repeat on the same courier is weaker
           best.kickSafe = now + (W.KICK.down + W.KICK.grace) * 1000; stun(best, W.KICK.down, "kick");
-          send(best.ws, { t: "kickfly", by: me.id, vx: r1(ux * W.KICK.fling), vy: W.KICK.up, vz: r1(uz * W.KICK.fling) }); send(me.ws, { t: "kickhit", id: best.id });
+          send(best.ws, { t: "kickfly", by: me.id, vx: r1(ux * W.KICK.fling * pw), vy: r1(W.KICK.up * pw), vz: r1(uz * W.KICK.fling * pw) }); send(me.ws, { t: "kickhit", id: best.id });
           break;
         }
         case "dropall": {   // (owner, 2026-11-14) letting go of the parcels you carry, to take new ones
@@ -387,9 +390,13 @@ export function attachPets(server, { origins = [], allowLocal = false, store = m
         case "chat": {
           const text = cleanChat(m.text); if (!text || now - me.lastChat < CHAT_GAP_MS) break;
           if (me.acct.muteUntil > now) { send(ws, { t: "muted", until: me.acct.muteUntil === Infinity ? -1 : me.acct.muteUntil }); break; }
-          me.lastChat = now; all(room, { t: "chat", id: me.id, name: me.name, text }, me); break;
+          me.lastChat = now; for (const o of room.players.values()) if (o !== me && !blocks(me, o)) send(o.ws, { t: "chat", id: me.id, name: me.name, text }); break;   // (owner, 2026-11-17) not to (or from) anyone blocked
         }
-        case "invite": { const to = room.players.get(m.id); if (!to || to === me || (me.party && me.party === to.party)) break; invites.set(`${to.id}:${me.id}`, now + INVITE_MS); send(to.ws, { t: "invited", from: me.id, name: me.name }); break; }
+        case "block": {   // (owner, 2026-11-17) block or unblock a courier: no kicks either way, no chat, no invites
+          const o = room.players.get(m.id); if (!o || o === me) break; const B = me.acct.data.blocked, i = B.indexOf(o.acct.id);
+          if (i >= 0) B.splice(i, 1); else if (B.length < W.KICK_FAIR.blocks) B.push(o.acct.id); changed(me); sendBlocks(me); break;
+        }
+        case "invite": { const to = room.players.get(m.id); if (!to || to === me || blocks(me, to) || (me.party && me.party === to.party)) break; invites.set(`${to.id}:${me.id}`, now + INVITE_MS); send(to.ws, { t: "invited", from: me.id, name: me.name }); break; }
         case "answer": {
           const key = `${me.id}:${m.from}`, exp = invites.get(key); invites.delete(key);
           const from = room.players.get(m.from); if (!from || !exp || exp < now || !m.yes) { if (from) send(from.ws, { t: "declined", name: me.name }); break; }
@@ -605,6 +612,10 @@ export function attachPets(server, { origins = [], allowLocal = false, store = m
   // the mount you ride; stepping off (or being kicked off) frees it
   const podView = (r) => r.pods.map((q) => (q ? { id: q.p.id, name: q.p.name } : null));
   const onPod = (p, s) => !p.gone && Math.abs(p.x - s.x) <= 2.4 && Math.abs(p.z - s.z) <= 2.4 && p.y > s.y - 0.4 && p.y < s.y + 1.5;
+  // (owner, 2026-11-17) blocking, either way round; kicks by p on o in the fair-kicking window
+  const blocks = (p, o) => p.acct.data.blocked.includes(o.acct.id) || o.acct.data.blocked.includes(p.acct.id);
+  const kicksOn = (p, o, now) => { p.kicked = (p.kicked || []).filter(([, t]) => now - t < W.KICK_FAIR.win * 1000); return p.kicked.filter(([a]) => a === o.acct.id).length; };
+  const sendBlocks = (p) => send(p.ws, { t: "blocks", ids: [...p.room.players.values()].filter((o) => p.acct.data.blocked.includes(o.acct.id)).map((o) => o.id) });
   // the build changed (an admin, or a courier's house): save it and send it everyone
   function applyBuild(list) {
     W.setBuild({ pieces: list, zones: W.zones.slice() }); store.saveBuild({ pieces: W.build, zones: W.zones }).catch((e) => console.error("[pets] saveBuild", e.message));
