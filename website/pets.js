@@ -6,7 +6,7 @@
 import * as THREE from "./vendor/three.module.min.js";
 import { svg, fillIcons, ICON } from "./icons.js?v=7";
 import * as World from "./pets-world.js?v=1794919828";
-import { loadCritters, makeCritter, hasCritter } from "./critters.js?v=3";
+import { loadCritters, makeCritter, hasCritter } from "./critters.js?v=4";
 import * as Town from "./town.js?v=1";
 await Promise.all([loadCritters(), Town.loadTown()]);   // (owner, 2026-11-17) the critter and town models, before anything is drawn
 
@@ -49,69 +49,10 @@ function textSprite(text, { size = 40, color = "#23303b", bg = "rgba(255,255,255
 // ---- the town, drawn from the shared world ----
 // (owner, 2026-11-11) the town's colors are kept calm so the delivery marker (POI: the one hot pink thing in town) stands out
 const POI = "#ff1f8f";
-const KIND_C = { plaza: "#d9d4c8", grass: "#78b765", mud: "#75583e", rock: "#9a948b", plank: "#b9905f", isle: "#80bd6c", road: "#84878f", stone: "#a9adb5", roof: "#b9573f", pod0: "#e8b923", pod1: "#c9d1d9", pod2: "#c98a4b", ice: "#d6f0ff", sand: "#e8cf8f", jungle: "#3f8f4a", basalt: "#4a4446", lava: "#ff5a1f", moon: "#c9c6d9", water: "#3f8fd0", snow: "#f4f8fb", log: "#8a5a34", crater: "#8a86a0" };
 const HOUSE_C = [["#efe3cc", "#c8604c"], ["#ecd5b8", "#5c86bd"], ["#cfdcc0", "#7a5a3c"], ["#dcd3c6", "#8368b0"], ["#f1f1ec", "#3fa9a4"], ["#eef6fb", "#5aa0d9"], ["#f0d9a8", "#c8662e"], ["#b9a27a", "#3f7a3f"], ["#5a5050", "#c8401e"], ["#e4e0f0", "#6a4ab0"]];   // walls and roofs, by district
 const NOWHERE = { name: "", x: 0, z: 0, y: 0, mx: 0, mz: 0, my: 0, d: 0 }, addrOf = (id) => World.addr(id) || NOWHERE;   // (owner, 2026-11-13) a mailbox may have been taken away
 const houseMesh = {}, dogMesh = [], gooseMesh = [], goatMesh = [], sprinklerMesh = [], pipeEyes = [];
-function rampGeo(s) {   // a wedge: flat at the bottom, rising along z (k 2) or x (k 3)
-  const y0 = Math.min(s.ya, s.yb), g = new THREE.BufferGeometry(), A = [s.x0, y0, s.z0], B = [s.x1, y0, s.z0], C = [s.x1, y0, s.z1], D = [s.x0, y0, s.z1], X = s.k === 3, E = [s.x0, s.ya, s.z0], F = [s.x1, X ? s.yb : s.ya, s.z0], G = [s.x1, s.yb, s.z1], H = [s.x0, X ? s.ya : s.yb, s.z1];
-  const quads = [[E, H, G, F], [A, E, F, B], [D, C, G, H], [A, D, H, E], [B, F, G, C]], v = [];
-  for (const [a, b, c, d] of quads) v.push(...a, ...b, ...c, ...a, ...c, ...d);
-  g.setAttribute("position", new THREE.Float32BufferAttribute(v, 3)); g.computeVertexNormals(); return g;
-}
-function buildTown() {
-  for (const s of World.slabs) {
-    const c = KIND_C[s.kind] || "#cccccc";
-    if (s.k === 0) { const h = Math.min(s.y - s.b, 46), m = box(s.x1 - s.x0, h, s.z1 - s.z0, c, (s.x0 + s.x1) / 2, s.y - h / 2, (s.z0 + s.z1) / 2); m.castShadow = s.kind === "roof" || s.kind === "stone"; }
-    else if (s.k === 2 || s.k === 3) { const m = new THREE.Mesh(rampGeo(s), new THREE.MeshLambertMaterial({ color: c, side: THREE.DoubleSide })); m.receiveShadow = true; scene.add(m); }
-    else {   // an island: grass on top, rock tapering away beneath
-      const top = new THREE.Mesh(new THREE.CylinderGeometry(s.r, s.r, 0.8, 40), mat(c)); top.position.set(s.x, s.y - 0.4, s.z); top.receiveShadow = true; scene.add(top);
-      const rock = new THREE.Mesh(new THREE.CylinderGeometry(s.r * 0.98, s.r * 0.25, 13, 20), mat("#9a8f84")); rock.position.set(s.x, s.y - 7.3, s.z); scene.add(rock);
-    }
-  }
-  // roads
-  for (const r of World.roads) {
-    const len = hyp(r.x1 - r.x0, r.z1 - r.z0), m = box(r.w, 0.06, len, r.alley ? "#c9ab7e" : r.w > 20 ? "#a9adb5" : "#84878f", (r.x0 + r.x1) / 2, 0.03, (r.z0 + r.z1) / 2, null, false); m.rotation.y = Math.atan2(r.x1 - r.x0, r.z1 - r.z0); m.receiveShadow = true;
-    if (!r.alley && r.w < 20) for (let u = 3; u < len - 3; u += 9) box(0.25, 0.07, 3.6, "#e8e2c8", r.x0 + ((r.x1 - r.x0) * u) / len, 0.04, r.z0 + ((r.z1 - r.z0) * u) / len, null, false).rotation.y = m.rotation.y;   // the middle line
-  }
-  // houses and their mailboxes
-  for (const h of World.houses) {
-    const [wall, roof] = HOUSE_C[h.d], g = new THREE.Group(), s = h.size; g.position.set(h.x, h.y, h.z); g.rotation.y = h.yaw; scene.add(g);
-    box(s, 3.2, s, wall, 0, 1.6, 0, g); box(1.3, 2.1, 0.12, roof, 0, 1.05, s / 2 + 0.02, g, false);
-    for (const x of [-1, 1]) box(1.1, 1.0, 0.1, "#bfe6ff", x * s * 0.3, 2.0, s / 2 + 0.02, g, false);
-    const rf = new THREE.Mesh(new THREE.ConeGeometry(s * 0.8, 2.6, 4), mat(roof)); rf.rotation.y = Math.PI / 4; rf.position.y = 4.5; rf.castShadow = true; g.add(rf);
-    const mb = new THREE.Group(); mb.position.set(h.mx, h.my, h.mz); mb.rotation.y = h.yaw; scene.add(mb);
-    box(0.14, 1.0, 0.14, "#f4f1ea", 0, 0.5, 0, mb); const bx = box(0.5, 0.42, 0.75, "#3a8ee6", 0, 1.2, 0, mb); box(0.06, 0.34, 0.06, "#e5534b", 0.3, 1.45, 0.2, mb, false);
-    houseMesh[h.id] = { g, mb, bx, shake: 0 };
-  }
-  for (const f of World.fences) { const len = hyp(f.x1 - f.x0, f.z1 - f.z0), m = f.hedge ? box(0.8, 0.9, len, "#4f8f46", (f.x0 + f.x1) / 2, f.y + 0.45, (f.z0 + f.z1) / 2) : box(0.14, 1.0, len, "#fbf7ee", (f.x0 + f.x1) / 2, f.y + 0.5, (f.z0 + f.z1) / 2); m.rotation.y = Math.atan2(f.x1 - f.x0, f.z1 - f.z0); }
-
-  for (const p of World.ponds) { const m = new THREE.Mesh(new THREE.CircleGeometry(p.r, 36).rotateX(-Math.PI / 2), new THREE.MeshLambertMaterial({ color: "#4fb4ee", transparent: true, opacity: 0.88 })); m.position.set(p.x, p.y + 0.07, p.z); scene.add(m); }
-  // shortcuts: ziplines, the sewer pipe, the Sky Cannon, jump pads, boost pads, balloons
-  for (const z of World.zips) {
-    const a = new THREE.Vector3(z.x, z.y + 3, z.z), b = new THREE.Vector3(z.tx, z.ty + 3, z.tz), len = a.distanceTo(b), m = new THREE.Mesh(new THREE.CylinderGeometry(0.05, 0.05, len, 5), mat("#2b323a"));
-    m.position.copy(a).lerp(b, 0.5); m.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), b.clone().sub(a).normalize()); scene.add(m);
-    box(0.3, 3.2, 0.3, "#8a5a34", z.x, z.y + 1.6, z.z); box(0.3, 3.2, 0.3, "#8a5a34", z.tx, z.ty + 1.6, z.tz); box(1.6, 0.14, 1.6, "#ffd84a", z.x, z.y + 0.07, z.z, null, false);
-  }
-  for (const e of World.PIPE.off ? [] : [World.PIPE.a, World.PIPE.b]) {
-    const m = new THREE.Mesh(new THREE.CylinderGeometry(World.PIPE.r, World.PIPE.r, 0.6, 20, 1, true), new THREE.MeshLambertMaterial({ color: "#4f9a5a", side: THREE.DoubleSide })); m.position.set(e.x, e.y + 0.3, e.z); m.castShadow = true; scene.add(m);
-    const lip = new THREE.Mesh(new THREE.TorusGeometry(World.PIPE.r, 0.22, 8, 24).rotateX(Math.PI / 2), mat("#5fb56b")); lip.position.set(e.x, e.y + 0.6, e.z); scene.add(lip);
-    const dark = new THREE.Mesh(new THREE.CircleGeometry(World.PIPE.r - 0.05, 20).rotateX(-Math.PI / 2), basic("#10151a")); dark.position.set(e.x, e.y + 0.42, e.z); scene.add(dark);
-    const eyes = new THREE.Group(); for (const x of [-0.35, 0.35]) { const w = new THREE.Mesh(new THREE.SphereGeometry(0.22, 10, 8), basic("#ffffff")); w.position.set(x, 0, 0); const p = new THREE.Mesh(new THREE.SphereGeometry(0.1, 8, 6), basic("#10151a")); p.position.set(x, 0.14, 0); eyes.add(w, p); }
-    const bill = new THREE.Mesh(new THREE.ConeGeometry(0.2, 0.5, 6), basic("#f08a24")); bill.position.set(0, 0.1, 0.3); eyes.add(bill); eyes.position.set(e.x, e.y + 1.0, e.z); scene.add(eyes); pipeEyes.push(eyes);
-  }
-  if (World.ISLES.length) { const C = World.CANNON, g = new THREE.Group(); g.position.set(C.x, C.y, C.z); scene.add(g);
-    const base = new THREE.Mesh(new THREE.CylinderGeometry(C.r + 0.4, C.r + 0.8, 0.5, 20), mat("#3d4650")); base.position.y = 0.25; g.add(base);
-    const pad = new THREE.Mesh(new THREE.CylinderGeometry(C.r, C.r, 0.1, 20), basic("#9aa8ff")); pad.position.y = 0.55; g.add(pad);
-    const barrel = new THREE.Mesh(new THREE.CylinderGeometry(1.5, 1.9, 6, 14, 1, true), new THREE.MeshLambertMaterial({ color: "#5a6472", side: THREE.DoubleSide })); barrel.position.set(-2.6, 2.2, 0); barrel.rotation.z = -0.9; barrel.castShadow = true; g.add(barrel); }
-  for (const p of World.pads) { const m = new THREE.Mesh(new THREE.CylinderGeometry(1.7, 1.7, 0.16, 18), mat("#35c4de")); m.position.set(p.x, p.y + 0.08, p.z); scene.add(m); const r = new THREE.Mesh(new THREE.TorusGeometry(1.7, 0.16, 6, 18).rotateX(Math.PI / 2), mat("#ffffff")); r.position.set(p.x, p.y + 0.16, p.z); scene.add(r); }
-
-
-  for (const b of World.balloons) { const g = new THREE.Group(); g.position.set(b.x, b.y, b.z); scene.add(g); box(1.6, 1.0, 1.6, "#b9824f", 0, 0.9, 0, g);
-    const top = new THREE.Mesh(new THREE.SphereGeometry(2.6, 16, 12), mat("#ff6b6b")); top.position.y = 6; top.scale.y = 1.15; g.add(top); const band = new THREE.Mesh(new THREE.SphereGeometry(2.64, 16, 6, 0, TAU, 1.2, 0.7), mat("#ffffff")); band.position.y = 6; band.scale.y = 1.15; g.add(band);
-    for (const [x, z] of [[-0.7, -0.7], [0.7, -0.7], [-0.7, 0.7], [0.7, 0.7]]) box(0.05, 3.2, 0.05, "#5a4632", x, 2.8, z, g, false); b.g = g; g.scale.setScalar(1.8);   // (owner, 2026-11-11) big, and it takes you from anywhere in its ring
-    const ring = new THREE.Mesh(new THREE.RingGeometry(BALLOON_R - 0.5, BALLOON_R, 48).rotateX(-Math.PI / 2), basic("#ff6b6b", 0.55)), fill = new THREE.Mesh(new THREE.CircleGeometry(BALLOON_R - 0.5, 48).rotateX(-Math.PI / 2), basic("#ff6b6b", 0.14)); ring.position.set(b.x, b.y + 0.08, b.z); fill.position.set(b.x, b.y + 0.07, b.z); scene.add(ring, fill); }
-  for (const s of World.sprinklers) { box(0.2, 0.5, 0.2, "#7a828c", s.x, s.y + 0.25, s.z); sprinklerMesh.push(s); }
+function buildTown() {   // (owner, 2026-11-17) the hand-built town's slabs, roads, ziplines, balloons and such went with it (2026-11-13): just the clouds
   // clouds, for somewhere to float
   for (let n = 0; n < 34; n++) { const g = new THREE.Group(), a = n * 2.39, r = 150 + (n * 97) % 620; g.position.set(250 + Math.cos(a) * r, 60 + (n * 37) % 90, Math.sin(a) * r * 0.8);
     for (let k = 0; k < 4; k++) { const m = new THREE.Mesh(SPHERE, basic("#ffffff", 0.92)); m.scale.set(8 + ((n + k) * 5) % 7, 4 + k, 6 + (k * 3) % 4); m.position.set(k * 7 - 10, (k % 2) * 2, (k * 5) % 6); g.add(m); } scene.add(g); }
@@ -230,7 +171,9 @@ let critDt = 0;
 function animateCrit(m, moving, speed, airborne) {
   const C = m.crit, want = m.act && C.acts[m.act] ? m.act : m.ab ? "ability" : airborne ? "jump" : moving ? "run" : "idle";
   C.play(want, { hold: want === "jump", speed: want === "run" ? clamp(speed / (16 * 0.36 * m.g.scale.x), 0.6, 2.6) : 1 });
-  C.update(critDt);
+  // (owner, 2026-11-17) far off (or off screen) a critter's animation steps less often
+  const far = m.g.position.distanceToSquared(camera.position); m.acc = (m.acc || 0) + critDt;
+  if (far < 70 * 70 || m.acc >= (far < 160 * 160 ? 1 / 20 : 1 / 8) || C.onceT > 0) { C.update(m.acc); m.acc = 0; } else return;
   if (m.rider) { m.rider.visible = m.rider.visible && !C.hide; const b = C.bone("RiderSeat"); if (b && !C.flip) { boneIn(b, m.body, crV); m.rider.position.set(crV.x, crV.y + m.rOff, crV.z); } else m.rider.position.set(0, m.seat + m.rOff, m.seatZ); }
 }
 function petModel(sp, rider, va, r = 0) { let riderM = null;
@@ -1224,6 +1167,7 @@ function inspector() {
     if (q.k === "block" || q.k === "gust" || q.k === "mover") row("Size", num(q.w, 1, 1, BX, ch((a, v) => (a.w = Math.round(v))), "52px"), num(q.h, 1, 1, BX, ch((a, v) => (a.h = Math.round(v))), "52px"), num(q.d, 1, 1, BX, ch((a, v) => (a.d = Math.round(v))), "52px"));
     if (q.k === "void") row("Size", num(q.w, 1, 1, World.AREA_MAX, ch((a, v) => (a.w = Math.round(v))), "52px"), num(q.h, 1, 1, 200, ch((a, v) => (a.h = Math.round(v))), "52px"), num(q.d, 1, 1, World.AREA_MAX, ch((a, v) => (a.d = Math.round(v))), "52px"));
     if (q.k === "area") row("Size", num(q.w, 1, 1, World.AREA_MAX, ch((a, v) => (a.w = Math.round(v))), "64px"), num(q.d, 1, 1, World.AREA_MAX, ch((a, v) => (a.d = Math.round(v))), "64px"));
+    if (q.k !== "area" && q.k !== "void" && q.k !== "gate" && q.k !== "wall") { const A = World.areaAt(...World.pieceCenter(q)); row("Neighborhood", el("span", "", A ? World.zoneName(A.d) : "Spawn")); }   // (owner, 2026-11-17) where it belongs: outside every bounds is Spawn
     if (q.k === "wall") row("Length", num(q.w, 1, 1, BX, ch((a, v) => (a.w = Math.round(v)))));
     if (q.k === "spawn" || q.k === "gust") row("Angle", num(q.a | 0, 15, 0, 359, ch((a, v) => (a.a = Math.round(v) % 360))));
     else if (!["block", "mover", "area", "void"].includes(q.k)) row("Facing", pick(q.r | 0, [[0, "0°"], [1, "90°"], [2, "180°"], [3, "270°"]], ch((a, v) => (a.r = +v))));
@@ -1635,7 +1579,7 @@ function stale(web, told, by) {
 function adopt(d) { const ride = save.ride, q0 = riding(), key = q0.sp + q0.r + q0.va + save.set.shirt + World.upTotal(save.up); save = World.cleanData(d); const q = riding(); if (!mine || ride !== save.ride || key !== q.sp + q.r + q.va + save.set.shirt + World.upTotal(save.up)) remount(); hudDirty = true; setVolumes(); if (panel && panel !== "admin") renderPanel(); }
 function sendPos(force) {
   if (!netOk || (me.transit && me.transit.k === "pipe")) return;
-  const mv = (me.moving ? 1 : 0) | (me.foot ? 2 : 0) | (me.ground ? 0 : 4) | (me.gliding ? 16 : 0), s = [me.x.toFixed(2), me.y.toFixed(2), me.z.toFixed(2), me.yaw.toFixed(2), mv].join();
+  const mv = (me.moving ? 1 : 0) | (me.foot ? 2 : 0) | (me.ground ? 0 : 4) | (me.gliding ? 16 : 0) | (me.sprint > 0 && !me.foot ? 32 : 0) | (me.dj && !me.ground ? 64 : 0), s = [me.x.toFixed(2), me.y.toFixed(2), me.z.toFixed(2), me.yaw.toFixed(2), mv].join();
   if (!force && s === lastPos && performance.now() - lastSent < 1000) return;
   netSend({ t: "pos", x: +me.x.toFixed(2), y: +me.y.toFixed(2), z: +me.z.toFixed(2), yaw: +me.yaw.toFixed(2), mv, ct: Math.round(performance.now()) }); lastPos = s; lastSent = performance.now();
 }
@@ -1830,7 +1774,8 @@ function stepOthers(dt, t) {
     if (o.stunT > 0) { o.stunT -= dt; if (Math.random() < 0.3) emit(o.x, o.y + 2.2, o.z, 1, { colors: ["#ffd84a"], speed: 1.5, up: 0.5, life: 0.5, grav: 0, size: 0.16 }); }
     if (o.graceT > 0) { o.graceT -= dt; if (Math.random() < 0.4) emit(o.x, o.y + 1.2, o.z, 1, { colors: ["#ffffff", "#bfe6ff"], speed: 1.2, up: 1, life: 0.5, grav: -1, size: 0.1, spread: 1.6 }); }
     if (o.kickT > 0) o.kickT -= dt; if (o.hideT > 0) o.hideT -= dt;
-    pose(o.rig, { x: o.x, y: o.y, z: o.z, yaw: o.yaw, moving: !!(o.mv & 1), foot, air: !!(o.mv & 4), stun: o.stunT, mx: o.mx, my: o.my, mz: o.mz, myaw: o.myaw, kickT: o.kickT, hidden: o.hideT > 0, glide: !!(o.mv & 16) }, dt, t, 10);
+    pose(o.rig, { x: o.x, y: o.y, z: o.z, yaw: o.yaw, moving: !!(o.mv & 1), foot, air: !!(o.mv & 4), stun: o.stunT, mx: o.mx, my: o.my, mz: o.mz, myaw: o.myaw, kickT: o.kickT, hidden: o.hideT > 0, glide: !!(o.mv & 16), sprint: !!(o.mv & 32) }, dt, t, 10);
+    { const dj = !!(o.mv & 64); if (dj && !o.wasDj) critOnce(o.rig, "flip"); o.wasDj = dj; }   // (owner, 2026-11-17) others see your Sprint and Double Jump too
     striking(o.rig, o.id, podIds.has(o.id) && !foot && !(o.mv & 1) && !(o.stunT > 0), t);
     if (o.va && !(o.hideT > 0)) { const f = foot; sparkle(f ? o.mx : o.x, f ? o.my : o.y, f ? o.mz : o.z, World.mountScale({ r: o.r | 0 }), dt); }
     if ((o.mv & 1) && !(o.mv & 6) && (o.r >= 4 || o.tr)) { o.stepT -= dt; if (o.stepT <= 0) { o.stepT = 0.18; trail(o.x, o.y, o.z, o, ""); } }
@@ -1951,7 +1896,7 @@ function stepCannons(dt, t) {
   const F = World.CANNONS.fuse, v = new THREE.Vector3();
   for (const c of Object.values(cannonMesh)) {
     if (c.kit) {   // (owner, 2026-11-17) the kit's cannon: sparks at its breech while the fuse burns, then its fire clip, timed so its BOOM is the launch
-      c.mixer.update(dt); if (c.fire < 0) continue; const was = c.fire; c.fire += dt;
+      if (c.fire < 0) continue; c.mixer.update(dt); const was = c.fire; c.fire += dt;   // idle cannons cost nothing
       if (was < F - Town.CANNON_BOOM && c.fire >= F - Town.CANNON_BOOM) c.play();
       if (c.fire < F) { c.tip.getWorldPosition(v); emit(v.x, v.y + 0.6, v.z, 3, { colors: ["#ffd84a", "#ff8a3d", "#ffffff"], speed: 3, up: 2, life: 0.4, grav: 3, size: 0.2 }); }
       else if (!c.boomed) { c.boomed = true; c.muzzle.getWorldPosition(v); if (hyp(c.x - me.x, c.z - me.z) < 80) { sfx("cannon"); cam.shake = Math.max(cam.shake, c.mine ? 0.9 : 0.4); }
@@ -2091,6 +2036,8 @@ function pieceMesh(q, live) {
     else if (q.k === "podium") { let n = World.PODIUM.spots.findIndex((p) => p.id === q.id); if (!live && n < 0) n = Math.min(2, World.PODIUM.spots.length); if (n >= 0) { const h = [1.6, 1.1, 0.7][n]; const pm = box(4.4, h, 4.4, POD_C[n], q.x, q.y + h / 2, q.z, G); pm.material = MARBLE_M; pm.userData.pid = q.id; box(4.6, 0.12, 4.6, "#ffffff", q.x, q.y + h + 0.06, q.z, G).material = MARBLE_M; } }
     else if (q.k === "spawn") { const g = new THREE.Group(); g.position.set(q.x, q.y + 0.08, q.z); g.rotation.y = q.a !== undefined ? (q.a * Math.PI) / 180 : (q.r | 0) * Math.PI / 2; G.add(g); if (live) { G.visible = !!bm; spawnG = G; }   /* (owner, 2026-11-13) only builders see it */ const sm = new THREE.MeshBasicMaterial({ color: "#7ef0c8", transparent: true, opacity: 0.85 });
       g.add(new THREE.Mesh(new THREE.RingGeometry(0.6, 0.9, 24).rotateX(-Math.PI / 2), sm)); const ar = new THREE.Mesh(new THREE.ConeGeometry(0.35, 0.8, 3).rotateX(Math.PI / 2), sm); ar.position.set(0, 0.05, 1.4); ar.scale.y = 0.15; g.add(ar); }   // which way couriers face
+  // (owner, 2026-11-17) a mailbox in Spawn (outside every bounds) gets no deliveries: red while building
+  if (live && q.k === "mailbox" && !World.areaAt(q.x, q.z)) { const r = new THREE.Mesh(new THREE.BoxGeometry(0.9, 1.7, 0.9), HOLO.red[0]); r.position.set(q.x, q.y + 0.85, q.z); r.renderOrder = 3; r.userData.noPick = 1; r.visible = !!bm; buildOnly.push(r); G.add(r); }
   G.traverse((o) => { o.userData.pid = q.id; });
   return G;
 }

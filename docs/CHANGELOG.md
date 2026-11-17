@@ -6,6 +6,10 @@ and any rule decided. Use `git log` for the code detail (and for the older Atamu
 
 ## 2026-11-17
 
+- **Polish and speed (owner).** Everyone sees your Sprint and Double Jump flip (Glide too, since the fix). The builder's
+  inspector shows each piece's neighborhood (Spawn outside every bounds), and a mailbox in Spawn shows red. Critters
+  share their materials, aren't drawn off screen and animate less often far away; idle cannons cost nothing; the
+  hand-built town's leftover drawing code is gone.
 - **Cannon Plots and Spawn (owner).** Cannons go on Cannon Plots the builder places anywhere: buy one (7,500 Aura, one
   each) and set any unlocked cannon on it. Houses are no longer for sale; anyone who bought one gets 7,500 Aura back on
   their next login. The builder's Build Outside Bounds button lets pieces go outside every bounds: that's Spawn, with no

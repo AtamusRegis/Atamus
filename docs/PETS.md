@@ -128,8 +128,8 @@ A parcel that breaks or is lost is gone; the conveyor always has the next one. (
   triangles, its colors from a small atlas; made in studs, 0.36 m each). The kinds kept their keys in saves and took their
   models' names: dog **Corgi Pup**, cat **Kitten**, gator **Axolotl**, bear **Cheetah Cub**, wolf **Griffin Chick**, fox
   **Bunny**, raptor **Baby Raptor**, trike **Mini Trike**, trex **Frog**, unicorn **Cloud Pony** (abilities unchanged).
-  Main Street's dogs, geese and goats are the town dog, goose and goat models; the other zones' chasers are their zone's
-  mount model. Each mount carries a mail bag; the rider sits on its `RiderSeat` bone (following it as it moves), the
+  The town dog, goose and goat models (and each zone's mount model for its chasers) are wired in for the town's animals,
+  but no animals roam today (see Danger). Each mount carries a mail bag; the rider sits on its `RiderSeat` bone (following it as it moves), the
   parcels stack at its `ParcelStack`. A **Shiny** swaps in the model's `_shiny` atlas, (owner, 2026-11-17) saturated well past the kit's pastel, shimmers (a soft glow that breathes, with a bright glint now and then) and sparkles (more and bigger stars than before). (owner, 2026-11-17) **Each
   rarity wears its coat:** Common is the model as made; Uncommon to Legendary recolor its atlas to the kind's coat for
   that rarity (`MOUNTS[..].coats`: the body colors to the coat's body color, the pale cream parts to its trim, each
@@ -138,7 +138,9 @@ A parcel that breaks or is lost is gone; the conveyor always has the next one. (
   their rarity too (the town dog takes the Dog coats). Clips: idle, run (sped up with the speed), jump
   (held in the air) and the ability: Sprint and Glide loop while on; **Blink** shrinks the mount to a dot with the rider
   hidden and the jump forward happens at frame 7 (others see it reappear from there); **Double Jump** flips the mount
-  while the rider stays upright. Chasers: idle, run and attack (a dog's bark-lunge as it chases, a goose's honk-flap, a
+  while the rider stays upright. (owner, 2026-11-17) Everyone sees your Glide, Sprint and Double Jump (`mv` bits 16, 32,
+  64). One material per look (kind, coat, Shiny), shared by every copy; critters off screen aren't drawn, and far ones
+  animate less often (20 times a second past 70 m, 8 past 160 m). Chasers: idle, run and attack (a dog's bark-lunge as it chases, a goose's honk-flap, a
   goat's headbutt). Sky geese stay the drawn ones. If a model can't load, the drawn animal is used.
 - (owner, 2026-11-11) **The mounts are the areas' animals:** Dog (Main Street), Cat (Maple Suburbs), Gator
   (Goose Marsh), Bear (Cliffside), Wolf (Floating Islands), (owner, 2026-11-12) Fox (Frostbite Fields), Raptor (Sunscorch
@@ -358,7 +360,8 @@ is one 1 m grass block (`SEED`) to stand on, with sky all round. Everything is a
   the camera. (owner, 2026-11-16) **pieces go only
   inside a neighborhood's bounds** (bounds and respawn boxes anywhere): outside, the hologram is red and nothing is
   placed. (owner, 2026-11-17) **Build Outside Bounds** (a button on the builder's bottom row, on or off) lets pieces go
-  anywhere: outside, they're Spawn's (placed pieces there show no red). A piece belongs to whichever neighborhood's
+  anywhere: outside, they're Spawn's (placed pieces there show no red, except a mailbox: it gets no deliveries). The
+  inspector shows every piece's Neighborhood (Spawn outside every bounds). A piece belongs to whichever neighborhood's
   bounds it's in now. **A gate (or bound wall) belongs to and unlocks the neighborhood whose
   bounds it stands in** (outside any: the one it was placed in), and **the next neighborhood can't be picked for
   editing until this one (past Main Street) has a gate**. **⚙** opens that neighborhood's panel: name, animal, each rarity's
