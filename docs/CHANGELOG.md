@@ -6,6 +6,8 @@ and any rule decided. Use `git log` for the code detail (and for the older Atamu
 
 ## 2026-11-16
 
+- **Fix: blocks snapping to gate walls (owner).** Placing aims through gate and wall boundaries; Select and Erase still
+  pick them.
 - **Fix: water seams (owner).** All the water is now drawn as one body, so touching or overlapping water blocks show
   no seams or darker overlaps.
 - **Building only inside bounds; gates unlock their own neighborhood (owner).** Pieces can only be placed inside a
