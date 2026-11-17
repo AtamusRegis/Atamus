@@ -6,6 +6,9 @@ and any rule decided. Use `git log` for the code detail (and for the older Atamu
 
 ## 2026-11-16
 
+- **Builder menus; each cannon's facing (owner).** The build tiles are in menus (Ground, Town, Hazards, Shortcuts).
+  A selected Main Street house sets which way its cannon faces (an arrow over the roof shows it) instead of one facing
+  for every cannon in Main Street's panel.
 - **Cannons (owner).** The builder places Cannon Unlocks and Cannon Pads; couriers unlock a neighborhood's cannon with
   Aura, buy a Main Street house, and put any unlocked cannon in its place to fire themselves to that neighborhood's pad
   (a sparkling fuse, a bubbly BOOM). The owner sets which way all cannons face.

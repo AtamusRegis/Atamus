@@ -62,7 +62,7 @@
     #pbody { padding: 12px; overflow-y: auto; touch-action: pan-y; display: flex; flex-direction: column; gap: 10px; -webkit-overflow-scrolling: touch; }
     /* (owner, 2026-11-13) the zone builder's bar: pieces, turn and close on top; sizes, material or zone under */
     #buildbar { position: fixed; left: 50%; transform: translateX(-50%); bottom: calc(10px + var(--sb)); z-index: 26; display: none; flex-direction: column; gap: 6px; align-items: center; width: max-content; max-width: calc(100vw - 16px); }
-    #buildbar .btiles { display: flex; gap: 6px; flex-wrap: wrap; justify-content: center; max-width: min(820px, calc(100vw - 16px)); }
+    #buildbar .bcats { display: flex; gap: 4px; flex-wrap: wrap; justify-content: center; } #buildbar .bcats .bt { padding: 6px 14px; } #buildbar .bcats .bt.on { background: #ffd84a; } #buildbar .btiles { display: flex; gap: 6px; flex-wrap: wrap; justify-content: center; max-width: min(820px, calc(100vw - 16px)); }
     #buildbar .btile { width: 64px; height: 70px; padding: 4px 2px 3px; border-radius: 14px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 1px; background: var(--card); }
     #buildbar .btile img { width: 46px; height: 46px; object-fit: contain; pointer-events: none; } #buildbar .btile span { font-size: 10px; line-height: 1.1; white-space: nowrap; } #buildbar .btile.on { background: #ffd84a; }
     body.cinema #buildbar, body.cinema #zpanel, body.cinema #pprompt, body.cinema #cprompt { opacity: 0; pointer-events: none; }
@@ -255,6 +255,6 @@
     <button id="lgo" class="btn go" type="submit">Log in</button>
     <button id="lnew" class="btn" type="button">Create account</button>
   </form>
-  <script type="module" src="pets.js?v=1794652382"></script>
+  <script type="module" src="pets.js?v=1794652383"></script>
 </body>
 </html>
