@@ -6,6 +6,10 @@ and any rule decided. Use `git log` for the code detail (and for the older Atamu
 
 ## 2026-11-16
 
+- **Inspector; cannons aim at their pad (owner).** Selecting a piece (or bounds), or picking a Block, Gust, Platform or
+  Wall tile, opens an inspector on the right with all its settings; the build bar is just menus, tiles and the
+  neighborhood. Cannons now face the pad they fire you to (no facing setting, no arrows); Cannon Pads are hidden from
+  players.
 - **Fix: placing near Main Street houses (owner).** Aiming in the builder hit the cannon arrows over the houses (and
   other builder-only or hidden things), so pieces went on top of an arrow instead of where you pointed; aiming now
   passes through them, and the arrows no longer show through walls. Holding R with a Main Street house selected spins
