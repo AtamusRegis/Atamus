@@ -1635,7 +1635,7 @@ function stale(web, told, by) {
 function adopt(d) { const ride = save.ride, q0 = riding(), key = q0.sp + q0.r + q0.va + save.set.shirt + World.upTotal(save.up); save = World.cleanData(d); const q = riding(); if (!mine || ride !== save.ride || key !== q.sp + q.r + q.va + save.set.shirt + World.upTotal(save.up)) remount(); hudDirty = true; setVolumes(); if (panel && panel !== "admin") renderPanel(); }
 function sendPos(force) {
   if (!netOk || (me.transit && me.transit.k === "pipe")) return;
-  const mv = (me.moving ? 1 : 0) | (me.foot ? 2 : 0) | (me.ground ? 0 : 4) | (me.glide ? 16 : 0), s = [me.x.toFixed(2), me.y.toFixed(2), me.z.toFixed(2), me.yaw.toFixed(2), mv].join();
+  const mv = (me.moving ? 1 : 0) | (me.foot ? 2 : 0) | (me.ground ? 0 : 4) | (me.gliding ? 16 : 0), s = [me.x.toFixed(2), me.y.toFixed(2), me.z.toFixed(2), me.yaw.toFixed(2), mv].join();
   if (!force && s === lastPos && performance.now() - lastSent < 1000) return;
   netSend({ t: "pos", x: +me.x.toFixed(2), y: +me.y.toFixed(2), z: +me.z.toFixed(2), yaw: +me.yaw.toFixed(2), mv, ct: Math.round(performance.now()) }); lastPos = s; lastSent = performance.now();
 }
@@ -2241,7 +2241,7 @@ function frame(tms) {
     if (me.kickT > 0) me.kickT -= dt; if (me.squash > 0) me.squash -= dt; if (me.hop > 0) me.hop -= dt;
     if (me.stun > 0 && Math.random() < 0.35) emit(me.x, me.y + 2.2, me.z, 1, { colors: ["#ffd84a"], speed: 1.5, up: 0.5, life: 0.5, grav: 0, size: 0.16 });
     if (me.grace > 0) { me.grace -= dt; if (Math.random() < 0.5) emit(me.x, me.y + 1.2, me.z, 1, { colors: ["#ffffff", "#bfe6ff"], speed: 1.2, up: 1, life: 0.5, grav: -1, size: 0.1, spread: 1.6 }); }
-    if (mine) pose(mine, { x: me.x, y: me.y, z: me.z, yaw: me.yaw, moving: me.moving, foot: me.foot, air: !me.ground, stun: me.stun, mx: me.mx, my: me.my, mz: me.mz, myaw: me.myaw, kickT: me.kickT, hidden: me.hidden, squash: me.squash, hop: me.hop, glide: me.glide, sprint: me.sprint > 0 }, dt, t, myStats().speed);
+    if (mine) pose(mine, { x: me.x, y: me.y, z: me.z, yaw: me.yaw, moving: me.moving, foot: me.foot, air: !me.ground, stun: me.stun, mx: me.mx, my: me.my, mz: me.mz, myaw: me.myaw, kickT: me.kickT, hidden: me.hidden, squash: me.squash, hop: me.hop, glide: me.gliding, sprint: me.sprint > 0 }, dt, t, myStats().speed);
     if (mine) striking(mine, myId, podIds.has(myId) && !me.foot && !me.moving && !(me.stun > 0), t);
     if (tms - lastSent > 66) sendPos();
   }

@@ -224,7 +224,7 @@ A parcel that breaks or is lost is gone; the conveyor always has the next one. (
   levels of the ones merged. (owner, 2026-11-12) **Merge all** (the Stable, when there's a merge to make) makes every merge
   there is, Commons first so what they make can merge on up; in each group it keeps the ridden one if it's there, else
   the one with the most Aura levels. **Selling:** any mount but the one you ride (and never your last) sells for Aura
-  by rarity: 15 / 60 / 250 / 1,000 / 4,000, x5 Shiny (the Stable's Sell button). An Epic, Legendary or Shiny made by merging is announced. Up to 60 mounts.
+  by rarity: 15 / 60 / 250 / 1,000 / 4,000, x5 Shiny (the Stable's Sell button). An Epic, Legendary or Shiny made by merging is announced. Up to 120 mounts (owner, 2026-11-17: room for every kind, rarity and Shiny).
 
 ## The tutorial
 
@@ -504,7 +504,7 @@ deliveries for 2 s).
 
 Nyssary is always admin and the only one who makes or removes admins; admins make moderators; moderators (and up)
 mute, kick and ban those below them. The Admin panel (Settings): find a courier, mute / kick / ban, role, give (coins,
-a mount of a kind, rarity and variant), quick commands (coins, all mounts (every kind at every rarity), upgrades,
+a mount of a kind, rarity and variant), quick commands (coins, all mounts (every kind at every rarity, normal and Shiny), upgrades,
 everything, **Reset to new player**: owner, 2026-11-11, a brand new courier in every way: coins,
 mounts, upgrades, unopened parcels, the parcels being carried and on the conveyor, stats, settings and the
 tutorial; their page reloads as a new courier), and edit coins. Everything is logged (`pet_admin_log`).

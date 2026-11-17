@@ -10,6 +10,9 @@ and any rule decided. Use `git log` for the code detail (and for the older Atamu
   each) and set any unlocked cannon on it. Houses are no longer for sale; anyone who bought one gets 7,500 Aura back on
   their next login. The builder's Build Outside Bounds button lets pieces go outside every bounds: that's Spawn, with no
   deliveries (a mailbox there is no address).
+- **Glide shows, and All mounts gives Shinies (owner).** A gliding mount plays its glide (for you and everyone else: it
+  never showed before). The admin All mounts (and Everything) gives every kind and rarity in Shiny too; the Stable holds
+  up to 120 mounts.
 - **Shinier Shinies (owner).** Shiny critters are much more colorful, shimmer with a glint now and then, and sparkle
   more.
 - **Critter coats (owner).** Every rarity of a critter has its own colors again (Uncommon to Legendary wear their

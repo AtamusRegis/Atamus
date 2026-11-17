@@ -162,7 +162,7 @@ export const podiumPay = (m) => Math.round(2 * Math.pow(2, clamp(m.r | 0, 0, 4))
 // (owner, 2026-11-11) no eggs any more: parcels drop mounts. Eggs someone still had became a Dog each (a Basic Egg a
 // Common one, a Rare Egg a Rare one, a Legendary Egg a Legendary one)
 const EGG_TO = { basic: ["dog", 0], rare: ["gator", 2], legendary: ["wolf", 4] };
-export const MOUNT_CAP = 60;
+export const MOUNT_CAP = 120;   // (owner, 2026-11-17) room for every kind, rarity and Shiny (100)
 // (owner, 2026-11-14) kicking another courier (m, s, m/s): in reach and in front; it throws them off their mount and
 // tumbling (down s), then a moment safe from kicks (grace s); one kick every cd s; never a party member or at the post office
 export const KICK = { range: 3.6, cd: 4, fling: 14, up: 9, down: 1.4, grace: 4 };
