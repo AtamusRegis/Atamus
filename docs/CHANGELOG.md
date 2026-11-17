@@ -6,6 +6,8 @@ and any rule decided. Use `git log` for the code detail (and for the older Atamu
 
 ## 2026-11-16
 
+- **Respawn boxes (owner).** A new builder piece for each neighborhood: touching one respawns you at once (at the
+  neighborhood's gate with a parcel, as a fall would) instead of falling for a while. Only builders see them.
 - **Inspector; cannons aim at their pad (owner).** Selecting a piece (or bounds), or picking a Block, Gust, Platform or
   Wall tile, opens an inspector on the right with all its settings; the build bar is just menus, tiles and the
   neighborhood. Cannons now face the pad they fire you to (no facing setting, no arrows); Cannon Pads are hidden from
