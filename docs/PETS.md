@@ -185,10 +185,13 @@ A parcel that breaks or is lost is gone; the conveyor always has the next one. (
 - **Your house's cannon:** standing by your house shows your name and House plus each cannon you've unlocked; picking
   one puts that cannon in the house's place (the house is gone; just the cannon's low base is solid), House puts it
   back. Swap any time.
-- **Cannons** (owner, 2026-11-16) face the Cannon Pad they fire you to, whichever way the house faced; the barrel is up 35 degrees, in the neighborhood's color, and breathes gently. **Only its owner
-  fires it:** touch it and you're inside while the fuse fizzes and sparkles (1.3 s; the barrel swells and wobbles;
-  the camera turns to watch from behind and to the side), then BOOM (smoke, a flash, a shake, the barrel recoils and
-  bounces) and you fly in an arc to that neighborhood's Cannon Pad (2.4 s). Other couriers see the cannon go off and
+- **Cannons** (owner, 2026-11-16) face the Cannon Pad they fire you to, whichever way the house faced. (owner, 2026-11-17) The town kit's
+  cannon (turret on a turntable, barrel up 45 degrees, its launch pad behind, centered on the house's spot at 0.9 size) in
+  the metal of the neighborhood it fires to: Bronze (1-2), Silver (3-4), Gold (5-6), Diamond (7-8), Rainbow (9); a
+  Cannon Unlock's little turning one too. **Only its owner
+  fires it:** touch it and you're inside while the fuse fizzes and sparkles (1.3 s; sparks at the breech;
+  the camera turns to watch from behind and to the side), then BOOM (smoke, a flash, a shake; the kit's fire clip, its
+  wind-up timed so its BOOM is the launch) and you fly in an arc to that neighborhood's Cannon Pad (2.4 s). Other couriers see the cannon go off and
   you vanish until you land.
 
 ## Aura and the podiums
@@ -234,6 +237,16 @@ them"; "start the world on one 1m block, and let me place EVERYTHING"). Nothing 
 is one 1 m grass block (`SEED`) to stand on, with sky all round. Everything is a placed piece kept on the server (table
 `pet_build`, one row; `W.build` / `setBuild`), the same for everyone, and changes for everyone at once.
 
+- (owner, 2026-11-17) **The town kit:** pines, houses, the cannon, the post office and the parcel are chunky toy
+  models made in Blender (`website/town/*.glb`, loaded by `website/town.js` before anything is drawn; made in studs of
+  0.36 m, all colored from one shared atlas; a variant atlas recolors a roof or a cannon's metal). A **Tree** is one of
+  five pines and a **House** one of five houses with one of five roof colors (red, blue, teal, purple, orange), both
+  picked by the piece's id. The houses come without the kit's own mailbox, path and delivery pad (owner: the placed
+  Mailbox pieces stay the addresses), shrunk where needed to fit the 8 m house lot. The **post office** is the kit's
+  (about 28 x 20 m, 10 m tall) with its conveyor running out of the loading door along the piece's x = 0 (`PO_LOCAL`:
+  the building west and behind, the belt's top 1.19 m, your Ready parcel comes out at the door and stops at the pickup
+  point by the bumper); its belt's stripes scroll as a parcel comes out. **Parcels** are the kit's taped box, its
+  cardboard in the tier's color (Express still has its blue band). If a model can't load, the drawn piece is used.
 - **Pieces** (on a 1 m grid; quarter turns):
   - **Block:** W x H x D metres (1 to 60 each) of a material: grass, dirt, stone, brick, wood, road, sand, snow, ice,
     water. You stand on its top and it stops you from the side (you can go under one in the air). Ice is slippery
