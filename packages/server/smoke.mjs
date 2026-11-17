@@ -99,10 +99,17 @@ try {
   await a.wait((m) => m.t === "belt" && m.ready && m.next, "the conveyor refills");
   // (owner, 2026-11-13) no bonking: a "kick" from the page does nothing
   // (owner, 2026-11-14) kicking another courier: thrown off their mount and tumbling, the kicker gets the shot; no parcel damage; then a moment safe
+  // (owner, 2026-11-17) a rookie (fewer than KICK_FAIR.rookie deliveries) can't be kicked
+  const saD0 = who("smokeA").acct.data.stats.del; { const sa = who("smokeA").acct.data.stats, d0 = sa.del; sa.del = 0; await put(a, "smokeA", 40, 40); await put(b, "smokeB", 40, 38); b.send({ t: "kick" }); await sleep(150); ok(!a.inbox.some((m) => m.t === "kickfly"), "a rookie can't be kicked"); sa.del = Math.max(d0, W.KICK_FAIR.rookie); who("smokeB").kickAt = 0; }
   await put(a, "smokeA", 40, 40); await put(b, "smokeB", 40, 38); b.send({ t: "kick" }); const kk = await a.wait((m) => m.t === "kickfly", "kicked"); const kh = await b.wait((m) => m.t === "kickhit", "the kick landed");
   ok(kk.vz > 10 && kk.vy > 0 && kh.id === who("smokeA").id && who("smokeA").stunUntil > Date.now() && who("smokeA").bag[0].hits === 0, "a kick throws the courier in front off their mount, away from the kicker");
   b.send({ t: "kick" }); await sleep(150); who("smokeB").kickAt = 0; b.send({ t: "kick" }); await sleep(150); ok(!a.inbox.some((m) => m.t === "kickfly" && m !== kk), "one kick at a time, and a kicked courier is safe for a moment");
   who("smokeA").stunUntil = 0; who("smokeA").kickSafe = 0; who("smokeB").kickAt = 0; await put(a, "smokeA", 0, 7.5); await put(b, "smokeB", 0, 5.5); b.send({ t: "kick" }); await sleep(150); ok(!a.inbox.some((m) => m.t === "kickfly" && m !== kk), "no kicking at the post office"); who("smokeB").kickAt = 0;
+  // (owner, 2026-11-17) kicking the same courier again: weaker each time, then not at all for a while; blocking: no kicks either way
+  { const A = who("smokeA"), Bp = who("smokeB"), again = async () => { A.stunUntil = 0; A.kickSafe = 0; Bp.kickAt = 0; a.inbox.length = 0; await put(a, "smokeA", 40, 40); await put(b, "smokeB", 40, 38); b.send({ t: "kick" }); await sleep(200); return a.inbox.find((m) => m.t === "kickfly"); };
+    const k2 = await again(), k3 = await again(), k4 = await again(); ok(k2 && k3 && k2.vz < kk.vz && k3.vz < k2.vz && !k4, "kicking the same courier again is weaker, then stops working on them");
+    Bp.kicked = []; b.send({ t: "block", id: A.id }); await b.wait((m) => m.t === "blocks" && m.ids.includes(A.id), "blocked"); ok(!(await again()), "a blocked courier can't be kicked (nor kick)");
+    b.send({ t: "block", id: A.id }); await b.wait((m) => m.t === "blocks" && !m.ids.includes(A.id), "unblocked"); A.stunUntil = 0; A.kickSafe = 0; Bp.kickAt = 0; Bp.kicked = []; A.acct.data.stats.del = saD0; await put(a, "smokeA", 0, 7.5); await put(b, "smokeB", 0, 5.5); }
   b.send({ t: "ability" }); await sleep(100);
   // (owner, 2026-11-14) falling off the town: back to the respawn point, still carrying the parcel
   { const pa = who("smokeA"), pid = pa.bag[0].pid; await put(a, "smokeA", 40, 40, W.EDGE_Y - 5); const tp = await a.wait((m) => m.t === "tp" && m.why === "home", "back from the fall");

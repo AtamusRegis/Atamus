@@ -373,7 +373,11 @@ is one 1 m grass block (`SEED`) to stand on, with sky all round. Everything is a
   edge of the town, they're back at the respawn point (with their parcels). (owner, 2026-11-14) The kicked courier
   sees a short shot round their own tumbling ragdoll ("KICKED!" and the kicker's name); the kicker gets no shot, just a
   heavy hit (a held frame, a hard shake, a white flash, a burst and "KICK!" over the courier kicked). Never a party member, never at the post office, and a kicked courier
-  can't be kicked again for 4 s after getting up. No parcel damage, no Aura. (The 2026-11-13 bonk, its Aura and the
+  can't be kicked again for 4 s after getting up. (owner, 2026-11-17) **Fair kicking:** one kick every 4 s; kicking the
+  same courier again within 60 s is weaker each time (65% of the last throw), and after 3 it doesn't work on them
+  until the minute clears; couriers with fewer than 5 deliveries can't be kicked; tapping a courier shows **Block**
+  (Unblock): neither of you can kick the other, you don't get each other's chat, and they can't invite you (kept in
+  your data, up to 200). No parcel damage, no Aura. (The 2026-11-13 bonk, its Aura and the
   Friendly setting stay gone.)
 
 ## Courier upgrades
