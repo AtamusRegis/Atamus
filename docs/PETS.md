@@ -139,10 +139,14 @@ A parcel that breaks or is lost is gone; the conveyor always has the next one. *
   strip all the way across just east of the square) every mount goes the same 12 m/s (x2 empty, as anywhere). Over the
   pad its own speed switches on (a whoosh and purple sparks), for as long as you're east of it. Riding speeds up and
   stops quickly whatever the speed (grip 7x the speed, at least 70 m/s², so fast mounts don't drift; ice still slides).
-- **Stats** (rarity 0-4, area a 0-4 for Dog to Wolf): (owner, 2026-11-12) Speed 12 m/s x (1 + 20% per rarity step) x
-  (owner, 2026-11-14) 1.05^a (each zone's animal 5% faster than the one before: Dog 100%, Cat 105%, Gator 110%...,
-  the same in every zone). (owner, 2026-11-14) Every mount jumps 8 and has no grip (the old Jump and Grip by rarity and
-  area, and the Aura **Boost** speed levels, are gone); the Stable shows just the speed, as a number.
+- **Stats:** (owner, 2026-11-16) **every mount goes the same 16 m/s** (no more by rarity or by zone); every mount jumps 8
+  and has no grip. The Stable shows a mount's **Ability** instead of a speed.
+- (owner, 2026-11-16) **Abilities**, one per animal: **Sprint** (Dog, Bear, Raptor): E or the purple ability button,
+  3 s at 1.7x, then 8 s to recharge (the button fills back up). **Blink** (Gator, Trike): E or the button, straight
+  ahead up to 12 m at the same height, stopping short of a wall, a block or a closed gate, every 3 s; a purple puff where
+  you left and where you land, others see it too. **Double Jump** (Cat, Fox, T-Rex): jump again in the air, once till
+  you land (90% of a jump). **Glide** (Wolf, Unicorn): hold jump while falling: down at most 2.5 m/s, at 55% speed the
+  way you steer, till you land. The ability button shows only for Sprint and Blink, and not on foot.
 - **Jumping** (owner, 2026-11-13): Space (or Jump, (owner, 2026-11-14) the big button now) jumps by the mount's Jump.
   **A jump keeps its speed:** in the air
   you carry on at the speed you left the ground with (letting go doesn't stop you), and the controls only steer gently.
@@ -477,7 +481,7 @@ Courier's rules.
   replaced by just a counter. The Odds menu for players.
 
 - (owner, 2026-11-13) **Mount abilities** (Bark, Double Jump, Dash, Tough Hide, Howl, Vanish, Pounce, Charge, Roar,
-  Blink) and **bonking** (the kick: stuns, cracked parcels, bonk Aura and its pop, grace, the Friendly setting):
+  Blink; (owner, 2026-11-16) four movement abilities came back, see Abilities) and **bonking** (the kick: stuns, cracked parcels, bonk Aura and its pop, grace, the Friendly setting):
   replaced by the Big Jump on every mount.
 
 - (owner, 2026-11-13) **The hand-built town** (Main Street, Maple Suburbs, Goose Marsh, Cliffside, the Floating Islands
@@ -565,3 +569,5 @@ From the old game, for the record:
 - The courier's cap and mail bag (owner, 2026-11-09): replaced by the R6-style figure.
 - Space as a single rise per press on a flier (owner, 2026-11-09): replaced by holding Space / Shift.
 - Helicopters spotting players by distance and chasing them down (owner, 2026-11-09): replaced by the searchlight.
+- (owner, 2026-11-16) Mount speed by rarity (+20% a step) and by zone (+5% each zone's animal): every mount goes the
+  same speed now.

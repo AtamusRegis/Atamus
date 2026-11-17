@@ -48,6 +48,7 @@
     .act:active { transform: translateY(3px); box-shadow: 0 1px 0 rgba(0,0,0,.18); }
     #bwhistle { right: calc(26px + var(--sr)); bottom: calc(112px + var(--sb)); width: 62px; height: 62px; background: #ffd84a; }
     #bkick { right: calc(112px + var(--sr)); bottom: calc(18px + var(--sb)); width: 66px; height: 66px; background: #ff7a59; }
+    #bab { right: calc(116px + var(--sr)); bottom: calc(96px + var(--sb)); width: 58px; height: 58px; background: #c9b6ff; } #bab.off { display: none; }
     #bjump { right: calc(16px + var(--sr)); bottom: calc(18px + var(--sb)); width: 84px; height: 84px; background: #8fe08a; }   /* (owner, 2026-11-14) the big button now */
     /* menu buttons down the right edge */
     #menus { position: fixed; right: calc(10px + var(--sr)); top: calc(10px + var(--st)); display: flex; flex-direction: column; gap: 8px; }
@@ -232,6 +233,7 @@
     </div>
     <button id="bwhistle" class="act" title="Whistle" data-ico="whistle"></button>
     <button id="bkick" class="act" title="Kick" data-ico="kick"></button>
+    <button id="bab" class="act" title="Ability" data-ico="sprint"></button>
     <button id="bjump" class="act" title="Jump" data-ico="jump"></button>
     <div id="gifts"><div id="gq"></div><button id="gall" class="disp">Open all</button><div id="gopen"><i id="grays"></i><div id="gbig"></div><b id="glabel" class="disp"></b></div><div id="gres"><button id="gx" title="Close">✕</button><div id="gtitle"></div><div id="glist"></div></div></div>
     <div id="announce"></div>
@@ -261,6 +263,6 @@
     <button id="lgo" class="btn go" type="submit">Log in</button>
     <button id="lnew" class="btn" type="button">Create account</button>
   </form>
-  <script type="module" src="pets.js?v=1794652388"></script>
+  <script type="module" src="pets.js?v=1794652389"></script>
 </body>
 </html>

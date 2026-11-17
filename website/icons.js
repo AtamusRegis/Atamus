@@ -16,6 +16,8 @@ export const ICON = {
   parcel: '<g stroke="#23303b" stroke-width="1.3" stroke-linejoin="round"><path d="M12 2.8 20.5 7v10L12 21.2 3.5 17V7z" fill="#d9a066"/><path d="M3.5 7 12 11.2 20.5 7M12 11.2v10" fill="none"/><path d="M7.7 4.9l8.5 4.2v3.4" fill="none" stroke="#f3e2c0" stroke-width="1.8"/></g>',
   cursor: '<path d="M5 3l13.5 8.3-6 1.3 3.6 6.6-2.8 1.5-3.6-6.6L5.4 18.4z" fill="#ffffff" stroke="#23303b" stroke-width="1.5" stroke-linejoin="round"/>',
   kick: '<g stroke="#23303b" stroke-width="1.4" stroke-linejoin="round"><path d="M7 3h5v8.5l6.5 3.2c1.6.8 2.5 2.4 2.5 4.1V20H5.5c-.8 0-1.5-.7-1.5-1.5V14l3-2.5z" fill="#a8683a"/><path d="M4 17.5h17" fill="none"/></g><path d="M1.5 9.5 4 10.5M1 13h2.5M2 6.5l2.2 1.6" stroke="#ffffff" stroke-width="1.6" stroke-linecap="round"/>',
+  sprint: '<path d="M13.5 2 5 13.5h6L9.5 22 19 9.5h-6.2z" fill="#ffd84a" stroke="#23303b" stroke-width="1.4" stroke-linejoin="round"/>',
+  blink: '<path d="M12 2.5l2.2 6.6 6.8.2-5.4 4.1 2 6.6-5.6-3.9-5.6 3.9 2-6.6L3 9.3l6.8-.2z" fill="#c77dff" stroke="#23303b" stroke-width="1.3" stroke-linejoin="round"/><path d="M2 21h5M17 21h5" stroke="#23303b" stroke-width="1.6" stroke-linecap="round" stroke-dasharray="1.5 2"/>',
   play: '<path d="M7 4.5v15l12.5-7.5z" fill="#3fb34f" stroke="#23303b" stroke-width="1.4" stroke-linejoin="round"/>',
   pin: '<path d="M12 22s-7-7.2-7-12.2a7 7 0 0 1 14 0C19 14.8 12 22 12 22z" fill="#e5484d" stroke="#23303b" stroke-width="1.3" stroke-linejoin="round"/><circle cx="12" cy="9.8" r="2.6" fill="#fff" stroke="#23303b" stroke-width="1.1"/>',
 };

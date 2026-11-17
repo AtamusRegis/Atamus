@@ -138,13 +138,16 @@ export const homeZone = (sp) => { const n = zones.findIndex((z) => z.sp === sp);
 export const mountScale = (m) => 1 + 0.25 * clamp(m.r | 0, 0, 4);             // Common 1x to Legendary 2x
 // (owner, 2026-11-12) around the post office every mount goes the same speed; the purple Aura pad across the way out
 // (x AURA_PAD.x, all the way across) switches on its own speed for the run
-export const BASE_SPEED = 12, RARITY_UP = 0.2, ZONE_UP = 0.05, SPD_UP = 0.05;
-// (owner, 2026-11-12) speed: 20% more per rarity step; 5% more per Aura speed level. (owner, 2026-11-14) each zone's
-// animal goes 5% faster than the one before (Dog 100%, Cat 105%, Gator 110%...), the same in every zone
-export const zoneSpeed = (sp) => Math.pow(1 + ZONE_UP, homeZone(sp));
-export function mountStats(m, zone) {   // m: { sp, r (rarity), spd }; zone: where it is (districtAt), or its own zone
-  const r = clamp(m.r | 0, 0, 4); void zone;
-  return { speed: BASE_SPEED * (1 + RARITY_UP * r) * zoneSpeed(m.sp), jump: 8, grip: 0 };   // (owner, 2026-11-14) no Aura speed (Boost) levels, and every mount jumps and grips the same
+export const BASE_SPEED = 12, MOUNT_SPEED = 16, SPD_UP = 0.05;
+// (owner, 2026-11-16) every mount goes the same speed (no more by rarity or by zone) and has its animal's movement
+// ability: Sprint (the ability button: 3 s much faster, then a cooldown), Blink (the ability button: straight ahead
+// up to `d` m at the same height, stopping short of anything in the way), Double Jump (jump again in the air, once),
+// Glide (hold jump while falling: down slowly, moving slowly the way you steer, till you land)
+export const ABILITIES = { sprint: { name: "Sprint", t: 3, mul: 1.7, cd: 8 }, blink: { name: "Blink", d: 12, cd: 3 }, djump: { name: "Double Jump", up: 0.9 }, glide: { name: "Glide", fall: 2.5, mul: 0.55 } };
+export const MOUNT_AB = { dog: "sprint", cat: "djump", gator: "blink", bear: "sprint", wolf: "glide", fox: "djump", raptor: "sprint", trike: "blink", trex: "djump", unicorn: "glide" };
+export const abilityOf = (sp) => MOUNT_AB[sp] || "sprint";
+export function mountStats(m) {   // m: { sp, r (rarity) }
+  return { speed: MOUNT_SPEED, jump: 8, grip: 0, ab: abilityOf(m && m.sp) };
 }
 // (owner, 2026-11-11) trails: one more to unlock every five areas opened (with five areas, the first at the Floating
 // Islands); any mount can wear any trail you've unlocked

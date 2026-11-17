@@ -4,8 +4,8 @@
 // deliveries, rolls, damage, coins, mounts; this page shows the town (pets-world.js, shared with the server), moves you
 // and asks. Phone first: a thumb joystick, drag to look, pinch to zoom, big buttons.
 import * as THREE from "./vendor/three.module.min.js";
-import { svg, fillIcons, ICON } from "./icons.js?v=6";
-import * as World from "./pets-world.js?v=1794652387";
+import { svg, fillIcons, ICON } from "./icons.js?v=7";
+import * as World from "./pets-world.js?v=1794652389";
 
 const $ = (id) => document.getElementById(id);
 const { TAU, clamp, hyp, MOUNTS, TIERS, RARITY, RARITY_C, MODS, UPGRADES } = World;
@@ -561,8 +561,19 @@ let clockOff = 0; const srvNow = () => (Date.now() + clockOff) / 1000;
 // (owner, 2026-11-13) coyote time: a jump still works for a moment after running off an edge
 const onGround = () => me.ground || me.coyote > 0;
 function tryJump() {
-  if (me.stun > 0 || me.transit || !onGround()) return; const st = myStats();
+  if (me.stun > 0 || me.transit) return; const st = myStats();
+  if (!onGround()) { if (me.foot || st.ab !== "djump" || me.dj) return; me.dj = true; me.vy = st.jump * World.ABILITIES.djump.up; sfx("jump"); emit(me.x, me.y + 0.2, me.z, 16, { colors: ["#ffffff", "#9fd8ff"], speed: 4, up: 0.5, life: 0.45, grav: 0, size: 0.18 }); return; }   // (owner, 2026-11-16) Double Jump: once more in the air
   me.vy = me.foot ? 7.5 : st.jump; me.ground = false; me.coyote = 0; sfx("jump"); emit(me.x, me.y + 0.1, me.z, 5, { colors: ["#e9e2d2"], speed: 2, up: 1, life: 0.4, grav: 2 });
+}
+// (owner, 2026-11-16) the ability button (E): Sprint or Blink (Double Jump and Glide are on the jump)
+function doAbility() {
+  const st = myStats(), A = World.ABILITIES[st.ab], t = now(); if (me.foot || me.stun > 0 || me.transit || rewardLock() || !(st.ab === "sprint" || st.ab === "blink") || t < (me.abAt || 0) + A.cd) return;
+  if (st.ab === "sprint") { me.abAt = t; me.sprint = A.t; sfx("boost"); cam.shake = Math.max(cam.shake, 0.15); return; }
+  const dx = Math.sin(me.yaw), dz = Math.cos(me.yaw), BR = 0.6; let k = 0;   // Blink: straight ahead at the same height, short of anything in the way
+  for (let d = 0.25; d <= A.d; d += 0.25) { const x = me.x + dx * d, z = me.z + dz * d; if (World.blocked(x, z, me.y, BR) || World.blocked(x, z, me.y + 1.2, BR) || World.gateBlocked(x, z, me.y, World.openFor(save), BR)) break; k = d; }
+  if (k < 1) return; me.abAt = t; emit(me.x, me.y + 1, me.z, 22, { colors: ["#c77dff", "#ffffff", "#e2b8ff"], speed: 4, up: 1, life: 0.5, grav: 0, size: 0.22 });
+  me.x += dx * k; me.z += dz * k; netSend({ t: "blink", x: me.x, y: me.y, z: me.z }); sfx("boost"); flash("#e2b8ff");
+  emit(me.x, me.y + 1, me.z, 22, { colors: ["#c77dff", "#ffffff", "#e2b8ff"], speed: 4, up: 1, life: 0.5, grav: 0, size: 0.22 });
 }
 // (owner, 2026-11-14) kicking another courier (F, or the boot button): the server picks who's in reach
 function doKick() { const t = now(); if (me.stun > 0 || me.transit || t < me.kickAt + World.KICK.cd) return; me.kickAt = t; me.kickT = 0.28; sfx("kick"); netSend({ t: "kick" }); }
@@ -606,14 +617,21 @@ function stepMe(dt) {
   if (World.inSafeZone(me.x, me.z, me.y)) me.started = false; else if (World.onStart(me.x, me.z, me.y)) me.started = true;
   const real = !World.starts.length || me.started; if (real && !me.real && !me.foot) { sfx("boost"); cam.shake = Math.max(cam.shake, 0.15); emit(me.x, me.y + 1, me.z, 24, { colors: ["#c77dff", "#ffffff", "#e2b8ff"], speed: 4, up: 2, life: 0.6, grav: 0, size: 0.2 }); } me.real = real;
   let speed = me.foot ? 5.5 : (real ? st.speed : World.BASE_SPEED) * (bag.length ? 1 : World.EMPTY_FAST) * mud   // (owner, 2026-11-11) a parcel weighs you down: empty-handed you ride back much faster
-    * (me.boost > 0 ? 1.6 : 1);
+    * (me.boost > 0 ? 1.6 : 1) * (me.sprint > 0 && !me.foot ? World.ABILITIES.sprint.mul : 1) * (me.gliding ? World.ABILITIES.glide.mul : 1);   // (owner, 2026-11-16) Sprint, Glide
+  if (me.sprint > 0) { me.sprint -= dt; if (Math.random() < 0.6) emit(me.x, me.y + 0.6, me.z, 1, { colors: ["#ffd84a", "#ffffff"], speed: 1, up: 0.5, life: 0.35, grav: 0, size: 0.18 }); }
   const grip = Math.max(70, speed * 7), steer = hyp(mx, mz) > 0.08, acc = (me.ground ? (kind === "ice" ? grip * World.ICE_GRIP : grip) : steer ? Math.max(12, speed * 1.1) : 0) * dt,   /* (owner, 2026-11-13) a jump keeps the speed it left the ground with: no stopping in the air, only a gentle steer */   /* (owner, 2026-11-12) no drifting: quick to speed up and stop however fast it goes */   /* (owner, 2026-11-12) ice: hard to start, turn and stop */ tvx = mx * speed, tvz = mz * speed;
+  if (me.gliding) { const ga = 18 * dt; me.vx += clamp(tvx - me.vx, -ga, ga); me.vz += clamp(tvz - me.vz, -ga, ga); } else
   me.vx += clamp(tvx - me.vx, -acc, acc); me.vz += clamp(tvz - me.vz, -acc, acc);
   me.moving = hyp(me.vx, me.vz) > 0.6;
   if (hyp(mx, mz) > 0.08) me.yaw = angDiff(me.yaw + angDiff(Math.atan2(mx, mz), me.yaw) * Math.min(1, 12 * dt), 0);   // kept within a turn (owner, 2026-11-11: others saw you sideways)
   // jumping, gliding, falling
   if (jumpTap) { jumpTap = false; tryJump(); }
   me.vy -= GRAV * dt;
+  me.gliding = !me.ground && !me.foot && !me.transit && jumpHeld && me.vy < 0 && st.ab === "glide";   // (owner, 2026-11-16) Glide: hold jump while falling
+  if (me.gliding) { me.vy = Math.max(me.vy, -World.ABILITIES.glide.fall); if (Math.random() < 0.4) emit(me.x, me.y + 0.4, me.z, 1, { colors: ["#ffffff", "#cfe9ff"], speed: 0.6, up: -0.3, life: 0.6, grav: 0, size: 0.16 }); }
+  if (me.ground) me.dj = false;
+  { const B = $("bab"), on = !me.foot && (st.ab === "sprint" || st.ab === "blink"), A = World.ABILITIES[st.ab], left = on ? Math.max(0, (me.abAt || -99) + A.cd - now()) / A.cd : 0, key = (on ? st.ab : "") + Math.ceil(left * 30);   // the ability button: its icon, its cooldown
+    if (key !== B.dataset.k) { B.dataset.k = key; B.classList.toggle("off", !on); if (on && B.title !== A.name) { B.dataset.ico = st.ab; B.innerHTML = svg(st.ab); B.title = A.name; } B.style.setProperty("--cd", Math.round(left * 360) + "deg"); } }
   if (kind === "lava" && me.vy <= 0 && !me.foot) { me.vy = 11; me.ground = false; sfx("pop"); emit(me.x, me.y + 0.2, me.z, 18, { colors: ["#ff6a1f", "#ffd84a", "#c8401e"], speed: 4, up: 5, life: 0.6, grav: 8, size: 0.2 }); }   // lava bounces you off (the server burns a parcel)
   // sprinklers shove you sideways; wind pushes across the islands
   const sn = srvNow();
@@ -766,12 +784,13 @@ addEventListener("keydown", (e) => {
   if (e.repeat) return; keys.add(e.code); if (free) { e.preventDefault(); return; }   // the freecam takes the keys
   if (rewardLock()) return;   // (owner, 2026-11-12) nothing to do while the reward screen is up (or opening)
   if (e.code === "Space") { jumpHeld = true; jumpTap = true; e.preventDefault(); }
+  if (e.code === "KeyE" && !e.repeat) doAbility();
   if (e.code === "KeyQ") doWhistle(); if (e.code === "KeyF") doKick();
 });
 addEventListener("keyup", (e) => { keys.delete(e.code); if (e.code === "Space") jumpHeld = false; });
 addEventListener("blur", () => { keys.clear(); jumpHeld = false; });
 function press(id, down, up) { const b = $(id); b.addEventListener("pointerdown", (e) => { e.preventDefault(); e.stopPropagation(); down(); }); if (up) for (const k of ["pointerup", "pointercancel", "pointerleave"]) b.addEventListener(k, up); }
-press("bwhistle", doWhistle); press("bkick", doKick); press("bjump", () => { jumpHeld = true; jumpTap = true; }, () => { jumpHeld = false; });
+press("bwhistle", doWhistle); press("bkick", doKick); press("bab", doAbility); press("bjump", () => { jumpHeld = true; jumpTap = true; }, () => { jumpHeld = false; });
 
 // ---- words and numbers that pop up: floating numbers (they rise and fade in 0.8 s), banners, toasts ----
 const pops = [], V = new THREE.Vector3();
@@ -1000,7 +1019,8 @@ function renderPanel() {
     const m = save.mounts.find((k) => k.id === selMount) || riding(), S = World.mountStats(m), d = el("div", "mdetail");
     const im = el("img", "big"); im.src = portrait(m.sp, m.va, m.r); im.alt = ""; d.appendChild(im);
     const info = el("div", "minfo"); info.appendChild(el("h3", "", mountName(m))); const rr = el("div", "rar", RARITY[m.r]); rr.style.color = RARITY_C[m.r] === "#ffffff" ? "#6f7d8a" : RARITY_C[m.r]; info.appendChild(rr);
-    for (const [name, v, max] of [["Speed", S.speed, 0]]) { if (!max) { const r = el("div", "stat pup"); r.appendChild(el("span", "", name)); r.appendChild(el("em", "", v.toFixed(1))); info.appendChild(r); continue; }   /* (owner, 2026-11-14) just the speed, as a number */ const r = el("div", "stat"); r.appendChild(el("span", "", name)); const b = el("div", "bar"), f = el("i"); f.style.width = clamp((v / max) * 100, 4, 100) + "%"; b.appendChild(f); r.appendChild(b); r.appendChild(el("em", "", name === "Grip" ? Math.round(v) + "%" : v.toFixed(1))); info.appendChild(r); }
+    { const r = el("div", "stat pup"); r.appendChild(el("span", "", "Ability")); r.appendChild(el("em", "", World.ABILITIES[S.ab].name)); info.appendChild(r); }   /* (owner, 2026-11-16) every mount goes the same speed: its ability instead */
+    for (const [name, v, max] of []) { if (!max) { const r = el("div", "stat pup"); r.appendChild(el("span", "", name)); r.appendChild(el("em", "", v.toFixed(1))); info.appendChild(r); continue; }   /* (owner, 2026-11-14) just the speed, as a number */ const r = el("div", "stat"); r.appendChild(el("span", "", name)); const b = el("div", "bar"), f = el("i"); f.style.width = clamp((v / max) * 100, 4, 100) + "%"; b.appendChild(f); r.appendChild(b); r.appendChild(el("em", "", name === "Grip" ? Math.round(v) + "%" : v.toFixed(1))); info.appendChild(r); }
     const acts = el("div", "acts"); if (m.id !== save.ride) acts.appendChild(btn("Ride", () => netSend({ t: "equip", id: m.id }), "go"));
     if (World.fuseSet(save.mounts, m.id)) acts.appendChild(btn("Merge", () => netSend({ t: "fuse", id: m.id }), "fuse"));   // the same ones: the next coat up
     if (m.id !== save.ride && save.mounts.length > 1) { const b = coinBtn(World.sellPrice(m), () => netSend({ t: "sell", id: m.id }), true); b.insertBefore(document.createTextNode("Sell "), b.firstChild); acts.appendChild(b); }   // (owner, 2026-11-12)
@@ -1569,6 +1589,7 @@ function onFx(m) {
   const o = whereOf(m.id), mineFx = m.id === myId, nearMe = o && hyp(o.x - me.x, o.z - me.z) < 50;
   switch (m.k) {
     case "stun": if (o && !mineFx) o.stunT = m.s; break;
+    case "blink": if (o && !mineFx) { emit(o.x, o.y + 1, o.z, 18, { colors: ["#c77dff", "#ffffff"], speed: 4, up: 1, life: 0.5, grav: 0, size: 0.22 }); emit(m.x, m.y + 1, m.z, 18, { colors: ["#c77dff", "#ffffff"], speed: 4, up: 1, life: 0.5, grav: 0, size: 0.22 }); o.x = m.x; o.y = m.y; o.z = m.z; } break;   // (owner, 2026-11-16) another courier's Blink
     case "kick": if (o && !mineFx) { o.kickT = 0.28; if (nearMe) sfx("kick"); } break;
     case "cannon": if (o && !mineFx) { o.hideT = World.CANNONS.fuse + World.CANNONS.fly; cannonFire(m.h, false); } break;   // (owner, 2026-11-16) another courier's cannon goes off
     case "house": { const b = World.buildings.find((q) => q.id === m.id); if (b) emit(b.x, b.y + 5, b.z, 50, { colors: CONFETTI, speed: 6, up: 8, life: 1.3 }); sfx("unlock"); break; }

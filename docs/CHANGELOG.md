@@ -6,6 +6,9 @@ and any rule decided. Use `git log` for the code detail (and for the older Atamu
 
 ## 2026-11-16
 
+- **Abilities; one speed for every mount (owner).** Every mount goes the same speed. Each animal has a movement ability:
+  Sprint (Dog, Bear, Raptor), Blink (Gator, Trike), Double Jump (Cat, Fox, T-Rex), Glide (Wolf, Unicorn); E or the new
+  ability button for Sprint and Blink.
 - **Fix: the zone slider covered the tutorial (owner).** It hides while the tutorial shows (they share the bottom
   center).
 - **Respawn boxes (owner).** A new builder piece for each neighborhood: touching one respawns you at once (at the

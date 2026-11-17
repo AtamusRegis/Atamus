@@ -288,7 +288,7 @@ export function attachPets(server, { origins = [], allowLocal = false, store = m
           const x = num(m.x, 2000), y = num(m.y, 400), z = num(m.z, 2000), dt = (now - me.lt) / 1000;
           if (dt > 0.2) {   // the speed cap: far faster than anything in town moves
             const v = hyp(x - me.lx, z - me.lz) / dt; me.vx = (x - me.lx) / dt; me.vz = (z - me.lz) / dt;
-            if (v > SPEED_CAP && now - me.tpAt > 1500) { me.flags++; me.sus = now; }
+            if (v > SPEED_CAP && now - me.tpAt > 1500 && now - (me.blinkAt || 0) > 1500) { me.flags++; me.sus = now; }
             me.lx = x; me.lz = z; me.lt = now;
           }
           // (owner, 2026-11-11) any angle, wrapped (clamping it to +-10 left others riding sideways once they'd turned round a few times)
@@ -328,6 +328,10 @@ export function attachPets(server, { origins = [], allowLocal = false, store = m
           const q = d.mounts.find((k) => k.id === m.id), k = m.k === "cap" ? m.k : "";   /* (owner, 2026-11-14) no speed (Boost) levels to buy */ if (!q || !k || (q[k] | 0) >= (k === "cap" ? W.CAP_MAX : W.SPD_MAX)) break;
           const cost = W.petUpCost(q, k); if (d.coins < cost) break;
           d.coins -= cost; q[k] = (q[k] | 0) + 1; changed(me); flush(me.acct); send(ws, { t: "petup", id: q.id, k, data: d }); break;
+        }
+        case "blink": {   // (owner, 2026-11-16) a Blink: the speed cap lets this jump through; others see it
+          const B = W.ABILITIES.blink; if (W.abilityOf(mountOf(me) && mountOf(me).sp) !== "blink" || now - (me.blinkAt || 0) < B.cd * 1000 - 300) break;
+          me.blinkAt = now; all(room, { t: "fx", k: "blink", id: me.id, x: num(m.x, 2000), y: num(m.y, 400), z: num(m.z, 2000) }, me); break;
         }
         case "buytrail": {   // (owner, 2026-11-12) a trail bought with Aura
           const T = W.TRAILS.find((t) => t.k === m.k && t.cost); if (!T || d.trails.includes(T.k) || d.coins < T.cost) break;
