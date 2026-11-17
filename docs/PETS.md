@@ -301,7 +301,7 @@ is one 1 m grass block (`SEED`) to stand on, with sky all round. Everything is a
   pieces; (owner, 2026-11-14) while a piece is selected the tiles go and the bar shows only its settings. The mouse
   wheel (while building) raises or lowers where the next piece goes, a meter a notch (the blueprint shows it)
   ((owner, 2026-11-13) every piece a rounded tile with a picture of
-  the piece and its name under it), (owner, 2026-11-16) **The inspector:** a panel on the right shows everything about the selected piece or bounds (Position, Size, Angle or Facing, Material, Neighborhood, a gust's Every and Power, a platform's B offset and Pick B, Speed, Breaks, Timer, Respawn, a house's Owner; Delete, Deselect), all typed in or picked from lists, or the settings the picked Block, Gust, Platform or Wall tile places with; the bar keeps just the menus, the tiles and the neighborhood. Tiles (owner, 2026-11-16) in menus (**Ground**: Block, Wall, Gate, Bounds; **Town**: House, Mailbox, Tree, Post Office,
+  the piece and its name under it), (owner, 2026-11-16) **The inspector:** a panel on the right shows everything about the selected piece or bounds (Position, Size, Angle or Facing, Material, Neighborhood, a gust's Every and Power, a platform's B offset and Pick B, Speed, Breaks, Timer, Respawn, a house's Owner; Delete, Deselect), all typed in or picked from lists, or the settings the picked Block, Gust, Platform or Wall tile places with; the bar keeps just the menus, the tiles and the neighborhood. Tiles (owner, 2026-11-16) in menus (**Ground**: Block, Wall, Gate, Bounds, Respawn Box; **Town**: House, Mailbox, Tree, Post Office,
   Respawn, Podium, Start Line; **Hazards**: Gust, Platform, Boost; **Shortcuts**: Pipe, Cannon Unlock, Cannon Pad), with
   Select first and Erase last whichever menu is open ((owner, 2026-11-14) no
   turn or close buttons: R turns, Escape, B or the Build button closes); under it **the neighborhood you're editing**
@@ -329,7 +329,10 @@ is one 1 m grass block (`SEED`) to stand on, with sky all round. Everything is a
   Erasing everything leaves the one block.
 - **Falling off** (below 20 m down, `EDGE_Y`) sends you back to the respawn point; (owner, 2026-11-14) you keep the
   parcels you carry and go on with them. (owner, 2026-11-16) **Carrying a parcel in a neighborhood that has a gate**,
-  you come back at its gate instead (the nearest gate into it), just inside, facing in. **Drop** (the button beside the parcel counter) lets go of every parcel you
+  you come back at its gate instead (the nearest gate into it), just inside, facing in. (owner, 2026-11-16) **Respawn boxes** (the
+  builder's Respawn Box, under Ground: a see-through red box only builders see, any size, for a neighborhood) do the
+  same at once: touching one counts as falling off (its neighborhood's gate if you carry a parcel, else the respawn
+  point), so you don't fall for a while first. A box over the spot it would send you back to does nothing. **Drop** (the button beside the parcel counter) lets go of every parcel you
   carry (no banner), so you can take new ones.
 
 ## Danger

@@ -311,7 +311,7 @@ const BASE_N = { slabs: slabs.length, solids: solids.length };
 // to anyone who hasn't opened zone d yet (the zone it leads into) ----
 export const BUILD_MAX = 6000, BLOCK_MAX = 60, HOUSE_S = 8, HOUSE_H = 5, GATE_W = 8, GATE_H = 7, GATE_T = 1;
 export const MATS = ["grass", "dirt", "stone", "brick", "wood", "road", "sand", "snow", "ice", "water", "mud", "turbine"];   // (owner, 2026-11-13) mud slows, ice slides, water is a see-through wall, a turbine blows you up into the air
-export const PIECES = ["block", "house", "mailbox", "gate", "wall", "tree", "boost", "start", "podium", "spawn", "office", "area", "pipe", "gust", "mover", "cannonlock", "cannonpad"];
+export const PIECES = ["block", "house", "mailbox", "gate", "wall", "tree", "boost", "start", "podium", "spawn", "office", "area", "pipe", "gust", "mover", "cannonlock", "cannonpad", "void"];
 export const AREA_MAX = 1000;
 export const ONE_ONLY = ["spawn", "office"];   // the last one placed counts
 export const buildings = [], gates = [], starts = [], areas = [], pipes = [];
@@ -321,6 +321,10 @@ export const buildings = [], gates = [], starts = [], areas = [], pipes = [];
 // at their house they set any cannon they've unlocked in its place (or the house back), any time. A cannon faces the way
 // its neighborhood's Cannon Pad, whichever way the house faced; only its owner fires it ----
 export const cannonLocks = [], cannonPads = [];
+// (owner, 2026-11-16) respawn boxes: the builder places them (for a neighborhood) where couriers would fall; touching one
+// respawns you at once, as falling off would (at that neighborhood's gate if you carry a parcel)
+export const voids = [];
+export function voidAt(x, z, y) { for (const v of voids) if (x >= v.x0 && x <= v.x1 && z >= v.z0 && z <= v.z1 && y >= v.y0 && y <= v.y1) return v; return null; }
 export const CANNONS = { house: 7500, cost: (z) => Math.round(2000 * Math.pow(1.35, z) / 100) * 100, near: 7, fire: 3.6, fuse: 1.3, fly: 2.4, s: 4.4, h: 3.2 };
 export const cannonPad = (z) => cannonPads.find((p) => p.d === z) || null;
 export const houseFor = (aid) => build.find((q) => q.k === "house" && q.ow === aid) || null;
@@ -347,6 +351,7 @@ export function cleanPiece(q) {
   else if (q.k === "gust") { o.w = n(q.w, 1, BLOCK_MAX); o.h = n(q.h, 1, BLOCK_MAX); o.d = n(q.d, 1, BLOCK_MAX); o.a = n(q.a, 0, 359); o.iv = clamp(Math.round((+q.iv || GUST.iv) * 10) / 10, 0.5, 30); o.pw = n(q.pw === undefined ? GUST.pw : q.pw, 1, 60); }
   else if (q.k === "mover") { o.w = n(q.w, 1, BLOCK_MAX); o.h = n(q.h, 1, BLOCK_MAX); o.d = n(q.d, 1, BLOCK_MAX); o.m = MATS.includes(q.m) && q.m !== "turbine" ? q.m : "wood"; o.bx = n(q.bx, -200, 200); o.by = n(q.by, -100, 100); o.bz = n(q.bz, -200, 200); o.sp = n(q.sp === undefined ? MOVER.sp : q.sp, 1, 30);
     o.brk = n(q.brk, 0, 2); o.bt = clamp(Math.round((+q.bt || MOVER.bt) * 2) / 2, 0.5, 30); o.rs = clamp(Math.round((q.rs === undefined ? MOVER.rs : +q.rs || 0) * 2) / 2, 0, 120); }   // (owner, 2026-11-14) breaking: 0 never, 1 on step (bt s after it's first stood on), 2 on prolonged step (bt s stood on in all); back after rs s
+  else if (q.k === "void") { o.w = n(q.w, 1, AREA_MAX); o.h = n(q.h, 1, 200); o.d = n(q.d, 1, AREA_MAX); o.zone = n(q.zone, 0, TIERS.length - 1); }   // (owner, 2026-11-16) a respawn box
   else if (q.k === "area") { o.w = n(q.w, 1, AREA_MAX); o.d = n(q.d, 1, AREA_MAX); o.zone = n(q.zone, 0, TIERS.length - 1); }   // (owner, 2026-11-13) a neighborhood's bounds
   else { o.r = n(q.r, 0, 3); if (q.k === "gate" || q.k === "wall") o.zone = n(q.zone, 1, TIERS.length - 1); if (q.k === "wall") o.w = n(q.w, 1, BLOCK_MAX); if (q.k === "pipe") o.to = n(q.to, 0, 1e9); if (q.k === "spawn") o.a = n(q.a === undefined ? o.r * 90 : q.a, 0, 359);
     if (q.k === "house" && q.ow) { o.ow = n(q.ow, 1, 1e9); o.on = String(q.on || "").slice(0, 18); o.cz = n(q.cz, 0, TIERS.length - 1); } }   // (owner, 2026-11-16) its owner (account id and name) and the cannon in its place (0: none)   // a: (owner, 2026-11-13) the respawn point turns all the way round, in degrees
@@ -358,7 +363,7 @@ export function setBuild(data) {   // data: { pieces, zones } (or, from before, 
   build = list.map(cleanPiece).filter(Boolean).slice(0, BUILD_MAX); if (!build.length) build = SEED.map((q) => ({ ...q }));
   areas.length = 0; for (const q of build) if (q.k === "area") areas.push({ id: q.id, x0: q.x, z0: q.z, x1: q.x + q.w, z1: q.z + q.d, d: q.zone, size: q.w * q.d });
   areas.sort((a, b) => a.size - b.size);
-  slabs.length = BASE_N.slabs; solids.length = BASE_N.solids; houses.length = 0; buildings.length = 0; gates.length = 0; starts.length = 0; boosts.length = 0; trees.length = 0; pipes.length = 0; gusts.length = 0; movers.length = 0; cannonLocks.length = 0; cannonPads.length = 0; updrafts.length = 0; PODIUM.spots.length = 0; PO.on = false;
+  slabs.length = BASE_N.slabs; solids.length = BASE_N.solids; houses.length = 0; buildings.length = 0; gates.length = 0; starts.length = 0; boosts.length = 0; trees.length = 0; pipes.length = 0; gusts.length = 0; movers.length = 0; cannonLocks.length = 0; cannonPads.length = 0; voids.length = 0; updrafts.length = 0; PODIUM.spots.length = 0; PO.on = false;
   Object.assign(SPAWN, { x: 0.5, z: 0.5, y: 0, yaw: 0 });
   const count = TIERS.map(() => 0);
   for (const q of build) {
@@ -368,6 +373,7 @@ export function setBuild(data) {   // data: { pieces, zones } (or, from before, 
     else if (q.k === "mover") movers.push({ ...q });
     else if (q.k === "house") { buildings.push({ id: q.id, x: q.x, z: q.z, y: q.y, yaw, d: districtAt(q.x, q.z, q.y), ow: q.ow || 0, cz: q.cz || 0 }); if (q.cz) solid(q.x, q.z, CANNONS.s / 2, CANNONS.s / 2, q.y - 1, q.y + 1.2); else solid(q.x, q.z, HOUSE_S / 2, HOUSE_S / 2, q.y - 1, q.y + HOUSE_H, yaw); }   // (owner, 2026-11-16) a cannon in its place: just its low base is solid
     else if (q.k === "cannonlock") { cannonLocks.push({ id: q.id, x: q.x, z: q.z, y: q.y, d: districtAt(q.x, q.z, q.y) }); solid(q.x, q.z, 1.1, 1.1, q.y - 1, q.y + 1.6); }
+    else if (q.k === "void") voids.push({ id: q.id, x0: q.x, x1: q.x + q.w, z0: q.z, z1: q.z + q.d, y0: q.y, y1: q.y + q.h, d: q.zone });
     else if (q.k === "cannonpad") cannonPads.push({ id: q.id, x: q.x, z: q.z, y: q.y, yaw, d: districtAt(q.x, q.z, q.y) });
     else if (q.k === "mailbox") { const d = districtAt(q.x, q.z, q.y); houses.push({ id: q.id, x: q.x, z: q.z, y: q.y, yaw, d, mx: q.x, mz: q.z, my: q.y, name: ++count[d] + " " + zoneName(d) }); solid(q.x, q.z, 0.2, 0.2, q.y - 1, q.y + 1.3); }   // in whichever neighborhood's bounds it stands
     else if (q.k === "wall") gates.push({ id: q.id, x: q.x, z: q.z, y: q.y, yaw, d: q.zone, c: Math.cos(yaw), s: Math.sin(yaw), w: q.w, wall: 1 });   // a bound wall: closed like a gate

@@ -5,7 +5,7 @@
 // and asks. Phone first: a thumb joystick, drag to look, pinch to zoom, big buttons.
 import * as THREE from "./vendor/three.module.min.js";
 import { svg, fillIcons, ICON } from "./icons.js?v=6";
-import * as World from "./pets-world.js?v=1794652386";
+import * as World from "./pets-world.js?v=1794652387";
 
 const $ = (id) => document.getElementById(id);
 const { TAU, clamp, hyp, MOUNTS, TIERS, RARITY, RARITY_C, MODS, UPGRADES } = World;
@@ -1102,14 +1102,14 @@ setInterval(() => { if (invites.length) renderInvite(); }, 1000);
 let bm = null;
 const ray = new THREE.Raycaster(), ndc = new THREE.Vector2(), ground = new THREE.Plane(new THREE.Vector3(0, 1, 0), 0), hitV = new THREE.Vector3();
 $("mbuild").onclick = () => (bm ? endBuild() : startBuild());   // (owner, 2026-11-13) admins: the Build button on screen
-function startBuild() { closePanel(); if (!free) setFree(true); if (spawnG) spawnG.visible = true; for (const g of buildOnly) g.visible = true; bm = { pm: { mv: true, sp: World.MOVER.sp, brk: 0, bt: World.MOVER.bt, rs: World.MOVER.rs }, tool: "select", a: ((Math.round((World.SPAWN.yaw * 180) / Math.PI) % 360) + 360) % 360, zone: 0, w: 2, h: 1, d: 2, m: "grass", r: 0, wl: 8, ly: 0, sel: 0, px: innerWidth / 2, py: innerHeight / 2, ghost: null, aim: null }; buildBar(); document.body.classList.add("building"); buildAim(bm.px, bm.py); drawAreas(); }
+function startBuild() { closePanel(); if (!free) setFree(true); if (spawnG) spawnG.visible = true; for (const g of buildOnly) g.visible = true; bm = { pm: { mv: true, sp: World.MOVER.sp, brk: 0, bt: World.MOVER.bt, rs: World.MOVER.rs }, tool: "select", a: ((Math.round((World.SPAWN.yaw * 180) / Math.PI) % 360) + 360) % 360, zone: 0, w: 2, h: 1, d: 2, vw: 20, vh: 4, vd: 20, m: "grass", r: 0, wl: 8, ly: 0, sel: 0, px: innerWidth / 2, py: innerHeight / 2, ghost: null, aim: null }; buildBar(); document.body.classList.add("building"); buildAim(bm.px, bm.py); drawAreas(); }
 function endBuild() { if (!bm) return; bm.zd = null; if (spawnG) spawnG.visible = false; for (const g of buildOnly) g.visible = false; if (bm.ghost) scene.remove(bm.ghost); if (bm.pselG) scene.remove(bm.pselG); bm = null; $("buildbar").style.display = "none"; $("zpanel").style.display = "none"; $("insp").style.display = "none"; document.body.classList.remove("insp"); $("pprompt").style.display = "none"; drawAreas(); document.body.classList.remove("building"); setFree(false); }
-const BUILD_TOOLS = [["select", "Select"], ["block", "Block"], ["house", "House"], ["mailbox", "Mailbox"], ["gate", "Gate"], ["wall", "Wall"], ["tree", "Tree"], ["boost", "Boost"], ["start", "Start Line"], ["podium", "Podium"], ["spawn", "Respawn"], ["office", "Post Office"], ["pipe", "Pipe"], ["gust", "Gust"], ["mover", "Platform"], ["cannonlock", "Cannon Unlock"], ["cannonpad", "Cannon Pad"], ["area", "Bounds"], ["erase", "Erase"]];
+const BUILD_TOOLS = [["select", "Select"], ["block", "Block"], ["house", "House"], ["mailbox", "Mailbox"], ["gate", "Gate"], ["wall", "Wall"], ["tree", "Tree"], ["boost", "Boost"], ["start", "Start Line"], ["podium", "Podium"], ["spawn", "Respawn"], ["office", "Post Office"], ["pipe", "Pipe"], ["gust", "Gust"], ["mover", "Platform"], ["cannonlock", "Cannon Unlock"], ["cannonpad", "Cannon Pad"], ["area", "Bounds"], ["void", "Respawn Box"], ["erase", "Erase"]];
 // (owner, 2026-11-16) the tiles in menus: Select and Erase always, the rest under the menu picked
-const BUILD_CATS = [["Ground", ["block", "wall", "gate", "area"]], ["Town", ["house", "mailbox", "tree", "office", "spawn", "podium", "start"]], ["Hazards", ["gust", "mover", "boost"]], ["Shortcuts", ["pipe", "cannonlock", "cannonpad"]]];
+const BUILD_CATS = [["Ground", ["block", "wall", "gate", "area", "void"]], ["Town", ["house", "mailbox", "tree", "office", "spawn", "podium", "start"]], ["Hazards", ["gust", "mover", "boost"]], ["Shortcuts", ["pipe", "cannonlock", "cannonpad"]]];
 let buildCat = 0;
 // each tile's picture: the piece itself, drawn once (with the mount portraits' renderer)
-const THUMB = {}, THUMB_Q = { block: { w: 2, h: 1, d: 2, m: "grass" }, gate: { zone: 1 }, wall: { w: 6, zone: 1 }, area: { w: 6, d: 6, zone: 1 }, gust: { w: 4, h: 3, d: 4, a: 0, iv: 4, pw: 18 }, mover: { w: 4, h: 1, d: 4, m: "wood", bx: 0, by: 0, bz: 0, sp: 4 } };
+const THUMB = {}, THUMB_Q = { void: { w: 4, h: 3, d: 4, zone: 0 }, block: { w: 2, h: 1, d: 2, m: "grass" }, gate: { zone: 1 }, wall: { w: 6, zone: 1 }, area: { w: 6, d: 6, zone: 1 }, gust: { w: 4, h: 3, d: 4, a: 0, iv: 4, pw: 18 }, mover: { w: 4, h: 1, d: 4, m: "wood", bx: 0, by: 0, bz: 0, sp: 4 } };
 function thumb(k) {
   if (THUMB[k]) return THUMB[k];
   if (k === "erase" || k === "select") return (THUMB[k] = "data:image/svg+xml," + encodeURIComponent(`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24">${ICON[k === "select" ? "cursor" : "erase"]}</svg>`));
@@ -1143,7 +1143,7 @@ function buildBar() {
 // the tile picked will place with; typed in, picked from lists ----
 const KIND_NAME = Object.fromEntries(BUILD_TOOLS);
 function inspector() {
-  const P = $("insp"); P.innerHTML = ""; const piece = bm && bm.tool === "select" ? hazSel() : bm && bm.tool === "area" ? selArea() : null, tool = bm && !piece && ["block", "gust", "mover", "wall"].includes(bm.tool) ? bm.tool : null;
+  const P = $("insp"); P.innerHTML = ""; const piece = bm && bm.tool === "select" ? hazSel() : bm && bm.tool === "area" ? selArea() : null, tool = bm && !piece && ["block", "gust", "mover", "wall", "void"].includes(bm.tool) ? bm.tool : null;
   document.body.classList.toggle("insp", !!(piece || tool)); P.style.display = piece || tool ? "block" : "none"; if (!piece && !tool) return;
   const re = () => { buildBar(); buildAim(bm.px, bm.py); };
   const row = (name, ...nodes) => { const r = el("label", "zrow"); r.appendChild(el("span", "", name)); const g = el("div", "ival"); g.append(...nodes); r.appendChild(g); P.appendChild(r); };
@@ -1156,12 +1156,13 @@ function inspector() {
     const q = piece, ch = (f) => (v) => { const a = { ...q }; f(a, v); doSet(q, a); };
     row("Position", num(q.x, 1, -World.GROUND.r, World.GROUND.r, ch((a, v) => (a.x = Math.round(v))), "52px"), num(q.y, 1, -40, 300, ch((a, v) => (a.y = Math.round(v))), "52px"), num(q.z, 1, -World.GROUND.r, World.GROUND.r, ch((a, v) => (a.z = Math.round(v))), "52px"));
     if (q.k === "block" || q.k === "gust" || q.k === "mover") row("Size", num(q.w, 1, 1, BX, ch((a, v) => (a.w = Math.round(v))), "52px"), num(q.h, 1, 1, BX, ch((a, v) => (a.h = Math.round(v))), "52px"), num(q.d, 1, 1, BX, ch((a, v) => (a.d = Math.round(v))), "52px"));
+    if (q.k === "void") row("Size", num(q.w, 1, 1, World.AREA_MAX, ch((a, v) => (a.w = Math.round(v))), "52px"), num(q.h, 1, 1, 200, ch((a, v) => (a.h = Math.round(v))), "52px"), num(q.d, 1, 1, World.AREA_MAX, ch((a, v) => (a.d = Math.round(v))), "52px"));
     if (q.k === "area") row("Size", num(q.w, 1, 1, World.AREA_MAX, ch((a, v) => (a.w = Math.round(v))), "64px"), num(q.d, 1, 1, World.AREA_MAX, ch((a, v) => (a.d = Math.round(v))), "64px"));
     if (q.k === "wall") row("Length", num(q.w, 1, 1, BX, ch((a, v) => (a.w = Math.round(v)))));
     if (q.k === "spawn" || q.k === "gust") row("Angle", num(q.a | 0, 15, 0, 359, ch((a, v) => (a.a = Math.round(v) % 360))));
-    else if (!["block", "mover", "area"].includes(q.k)) row("Facing", pick(q.r | 0, [[0, "0°"], [1, "90°"], [2, "180°"], [3, "270°"]], ch((a, v) => (a.r = +v))));
+    else if (!["block", "mover", "area", "void"].includes(q.k)) row("Facing", pick(q.r | 0, [[0, "0°"], [1, "90°"], [2, "180°"], [3, "270°"]], ch((a, v) => (a.r = +v))));
     if (q.k === "block" || q.k === "mover") row("Material", pick(q.m, mats(q.k), ch((a, v) => (a.m = v))));
-    if (q.k === "gate" || q.k === "wall" || q.k === "area") row("Neighborhood", pick(q.zone, World.TIERS.map((_, n) => [n, World.zoneName(n)]).filter(([n]) => q.k === "area" || n > 0), ch((a, v) => (a.zone = +v))));
+    if (q.k === "gate" || q.k === "wall" || q.k === "area" || q.k === "void") row("Neighborhood", pick(q.zone, World.TIERS.map((_, n) => [n, World.zoneName(n)]).filter(([n]) => q.k === "area" || q.k === "void" || n > 0), ch((a, v) => (a.zone = +v))));
     if (q.k === "gust") { row("Every (s)", num(q.iv, 0.5, 0.5, 30, ch((a, v) => (a.iv = v)))); row("Power", num(q.pw, 1, 1, 60, ch((a, v) => (a.pw = Math.round(v))))); }
     if (q.k === "mover") {
       row("B offset", num(q.bx, 1, -200, 200, ch((a, v) => (a.bx = Math.round(v))), "52px"), num(q.by, 1, -100, 100, ch((a, v) => (a.by = Math.round(v))), "52px"), num(q.bz, 1, -200, 200, ch((a, v) => (a.bz = Math.round(v))), "52px"));
@@ -1177,6 +1178,7 @@ function inspector() {
     return;
   }
   if (tool === "wall") { row("Length", num(bm.wl, 1, 1, BX, (v) => { bm.wl = Math.round(v); re(); })); return; }
+  if (tool === "void") { row("Size", num(bm.vw, 1, 1, World.AREA_MAX, (v) => { bm.vw = Math.round(v); re(); }, "52px"), num(bm.vh, 1, 1, 200, (v) => { bm.vh = Math.round(v); re(); }, "52px"), num(bm.vd, 1, 1, World.AREA_MAX, (v) => { bm.vd = Math.round(v); re(); }, "52px")); return; }
   row("Size", num(bm.w, 1, 1, BX, (v) => { bm.w = Math.round(v); re(); }, "52px"), num(bm.h, 1, 1, BX, (v) => { bm.h = Math.round(v); re(); }, "52px"), num(bm.d, 1, 1, BX, (v) => { bm.d = Math.round(v); re(); }, "52px"));
   if (tool !== "gust") row("Material", pick(bm.m === "turbine" && tool === "mover" ? "wood" : bm.m, mats(tool), (v) => { bm.m = v; re(); }));
   if (tool === "mover") { const M = bm.pm;   // (owner, 2026-11-14) the platform's kind, picked before it's placed
@@ -1187,7 +1189,7 @@ function inspector() {
   }
 }
 // (owner, 2026-11-16) aiming passes through what builders only see (a cannon's arrow, a platform's B) and anything hidden
-const unpickable = (o) => { for (; o; o = o.parent) if (o.userData.noPick || !o.visible) return true; return false; };
+const unpickable = (o) => { for (; o; o = o.parent) if (o.userData.noPick || !o.visible || (o.userData.selOnly && bm && bm.tool !== "select" && bm.tool !== "erase")) return true; return false; };   /* a respawn box: only to select or erase it */
 function pieceAt(px, py) {   // what's pointed at: the point, its face's normal and the piece's id (0: the ground)
   ndc.set((px / innerWidth) * 2 - 1, -(py / innerHeight) * 2 + 1); ray.setFromCamera(ndc, camera);
   const hits = buildG ? ray.intersectObjects([...buildG.children, ...(poG ? [poG] : [])], true) : []; for (const h of hits) { if (unpickable(h.object)) continue; let o = h.object; while (o && !o.userData.pid && o.parent) o = o.parent; if (o && o.userData.pid) { const n = h.face ? h.face.normal.clone().transformDirection(h.object.matrixWorld) : new THREE.Vector3(0, 1, 0); return { p: h.point, n, id: o.userData.pid }; } }
@@ -1197,7 +1199,7 @@ function pieceAt(px, py) {   // what's pointed at: the point, its face's normal 
 // the box a piece takes: [w, h, d, center x, y, z]
 function pieceBox(q) {
   const S = World.HOUSE_S, P = World.PO.b;
-  return q.k === "block" || q.k === "gust" || q.k === "mover" ? [q.w, q.h, q.d, q.x + q.w / 2, q.y + q.h / 2, q.z + q.d / 2] : q.k === "pipe" ? [World.TUBE.r * 2, World.TUBE.r * 2, World.TUBE.l, q.x, q.y + World.TUBE.r, q.z] : q.k === "house" ? [S, 5, S, q.x, q.y + 2.5, q.z] : q.k === "gate" ? [World.GATE_W, World.GATE_H, World.GATE_T, q.x, q.y + World.GATE_H / 2, q.z] : q.k === "wall" ? [q.w, World.GATE_H, World.GATE_T, q.x, q.y + World.GATE_H / 2, q.z] : q.k === "area" ? [q.w, 1, q.d, q.x + q.w / 2, q.y, q.z + q.d / 2]
+  return q.k === "block" || q.k === "gust" || q.k === "mover" || q.k === "void" ? [q.w, q.h, q.d, q.x + q.w / 2, q.y + q.h / 2, q.z + q.d / 2] : q.k === "pipe" ? [World.TUBE.r * 2, World.TUBE.r * 2, World.TUBE.l, q.x, q.y + World.TUBE.r, q.z] : q.k === "house" ? [S, 5, S, q.x, q.y + 2.5, q.z] : q.k === "gate" ? [World.GATE_W, World.GATE_H, World.GATE_T, q.x, q.y + World.GATE_H / 2, q.z] : q.k === "wall" ? [q.w, World.GATE_H, World.GATE_T, q.x, q.y + World.GATE_H / 2, q.z] : q.k === "area" ? [q.w, 1, q.d, q.x + q.w / 2, q.y, q.z + q.d / 2]
     : q.k === "tree" ? [1.6, 6.5, 1.6, q.x, q.y + 3.25, q.z] : q.k === "boost" ? [3.2, 0.3, 3.2, q.x, q.y + 0.15, q.z] : q.k === "start" ? [World.START_W, 0.3, World.START_D, q.x, q.y + 0.15, q.z] : q.k === "podium" ? [4.4, 1.6, 4.4, q.x, q.y + 0.8, q.z]
     : q.k === "spawn" ? [1.8, 0.3, 1.8, q.x, q.y + 0.15, q.z] : q.k === "cannonlock" ? [2.2, 2.6, 2.2, q.x, q.y + 1.3, q.z] : q.k === "cannonpad" ? [6, 0.3, 6, q.x, q.y + 0.15, q.z] : q.k === "office" ? [P.hw * 2, P.h + 2, P.hd * 2 + 10, q.x, q.y + (P.h + 2) / 2, q.z - 9 + (P.hd * 2 + 10) / 2 - P.hd] : [0.6, 1.5, 0.6, q.x, q.y + 0.75, q.z];
 }
@@ -1214,10 +1216,11 @@ function hologram(q, red) {
 function buildPiece(a, base) { const q = buildPiece0(a, base); if (q && bm && bm.lift) q.y += bm.lift; return q; }
 function buildPiece0(a, base) {   // the piece the bar (or the clipboard: base) would place at an aim, turned bm.r more
   const T = base ? base.k : bm.tool, p = a.p, n = a.n, up = n.y > 0.5, down = n.y < -0.5;
-  if (T === "block" || T === "gust" || T === "mover") {
-    const B = base || { w: bm.w, h: bm.h, d: bm.d, m: bm.m }, w = bm.r % 2 ? B.d : B.w, d = bm.r % 2 ? B.w : B.d, h = B.h;
+  if (T === "block" || T === "gust" || T === "mover" || T === "void") {
+    const B = base || (T === "void" ? { w: bm.vw, h: bm.vh, d: bm.vd } : { w: bm.w, h: bm.h, d: bm.d, m: bm.m }), w = bm.r % 2 ? B.d : B.w, d = bm.r % 2 ? B.w : B.d, h = B.h;
     let x = Math.round(p.x - w / 2), z = Math.round(p.z - d / 2), y = up ? Math.round(p.y) : down ? Math.round(p.y) - h : Math.floor(p.y + 0.001);
     if (!up && !down) { if (n.x > 0.5) x = Math.round(p.x); else if (n.x < -0.5) x = Math.round(p.x) - w; if (n.z > 0.5) z = Math.round(p.z); else if (n.z < -0.5) z = Math.round(p.z) - d; }
+    if (T === "void") return { k: "void", x, z, y, w, h, d, zone: base ? base.zone : bm.zone };
     if (T === "gust") return { k: "gust", x, z, y, w, h, d, a: base ? base.a | 0 : Math.round(bm.a) % 360, iv: base ? base.iv : World.GUST.iv, pw: base ? base.pw : World.GUST.pw };
     if (T === "mover") return { k: "mover", x, z, y, w, h, d, m: B.m === "turbine" ? "wood" : B.m, bx: base ? base.bx : 0, by: base ? base.by : 0, bz: base ? base.bz : 0, sp: base ? base.sp : bm.pm.sp, ...(base ? { brk: base.brk | 0, bt: base.bt, rs: base.rs } : { brk: bm.pm.brk, bt: bm.pm.bt, rs: bm.pm.rs }) };
     return { k: "block", x, z, y, w, h, d, m: B.m };
@@ -1794,6 +1797,9 @@ function pieceMesh(q, live) {
       }
     }
     else if (q.k === "house" && q.cz) { const c = cannonModel(q.cz, 1, World.cannonYaw(q)); c.g.position.set(q.x, q.y, q.z); c.g.traverse((o) => { o.userData.pid = q.id; }); G.add(c.g); if (live) cannonMesh[q.id] = { ...c, x: q.x, y: q.y, z: q.z, yaw: World.cannonYaw(q), fire: -1 }; if (q.on) { const tg = textSprite(q.on, { size: 30 }); tg.position.set(q.x, q.y + 5.2, q.z); G.add(tg); } }   // (owner, 2026-11-16) its owner's cannon in its place
+    else if (q.k === "void") {   // (owner, 2026-11-16) a respawn box: see-through red, only builders see it
+      const g = new THREE.Group(); g.position.set(q.x + q.w / 2, q.y + q.h / 2, q.z + q.d / 2); G.add(g); const f = new THREE.Mesh(new THREE.BoxGeometry(q.w, q.h, q.d), new THREE.MeshBasicMaterial({ color: "#e5534b", transparent: true, opacity: 0.18, depthWrite: false })); f.renderOrder = 2; f.userData.selOnly = 1; g.add(f);
+      const e = new THREE.LineSegments(new THREE.EdgesGeometry(new THREE.BoxGeometry(q.w, q.h, q.d)), new THREE.LineBasicMaterial({ color: "#e5534b" })); e.userData.noPick = 1; g.add(e); if (live) { g.visible = !!bm; buildOnly.push(g); } }
     else if (q.k === "cannonlock") { const g = new THREE.Group(); g.position.set(q.x, q.y, q.z); G.add(g); const d = live ? World.districtAt(q.x, q.z, q.y) : 5;
       box(2.2, 1.2, 2.2, "#4a4f5a", 0, 0.6, 0, g); box(2.4, 0.2, 2.4, World.TIERS[d] ? World.TIERS[d].c : "#ffd84a", 0, 1.3, 0, g); const c = cannonModel(d, 0.32); c.g.position.y = 1.4; g.add(c.g); if (live) { lockMesh.push({ g: c.g, id: q.id, d }); const tg = textSprite(World.zoneName(d) + " Cannon", { size: 30 }); tg.position.y = 3.4; g.add(tg); } }
     else if (q.k === "cannonpad") { const g = new THREE.Group(); g.position.set(q.x, q.y + 0.06, q.z); G.add(g); if (live) { g.visible = !!bm; buildOnly.push(g); }   /* (owner, 2026-11-16) only builders see it */ const d = live ? World.districtAt(q.x, q.z, q.y) : 5, c = World.TIERS[d] ? World.TIERS[d].c : "#ffd84a";

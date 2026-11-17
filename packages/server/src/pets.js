@@ -564,8 +564,10 @@ export function attachPets(server, { origins = [], allowLocal = false, store = m
     for (const p of players) {
       const dist = W.districtAt(p.x, p.z, p.y);
       if (dist === 8 && W.lavaAt(p.x, p.z, p.y) && now >= (p.lavaAt || 0) && now >= p.stunUntil && now - p.tpAt > 600) { p.lavaAt = now + W.LAVA.every * 1000; stun(p, W.LAVA.stun, "lava"); hit(p, "lava"); }   // (owner, 2026-11-12) a lava pool burns
-      if (p.y < W.EDGE_Y && !(ISLES.length && p.x > W.ISLE_X && p.x < W.FAR.x0 - 15) && now - p.tpAt > 600) {   // off the edge of the town: back to the respawn point, (owner, 2026-11-14) keeping the parcels you carry
-        p.tpAt = now; const g = p.bag.length ? W.gateSpawn(dist, p.x, p.z) : null;   // (owner, 2026-11-16) carrying a parcel in a neighborhood with a gate: back at its gate
+      let vb = W.voids.length ? W.voidAt(p.x, p.z, p.y) : null;   // (owner, 2026-11-16) in a respawn box: as if fallen off, at once
+      if (vb) { const g = p.bag.length ? W.gateSpawn(vb.d, p.x, p.z) : null, to = g || W.SPAWN; if (W.voidAt(to.x, to.z, to.y + 0.5)) vb = null; }   // (never one over where it would send you back to)
+      if ((vb || (p.y < W.EDGE_Y && !(ISLES.length && p.x > W.ISLE_X && p.x < W.FAR.x0 - 15))) && now - p.tpAt > 600) {   // off the edge of the town: back to the respawn point, (owner, 2026-11-14) keeping the parcels you carry
+        p.tpAt = now; const g = p.bag.length ? W.gateSpawn(vb ? vb.d : dist, p.x, p.z) : null;   // (owner, 2026-11-16) carrying a parcel in a neighborhood with a gate: back at its gate
         if (g) teleport(p, g.x, g.z, g.y, "gate", g.yaw); else teleport(p, W.SPAWN.x + (Math.random() - 0.5) * 0.4, W.SPAWN.z + (Math.random() - 0.5) * 0.4, W.SPAWN.y, "home"); continue;
       }
       if (ISLES.length && dist === 3 && p.y > 1 && p.y < W.SKY_Y) {   // (the old town's Cliffside rocks and sky geese: gone with it)
