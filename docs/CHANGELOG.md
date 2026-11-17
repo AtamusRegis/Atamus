@@ -6,6 +6,10 @@ and any rule decided. Use `git log` for the code detail (and for the older Atamu
 
 ## 2026-11-17
 
+- **Town models (owner).** Trees are five new pines, houses five new houses with five roof colors, the post office and
+  its conveyor are the new model (bigger: the building now reaches further west and back; the conveyor is in the same
+  place), cannons are the new cannon in Bronze to Rainbow by how far they fire, and parcels are taped boxes in their
+  tier's color. Houses leave out the kit's mailbox: placed mailboxes stay the addresses.
 - **Critter models (owner).** Every mount and Main Street's dogs, geese and goats are new animated block critters: Corgi
   Pup, Kitten, Axolotl, Cheetah Cub, Griffin Chick, Bunny, Baby Raptor, Mini Trike, Frog and Cloud Pony (the old kinds,
   renamed), each with a mail bag, a Shiny texture and idle, run, jump and ability animations; Blink shrinks the mount

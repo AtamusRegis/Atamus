@@ -268,7 +268,9 @@ export const slabs = [], solids = [], houses = [], dogs = [], ponds = [], geese 
 // the end, where you grab it. (x, z: the middle of its square; b: the building; belt: the conveyor; end: where your parcel waits)
 // (owner, 2026-11-13) placed with the zone builder (none until then: no conveyor, no safe zone); setBuild moves it
 // PO_LOCAL: its parts as if it stood at (0, 0) facing +z; (owner, 2026-11-13) it can be turned (yaw)
-export const PO_LOCAL = { x: 0, z: 0, b: { x: 0, z: -9, hw: 8, hd: 5, h: 6.5 }, belt: { z0: -4, z1: 5.2, hw: 1.3, top: 1.1 }, end: { x: 0, z: 3.9 } };
+// (owner, 2026-11-17) the town kit's post office (website/town/post_office.glb, in studs of 0.36 m): its model sits at
+// "model" so its belt runs out along x = 0; b its building, belt its conveyor (door: where a parcel comes out), end its pickup
+export const PO_LOCAL = { x: 0, z: 0, model: { x: -7.2, z: -8.04 }, b: { x: -7.2, z: -7.84, hw: 13.8, hd: 5.55, h: 7.2 }, belt: { z0: -4.8, z1: 6, hw: 1.44, top: 1.19, door: -3.43 }, end: { x: 0, z: 5.06 } };
 export const PO = { on: false, x: 0, z: 0, y: 0, yaw: 0, b: { ...PO_LOCAL.b }, belt: { ...PO_LOCAL.belt }, end: { ...PO_LOCAL.end } };
 export const turn = (lx, lz, yaw) => [lx * Math.cos(yaw) + lz * Math.sin(yaw), -lx * Math.sin(yaw) + lz * Math.cos(yaw)];   // a local offset turned as a model turned yaw
 // (owner, 2026-11-11: neighborhoods three houses long) every district is short: three houses down each side of the road

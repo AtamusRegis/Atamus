@@ -5,9 +5,10 @@
 // and asks. Phone first: a thumb joystick, drag to look, pinch to zoom, big buttons.
 import * as THREE from "./vendor/three.module.min.js";
 import { svg, fillIcons, ICON } from "./icons.js?v=7";
-import * as World from "./pets-world.js?v=1794912405";
+import * as World from "./pets-world.js?v=1794916777";
 import { loadCritters, makeCritter, hasCritter } from "./critters.js?v=1";
-await loadCritters();   // (owner, 2026-11-17) the critter models, before anything is drawn
+import * as Town from "./town.js?v=1";
+await Promise.all([loadCritters(), Town.loadTown()]);   // (owner, 2026-11-17) the critter and town models, before anything is drawn
 
 const $ = (id) => document.getElementById(id);
 const { TAU, clamp, hyp, MOUNTS, TIERS, RARITY, RARITY_C, MODS, UPGRADES } = World;
@@ -441,6 +442,7 @@ function buildAnimals() {
 // a parcel: its tier's color, taped; modifiers show on it
 function parcelMesh(tier, mod) {
   const g = new THREE.Group(), s = 0.72, c = TIERS[tier].c;
+  if (Town.hasTown("parcel")) { const k = s / Town.PARCEL.w, m = Town.parcel(c); m.scale.setScalar(k); g.add(m); if (mod === "express") box(s * 0.3, Town.PARCEL.h * k * 1.04, Town.PARCEL.h * k * 1.12, "#3a8ee6", s * 0.2, Town.PARCEL.h * k / 2, 0, g, false); g.userData.s = Town.PARCEL.h * k; return g; }   // (owner, 2026-11-17) the town kit's taped box in its tier's color
   const b = new THREE.Mesh(BOX, new THREE.MeshLambertMaterial({ color: c })); b.scale.setScalar(s); b.position.y = s / 2; b.castShadow = true; g.add(b);
   box(s * 1.02, s * 0.16, s * 1.02, "#fff8e6", 0, s / 2, 0, g, false); box(s * 0.16, s * 1.02, s * 1.02, "#fff8e6", 0, s / 2, 0, g, false);
   if (mod === "express") box(s * 0.5, s * 1.04, s * 0.3, "#3a8ee6", 0, s / 2, s * 0.2, g, false);
@@ -1267,8 +1269,8 @@ function pieceAt(px, py) {   // what's pointed at: the point, its face's normal 
 function pieceBox(q) {
   const S = World.HOUSE_S, P = World.PO.b;
   return q.k === "block" || q.k === "gust" || q.k === "mover" || q.k === "void" ? [q.w, q.h, q.d, q.x + q.w / 2, q.y + q.h / 2, q.z + q.d / 2] : q.k === "pipe" ? [World.TUBE.r * 2, World.TUBE.r * 2, World.TUBE.l, q.x, q.y + World.TUBE.r, q.z] : q.k === "house" ? [S, 5, S, q.x, q.y + 2.5, q.z] : q.k === "gate" ? [World.GATE_W, World.GATE_H, World.GATE_T, q.x, q.y + World.GATE_H / 2, q.z] : q.k === "wall" ? [q.w, World.GATE_H, World.GATE_T, q.x, q.y + World.GATE_H / 2, q.z] : q.k === "area" ? [q.w, 1, q.d, q.x + q.w / 2, q.y, q.z + q.d / 2]
-    : q.k === "tree" ? [1.6, 6.5, 1.6, q.x, q.y + 3.25, q.z] : q.k === "boost" ? [3.2, 0.3, 3.2, q.x, q.y + 0.15, q.z] : q.k === "start" ? [World.START_W, 0.3, World.START_D, q.x, q.y + 0.15, q.z] : q.k === "podium" ? [4.4, 1.6, 4.4, q.x, q.y + 0.8, q.z]
-    : q.k === "spawn" ? [1.8, 0.3, 1.8, q.x, q.y + 0.15, q.z] : q.k === "cannonlock" ? [2.2, 2.6, 2.2, q.x, q.y + 1.3, q.z] : q.k === "cannonpad" ? [6, 0.3, 6, q.x, q.y + 0.15, q.z] : q.k === "office" ? [P.hw * 2, P.h + 2, P.hd * 2 + 10, q.x, q.y + (P.h + 2) / 2, q.z - 9 + (P.hd * 2 + 10) / 2 - P.hd] : [0.6, 1.5, 0.6, q.x, q.y + 0.75, q.z];
+    : q.k === "tree" ? [3, 7, 3, q.x, q.y + 3.5, q.z] : q.k === "boost" ? [3.2, 0.3, 3.2, q.x, q.y + 0.15, q.z] : q.k === "start" ? [World.START_W, 0.3, World.START_D, q.x, q.y + 0.15, q.z] : q.k === "podium" ? [4.4, 1.6, 4.4, q.x, q.y + 0.8, q.z]
+    : q.k === "spawn" ? [1.8, 0.3, 1.8, q.x, q.y + 0.15, q.z] : q.k === "cannonlock" ? [2.2, 2.6, 2.2, q.x, q.y + 1.3, q.z] : q.k === "cannonpad" ? [6, 0.3, 6, q.x, q.y + 0.15, q.z] : q.k === "office" ? (() => { const L = World.PO_LOCAL, B = L.b, z0 = B.z - B.hd, z1 = L.belt.z1; return [B.hw * 2, B.h + 3, z1 - z0, q.x + B.x, q.y + (B.h + 3) / 2, q.z + (z0 + z1) / 2]; })() : [0.6, 1.5, 0.6, q.x, q.y + 0.75, q.z];
 }
 // (owner, 2026-11-13) the preview is a blueprint hologram of the piece itself: see-through blue with glowing edges (red
 // for what Erase or Cut takes)
@@ -1767,7 +1769,7 @@ function onFx(m) {
 }
 
 // ---- the conveyor's two parcels (yours alone), the address you're riding to ----
-let readyMesh = null, nextMesh = null, pusher = null; const beltStripes = [], targetFx = new Map();   // house id -> its marker
+let readyMesh = null, nextMesh = null, pusher = null, beltTex = null; const beltStripes = [], targetFx = new Map();   // house id -> its marker
 function beltShow(slide, pop) {
   if (readyMesh && readyMesh.parent) readyMesh.parent.remove(readyMesh); if (nextMesh && nextMesh.parent) nextMesh.parent.remove(nextMesh); readyMesh = nextMesh = null;
   if (belt.ready) { readyMesh = parcelMesh(belt.ready.tier, belt.ready.mod); readyMesh.scale.setScalar(BELT_SC); (poG || scene).add(readyMesh); beltSlide = slide || pop ? BELT_SLIDE : 0; }
@@ -1847,13 +1849,13 @@ function stepNpcs(dt, t) {
   for (let i = divers.length - 1; i >= 0; i--) { const d = divers[i]; d.t += dt; const u = d.t / d.s, g = d.g.g; if (u < 1) g.position.set(d.x + 9 * (1 - u), d.y + 0.6 + 14 * (1 - u) * (1 - u), d.z); else g.position.set(d.x - 12 * (u - 1), d.y + 0.6 + 16 * (u - 1), d.z); g.rotation.y = -Math.PI / 2; d.g.wings[0].rotation.z = -1.2 + Math.sin(d.t * 20) * 0.4; d.g.wings[1].rotation.z = 1.2 - Math.sin(d.t * 20) * 0.4; if (u > 2) { scene.remove(g); divers.splice(i, 1); } }
   for (const h of Object.values(houseMesh)) { if (h.shake > 0) { h.shake -= dt; h.mb.rotation.z = h.shake > 0 ? Math.sin(t * 40) * 0.25 : 0; } if (h.pop > 0) { h.pop -= dt; h.mb.scale.setScalar(1 + Math.max(0, Math.sin((h.pop / 0.3) * Math.PI)) * 0.4); } }
   if (readyMesh) readyMesh.visible = World.PO.on; if (nextMesh) nextMesh.visible = World.PO.on;
-  { const P = World.PO_LOCAL, BT = P.belt, top = BT.top, door = BT.z0 - 0.2, endZ = P.end.z, u = beltSlide > 0 ? 1 - beltSlide / BELT_SLIDE : 1, run = beltSlide > 0;
+  { const P = World.PO_LOCAL, BT = P.belt, top = BT.top, door = BT.door !== undefined ? BT.door : BT.z0 - 0.2, endZ = P.end.z, u = beltSlide > 0 ? 1 - beltSlide / BELT_SLIDE : 1, run = beltSlide > 0;
     if (beltSlide > 0) beltSlide = Math.max(0, beltSlide - dt);
     const e = u < 1 ? 1 - Math.pow(1 - u, 2) : 1, rz = door + (endZ - door) * e;
     if (readyMesh) { readyMesh.position.set(P.end.x, top + (run ? 0 : Math.abs(Math.sin(t * 3)) * 0.12), rz); readyMesh.rotation.y = run ? 0 : Math.sin(t * 0.8) * 0.25; }
     if (nextMesh) nextMesh.position.set(P.end.x, Math.max(top, nextMesh.position.y - dt * 14), door + 0.9);
     if (pusher) pusher.position.z = run ? rz - 0.9 * BELT_SC * 0.72 - 0.25 : Math.max(BT.z0 - 0.4, pusher.position.z - dt * 6);   // the pusher follows the parcel out, then goes back in
-    const L = BT.z1 - BT.z0; if (run) beltStripes.off = (beltStripes.off || 0) + dt * 4.4; beltStripes.forEach((m, k) => { m.position.z = BT.z0 + (((k / 10) * L + (beltStripes.off || 0)) % L); }); }
+    const L = BT.z1 - BT.z0; if (run) beltStripes.off = (beltStripes.off || 0) + dt * 4.4; if (beltTex && run) beltTex.offset.y -= (dt * 4.4) / (10.8 * Town.STUD); beltStripes.forEach((m, k) => { m.position.z = BT.z0 + (((k / 10) * L + (beltStripes.off || 0)) % L); }); }
   for (const fx of targetFx.values()) { const u = fx.userData; u.ring.scale.setScalar(1 + Math.sin(t * 5) * 0.06); u.gem.position.y = 4.2 + Math.sin(t * 3) * 0.4; u.gem.rotation.y = t * 2; }
   for (const g of dropMeshes.values()) { const dq = g.userData.q; g.position.y = dq.y + 0.3 + Math.abs(Math.sin(t * 4)) * 0.5; g.rotation.y = t * 2; if (Math.random() < 0.2) emit(dq.x, dq.y + 1, dq.z, 1, { colors: ["#ffd84a"], speed: 1, up: 2, life: 0.6, grav: 0, size: 0.1 }); }
   for (const b of World.balloons) b.g.position.y = b.y + Math.sin(t * 1.2 + b.x) * 0.25;
@@ -1901,7 +1903,10 @@ let buildG = null, poG = null;
 // ---- (owner, 2026-11-16) cannons: a round, bubbly cannon on a wheeled carriage, its barrel up 35 degrees the way the
 // builder set on its house, a fuse at the back; a Cannon Unlock has a little one on its pedestal ----
 const cannonMesh = {}, lockMesh = [];
+// (owner, 2026-11-17) the town kit's cannon, in the metal of the neighborhood it fires to: Bronze, Silver, Gold, Diamond, Rainbow as they get farther
+const cannonMetal = (d) => Math.min(4, Math.floor(Math.max(0, (d | 0) - 1) / 2));
 function cannonModel(d, k = 1, ya = 0) {
+  if (Town.hasTown("cannon")) { const c = Town.cannon(cannonMetal(d), 0.9 * k), g = new THREE.Group(), yaw = new THREE.Group(); yaw.rotation.y = ya; yaw.add(c.g); g.add(yaw); return { ...c, g, kit: true }; }
   const g = new THREE.Group(), c = World.TIERS[d] ? World.TIERS[d].c : "#ffd84a", yaw = new THREE.Group(); g.add(yaw); yaw.rotation.y = ya; g.scale.setScalar(k);
   box(3.2, 0.9, 3.4, "#8a5a34", 0, 0.75, 0, yaw); for (const x of [-1.75, 1.75]) for (const z of [-1, 1]) { const w = new THREE.Mesh(new THREE.CylinderGeometry(0.75, 0.75, 0.35, 16).rotateZ(Math.PI / 2), mat("#5b3a22")); w.position.set(x, 0.75, z); w.castShadow = true; yaw.add(w); }
   const pivot = new THREE.Group(); pivot.position.set(0, 1.5, -0.3); pivot.rotation.x = -0.61; yaw.add(pivot);
@@ -1920,6 +1925,14 @@ function cannonFire(id, mine) {   // the fuse burns, the barrel swells and wobbl
 function stepCannons(dt, t) {
   const F = World.CANNONS.fuse, v = new THREE.Vector3();
   for (const c of Object.values(cannonMesh)) {
+    if (c.kit) {   // (owner, 2026-11-17) the kit's cannon: sparks at its breech while the fuse burns, then its fire clip, timed so its BOOM is the launch
+      c.mixer.update(dt); if (c.fire < 0) continue; const was = c.fire; c.fire += dt;
+      if (was < F - Town.CANNON_BOOM && c.fire >= F - Town.CANNON_BOOM) c.play();
+      if (c.fire < F) { c.tip.getWorldPosition(v); emit(v.x, v.y + 0.6, v.z, 3, { colors: ["#ffd84a", "#ff8a3d", "#ffffff"], speed: 3, up: 2, life: 0.4, grav: 3, size: 0.2 }); }
+      else if (!c.boomed) { c.boomed = true; c.muzzle.getWorldPosition(v); if (hyp(c.x - me.x, c.z - me.z) < 80) { sfx("cannon"); cam.shake = Math.max(cam.shake, c.mine ? 0.9 : 0.4); }
+        emit(v.x, v.y, v.z, 40, { colors: ["#ffffff", "#e9e2d2", "#bfc6cf"], speed: 7, up: 4, life: 0.9, grav: 1, size: 0.5 }); emit(v.x, v.y, v.z, 24, { colors: ["#ffd84a", "#ff8a3d"], speed: 9, up: 3, life: 0.4, grav: 2 }); }
+      else if (c.fire > F - Town.CANNON_BOOM + c.len) { c.fire = -1; c.boomed = false; }
+      continue; }
     if (c.fire < 0) { const b = 1 + Math.sin(t * 2.4 + c.x) * 0.025; c.barrel.scale.set(b, b, 1 / b); continue; }   // idle: a slow, bubbly breath
     c.fire += dt; const u = c.fire / F;
     if (u < 1) { const w = 1 + u * 0.18 + Math.sin(c.fire * (18 + u * 30)) * 0.05 * (0.4 + u); c.barrel.scale.set(w, w, 1 / Math.sqrt(w)); c.fuse.scale.y = 1 - u * 0.8;
@@ -1969,7 +1982,11 @@ function waterBody() {
 }
 function pieceMesh(q, live) {
   const G = new THREE.Group();
-  if (q.k === "office") {   // built as if at (0, 0) facing +z, then moved and turned as it stands
+  if (q.k === "office" && Town.hasTown("post_office")) {   // (owner, 2026-11-17) the town kit's post office, its belt where PO_LOCAL says
+    const o = Town.office(), L = World.PO_LOCAL; o.g.position.set(L.model.x, 0, L.model.z); o.g.traverse((m) => { m.userData.pid = q.id; }); G.add(o.g); if (live) beltTex = o.belt;
+    G.position.set(q.x, q.y, q.z); G.rotation.y = (q.r | 0) * Math.PI / 2;
+  }
+  else if (q.k === "office") {   // built as if at (0, 0) facing +z, then moved and turned as it stands
     const keep = [beltStripes.slice(), pusher], n0 = scene.children.length; officeMeshes(); for (const o of scene.children.slice(n0)) G.add(o);
     G.position.set(q.x, q.y, q.z); G.rotation.y = (q.r | 0) * Math.PI / 2; if (!live) { beltStripes.length = 0; beltStripes.push(...keep[0]); pusher = keep[1]; }
   }
@@ -1999,14 +2016,18 @@ function pieceMesh(q, live) {
         B.visible = !!bm; buildOnly.push(B); G.add(B); B.traverse((o) => { o.userData.noPick = 1; });
       }
     }
-    else if (q.k === "house" && q.cz) { const c = cannonModel(q.cz, 1, World.cannonYaw(q)); c.g.position.set(q.x, q.y, q.z); c.g.traverse((o) => { o.userData.pid = q.id; }); G.add(c.g); if (live) cannonMesh[q.id] = { ...c, x: q.x, y: q.y, z: q.z, yaw: World.cannonYaw(q), fire: -1 }; if (q.on) { const tg = textSprite(q.on, { size: 30 }); tg.position.set(q.x, q.y + 5.2, q.z); G.add(tg); } }   // (owner, 2026-11-16) its owner's cannon in its place
+    else if (q.k === "house" && q.cz) { const c = cannonModel(q.cz, 1, World.cannonYaw(q)); c.g.position.set(q.x, q.y, q.z); c.g.traverse((o) => { o.userData.pid = q.id; }); G.add(c.g); if (live) cannonMesh[q.id] = { ...c, play: c.fire, x: q.x, y: q.y, z: q.z, yaw: World.cannonYaw(q), fire: -1 }; if (q.on) { const tg = textSprite(q.on, { size: 30 }); tg.position.set(q.x, q.y + 5.2, q.z); G.add(tg); } }   // (owner, 2026-11-16) its owner's cannon in its place
     else if (q.k === "void") {   // (owner, 2026-11-16) a respawn box: see-through red, only builders see it
       const g = new THREE.Group(); g.position.set(q.x + q.w / 2, q.y + q.h / 2, q.z + q.d / 2); G.add(g); const f = new THREE.Mesh(new THREE.BoxGeometry(q.w, q.h, q.d), new THREE.MeshBasicMaterial({ color: "#e5534b", transparent: true, opacity: 0.18, depthWrite: false })); f.renderOrder = 2; f.userData.selOnly = 1; g.add(f);
       const e = new THREE.LineSegments(new THREE.EdgesGeometry(new THREE.BoxGeometry(q.w, q.h, q.d)), new THREE.LineBasicMaterial({ color: "#e5534b" })); e.userData.noPick = 1; g.add(e); if (live) { g.visible = !!bm; buildOnly.push(g); } }
     else if (q.k === "cannonlock") { const g = new THREE.Group(); g.position.set(q.x, q.y, q.z); G.add(g); const d = live ? World.districtAt(q.x, q.z, q.y) : 5;
-      box(2.2, 1.2, 2.2, "#4a4f5a", 0, 0.6, 0, g); box(2.4, 0.2, 2.4, World.TIERS[d] ? World.TIERS[d].c : "#ffd84a", 0, 1.3, 0, g); const c = cannonModel(d, 0.32); c.g.position.y = 1.4; g.add(c.g); if (live) { lockMesh.push({ g: c.g, id: q.id, d }); const tg = textSprite(World.zoneName(d) + " Cannon", { size: 30 }); tg.position.y = 3.4; g.add(tg); } }
+      box(2.2, 1.2, 2.2, "#4a4f5a", 0, 0.6, 0, g); box(2.4, 0.2, 2.4, World.TIERS[d] ? World.TIERS[d].c : "#ffd84a", 0, 1.3, 0, g); const c = cannonModel(d, Town.hasTown("cannon") ? 0.24 : 0.32); c.g.position.y = 1.4; g.add(c.g); if (live) { lockMesh.push({ g: c.g, id: q.id, d }); const tg = textSprite(World.zoneName(d) + " Cannon", { size: 30 }); tg.position.y = 3.4; g.add(tg); } }
     else if (q.k === "cannonpad") { const g = new THREE.Group(); g.position.set(q.x, q.y + 0.06, q.z); G.add(g); if (live) { g.visible = !!bm; buildOnly.push(g); }   /* (owner, 2026-11-16) only builders see it */ const d = live ? World.districtAt(q.x, q.z, q.y) : 5, c = World.TIERS[d] ? World.TIERS[d].c : "#ffd84a";
       [[3, "#ffffff"], [2.3, c], [1.5, "#ffffff"], [0.8, c]].forEach(([r, col], i) => { const m = new THREE.Mesh(new THREE.CylinderGeometry(r, r, 0.1 + i * 0.03, 32), mat(col)); m.position.y = 0.05 + i * 0.015; m.receiveShadow = true; g.add(m); }); }
+    else if (q.k === "house" && Town.hasTown("house_cottage")) {   // (owner, 2026-11-17) one of the five houses, its roof one of five colors (both by the piece)
+      const h = Town.house(q.id | 0, Math.floor((q.id | 0) / 5)); h.g.position.set(q.x, q.y, q.z); h.g.rotation.y = (q.r | 0) * Math.PI / 2; h.g.traverse((o) => { o.userData.pid = q.id; }); G.add(h.g);
+      if (q.on) { const tg = textSprite(q.on, { size: 30 }); tg.position.set(q.x, q.y + h.h + 1.2, q.z); G.add(tg); }
+    }
     else if (q.k === "house") {
       const hb = World.buildings.find((b) => b.id === q.id), [wall, roof] = HOUSE_C[hb ? hb.d : World.districtAt(q.x, q.z, q.y)] || HOUSE_C[0], g = new THREE.Group(), S = World.HOUSE_S; g.position.set(q.x, q.y, q.z); g.rotation.y = (q.r | 0) * Math.PI / 2; G.add(g);
       box(S, 3.2, S, wall, 0, 1.6, 0, g).userData.pid = q.id; box(1.3, 2.1, 0.12, roof, 0, 1.05, S / 2 + 0.02, g, false);
@@ -2033,6 +2054,7 @@ function pieceMesh(q, live) {
       const rim = new THREE.Mesh(new THREE.TorusGeometry(R, 0.28, 8, 24), mat(on ? "#56d066" : "#90a895")); rim.position.set(0, R, L / 2); g.add(rim);
       const back = new THREE.Mesh(new THREE.CircleGeometry(R, 20), new THREE.MeshBasicMaterial({ color: "#10241a" })); back.position.set(0, R, -L / 2 + 0.05); g.add(back);
     }
+    else if (q.k === "tree" && Town.hasTown("pine_cone")) { const g = Town.pine(q.id | 0); g.position.set(q.x, q.y, q.z); g.rotation.y = (q.r | 0) * Math.PI / 2; g.traverse((o) => { o.userData.pid = q.id; }); G.add(g); }   // (owner, 2026-11-17) one of the five pines
     else if (q.k === "tree") { const g = new THREE.Group(); g.position.set(q.x, q.y, q.z); g.rotation.y = (q.r | 0) * Math.PI / 2; G.add(g); const tr = new THREE.Mesh(new THREE.CylinderGeometry(0.28, 0.36, 2.2, 7), mat("#8a5a34")); tr.position.y = 1.1; tr.castShadow = true; g.add(tr); const lf = new THREE.Mesh(new THREE.ConeGeometry(1.9, 4.6, 8), mat("#3fa650")); lf.position.y = 4.2; lf.castShadow = true; g.add(lf); tr.userData.pid = lf.userData.pid = q.id; }
     else if (q.k === "boost") { const m = new THREE.Mesh(new THREE.PlaneGeometry(3.2, 3.2).rotateX(-Math.PI / 2), BOOST_M); m.position.set(q.x, q.y + 0.09, q.z); m.rotation.y = (q.r | 0) * Math.PI / 2 + Math.PI; m.receiveShadow = true; m.userData.pid = q.id; G.add(m); }
     else if (q.k === "start") { const t = START_T.clone(); t.needsUpdate = true; t.repeat.set(World.START_W / 2, 1); const m = new THREE.Mesh(new THREE.PlaneGeometry(World.START_W, World.START_D).rotateX(-Math.PI / 2), new THREE.MeshBasicMaterial({ map: t })); m.position.set(q.x, q.y + 0.1, q.z); m.rotation.y = (q.r | 0) * Math.PI / 2; m.userData.pid = q.id; G.add(m); }
