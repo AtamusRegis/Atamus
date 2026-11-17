@@ -6,6 +6,8 @@ and any rule decided. Use `git log` for the code detail (and for the older Atamu
 
 ## 2026-11-16
 
+- **Swimmable water (owner).** Water blocks aren't walls any more: you swim through them slowly, sinking gently and
+  rising with jump. Joined water blocks show no seams between them.
 - **An Uncommon Dog early (owner).** The second delivery's mount (a new courier's second run) is now always a Main
   Street Dog, Uncommon or better.
 - **Abilities; one speed for every mount (owner).** Every mount goes the same speed. Each animal has a movement ability:
