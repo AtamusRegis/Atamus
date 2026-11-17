@@ -6,6 +6,8 @@ and any rule decided. Use `git log` for the code detail (and for the older Atamu
 
 ## 2026-11-17
 
+- **Critter coats (owner).** Every rarity of a critter has its own colors again (Uncommon to Legendary wear their
+  coat; Common is the model as made), mounts and chasers alike.
 - **Ground gradients (owner).** Blocks shade softly like the town models: sides darker toward the foot, tops in broad
   lighter and darker patches.
 - **Town models (owner).** Trees are five new pines, houses five new houses with five roof colors, the post office and
