@@ -162,15 +162,15 @@ A parcel that breaks or is lost is gone; the conveyor always has the next one. *
 - **Unlocking:** standing by a Cannon Unlock shows "<neighborhood> Cannon" and Unlock with its price: 2,000 x 1.35^n
   Aura for neighborhood n (rounded to 100: neighborhood 5 is 9,000). Unlocked cannons are kept in your data
   (`cannons`).
-- **Houses:** every Main Street house is for sale at 7,500 Aura (the same for all). Standing by one for sale (when you
+- **Houses:** every Main Street house is for sale at 7,500 Aura (the same for all). Standing right by one for sale (within 2.5 m of its walls; when you
   don't own one yet) shows House and Buy. A house has one owner (kept in the town's build: `ow`, `on` on the house),
   shown by their name over it; one house each. Other couriers still deliver to its mailbox.
 - **Your house's cannon:** standing by your house shows your name and House plus each cannon you've unlocked; picking
   one puts that cannon in the house's place (the house is gone; just the cannon's low base is solid), House puts it
   back. Swap any time.
 - **Cannons** face the way set on their house ((owner, 2026-11-16) a selected Main Street house's **Cannon** setting,
-  15 degrees a step, round and round; at first the way the house faces; builders see it as an orange arrow over the
-  roof), whichever way the house faces; the barrel is up 35 degrees, in the neighborhood's color, and breathes gently. **Only its owner
+  15 degrees a step, round and round, or (owner, 2026-11-16) hold R to spin it smoothly (the Turn button turns the house); at first the way the house faces; builders see it as an orange arrow over the
+  roof, which aiming passes through), whichever way the house faces; the barrel is up 35 degrees, in the neighborhood's color, and breathes gently. **Only its owner
   fires it:** touch it and you're inside while the fuse fizzes and sparkles (1.3 s; the barrel swells and wobbles;
   the camera turns to watch from behind and to the side), then BOOM (smoke, a flash, a shake, the barrel recoils and
   bounces) and you fly in an arc to that neighborhood's Cannon Pad (2.4 s). Other couriers see the cannon go off and
