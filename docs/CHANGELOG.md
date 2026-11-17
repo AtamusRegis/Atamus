@@ -6,6 +6,8 @@ and any rule decided. Use `git log` for the code detail (and for the older Atamu
 
 ## 2026-11-17
 
+- **Ground gradients (owner).** Blocks shade softly like the town models: sides darker toward the foot, tops in broad
+  lighter and darker patches.
 - **Town models (owner).** Trees are five new pines, houses five new houses with five roof colors, the post office and
   its conveyor are the new model (bigger: the building now reaches further west and back; the conveyor is in the same
   place), cannons are the new cannon in Bronze to Rainbow by how far they fire, and parcels are taped boxes in their

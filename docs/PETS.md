@@ -249,7 +249,8 @@ is one 1 m grass block (`SEED`) to stand on, with sky all round. Everything is a
   cardboard in the tier's color (Express still has its blue band). If a model can't load, the drawn piece is used.
 - **Pieces** (on a 1 m grid; quarter turns):
   - **Block:** W x H x D metres (1 to 60 each) of a material: grass, dirt, stone, brick, wood, road, sand, snow, ice,
-    water. You stand on its top and it stops you from the side (you can go under one in the air). Ice is slippery
+    water. (owner, 2026-11-17) Blocks have soft gradients like the town kit's models: their sides darken toward the
+    foot and their tops drift gently lighter and darker in broad patches (strongest on grass). You stand on its top and it stops you from the side (you can go under one in the air). Ice is slippery
     (12% grip), sand 80% speed, water 50%.
   - **Post Office:** the building, its conveyor and counter, and the safe zone (20 m round it), turned as placed. One
     at a time (a new one replaces it). None: no conveyor, no parcels, no safe zone.

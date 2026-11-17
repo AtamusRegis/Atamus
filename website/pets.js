@@ -1869,6 +1869,28 @@ function lock(g, y) { const L = new THREE.Group(); L.position.y = y; g.add(L); b
 function buildGates() {}
 // ---- (owner, 2026-11-13) the town the zone builder placed: drawn again whenever it changes ----
 const MAT_C = { grass: "#7cc36a", dirt: "#a07a52", stone: "#a9adb5", brick: "#b9573f", wood: "#a87a4a", road: "#84878f", sand: "#e8cf8f", snow: "#f4f8fb", ice: "#bfe9ff", water: "#3f8fd0", mud: "#6b4d33", turbine: "#8d99a6" };
+// (owner, 2026-11-17) the ground has soft gradients like the town kit's models: a block's sides darken toward its foot,
+// and its top drifts gently lighter and darker (and a touch warmer or cooler) in broad patches across the world
+const GROUND_M = {}, GRAD_K = { grass: 1, dirt: 0.8, sand: 0.7, snow: 0.45, mud: 0.8, stone: 0.6, brick: 0.5, wood: 0.6, road: 0.45, turbine: 0.4 };
+function groundMat(m) {
+  if (GROUND_M[m]) return GROUND_M[m];
+  const M = new THREE.MeshLambertMaterial({ color: MAT_C[m] || MAT_C.grass }), k = GRAD_K[m] ?? 0.6;
+  M.onBeforeCompile = (sh) => {
+    sh.uniforms.gK = { value: k };
+    sh.vertexShader = sh.vertexShader.replace("#include <common>", "#include <common>\nvarying vec3 vGW; varying float vGN; varying float vGY;")
+      .replace("#include <begin_vertex>", "#include <begin_vertex>\nvGW = (modelMatrix * vec4(transformed, 1.0)).xyz; vGN = normalize(mat3(modelMatrix) * objectNormal).y; vGY = position.y + 0.5;");
+    sh.fragmentShader = sh.fragmentShader.replace("#include <common>", `#include <common>
+varying vec3 vGW; varying float vGN; varying float vGY; uniform float gK;
+float gH(vec2 p) { return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }
+float gN(vec2 p) { vec2 i = floor(p), f = fract(p); f = f * f * (3.0 - 2.0 * f); return mix(mix(gH(i), gH(i + vec2(1, 0)), f.x), mix(gH(i + vec2(0, 1)), gH(i + vec2(1, 1)), f.x), f.y); }`)
+      .replace("#include <color_fragment>", `#include <color_fragment>
+{ float n = gN(vGW.xz / 26.0) * 0.65 + gN(vGW.xz / 7.0 + 17.0) * 0.35 - 0.5;
+  if (vGN > 0.5) { diffuseColor.rgb *= 1.0 + n * 0.3 * gK; diffuseColor.rgb += vec3(0.035, 0.02, -0.03) * n * gK; }
+  else if (vGN > -0.5) { float u = clamp(vGY, 0.0, 1.0); diffuseColor.rgb *= mix(1.0 - 0.28 * gK, 1.0 + 0.04 * gK, u * u * (3.0 - 2.0 * u)) + n * 0.06 * gK; }
+  else diffuseColor.rgb *= 1.0 - 0.3 * gK; }`);
+  };
+  M.customProgramCacheKey = () => "ground" + k; return (GROUND_M[m] = M);
+}
   // (owner, 2026-11-11) the post office: a building, its conveyor belt coming out of the door to where your parcel waits
 function officeMeshes() { const P = World.PO_LOCAL, B = P.b, BT = P.belt, W2 = B.hw * 2, D2 = B.hd * 2, front = B.z + B.hd, door = 3.4;
     box(W2, 0.3, D2, "#c9bda8", B.x, 0.15, B.z);   // the floor
@@ -1991,7 +2013,7 @@ function pieceMesh(q, live) {
     G.position.set(q.x, q.y, q.z); G.rotation.y = (q.r | 0) * Math.PI / 2; if (!live) { beltStripes.length = 0; beltStripes.push(...keep[0]); pusher = keep[1]; }
   }
     else if (q.k === "block" && q.m === "water" && live) { const m = new THREE.Mesh(new THREE.BoxGeometry(q.w, q.h, q.d), PICK_M); m.position.set(q.x + q.w / 2, q.y + q.h / 2, q.z + q.d / 2); m.userData.pid = q.id; G.add(m); }   // (owner, 2026-11-16) just something to aim at: all the water is drawn as one body (waterBody)
-    else if (q.k === "block") { const m = box(q.w, q.h, q.d, MAT_C[q.m], q.x + q.w / 2, q.y + q.h / 2, q.z + q.d / 2, G); if (q.m === "water" || q.m === "ice") { m.material = new THREE.MeshLambertMaterial({ color: MAT_C[q.m], transparent: true, opacity: q.m === "water" ? 0.6 : 0.85, depthWrite: q.m !== "water" }); } m.userData.pid = q.id;
+    else if (q.k === "block") { const m = box(q.w, q.h, q.d, MAT_C[q.m], q.x + q.w / 2, q.y + q.h / 2, q.z + q.d / 2, G); if (q.m !== "water" && q.m !== "ice") m.material = groundMat(q.m); if (q.m === "water" || q.m === "ice") { m.material = new THREE.MeshLambertMaterial({ color: MAT_C[q.m], transparent: true, opacity: q.m === "water" ? 0.6 : 0.85, depthWrite: q.m !== "water" }); } m.userData.pid = q.id;
       if (q.m === "turbine") {   // (owner, 2026-11-13) a fan on top, spinning, that blows you up into the air
         const f = new THREE.Group(); f.position.set(q.x + q.w / 2, q.y + q.h + 0.08, q.z + q.d / 2); G.add(f); const R0 = Math.min(q.w, q.d) * 0.45;
         const ring = new THREE.Mesh(new THREE.TorusGeometry(R0, 0.12, 6, 28).rotateX(Math.PI / 2), mat("#4d5863")); f.add(ring); const hub = new THREE.Mesh(new THREE.CylinderGeometry(R0 * 0.18, R0 * 0.18, 0.2, 10), mat("#4d5863")); f.add(hub);
