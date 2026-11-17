@@ -5,7 +5,7 @@
 // and asks. Phone first: a thumb joystick, drag to look, pinch to zoom, big buttons.
 import * as THREE from "./vendor/three.module.min.js";
 import { svg, fillIcons, ICON } from "./icons.js?v=6";
-import * as World from "./pets-world.js?v=1794652383";
+import * as World from "./pets-world.js?v=1794652384";
 
 const $ = (id) => document.getElementById(id);
 const { TAU, clamp, hyp, MOUNTS, TIERS, RARITY, RARITY_C, MODS, UPGRADES } = World;
@@ -1504,7 +1504,7 @@ function onNet(m) {
     case "stun": me.stun = m.s; if (me.transit && me.transit.k !== "pipe") me.transit = null; knockedOff(); sfx("stun"); cam.shake = Math.max(cam.shake, 0.5); flash(m.why === "kick" ? "#ffffff" : "#e5534b"); if (m.why === "dog") sfx("growl"); break;
     case "knock": me.px = m.x; me.pz = m.z; me.vy = m.y; me.ground = false; sfx("kick"); cam.shake = Math.max(cam.shake, 0.5); break;
     case "tp": { const sp0 = hyp(me.vx, me.vz); if (m.why === "home" || m.why === "balloon") faceSpawn();   // (owner, 2026-11-13) facing the way the respawn point is turned
-      me.x = m.x; me.y = m.y; me.z = m.z; me.vx = me.vz = me.vy = me.px = me.pz = 0; me.transit = null; me.ground = true; me.armed = false; me.foot = false; camAt.y = m.y + 2; if (m.why === "fall") { flash("#ffffff"); sfx("pop"); } else if (m.why === "home") sfx("pad"); else if (m.why === "tube") { me.yaw = m.yaw; cam.yaw = me.yaw - Math.PI; me.vx = Math.sin(me.yaw) * sp0; me.vz = Math.cos(me.yaw) * sp0; sfx("pipe"); emit(me.x, me.y + 1, me.z, 18, { colors: ["#5fb56b", "#ffffff"], speed: 4, up: 3, life: 0.5 }); } else { flash("#bfe6ff"); sfx("pad"); }   /* tube: (owner, 2026-11-13) out of a pipe shortcut, keeping your speed; home: (owner, 2026-11-11) the run's over, back at the post office */ sendPos(true); break; }
+      me.x = m.x; me.y = m.y; me.z = m.z; me.vx = me.vz = me.vy = me.px = me.pz = 0; me.transit = null; me.ground = true; me.armed = false; me.foot = false; camAt.y = m.y + 2; if (m.why === "fall") { flash("#ffffff"); sfx("pop"); } else if (m.why === "home") sfx("pad"); else if (m.why === "gate") { me.yaw = m.yaw; cam.yaw = me.yaw + Math.PI; cam.pitch = Math.PI / 6; flash("#ffffff"); sfx("pad"); }   /* (owner, 2026-11-16) back at the neighborhood's gate, facing in */ else if (m.why === "tube") { me.yaw = m.yaw; cam.yaw = me.yaw - Math.PI; me.vx = Math.sin(me.yaw) * sp0; me.vz = Math.cos(me.yaw) * sp0; sfx("pipe"); emit(me.x, me.y + 1, me.z, 18, { colors: ["#5fb56b", "#ffffff"], speed: 4, up: 3, life: 0.5 }); } else { flash("#bfe6ff"); sfx("pad"); }   /* tube: (owner, 2026-11-13) out of a pipe shortcut, keeping your speed; home: (owner, 2026-11-11) the run's over, back at the post office */ sendPos(true); break; }
     case "piped": me.transit = { k: "pipe", until: now() + m.s, x: m.x, y: m.y, z: m.z }; me.hidden = true; me.vx = me.vz = me.px = me.pz = 0; sfx("pipe"); if (m.goose) setTimeout(() => sfx("honk"), 600); break;
     case "rock": { const r = new THREE.Mesh(new THREE.DodecahedronGeometry(1.3), mat("#8a8278")); r.position.set(m.x, m.y + 22, m.z); scene.add(r); fallers.push({ g: r, y0: m.y + 22, y1: m.y + 0.8, t: 0, s: m.s });
       groundMark(m.x, m.y, m.z, World.ROCK.r, m.s, "#1d232a", (k) => { if (hyp(k.x - me.x, k.z - me.z) < 60) sfx("rock"); emit(k.x, k.y + 0.3, k.z, 22, { colors: ["#8a8278", "#c9bfae"], speed: 6, up: 4, life: 0.7 }); if (hyp(k.x - me.x, k.z - me.z) < 14) cam.shake = Math.max(cam.shake, 0.4); }); break; }

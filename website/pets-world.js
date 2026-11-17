@@ -424,6 +424,13 @@ export function moverUnder(x, z, y, tSec) {   // the highest moving platform top
 }
 export const addr = (id) => houses.find((h) => h.id === id) || null;   // a mailbox by its id
 // a closed gate in the way at (x, z, y), for someone with `open` zones open
+// (owner, 2026-11-16) falling off with a parcel in a neighborhood that has a gate: back at its gate (the nearest one into
+// it), just inside, facing in
+export function gateSpawn(d, x, z) {
+  let best = null, bd = Infinity; for (const g of gates) if (!g.wall && g.d === d && d > 0) { const k = hyp(g.x - x, g.z - z); if (k < bd) { bd = k; best = g; } }
+  if (!best) return null; const nx = Math.sin(best.yaw), nz = Math.cos(best.yaw), sg = districtAt(best.x + nx * 4, best.z + nz * 4, best.y) === d ? 1 : -1;
+  return { x: best.x + nx * 4 * sg, z: best.z + nz * 4 * sg, y: best.y, yaw: Math.atan2(nx * sg, nz * sg) };
+}
 export function gateBlocked(x, z, y, open, r = 0.55) {
   for (const g of gates) { if (g.d < open) continue;   /* (owner, 2026-11-14) at any height */ const dx = x - g.x, dz = z - g.z; if (Math.abs(dx * g.c - dz * g.s) < g.w / 2 + r && Math.abs(dx * g.s + dz * g.c) < GATE_T / 2 + r) return true; }
   return false;

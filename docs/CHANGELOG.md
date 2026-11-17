@@ -6,6 +6,8 @@ and any rule decided. Use `git log` for the code detail (and for the older Atamu
 
 ## 2026-11-16
 
+- **Back at the gate (owner).** Falling off with a parcel in a neighborhood that has a gate brings you back at its
+  gate, facing in, instead of the respawn point.
 - **Builder menus; each cannon's facing (owner).** The build tiles are in menus (Ground, Town, Hazards, Shortcuts).
   A selected Main Street house sets which way its cannon faces (an arrow over the roof shows it) instead of one facing
   for every cannon in Main Street's panel.

@@ -106,7 +106,10 @@ try {
   b.send({ t: "ability" }); await sleep(100);
   // (owner, 2026-11-14) falling off the town: back to the respawn point, still carrying the parcel
   { const pa = who("smokeA"), pid = pa.bag[0].pid; await put(a, "smokeA", 40, 40, W.EDGE_Y - 5); const tp = await a.wait((m) => m.t === "tp" && m.why === "home", "back from the fall");
-    ok(pa.bag.length === 1 && pa.bag[0].pid === pid && Math.abs(tp.x - W.SPAWN.x) < 1 && Math.abs(tp.z - W.SPAWN.z) < 1, "a fall sends you back to the respawn point with your parcel"); await sleep(700); }
+    ok(pa.bag.length === 1 && pa.bag[0].pid === pid && Math.abs(tp.x - W.SPAWN.x) < 1 && Math.abs(tp.z - W.SPAWN.z) < 1, "a fall sends you back to the respawn point with your parcel"); await sleep(700);
+    // (owner, 2026-11-16) in a neighborhood with a gate: back at its gate, just inside, facing in
+    await put(a, "smokeA", 70, 40, W.EDGE_Y - 5); const tg = await a.wait((m) => m.t === "tp" && m.why === "gate", "back at the gate");
+    ok(pa.bag.length === 1 && Math.abs(tg.x - 59) < 0.01 && Math.abs(tg.z) < 0.01 && Math.abs(tg.yaw - Math.PI / 2) < 0.01, "a fall in a gated neighborhood with a parcel sends you back to its gate"); await sleep(700); }
   // delivery: the right mailbox, checked by the server; coins, a roll, the Stamp Meter
   { const pa = who("smokeA"), h = W.addr(pa.bag[0].house), wrong = W.houses.find((q) => q.d === 0 && q.id !== h.id);
     for (const g of pa.room.geese) g.cool = Date.now() + 60000;
