@@ -757,7 +757,7 @@ addEventListener("keydown", (e) => {
   if (e.code === "Escape") { if (bm) { endBuild(); return; } if (free) setFree(false); closePanel(); return; }
   if (bm && !e.repeat && (e.code === "Delete" || e.code === "Backspace") && bm.shotSel !== undefined && shotList()[bm.shotSel]) { const L = shotList(); L.splice(bm.shotSel, 1); bm.shotSel = undefined; saveShots(L); setTimeout(drawAreas, 150); return; }   // (owner, 2026-11-14) a picked shot taken away
   if (bm && !e.repeat && (e.code === "Delete" || e.code === "Backspace") && selArea()) { doDel(selArea()); bm.sel = 0; buildBar(); drawAreas(); return; }
-  if (bm && e.code === "KeyR" && !e.ctrlKey && !e.metaKey && bm.tool === "select" && hazSel()) { const q = hazSel(); if (q.k === "gust" || q.k === "spawn") keys.add("KeyR"); else if (!e.repeat && q.k !== "block" && q.k !== "mover") doSet(q, { ...q, r: ((q.r | 0) + 1) % 4 }); return; }   // (owner, 2026-11-14) R turns the selected piece
+  if (bm && e.code === "KeyR" && !e.ctrlKey && !e.metaKey && bm.tool === "select" && hazSel()) { const q = hazSel(); if (q.k === "gust" || q.k === "spawn" || houseArrow[q.id]) keys.add("KeyR");   /* (owner, 2026-11-16) a Main Street house: R spins its cannon */ else if (!e.repeat && q.k !== "block" && q.k !== "mover") doSet(q, { ...q, r: ((q.r | 0) + 1) % 4 }); return; }   // (owner, 2026-11-14) R turns the selected piece
   if (bm && !e.repeat && (e.code === "Delete" || e.code === "Backspace") && bm.tool === "select" && hazSel()) { doDel(hazSel()); bm.hsel = 0; buildBar(); drawHazSel(); return; }
   if (bm && e.code === "KeyR" && !e.ctrlKey && !e.metaKey) { if (bm.tool === "spawn" || bm.tool === "gust") keys.add("KeyR"); else if (!e.repeat) { bm.r = (bm.r + 1) % 4; buildAim(bm.px, bm.py); } return; }   // (owner, 2026-11-13) the respawn point turns while R is held
   if (bm && (e.ctrlKey || e.metaKey) && !chatting) {   // (owner, 2026-11-13) the builder's copy, cut, paste, undo, redo
@@ -1165,9 +1165,11 @@ function buildBar() {
   else if (bm.tool === "area") { const q = selArea(); if (q) { const ch = (f) => (v) => { const a = { ...q }; f(a, v); doSet(q, a); }; dims([["W", () => q.w, ch((a, v) => (a.w = v)), 1, World.AREA_MAX], ["L", () => q.d, ch((a, v) => (a.d = v)), 1, World.AREA_MAX]]); row2.appendChild(btn("Delete", () => { doDel(q); bm.sel = 0; buildBar(); drawAreas(); }, "bt")); } }
   B.appendChild(row2);
 }
+// (owner, 2026-11-16) aiming passes through what builders only see (a cannon's arrow, a platform's B) and anything hidden
+const unpickable = (o) => { for (; o; o = o.parent) if (o.userData.noPick || !o.visible) return true; return false; };
 function pieceAt(px, py) {   // what's pointed at: the point, its face's normal and the piece's id (0: the ground)
   ndc.set((px / innerWidth) * 2 - 1, -(py / innerHeight) * 2 + 1); ray.setFromCamera(ndc, camera);
-  const hits = buildG ? ray.intersectObjects([...buildG.children, ...(poG ? [poG] : [])], true) : []; for (const h of hits) { let o = h.object; while (o && !o.userData.pid && o.parent) o = o.parent; if (o && o.userData.pid) { const n = h.face ? h.face.normal.clone().transformDirection(h.object.matrixWorld) : new THREE.Vector3(0, 1, 0); return { p: h.point, n, id: o.userData.pid }; } }
+  const hits = buildG ? ray.intersectObjects([...buildG.children, ...(poG ? [poG] : [])], true) : []; for (const h of hits) { if (unpickable(h.object)) continue; let o = h.object; while (o && !o.userData.pid && o.parent) o = o.parent; if (o && o.userData.pid) { const n = h.face ? h.face.normal.clone().transformDirection(h.object.matrixWorld) : new THREE.Vector3(0, 1, 0); return { p: h.point, n, id: o.userData.pid }; } }
   if (ray.ray.intersectPlane(ground, hitV)) return { p: hitV.clone(), n: new THREE.Vector3(0, 1, 0), id: 0 };
   return null;
 }
@@ -1782,9 +1784,9 @@ function pieceMesh(q, live) {
       const rf = new THREE.Mesh(new THREE.ConeGeometry(S * 0.8, 2.6, 4), mat(roof)); rf.rotation.y = Math.PI / 4; rf.position.y = 4.5; rf.castShadow = true; rf.userData.pid = q.id; g.add(rf);
       if (q.on) { const tg = textSprite(q.on, { size: 30 }); tg.position.set(q.x, q.y + 7, q.z); G.add(tg); }   // (owner, 2026-11-16) a bought house: its owner's name
       if (live && (hb ? hb.d : World.districtAt(q.x, q.z, q.y)) === 0) {   // (owner, 2026-11-16) builders see which way its cannon would face: an arrow on the roof
-        const A = new THREE.Group(), am = new THREE.MeshBasicMaterial({ color: "#ff8a3d", depthTest: false }); A.position.set(q.x, q.y + 6.4, q.z); A.rotation.y = World.cannonYaw(q);
+        const A = new THREE.Group(), am = new THREE.MeshBasicMaterial({ color: "#ff8a3d" }); A.position.set(q.x, q.y + 6.4, q.z); A.rotation.y = World.cannonYaw(q);
         const sh = new THREE.Mesh(new THREE.BoxGeometry(0.35, 0.35, 3.2), am); sh.position.z = 1.6; const hd = new THREE.Mesh(new THREE.ConeGeometry(0.7, 1.4, 12).rotateX(Math.PI / 2), am); hd.position.z = 3.8; A.add(sh, hd);
-        A.traverse((o) => { o.renderOrder = 5; o.userData.noPick = 1; }); A.visible = !!bm; buildOnly.push(A); G.add(A); }
+        A.traverse((o) => { o.renderOrder = 5; o.userData.noPick = 1; }); A.visible = !!bm; buildOnly.push(A); G.add(A); houseArrow[q.id] = A; }
     }
     else if (q.k === "mailbox") {
       const mb = new THREE.Group(); mb.position.set(q.x, q.y, q.z); mb.rotation.y = (q.r | 0) * Math.PI / 2; G.add(mb);
@@ -1835,7 +1837,7 @@ function crackTex(size) {
     crackImg = c; }
   const t = new THREE.CanvasTexture(crackImg); t.wrapS = t.wrapT = THREE.RepeatWrapping; const n = Math.max(1, Math.round(size / 4)); t.repeat.set(n, n); return t;
 }
-let spawnG = null; const buildOnly = [], fans = [], moverMeshes = [];   // (owner, 2026-11-13) what only builders see; turbines' fans; moving platforms
+let spawnG = null; const buildOnly = [], fans = [], moverMeshes = [], houseArrow = {};   // (owner, 2026-11-13) what only builders see; turbines' fans; moving platforms
 const hazSel = () => (bm && bm.hsel && World.build.find((q) => q.id === bm.hsel && q.k !== "area")) || null;   // (owner, 2026-11-14) the selected piece (Select)
 function drawHazSel() { if (bm && bm.hselG) { scene.remove(bm.hselG); bm.hselG = null; } const q = hazSel(); if (!q) return; const [w, h, d, x, y, z] = pieceBox(q); const e = new THREE.LineSegments(new THREE.EdgesGeometry(new THREE.BoxGeometry(w + 0.2, h + 0.2, d + 0.2)), new THREE.LineBasicMaterial({ color: "#ffd84a" })); e.position.set(x, y, z); bm.hselG = e; scene.add(e); }
 // each frame: moving platforms where they are now, fans spinning, a gust's wind while it blows, a turbine's updraft
@@ -1850,7 +1852,7 @@ function stepHazards(dt) {
   for (const u of World.updrafts) { const cx = (u.x0 + u.x1) / 2, cz = (u.z0 + u.z1) / 2; if (hyp(cx - P.x, cz - P.z) > 90 || Math.random() > dt * 14) continue; emit(u.x0 + Math.random() * (u.x1 - u.x0), u.y0 + 0.3, u.z0 + Math.random() * (u.z1 - u.z0), 1, { colors: ["#ffffff", "#dfe9f2"], dir: [0, 1, 0], speed: 10, grav: 0, life: 0.9, size: 0.1, spread: 0 }); }
 }
 function drawBuild() {
-  buildOnly.length = 0; fans.length = 0; moverMeshes.length = 0;
+  buildOnly.length = 0; fans.length = 0; moverMeshes.length = 0; for (const k of Object.keys(houseArrow)) delete houseArrow[k];
   if (poG) { scene.remove(poG); poG = null; }
   if (buildG) scene.remove(buildG); buildG = new THREE.Group(); scene.add(buildG);
   for (const k of Object.keys(houseMesh)) delete houseMesh[k]; for (const k of Object.keys(cannonMesh)) delete cannonMesh[k]; lockMesh.length = 0; for (let n = gates.length - 1; n >= 0; n--) if (gates[n].built) gates.splice(n, 1);
@@ -1955,8 +1957,8 @@ function frame(tms) {
   if (hitStop > 0) { hitStop -= dt; renderer.render(scene, camera); return; }   // a landed kick holds the picture for a beat
   if (loggedIn) {
     stepMe(dt);
-    if (bm && (bm.tool === "spawn" || bm.tool === "gust" || bm.tool === "select") && keys.has("KeyR")) { const s = bm.tool === "select" ? hazSel() : null; if (s && (s.k === "gust" || s.k === "spawn")) { bm.hdraft = { ...(bm.hdraft || s), a: Math.round(((bm.hdraft || s).a + 120 * dt) % 360) }; } else { bm.a = (bm.a + 120 * dt) % 360; buildAim(bm.px, bm.py); } }
-    else if (bm && bm.hdraft) { const s = hazSel(); if (s) doSet(s, bm.hdraft); bm.hdraft = null; }   // a selected gust or respawn point turned with R: sent when R comes up
+    if (bm && (bm.tool === "spawn" || bm.tool === "gust" || bm.tool === "select") && keys.has("KeyR")) { const s = bm.tool === "select" ? hazSel() : null; if (s && (s.k === "gust" || s.k === "spawn")) { bm.hdraft = { ...(bm.hdraft || s), a: Math.round(((bm.hdraft || s).a + 120 * dt) % 360) }; } else if (s && houseArrow[s.id]) { const d = bm.hdraft || { ...s, ca: s.ca | 0 }; d.cf = ((d.cf !== undefined ? d.cf : d.ca) + 120 * dt) % 360; d.ca = Math.round(d.cf); bm.hdraft = d; houseArrow[s.id].rotation.y = (d.ca * Math.PI) / 180; } else { bm.a = (bm.a + 120 * dt) % 360; buildAim(bm.px, bm.py); } }
+    else if (bm && bm.hdraft) { const s = hazSel(); if (s) { const d = { ...bm.hdraft }; delete d.cf; doSet(s, d); } bm.hdraft = null; }   // a selected gust or respawn point turned with R: sent when R comes up
     stepHazards(dt);
     if (me.kickT > 0) me.kickT -= dt; if (me.squash > 0) me.squash -= dt; if (me.hop > 0) me.hop -= dt;
     if (me.stun > 0 && Math.random() < 0.35) emit(me.x, me.y + 2.2, me.z, 1, { colors: ["#ffd84a"], speed: 1.5, up: 0.5, life: 0.5, grav: 0, size: 0.16 });
