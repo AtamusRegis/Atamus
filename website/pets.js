@@ -5,7 +5,7 @@
 // and asks. Phone first: a thumb joystick, drag to look, pinch to zoom, big buttons.
 import * as THREE from "./vendor/three.module.min.js";
 import { svg, fillIcons, ICON } from "./icons.js?v=7";
-import * as World from "./pets-world.js?v=1794652398";
+import * as World from "./pets-world.js?v=1794652400";
 
 const $ = (id) => document.getElementById(id);
 const { TAU, clamp, hyp, MOUNTS, TIERS, RARITY, RARITY_C, MODS, UPGRADES } = World;
@@ -629,7 +629,7 @@ function stepMe(dt) {
   const wt = !me.transit && World.waterAt(me.x, me.z, me.y + 0.7); me.swim = !!wt;
   if (wt && jumpTap) { jumpTap = false; if (me.y + 1.6 > wt.y1) { me.vy = st.jump * World.SWIM.out; me.ground = false; sfx("jump"); emit(me.x, wt.y1, me.z, 14, { colors: ["#bfe6ff", "#ffffff"], speed: 3, up: 3, life: 0.5, grav: 8, size: 0.18 }); } }
   if (jumpTap) { jumpTap = false; tryJump(); }
-  if (wt) { const tv = jumpHeld ? World.SWIM.up : -World.SWIM.sink; me.vy += clamp(tv - me.vy, -14 * dt, 14 * dt); if (Math.random() < 0.15) emit(me.x, me.y + 1.2, me.z, 1, { colors: ["#e8f7ff"], speed: 0.3, up: 1.5, life: 0.8, grav: -1, size: 0.12 }); }
+  if (wt) { const tv = clamp((wt.y1 - World.SWIM.float + Math.sin(now() * 2.2) * 0.06 - me.y) * 4, -4, 4); me.vy += clamp(tv - me.vy, -30 * dt, 30 * dt);   /* (owner, 2026-11-17) float up to the surface and bob there */ if (Math.random() < 0.15) emit(me.x, me.y + 1.2, me.z, 1, { colors: ["#e8f7ff"], speed: 0.3, up: 1.5, life: 0.8, grav: -1, size: 0.12 }); }
   else me.vy -= GRAV * dt;
   me.gliding = !me.ground && !me.foot && !me.transit && !wt && jumpHeld && me.vy < 0 && st.ab === "glide";   // (owner, 2026-11-16) Glide: hold jump while falling
   if (me.gliding) { me.vy = Math.max(me.vy, -World.ABILITIES.glide.fall); if (Math.random() < 0.4) emit(me.x, me.y + 0.4, me.z, 1, { colors: ["#ffffff", "#cfe9ff"], speed: 0.6, up: -0.3, life: 0.6, grav: 0, size: 0.16 }); }
