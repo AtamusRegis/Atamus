@@ -10,6 +10,7 @@ and any rule decided. Use `git log` for the code detail (and for the older Atamu
   Pup, Kitten, Axolotl, Cheetah Cub, Griffin Chick, Bunny, Baby Raptor, Mini Trike, Frog and Cloud Pony (the old kinds,
   renamed), each with a mail bag, a Shiny texture and idle, run, jump and ability animations; Blink shrinks the mount
   away before the jump.
+- **Floating in water (owner).** In water you float at the surface instead of sinking.
 - **Abilities reset on respawn (owner).** Respawning recharges Sprint and Blink at once.
 - **Fair kicking (owner).** Repeated kicks on the same courier get weaker, then stop working on them for a while; new
   couriers can't be kicked for their first deliveries; tapping a courier lets you Block them (no kicks either way, no

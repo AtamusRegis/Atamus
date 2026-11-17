@@ -309,9 +309,9 @@ function solid(x, z, hw, hd, y0, y1, yaw = 0) { solids.push({ x, z, hw, hd, c: M
 const STREET = ["Main Street", "Maple Lane", "Goose Way", "Cliff Road", "Cloud Isle", "Frost Lane", "Dune Road", "Vine Street", "Ember Way", "Star Lane"];
 // (owner, 2026-11-12) each far zone's tough going: ice (slippery), sand (slow, and sandstorms), rivers across the jungle
 // (slow, and thick trees), lava pools (a burn and a bounce), and the moon's low gravity
-// (owner, 2026-11-16) water blocks aren't walls any more: you swim through them, slowly (SWIM.mul of your speed), sinking
-// gently, rising while jump is held, and jumping out at the top
-export const waters = [], SWIM = { mul: 0.35, sink: 1.5, up: 4.5, out: 0.85 };
+// (owner, 2026-11-16) water blocks aren't walls any more: you swim through them, slowly (SWIM.mul of your speed),
+// (owner, 2026-11-17) floating at the top, and jumping out
+export const waters = [], SWIM = { mul: 0.35, float: 0.8, out: 0.85 };   // (owner, 2026-11-17) you float, the surface at your chest (float m below it)
 export function waterAt(x, z, y) { for (const w of waters) if (x >= w.x0 && x <= w.x1 && z >= w.z0 && z <= w.z1 && y >= w.y0 && y <= w.y1) return w; return null; }
 export const lavas = [], ICE_GRIP = 0.12, SAND_SLOW = 0.8, WATER_SLOW = 0.5, MOON_GRAV = 0.45, LAVA = { stun: 0.6, every: 2 };
 export const lavaAt = (x, z, y) => y < 1.2 && lavas.some((l) => hyp(x - l.x, z - l.z) < l.r);
