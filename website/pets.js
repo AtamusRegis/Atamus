@@ -959,8 +959,8 @@ function hud(dt) {
   const t = now();
   // (owner, 2026-11-14) the zone slider, bottom center: one step per open zone with mailboxes; the top step is the usual
   // mix, a lower one asks for every parcel from that zone
-  { const Z = World.pickZones(World.openFor(save)), k = Z.join() + "|" + save.set.pz + "|" + !!bm, S = $("zpick");
-    if (k !== zpickKey) { zpickKey = k; S.style.display = Z.length > 1 && !bm ? "flex" : "none"; const inp = S.querySelector("input"), i = Z.indexOf(save.set.pz), v = i >= 0 ? i : Z.length - 1;
+  { const Z = World.pickZones(World.openFor(save)), k = Z.join() + "|" + save.set.pz + "|" + !!bm + "|" + (tut >= 0), S = $("zpick");   /* (owner, 2026-11-16) not while the tutorial shows: they share the spot */
+    if (k !== zpickKey) { zpickKey = k; S.style.display = Z.length > 1 && !bm && tut < 0 ? "flex" : "none"; const inp = S.querySelector("input"), i = Z.indexOf(save.set.pz), v = i >= 0 ? i : Z.length - 1;
       inp.max = Z.length - 1; inp.value = v; S.querySelector("b").textContent = World.zoneName(Z[v]); S.querySelector("b").style.boxShadow = "inset 0 -3px 0 " + (World.TIERS[Z[v]] || World.TIERS[0]).c;
       inp.oninput = () => { const n = +inp.value; S.querySelector("b").textContent = World.zoneName(Z[n]); };
       inp.onchange = () => { const n = +inp.value, pz = n === Z.length - 1 ? -1 : Z[n]; save.set.pz = pz; netSend({ t: "set", pz }); }; } }
