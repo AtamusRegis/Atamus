@@ -210,6 +210,19 @@ try {
     ok(r.pods[0] && r.pods[0].p === pb, "standing on a podium holds it");
     const c0 = pb.acct.data.coins; r.pods[0].payAt = 0; const au = await b.wait((m) => m.t === "aura", "a podium's Aura"); ok(au.n > 0 && pb.acct.data.coins > c0, "a held podium pays its courier Aura"); pb.acct.data.coins = c0;
     await put(b, "smokeB", s0.x + 12, s0.z, 0); await sleep(1300); ok(!r.pods[0], "stepping off frees the podium"); }
+  // (owner, 2026-11-16) cannons: buy a Main Street house, unlock neighborhood 5's cannon, set it at the house, fire it
+  { const pb = who("smokeB"), pa = who("smokeA"), d = pb.acct.data, c0 = d.coins, a0 = pa.acct.data.coins; d.coins = 1e6; pa.acct.data.coins = 1e6;
+    ok(W.CANNONS.cost(5) > W.CANNONS.cost(1) && W.cannonLocks.length === 1 && W.cannonLocks[0].d === 5 && W.cannonPad(5), "a Cannon Unlock and Pad belong to their neighborhood; a later cannon costs more");
+    await put(b, "smokeB", 40, 26, 0); b.send({ t: "buyhouse", id: 30 }); await b.wait((m) => m.t === "build" && m.build.some((q) => q.id === 30 && q.ow === pb.acct.id), "B's house");
+    ok(d.coins === 1e6 - W.CANNONS.house, "a house costs the same price");
+    await put(a, "smokeA", 40, 26, 0); a.send({ t: "buyhouse", id: 30 }); await sleep(250); ok(W.build.find((q) => q.id === 30).ow === pb.acct.id && pa.acct.data.coins === 1e6, "a house has one owner");
+    b.send({ t: "setcannon", z: 5 }); await sleep(200); ok(!W.build.find((q) => q.id === 30).cz, "no cannon before it's unlocked");
+    await put(b, "smokeB", 193, 30, 0); b.send({ t: "unlockcannon", id: 62 }); await b.wait((m) => m.t === "data" && m.data.cannons.includes(5), "the cannon unlocked");
+    await put(b, "smokeB", 40, 27, 0); b.send({ t: "setcannon", z: 5 }); await b.wait((m) => m.t === "build" && m.build.some((q) => q.id === 30 && q.cz === 5), "the cannon at the house");
+    await put(a, "smokeA", 41, 21, 0); a.send({ t: "cannon" }); await sleep(200); ok(!a.inbox.some((m) => m.t === "cannon"), "only its owner fires a cannon");
+    await put(b, "smokeB", 41, 21, 0); b.send({ t: "cannon" }); const cm = await b.wait((m) => m.t === "cannon", "the cannon fires"); ok(cm.x === 190 && cm.z === -40, "the cannon aims at its neighborhood's pad");
+    const tp = await b.wait((m) => m.t === "tp" && m.why === "cannon", "landing on the pad", 8000); ok(tp.x === 190 && tp.z === -40, "it lands you on the pad");
+    d.coins = c0; pa.acct.data.coins = a0; }
   n.send({ t: "admin", op: "give", what: "mount:gator", n: 1, r: 2, name: "smokeB" });
   const gg = await b.wait((m) => m.t === "data" && m.data.mounts.some((k) => k.sp === "gator" && k.r === 2), "B's Rare Gator");
   // upgrades and mounts: the server takes the coins and saves
