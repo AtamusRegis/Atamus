@@ -5,7 +5,9 @@
 // and asks. Phone first: a thumb joystick, drag to look, pinch to zoom, big buttons.
 import * as THREE from "./vendor/three.module.min.js";
 import { svg, fillIcons, ICON } from "./icons.js?v=7";
-import * as World from "./pets-world.js?v=1794652398";
+import * as World from "./pets-world.js?v=1794912405";
+import { loadCritters, makeCritter, hasCritter } from "./critters.js?v=1";
+await loadCritters();   // (owner, 2026-11-17) the critter models, before anything is drawn
 
 const $ = (id) => document.getElementById(id);
 const { TAU, clamp, hyp, MOUNTS, TIERS, RARITY, RARITY_C, MODS, UPGRADES } = World;
@@ -213,8 +215,25 @@ const SPARK = ["#ffffff", "#fff6c2", "#c9f0ff", "#ffd1f3"];
 function sparkle(x, y, z, sc, dt) { if (Math.random() < dt * 10) emit(x, y + 0.9 * sc, z, 1, { colors: SPARK, speed: 0.15, up: 0.3, life: 0.75, grav: 0, size: 0.24, spread: 1.7 * sc, tw: 1 }); }
 const RAINBOW = ["#ff6b6b", "#ffb84d", "#ffe66b", "#7ee08a", "#6bb8ff", "#b48cff"];
 // (owner, 2026-11-09) a pet grows with its level but its rider stays the same size, so a big pet feels big
-function sizePet(m, sc) { m.g.scale.setScalar(sc); if (m.rider) { m.rider.scale.setScalar(0.8 / sc); m.rider.position.y = m.seat - 0.52 / sc; m.top = m.seat * sc + 1.4; } else m.top *= sc; }
-function petModel(sp, rider, va, r = 0) { let riderM = null;   // sp: a mount's kind (r: its rarity, for its coat), or { look, c, a, size }; va: 1 Shiny (the same coat: it sparkles)
+function sizePet(m, sc) { m.g.scale.setScalar(sc); if (m.rider) { m.rOff = -0.52 / sc; m.rider.scale.setScalar(0.8 / sc); m.rider.position.y = m.seat - 0.52 / sc; m.top = m.seat * sc + 1.4; } else m.top *= sc; }
+// (owner, 2026-11-17) a critter model (critters.js): its rider sits on its RiderSeat bone, its parcels on its ParcelStack
+function critModel(key, rider, va) {
+  const C = makeCritter(key, !!va), g = new THREE.Group(), body = new THREE.Group(); g.add(body); body.add(C.g); C.update(0);
+  const seat = C.seat.y, seatZ = C.seat.z; let riderG = null, riderM = null, top = seat;
+  if (rider) { const r = courierModel(rider, true); r.g.scale.setScalar(0.8); r.g.position.set(0, seat - 0.52, seatZ); body.add(r.g); riderG = r.g; riderM = r; top = seat + 1.4; }
+  return { g, body, legs: [], wings: [], head: new THREE.Group(), tails: [], k: 1, top, seat, seatZ, rOff: -0.52, rider: riderG, riderM, crit: C, plan: "crit", act: null, ab: null };
+}
+const crV = new THREE.Vector3();
+function boneIn(b, root, v) { v.set(0, 0, 0); for (let o = b; o && o !== root; o = o.parent) { o.updateMatrix(); v.applyMatrix4(o.matrix); } return v; }   // a bone's spot in root's space
+let critDt = 0;
+function animateCrit(m, moving, speed, airborne) {
+  const C = m.crit, want = m.act && C.acts[m.act] ? m.act : m.ab ? "ability" : airborne ? "jump" : moving ? "run" : "idle";
+  C.play(want, { hold: want === "jump", speed: want === "run" ? clamp(speed / (16 * 0.36 * m.g.scale.x), 0.6, 2.6) : 1 });
+  C.update(critDt);
+  if (m.rider) { m.rider.visible = m.rider.visible && !C.hide; const b = C.bone("RiderSeat"); if (b && !C.flip) { boneIn(b, m.body, crV); m.rider.position.set(crV.x, crV.y + m.rOff, crV.z); } else m.rider.position.set(0, m.seat + m.rOff, m.seatZ); }
+}
+function petModel(sp, rider, va, r = 0) { let riderM = null;
+  if (typeof sp !== "object" && hasCritter(sp)) return critModel(sp, rider, va);   // sp: a mount's kind (r: its rarity, for its coat), or { look, c, a, size }; va: 1 Shiny (the same coat: it sparkles)
   let riderG = null;
   if (typeof sp !== "object") { const M = World.MOUNTS[sp] || World.MOUNTS.dog, [c, a] = World.coat(sp, r); sp = { look: M.look, c, a, size: M.size }; }
   const s = sp, L = LOOK[s.look] || LOOK.pup, k = s.size, g = new THREE.Group(), body = new THREE.Group(); g.add(body);
@@ -358,6 +377,7 @@ function petModel(sp, rider, va, r = 0) { let riderM = null;   // sp: a mount's 
   return { g, body, legs, wings, head, tails, k, top, seat, rider: riderG, riderM, butterfly: L.plan === "butterfly", fly: s.ab === "glide", hop: !!L.hop, plan: L.plan };
 }
 function animatePet(m, t, moving, speed, airborne) {
+  if (m.crit) return animateCrit(m, moving, speed, airborne);
   const f = 6 + speed * 0.5, sw = moving && !airborne ? Math.sin(t * f) * 0.6 : 0;
   m.legs.forEach((l, i) => (l.rotation.x = airborne ? 0.6 : m.hop ? -Math.abs(sw) : m.legs.length === 2 ? (i ? sw : -sw) : (i === 0 || i === 3 ? sw : -sw)));
   m.body.position.y = airborne ? Math.sin(t * 3) * 0.25 : moving ? Math.abs(Math.sin(t * f)) * (m.hop ? 0.35 : 0.12) * m.k : (m.butterfly ? 0.3 + Math.sin(t * 3) * 0.1 : Math.sin(t * 2) * 0.02);
@@ -375,8 +395,9 @@ const PORTRAITS = {};
 function portrait(sp, va = 0, r = 0) {
   const key = sp + va + "/" + r; if (PORTRAITS[key]) return PORTRAITS[key];
   const m = petModel(sp, null, va, r); m.g.rotation.y = 0.7; pScene.add(m.g);
-  const L = LOOK[(World.MOUNTS[sp] || World.MOUNTS.dog).look] || {}, k = (World.MOUNTS[sp] || World.MOUNTS.dog).size, wide = L.wings === "bat" || L.wings === "feather" && L.plan === "quad" || L.plan === "butterfly" ? 1.35 : 1, tall = (L.neck || 0) + (L.leg || 0.5) > 1.5 ? 1.3 : 1;
-  pCam.position.set(0, 2.4 * k * wide * tall, 5.6 * k * wide * tall); pCam.lookAt(0, 1.0 * k * tall, 0);
+  if (m.crit) { m.g.updateMatrixWorld(true); const B = new THREE.Box3().setFromObject(m.g), c = B.getCenter(new THREE.Vector3()), z = B.getSize(new THREE.Vector3()), d = Math.max(z.x, z.y, z.z); pCam.position.set(c.x, c.y + d * 0.55, c.z + d * 2.2); pCam.lookAt(c.x, c.y, c.z); }
+  else { const L = LOOK[(World.MOUNTS[sp] || World.MOUNTS.dog).look] || {}, k = (World.MOUNTS[sp] || World.MOUNTS.dog).size, wide = L.wings === "bat" || L.wings === "feather" && L.plan === "quad" || L.plan === "butterfly" ? 1.35 : 1, tall = (L.neck || 0) + (L.leg || 0.5) > 1.5 ? 1.3 : 1;
+  pCam.position.set(0, 2.4 * k * wide * tall, 5.6 * k * wide * tall); pCam.lookAt(0, 1.0 * k * tall, 0); }
   portraitR.render(pScene, pCam); pScene.remove(m.g);
   if (!va) return (PORTRAITS[key] = portraitR.domElement.toDataURL());
   // a Shiny's picture has its sparkles: four-pointed stars over it
@@ -411,10 +432,11 @@ const KIND = {
 };
 function rarityRing(g, r, rad) { if (!r) return; const m = new THREE.Mesh(new THREE.RingGeometry(rad * 0.8, rad, 32).rotateX(-Math.PI / 2), basic(RARITY_C[r], 0.75)); m.position.y = 0.06; g.add(m); g.userData.rar = r; }
 function buildAnimals() {
-  for (const d of World.dogs) { const K = KIND[d.sp], [c, a] = World.coat(d.sp, d.r), m = petModel({ look: K.look, c, a, size: K.size * (1 + 0.08 * d.r) }); /* (owner, 2026-11-11) the same coat as the mount of that kind and rarity */ m.g.position.set(d.hx, d.y, d.hz); scene.add(m.g); blobUnder(m.g, 1.6 * K.size); rarityRing(m.g, d.r, 1.1 * K.size);
+  const crit = (key, sc) => { if (!hasCritter(key)) return null; const m = critModel(key, null, 0); m.g.scale.setScalar(sc); return m; };   // (owner, 2026-11-17) the critter models: Main Street's dogs, geese and goats have their own; other zones' chasers are their zone's mount
+  for (const d of World.dogs) { const K = KIND[d.sp], [c, a] = World.coat(d.sp, d.r), m = crit(d.sp === "dog" ? "towndog" : d.sp, K.size * (1 + 0.08 * d.r)) || petModel({ look: K.look, c, a, size: K.size * (1 + 0.08 * d.r) }); /* (owner, 2026-11-11) the same coat as the mount of that kind and rarity */ m.g.position.set(d.hx, d.y, d.hz); scene.add(m.g); blobUnder(m.g, 1.6 * K.size); rarityRing(m.g, d.r, 1.1 * K.size);
     const bang = textSprite("!", { size: 64, color: "#ffffff", bg: "#e5534b" }); bang.position.y = 2.3; bang.visible = false; m.g.add(bang); dogMesh.push({ m, bang, x: d.hx, z: d.hz, yaw: 0, tx: d.hx, tz: d.hz, tyaw: 0, mode: 0, y: d.y, ty: d.y }); }
-  for (const q of World.geese) { const m = gooseModel(); m.g.scale.setScalar(1 + 0.08 * q.r); m.g.position.set(q.x, q.y, q.z); scene.add(m.g); blobUnder(m.g, 1.2); rarityRing(m.g, q.r, 0.8); gooseMesh.push({ m, x: q.x, y: q.y, z: q.z, yaw: 0, tx: q.x, ty: q.y, tz: q.z, tyaw: 0, mode: 0, carry: -1, box: null }); }
-  for (const q of World.goats) { const m = petModel({ look: "goat", c: "#e9e4dc", a: "#8a7a66", size: 0.95 * (1 + 0.08 * q.r) }); m.g.position.set(q.hx, q.y, q.hz); scene.add(m.g); blobUnder(m.g, 1.7); rarityRing(m.g, q.r, 1.0); goatMesh.push({ m, x: q.hx, z: q.hz, yaw: Math.PI / 2, tx: q.hx, tz: q.hz, tyaw: Math.PI / 2, mode: 0, y: q.y }); }
+  for (const q of World.geese) { const m = crit("goose", 1 + 0.08 * q.r) || gooseModel(); if (m.crit) { m.slot = new THREE.Group(); m.slot.position.set(0, 0.95, 0.6); m.body.add(m.slot); } m.g.scale.setScalar(1 + 0.08 * q.r); m.g.position.set(q.x, q.y, q.z); scene.add(m.g); blobUnder(m.g, 1.2); rarityRing(m.g, q.r, 0.8); gooseMesh.push({ m, x: q.x, y: q.y, z: q.z, yaw: 0, tx: q.x, ty: q.y, tz: q.z, tyaw: 0, mode: 0, carry: -1, box: null }); }
+  for (const q of World.goats) { const m = crit("goat", 0.95 * (1 + 0.08 * q.r)) || petModel({ look: "goat", c: "#e9e4dc", a: "#8a7a66", size: 0.95 * (1 + 0.08 * q.r) }); m.g.position.set(q.hx, q.y, q.hz); scene.add(m.g); blobUnder(m.g, 1.7); rarityRing(m.g, q.r, 1.0); goatMesh.push({ m, x: q.hx, z: q.hz, yaw: Math.PI / 2, tx: q.hx, tz: q.hz, tyaw: Math.PI / 2, mode: 0, y: q.y }); }
 }
 // a parcel: its tier's color, taped; modifiers show on it
 function parcelMesh(tier, mod) {
@@ -529,7 +551,7 @@ function makeTag(name, rank, r) { return textSprite(String(name || "Courier").sl
 function rigMount(sp, va, r, shirt, name, rank) {   // a mount with its rider, name tag and (hidden) walking courier
   const m = petModel(MOUNTS[sp] ? sp : "dog", shirt, va, r); sizePet(m, World.mountScale({ r })); const tag = makeTag(name, rank, r); tag.position.y = (m.top + 0.9) / m.g.scale.x; tag.scale.multiplyScalar(1 / m.g.scale.x); m.g.add(tag);
   const w = courierModel(shirt); w.g.visible = false; scene.add(w.g); scene.add(m.g); blobUnder(m.g, 2.2 * (m.k || 1)); blobUnder(w.g, 1.1);
-  const slot = new THREE.Group(); slot.position.set(0, m.seat + 0.02, -0.75 * m.k); slot.scale.setScalar(1 / m.g.scale.x); m.body.add(slot);
+  const slot = new THREE.Group(); if (m.crit) slot.position.copy(m.crit.parcel); else slot.position.set(0, m.seat + 0.02, -0.75 * m.k); slot.scale.setScalar(1 / m.g.scale.x); m.body.add(slot);
   return { m, tag, w, slot, sc: m.g.scale.x, va, r };
 }
 function unrig(r) { if (!r) return; scene.remove(r.m.g, r.w.g); }
@@ -562,7 +584,7 @@ let clockOff = 0; const srvNow = () => (Date.now() + clockOff) / 1000;
 const onGround = () => me.ground || me.coyote > 0;
 function tryJump() {
   if (me.stun > 0 || me.transit) return; const st = myStats();
-  if (!onGround()) { if (me.foot || st.ab !== "djump" || me.dj) return; me.dj = true; me.vy = st.jump * World.ABILITIES.djump.up; sfx("jump"); emit(me.x, me.y + 0.2, me.z, 16, { colors: ["#ffffff", "#9fd8ff"], speed: 4, up: 0.5, life: 0.45, grav: 0, size: 0.18 }); return; }   // (owner, 2026-11-16) Double Jump: once more in the air
+  if (!onGround()) { if (me.foot || st.ab !== "djump" || me.dj) return; me.dj = true; me.vy = st.jump * World.ABILITIES.djump.up; critOnce(mine, "flip"); sfx("jump"); emit(me.x, me.y + 0.2, me.z, 16, { colors: ["#ffffff", "#9fd8ff"], speed: 4, up: 0.5, life: 0.45, grav: 0, size: 0.18 }); return; }   // (owner, 2026-11-16) Double Jump: once more in the air
   me.vy = me.foot ? 7.5 : st.jump; me.ground = false; me.coyote = 0; sfx("jump"); emit(me.x, me.y + 0.1, me.z, 5, { colors: ["#e9e2d2"], speed: 2, up: 1, life: 0.4, grav: 2 });
 }
 // (owner, 2026-11-16) the ability button (E): Sprint or Blink (Double Jump and Glide are on the jump)
@@ -571,7 +593,19 @@ function doAbility() {
   if (st.ab === "sprint") { me.abAt = t; me.sprint = A.t; sfx("boost"); cam.shake = Math.max(cam.shake, 0.15); return; }
   const dx = Math.sin(me.yaw), dz = Math.cos(me.yaw), BR = 0.6; let k = 0;   // Blink: straight ahead at the same height, short of anything in the way
   for (let d = 0.25; d <= A.d; d += 0.25) { const x = me.x + dx * d, z = me.z + dz * d; if (World.blocked(x, z, me.y, BR) || World.blocked(x, z, me.y + 1.2, BR) || World.gateBlocked(x, z, me.y, World.openFor(save), BR)) break; k = d; }
-  if (k < 1) return; me.abAt = t; emit(me.x, me.y + 1, me.z, 22, { colors: ["#c77dff", "#ffffff", "#e2b8ff"], speed: 4, up: 1, life: 0.5, grav: 0, size: 0.22 });
+  if (k < 1) return; me.abAt = t;
+  if (mine && mine.m.crit && !me.blinkT) { me.blinkT = BLINK_AT; critOnce(mine, "hide"); return; }   // (owner, 2026-11-17) the critter shrinks away first: the jump comes at frame 7
+  blinkGo(dx, dz, k);
+}
+const BLINK_AT = 7 / 24;
+function critOnce(rig, how, from = 0) { const C = rig && rig.m.crit; if (!C) return; C.play("ability", { once: true, from }); C.hide = how === "hide"; C.flip = how === "flip"; }
+function blinkAgain() {   // frame 7: where it can reach now
+  const A = World.ABILITIES.blink, dx = Math.sin(me.yaw), dz = Math.cos(me.yaw), BR = 0.6; let k = 0;
+  for (let d = 0.25; d <= A.d; d += 0.25) { const x = me.x + dx * d, z = me.z + dz * d; if (World.blocked(x, z, me.y, BR) || World.blocked(x, z, me.y + 1.2, BR) || World.gateBlocked(x, z, me.y, World.openFor(save), BR)) break; k = d; }
+  if (k >= 1 && !me.foot && !me.transit) blinkGo(dx, dz, k);
+}
+function blinkGo(dx, dz, k) {
+  emit(me.x, me.y + 1, me.z, 22, { colors: ["#c77dff", "#ffffff", "#e2b8ff"], speed: 4, up: 1, life: 0.5, grav: 0, size: 0.22 });
   me.x += dx * k; me.z += dz * k; netSend({ t: "blink", x: me.x, y: me.y, z: me.z }); sfx("boost"); flash("#e2b8ff");
   emit(me.x, me.y + 1, me.z, 22, { colors: ["#c77dff", "#ffffff", "#e2b8ff"], speed: 4, up: 1, life: 0.5, grav: 0, size: 0.22 });
 }
@@ -618,6 +652,7 @@ function stepMe(dt) {
   const real = !World.starts.length || me.started; if (real && !me.real && !me.foot) { sfx("boost"); cam.shake = Math.max(cam.shake, 0.15); emit(me.x, me.y + 1, me.z, 24, { colors: ["#c77dff", "#ffffff", "#e2b8ff"], speed: 4, up: 2, life: 0.6, grav: 0, size: 0.2 }); } me.real = real;
   let speed = me.foot ? 5.5 : (real ? st.speed : World.BASE_SPEED) * (bag.length ? 1 : World.EMPTY_FAST) * mud   // (owner, 2026-11-11) a parcel weighs you down: empty-handed you ride back much faster
     * (me.boost > 0 ? 1.6 : 1) * (me.sprint > 0 && !me.foot ? World.ABILITIES.sprint.mul : 1) * (me.gliding ? World.ABILITIES.glide.mul : 1) * (me.swim ? World.SWIM.mul : 1);   // (owner, 2026-11-16) Sprint, Glide, swimming
+  if (me.blinkT > 0 && (me.blinkT -= dt) <= 0) { me.blinkT = 0; blinkAgain(); }
   if (me.sprint > 0) { me.sprint -= dt; if (Math.random() < 0.6) emit(me.x, me.y + 0.6, me.z, 1, { colors: ["#ffd84a", "#ffffff"], speed: 1, up: 0.5, life: 0.35, grav: 0, size: 0.18 }); }
   const grip = Math.max(70, speed * 7), steer = hyp(mx, mz) > 0.08, acc = (me.ground ? (kind === "ice" ? grip * World.ICE_GRIP : grip) : steer ? Math.max(12, speed * 1.1) : 0) * dt,   /* (owner, 2026-11-13) a jump keeps the speed it left the ground with: no stopping in the air, only a gentle steer */   /* (owner, 2026-11-12) no drifting: quick to speed up and stop however fast it goes */   /* (owner, 2026-11-12) ice: hard to start, turn and stop */ tvx = mx * speed, tvz = mz * speed;
   if (me.gliding || me.swim) { const ga = (me.swim ? 14 : 18) * dt; me.vx += clamp(tvx - me.vx, -ga, ga); me.vz += clamp(tvz - me.vz, -ga, ga); } else
@@ -1671,7 +1706,7 @@ function onNet(m) {
     case "kickhit": kickHit(m.id); break;
     case "stun": me.stun = m.s; if (me.transit && me.transit.k !== "pipe") me.transit = null; knockedOff(); sfx("stun"); cam.shake = Math.max(cam.shake, 0.5); flash(m.why === "kick" ? "#ffffff" : "#e5534b"); if (m.why === "dog") sfx("growl"); break;
     case "knock": me.px = m.x; me.pz = m.z; me.vy = m.y; me.ground = false; sfx("kick"); cam.shake = Math.max(cam.shake, 0.5); break;
-    case "tp": { const sp0 = hyp(me.vx, me.vz); if (m.why === "home" || m.why === "gate" || m.why === "fall") { me.abAt = -99; me.sprint = 0; me.dj = false; }   /* (owner, 2026-11-17) a respawn resets the ability */ if (m.why === "home" || m.why === "balloon") faceSpawn();   // (owner, 2026-11-13) facing the way the respawn point is turned
+    case "tp": { const sp0 = hyp(me.vx, me.vz); if (m.why === "home" || m.why === "gate" || m.why === "fall") { me.abAt = -99; me.sprint = 0; me.dj = false; me.blinkT = 0; }   /* (owner, 2026-11-17) a respawn resets the ability */ if (m.why === "home" || m.why === "balloon") faceSpawn();   // (owner, 2026-11-13) facing the way the respawn point is turned
       me.x = m.x; me.y = m.y; me.z = m.z; me.vx = me.vz = me.vy = me.px = me.pz = 0; me.transit = null; me.ground = true; me.armed = false; me.foot = false; camAt.y = m.y + 2; if (m.why === "fall") { flash("#ffffff"); sfx("pop"); } else if (m.why === "home") sfx("pad"); else if (m.why === "gate") { me.yaw = m.yaw; if (!bm) { cam.yaw = me.yaw + Math.PI; cam.pitch = Math.PI / 6; } flash("#ffffff"); sfx("pad"); }   /* (owner, 2026-11-16) back at the neighborhood's gate, facing in */ else if (m.why === "tube") { me.yaw = m.yaw; cam.yaw = me.yaw - Math.PI; me.vx = Math.sin(me.yaw) * sp0; me.vz = Math.cos(me.yaw) * sp0; sfx("pipe"); emit(me.x, me.y + 1, me.z, 18, { colors: ["#5fb56b", "#ffffff"], speed: 4, up: 3, life: 0.5 }); } else { flash("#bfe6ff"); sfx("pad"); }   /* tube: (owner, 2026-11-13) out of a pipe shortcut, keeping your speed; home: (owner, 2026-11-11) the run's over, back at the post office */ sendPos(true); break; }
     case "piped": me.transit = { k: "pipe", until: now() + m.s, x: m.x, y: m.y, z: m.z }; me.hidden = true; me.vx = me.vz = me.px = me.pz = 0; sfx("pipe"); if (m.goose) setTimeout(() => sfx("honk"), 600); break;
     case "rock": { const r = new THREE.Mesh(new THREE.DodecahedronGeometry(1.3), mat("#8a8278")); r.position.set(m.x, m.y + 22, m.z); scene.add(r); fallers.push({ g: r, y0: m.y + 22, y1: m.y + 0.8, t: 0, s: m.s });
@@ -1711,7 +1746,7 @@ function onFx(m) {
   const o = whereOf(m.id), mineFx = m.id === myId, nearMe = o && hyp(o.x - me.x, o.z - me.z) < 50;
   switch (m.k) {
     case "stun": if (o && !mineFx) o.stunT = m.s; break;
-    case "blink": if (o && !mineFx) { emit(o.x, o.y + 1, o.z, 18, { colors: ["#c77dff", "#ffffff"], speed: 4, up: 1, life: 0.5, grav: 0, size: 0.22 }); emit(m.x, m.y + 1, m.z, 18, { colors: ["#c77dff", "#ffffff"], speed: 4, up: 1, life: 0.5, grav: 0, size: 0.22 }); o.x = m.x; o.y = m.y; o.z = m.z; } break;   // (owner, 2026-11-16) another courier's Blink
+    case "blink": if (o && !mineFx) { emit(o.x, o.y + 1, o.z, 18, { colors: ["#c77dff", "#ffffff"], speed: 4, up: 1, life: 0.5, grav: 0, size: 0.22 }); emit(m.x, m.y + 1, m.z, 18, { colors: ["#c77dff", "#ffffff"], speed: 4, up: 1, life: 0.5, grav: 0, size: 0.22 }); o.x = m.x; o.y = m.y; o.z = m.z; critOnce(o.rig, "hide", BLINK_AT); } break;   // (owner, 2026-11-16) another courier's Blink
     case "kick": if (o && !mineFx) { o.kickT = 0.28; if (nearMe) sfx("kick"); } break;
     case "cannon": if (o && !mineFx) { o.hideT = World.CANNONS.fuse + World.CANNONS.fly; cannonFire(m.h, false); } break;   // (owner, 2026-11-16) another courier's cannon goes off
     case "house": { const b = World.buildings.find((q) => q.id === m.id); if (b) emit(b.x, b.y + 5, b.z, 50, { colors: CONFETTI, speed: 6, up: 8, life: 1.3 }); sfx("unlock"); break; }
@@ -1768,7 +1803,7 @@ function stepArrow(t, tg) {
 // ---- drawing everyone ----
 function pose(rig, s, dt, t, speed) {   // s: { x, y, z, yaw, moving, foot, air, stun, mx, my, mz, myaw, kickT, hidden, squash, hop, glide }
   const g = rig.m.g, w = rig.w;
-  g.visible = !s.hidden; w.g.visible = !s.hidden && s.foot; if (rig.m.rider) rig.m.rider.visible = !s.foot;
+  g.visible = !s.hidden; w.g.visible = !s.hidden && s.foot; if (rig.m.rider) rig.m.rider.visible = !s.foot; rig.m.ab = !s.foot && (s.glide || (s.sprint && s.moving)) ? "loop" : null;   // (owner, 2026-11-17) Sprint and Glide play the critter's ability
   if (s.foot) { g.position.set(s.mx, s.my, s.mz); g.rotation.y = s.myaw; animatePet(rig.m, t, false, 0, false);
     w.g.position.set(s.x, s.y, s.z); w.g.rotation.set(0, s.yaw, 0);
     if (s.stun > 0 && s.air) { w.g.rotation.set(t * 9, s.yaw, t * 5); const f = Math.sin(t * 22); w.legs[0].rotation.x = f; w.legs[1].rotation.x = -f; w.arms[0].rotation.x = -f * 1.4; w.arms[1].rotation.x = f * 1.4; }   // (owner, 2026-11-14) a ragdoll: tumbling, limbs flailing
@@ -1799,11 +1834,12 @@ function stepOthers(dt, t) {
 function stepNpcs(dt, t) {
   const k = 1 - Math.exp(-14 * dt);
   const far = (o) => { const v = Math.abs(o.x - camera.position.x) < 170 && Math.abs(o.z - camera.position.z) < 170; o.m.g.visible = v; return !v; };   // animals a long way off aren't drawn
-  for (const d of dogMesh) { if (far(d)) { d.x = d.tx; d.z = d.tz; d.y = d.ty; continue; } const mv = hyp(d.tx - d.x, d.tz - d.z) > 0.02; d.x += (d.tx - d.x) * k; d.z += (d.tz - d.z) * k; d.y += (d.ty - d.y) * k; d.yaw += angDiff(d.tyaw, d.yaw) * k; d.m.g.position.set(d.x, d.y, d.z); d.m.g.rotation.y = d.yaw; animatePet(d.m, t + d.x, mv, 11, false); if (d.mode === 1) d.m.g.position.y = d.y + Math.abs(Math.sin(t * 22)) * 0.25; }
+  for (const d of dogMesh) { if (far(d)) { d.x = d.tx; d.z = d.tz; d.y = d.ty; continue; } const mv = hyp(d.tx - d.x, d.tz - d.z) > 0.02; d.x += (d.tx - d.x) * k; d.z += (d.tz - d.z) * k; d.y += (d.ty - d.y) * k; d.yaw += angDiff(d.tyaw, d.yaw) * k; d.m.g.position.set(d.x, d.y, d.z); d.m.g.rotation.y = d.yaw; d.m.act = d.mode === 1 ? "attack" : null; animatePet(d.m, t + d.x, mv, 11, false); if (d.mode === 1 && !d.m.crit) d.m.g.position.y = d.y + Math.abs(Math.sin(t * 22)) * 0.25; }
   for (const g of gooseMesh) { if (far(g)) { g.x = g.tx; g.z = g.tz; g.y = g.ty; continue; } const mv = hyp(g.tx - g.x, g.tz - g.z) > 0.03; g.x += (g.tx - g.x) * k; g.z += (g.tz - g.z) * k; g.y += (g.ty - g.y) * k; g.yaw += angDiff(g.tyaw, g.yaw) * k; const m = g.m; m.g.position.set(g.x, g.y, g.z); m.g.rotation.y = g.yaw;
+    if (m.crit) { m.act = g.mode === 1 ? "attack" : null; animateCrit(m, mv || g.mode === 2, g.mode >= 2 ? 14 : 6, false); m.g.rotation.z = g.mode === 4 ? Math.sin(t * 10) * 0.3 : 0; if (g.mode === 5) m.g.position.y = g.y - 0.25 + Math.sin(t * 9) * 0.12; continue; }
     const sw = mv ? Math.sin(t * (g.mode >= 2 ? 22 : 9) + g.x) * 0.6 : 0; m.legs[0].rotation.x = sw; m.legs[1].rotation.x = -sw; m.body.rotation.z = mv ? Math.sin(t * 9 + g.x) * 0.1 : 0;
     const flap = g.mode === 1 ? 0.9 + Math.sin(t * 30) * 0.7 : g.mode === 2 ? 0.7 : 0.05; m.wings[0].rotation.z = -flap; m.wings[1].rotation.z = flap; m.head.rotation.x = g.mode === 1 ? -0.5 : g.mode === 4 ? Math.sin(t * 14) * 0.5 : 0; m.g.rotation.z = g.mode === 4 ? Math.sin(t * 10) * 0.3 : 0; if (g.mode === 5) { m.g.position.y = g.y - 0.25 + Math.sin(t * 9) * 0.12; m.head.rotation.x = 0.5 + Math.sin(t * 9) * 0.4; } }
-  for (const g of goatMesh) { if (far(g)) { g.x = g.tx; g.z = g.tz; continue; } const mv = hyp(g.tx - g.x, g.tz - g.z) > 0.05; g.x += (g.tx - g.x) * k; g.z += (g.tz - g.z) * k; g.yaw += angDiff(g.tyaw, g.yaw) * k; g.m.g.position.set(g.x, g.y, g.z); g.m.g.rotation.y = g.yaw; animatePet(g.m, t, mv, 13, false); g.m.head.rotation.x = g.mode === 1 ? 0.5 + Math.sin(t * 26) * 0.15 : g.mode === 2 ? 0.6 : 0; }
+  for (const g of goatMesh) { if (far(g)) { g.x = g.tx; g.z = g.tz; continue; } const mv = hyp(g.tx - g.x, g.tz - g.z) > 0.05; g.x += (g.tx - g.x) * k; g.z += (g.tz - g.z) * k; g.yaw += angDiff(g.tyaw, g.yaw) * k; g.m.g.position.set(g.x, g.y, g.z); g.m.g.rotation.y = g.yaw; g.m.act = g.mode === 1 ? "attack" : null; animatePet(g.m, t, mv, 13, false); g.m.head.rotation.x = g.mode === 1 ? 0.5 + Math.sin(t * 26) * 0.15 : g.mode === 2 ? 0.6 : 0; }
   const sn = srvNow(), goose = World.pipeGoose(sn); for (const e of pipeEyes) { e.visible = goose; e.position.y = (e === pipeEyes[0] ? World.PIPE.a.y : World.PIPE.b.y) + 0.75 + Math.sin(t * 3) * 0.08; }
   for (const s of sprinklerMesh) if (World.sprinklerOn(s, sn) && hyp(s.x - me.x, s.z - me.z) < 90) { emit(s.x, s.y + 0.6, s.z, 2, { colors: ["#bfe6ff", "#ffffff"], speed: 5.5, up: 4, life: 0.7, grav: 10, size: 0.1 }); if (hyp(s.x - me.x, s.z - me.z) < 14 && Math.random() < 0.03) sfx("hiss"); }
   if (me.x > World.ISLE_X - 20 && me.y > World.SKY_Y) { const w = World.windAt(sn); if (w.on) { if (!windOn) sfx("wind"); for (let n = 0; n < 2; n++) { const a = Math.random() * TAU, r = Math.random() * 22; parts.length < PN && parts.push({ x: me.x + Math.cos(a) * r - w.x * 8, y: me.y + 0.5 + Math.random() * 4, z: me.z + Math.sin(a) * r - w.z * 8, vx: w.x * 16, vy: Math.sin(t * 5 + n) * 1.5, vz: w.z * 16, t: 0, life: 0.8, size: 0.12, grav: 0, c: "#ffffff", r: n }); } } windOn = w.on; }
@@ -2146,7 +2182,7 @@ function stepAir(dt) {
 }
 function frame(tms) {
   requestAnimationFrame(frame);
-  let dt = Math.min(0.08, (tms - last) / 1000); last = tms; const t = tms / 1000;
+  let dt = Math.min(0.08, (tms - last) / 1000); last = tms; const t = tms / 1000; critDt = dt;
   if (hitStop > 0) { hitStop -= dt; renderer.render(scene, camera); return; }   // a landed kick holds the picture for a beat
   if (loggedIn) {
     stepMe(dt);
@@ -2156,7 +2192,7 @@ function frame(tms) {
     if (me.kickT > 0) me.kickT -= dt; if (me.squash > 0) me.squash -= dt; if (me.hop > 0) me.hop -= dt;
     if (me.stun > 0 && Math.random() < 0.35) emit(me.x, me.y + 2.2, me.z, 1, { colors: ["#ffd84a"], speed: 1.5, up: 0.5, life: 0.5, grav: 0, size: 0.16 });
     if (me.grace > 0) { me.grace -= dt; if (Math.random() < 0.5) emit(me.x, me.y + 1.2, me.z, 1, { colors: ["#ffffff", "#bfe6ff"], speed: 1.2, up: 1, life: 0.5, grav: -1, size: 0.1, spread: 1.6 }); }
-    if (mine) pose(mine, { x: me.x, y: me.y, z: me.z, yaw: me.yaw, moving: me.moving, foot: me.foot, air: !me.ground, stun: me.stun, mx: me.mx, my: me.my, mz: me.mz, myaw: me.myaw, kickT: me.kickT, hidden: me.hidden, squash: me.squash, hop: me.hop, glide: me.glide }, dt, t, myStats().speed);
+    if (mine) pose(mine, { x: me.x, y: me.y, z: me.z, yaw: me.yaw, moving: me.moving, foot: me.foot, air: !me.ground, stun: me.stun, mx: me.mx, my: me.my, mz: me.mz, myaw: me.myaw, kickT: me.kickT, hidden: me.hidden, squash: me.squash, hop: me.hop, glide: me.glide, sprint: me.sprint > 0 }, dt, t, myStats().speed);
     if (mine) striking(mine, myId, podIds.has(myId) && !me.foot && !me.moving && !(me.stun > 0), t);
     if (tms - lastSent > 66) sendPos();
   }
