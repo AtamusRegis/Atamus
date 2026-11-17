@@ -6,6 +6,8 @@ and any rule decided. Use `git log` for the code detail (and for the older Atamu
 
 ## 2026-11-16
 
+- **Fix: the zone slider covered the tutorial (owner).** It hides while the tutorial shows (they share the bottom
+  center).
 - **Respawn boxes (owner).** A new builder piece for each neighborhood: touching one respawns you at once (at the
   neighborhood's gate with a parcel, as a fall would) instead of falling for a while. Only builders see them.
 - **Inspector; cannons aim at their pad (owner).** Selecting a piece (or bounds), or picking a Block, Gust, Platform or
