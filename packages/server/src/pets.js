@@ -198,7 +198,7 @@ export function attachPets(server, { origins = [], allowLocal = false, store = m
           break;
         }
         if (cmd === "coins" || every) d.coins = Math.min(1e12, d.coins + (every ? 1e7 : Math.max(1, Math.min(1e9, Math.floor(+m.n || 0)))));
-        if (cmd === "allmounts" || every) { const have = new Set(d.mounts.map((q) => q.sp + q.r)); for (const sp of Object.keys(MOUNTS)) for (let r = 0; r < 5; r++) if (!have.has(sp + r) && d.mounts.length < W.MOUNT_CAP) d.mounts.push({ id: d.nextId++, sp, r, va: 0 }); }
+        if (cmd === "allmounts" || every) { const have = new Set(d.mounts.map((q) => q.sp + q.r + "/" + (q.va | 0))); for (const va of [0, 1]) for (const sp of Object.keys(MOUNTS)) for (let r = 0; r < 5; r++) if (!have.has(sp + r + "/" + va) && d.mounts.length < W.MOUNT_CAP) d.mounts.push({ id: d.nextId++, sp, r, va }); }
         if (cmd === "upgrades" || every) for (const k of Object.keys(UPGRADES)) d.up[k] = W.UP_MAX;
         await putData(d); log("quick", cmd + (cmd === "coins" ? " " + m.n : "")); break;
       }
