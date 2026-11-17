@@ -6,6 +6,7 @@ and any rule decided. Use `git log` for the code detail (and for the older Atamu
 
 ## 2026-11-17
 
+- **Abilities reset on respawn (owner).** Respawning recharges Sprint and Blink at once.
 - **Fair kicking (owner).** Repeated kicks on the same courier get weaker, then stop working on them for a while; new
   couriers can't be kicked for their first deliveries; tapping a courier lets you Block them (no kicks either way, no
   chat, no invites). The 4 s cooldown and the safe moment after a kick stay.
