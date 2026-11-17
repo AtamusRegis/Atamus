@@ -28,7 +28,7 @@ export const DISTRICTS = ["Main Street", "Maple Suburbs", "Goose Marsh", "Cliffs
 // modifiers: one parcel in five is timed (Express). (owner, 2026-11-11) only the rarer tiers and timed parcels stay:
 // Fragile, Heavy and Golden went
 export const MODS = { express: { name: "Express", bonus: 1.5 } };
-export const MOD_CHANCE = 0.2, EMPTY_FAST = 2, BASE_DUR = 3, BASE_COINS = 10, HIT_CUT = 0.2, MUD_SLOW = 0.75;   // (owner, 2026-11-11) empty, a mount goes twice as fast
+export const MOD_CHANCE = 0.2, EMPTY_FAST = 1, BASE_DUR = 3, BASE_COINS = 10, HIT_CUT = 0.2, MUD_SLOW = 0.75;   // (owner, 2026-11-17) the same speed loaded or empty (it was twice as fast empty)
 // reward rolls: chance, coins, and the chance of a mount (owner, 2026-11-11: no mount levels, so no Training XP or
 // Level Coupons any more): (owner,
 // 2026-11-11) the parcel's area's animal, at the parcel's rarity or lower (a Rare parcel from the Marsh: a Common,

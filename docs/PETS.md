@@ -42,8 +42,7 @@ Every rule below is in `website/pets-world.js` (shared with the server, an ident
 (the Stable's Carry row: 150 Aura x 4^level x (1 + 0.5 x rarity) x (1 + 0.5 x its area), so rarer and farther animals
 cost more). Mounts from before kept what they carried (one per rarity rank), once. Ride back into the conveyor to load up. (owner, 2026-11-11) The mount shows **a big box for each parcel**, stacked. Each has its own address (the same neighborhood as another or a
 different one), its own marker, and the parcel counter shows how many of how many. The ground arrow points to the nearest. Each delivers at its own mailbox and rolls; several rolls take turns.
-A parcel that breaks or is lost is gone; the conveyor always has the next one. **Empty-handed you ride twice as fast**
-(owner, 2026-11-11: parcels weigh you down; empty mounts "way faster"), so the trip back to the post office is quick.
+A parcel that breaks or is lost is gone; the conveyor always has the next one. (owner, 2026-11-17) **You ride the same speed loaded or empty.**
 
 ## The conveyor
 
@@ -137,7 +136,7 @@ A parcel that breaks or is lost is gone; the conveyor always has the next one. *
   leftover egg) became a **Dog** of the same rarity and skin, once (saved data version 2), so nobody has an animal
   from an area they haven't reached.
 - (owner, 2026-11-12) **The start of the run:** around the post office (west of the purple **Aura pad**, a chevron
-  strip all the way across just east of the square) every mount goes the same 12 m/s (x2 empty, as anywhere). Over the
+  strip all the way across just east of the square) every mount goes the same 12 m/s. Over the
   pad its own speed switches on (a whoosh and purple sparks), for as long as you're east of it. Riding speeds up and
   stops quickly whatever the speed (grip 7x the speed, at least 70 m/s², so fast mounts don't drift; ice still slides).
 - **Stats:** (owner, 2026-11-16) **every mount goes the same 16 m/s** (no more by rarity or by zone); every mount jumps 8
@@ -586,5 +585,6 @@ From the old game, for the record:
 - The courier's cap and mail bag (owner, 2026-11-09): replaced by the R6-style figure.
 - Space as a single rise per press on a flier (owner, 2026-11-09): replaced by holding Space / Shift.
 - Helicopters spotting players by distance and chasing them down (owner, 2026-11-09): replaced by the searchlight.
+- (owner, 2026-11-17) Riding twice as fast empty-handed.
 - (owner, 2026-11-16) Mount speed by rarity (+20% a step) and by zone (+5% each zone's animal): every mount goes the
   same speed now.
