@@ -287,6 +287,12 @@ const ISLE_LINKS = [[0, 1], [1, 2]];
 // reached by the zipline from the last island
 export const FAR = { x0: 600, len: 100, n: 5, z0: -30, z1: 30 }, farX = (d) => FAR.x0 + (d - 5) * FAR.len;
 // (owner, 2026-11-13) the zone a spot is in: the nearest mailbox's (the post office square is the first)
+// (owner, 2026-11-16) the bounds a point is in (the smallest where they overlap), or null
+export function areaAt(x, z) { for (const a of areas) if (x >= a.x0 && x < a.x1 && z >= a.z0 && z < a.z1) return a; return null; }
+// a piece can be placed (and counts) only inside some neighborhood's bounds (bounds and respawn boxes anywhere): it
+// belongs to the neighborhood whose bounds it's in, whichever that is now
+export const pieceCenter = (q) => (q.k === "block" || q.k === "gust" || q.k === "mover" || q.k === "void" ? [q.x + q.w / 2, q.z + q.d / 2] : [q.x, q.z]);
+export const inBounds = (q) => q.k === "area" || q.k === "void" || !!areaAt(...pieceCenter(q));
 export function districtAt(x, z, y = 0) { for (const a of areas) if (x >= a.x0 && x < a.x1 && z >= a.z0 && z < a.z1) return a.d; return 0; }   // (owner, 2026-11-13) the bounds it's in
 
 function rect(x0, x1, z0, z1, y, kind, b = y - 40, m = 0) { slabs.push({ k: 0, x0, x1, z0, z1, y, b, kind, m, mx: (m * (x1 - x0)) / 2, mz: (m * (z1 - z0)) / 2 }); }
@@ -360,6 +366,9 @@ export function cleanPiece(q) {
     if (q.k === "house" && q.ow) { o.ow = n(q.ow, 1, 1e9); o.on = String(q.on || "").slice(0, 18); o.cz = n(q.cz, 0, TIERS.length - 1); } }   // (owner, 2026-11-16) its owner (account id and name) and the cannon in its place (0: none)   // a: (owner, 2026-11-13) the respawn point turns all the way round, in degrees
   return o;
 }
+// (owner, 2026-11-16) a gate (or a bound wall) belongs to and unlocks the neighborhood whose bounds it stands in (outside
+// any: the one it was placed for)
+const gateZone = (q) => { const a = areaAt(q.x, q.z); return a ? a.d : q.zone; };
 export function setBuild(data) {   // data: { pieces, zones } (or, from before, just the pieces)
   const list = Array.isArray(data) ? data : (data && data.pieces) || [], zs = (!Array.isArray(data) && data && data.zones) || [];
   zones.length = 0; for (let n = 0; n < TIERS.length; n++) zones.push(cleanZone(zs[n], n));
@@ -379,8 +388,8 @@ export function setBuild(data) {   // data: { pieces, zones } (or, from before, 
     else if (q.k === "void") voids.push({ id: q.id, x0: q.x, x1: q.x + q.w, z0: q.z, z1: q.z + q.d, y0: q.y, y1: q.y + q.h, d: q.zone });
     else if (q.k === "cannonpad") cannonPads.push({ id: q.id, x: q.x, z: q.z, y: q.y, yaw, d: districtAt(q.x, q.z, q.y) });
     else if (q.k === "mailbox") { const d = districtAt(q.x, q.z, q.y); houses.push({ id: q.id, x: q.x, z: q.z, y: q.y, yaw, d, mx: q.x, mz: q.z, my: q.y, name: ++count[d] + " " + zoneName(d) }); solid(q.x, q.z, 0.2, 0.2, q.y - 1, q.y + 1.3); }   // in whichever neighborhood's bounds it stands
-    else if (q.k === "wall") gates.push({ id: q.id, x: q.x, z: q.z, y: q.y, yaw, d: q.zone, c: Math.cos(yaw), s: Math.sin(yaw), w: q.w, wall: 1 });   // a bound wall: closed like a gate
-    else if (q.k === "gate") gates.push({ id: q.id, x: q.x, z: q.z, y: q.y, yaw, d: q.zone, c: Math.cos(yaw), s: Math.sin(yaw), w: GATE_W });
+    else if (q.k === "wall") gates.push({ id: q.id, x: q.x, z: q.z, y: q.y, yaw, d: gateZone(q), c: Math.cos(yaw), s: Math.sin(yaw), w: q.w, wall: 1 });   // a bound wall: closed like a gate
+    else if (q.k === "gate") gates.push({ id: q.id, x: q.x, z: q.z, y: q.y, yaw, d: gateZone(q), c: Math.cos(yaw), s: Math.sin(yaw), w: GATE_W });
     else if (q.k === "pipe") { pipes.push({ id: q.id, x: q.x, z: q.z, y: q.y, yaw, to: q.to }); solid(q.x, q.z, TUBE.r, TUBE.l / 2, q.y - 1, q.y + TUBE.r * 2, yaw); }
     else if (q.k === "tree") { trees.push({ id: q.id, x: q.x, z: q.z, y: q.y, s: 1, yaw }); solid(q.x, q.z, 0.45, 0.45, q.y - 1, q.y + 8); }
     else if (q.k === "boost") boosts.push({ id: q.id, x: q.x, z: q.z, y: q.y, yaw });   // x1.6 speed for a moment, the way it points

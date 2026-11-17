@@ -5,7 +5,7 @@
 // and asks. Phone first: a thumb joystick, drag to look, pinch to zoom, big buttons.
 import * as THREE from "./vendor/three.module.min.js";
 import { svg, fillIcons, ICON } from "./icons.js?v=7";
-import * as World from "./pets-world.js?v=1794652389";
+import * as World from "./pets-world.js?v=1794652392";
 
 const $ = (id) => document.getElementById(id);
 const { TAU, clamp, hyp, MOUNTS, TIERS, RARITY, RARITY_C, MODS, UPGRADES } = World;
@@ -1142,7 +1142,8 @@ function thumb(k) {
   portraitR.render(pScene, pCam); pScene.remove(g); pCam.far = 60; pCam.updateProjectionMatrix();
   return (THUMB[k] = portraitR.domElement.toDataURL());
 }
-const zoneReach = () => { let z = 0; while (z < World.TIERS.length - 1 && World.build.some((q) => q.k === "gate" && q.zone === z + 1)) z++; return z; };
+// (owner, 2026-11-16) the next neighborhood can be made once this one (past Main Street) has its gate
+const zoneReach = () => { let z = 0; while (z < World.TIERS.length - 1 && (z === 0 || World.gates.some((g) => !g.wall && g.d === z))) z++; return z; };
 function buildBar() {
   const B = $("buildbar"); B.innerHTML = ""; B.style.display = "flex"; const row0 = el("div", "brow"), row2 = el("div", "brow");
   // (owner, 2026-11-13) every piece a rounded tile with its picture
@@ -1182,7 +1183,8 @@ function inspector() {
     if (q.k === "spawn" || q.k === "gust") row("Angle", num(q.a | 0, 15, 0, 359, ch((a, v) => (a.a = Math.round(v) % 360))));
     else if (!["block", "mover", "area", "void"].includes(q.k)) row("Facing", pick(q.r | 0, [[0, "0°"], [1, "90°"], [2, "180°"], [3, "270°"]], ch((a, v) => (a.r = +v))));
     if (q.k === "block" || q.k === "mover") row("Material", pick(q.m, mats(q.k), ch((a, v) => (a.m = v))));
-    if (q.k === "gate" || q.k === "wall" || q.k === "area" || q.k === "void") row("Neighborhood", pick(q.zone, World.TIERS.map((_, n) => [n, World.zoneName(n)]).filter(([n]) => q.k === "area" || q.k === "void" || n > 0), ch((a, v) => (a.zone = +v))));
+    if (q.k === "gate" || q.k === "wall") { const g = World.gates.find((o) => o.id === q.id); row("Neighborhood", el("span", "", g ? World.zoneName(g.d) : "")); }
+    if (q.k === "area" || q.k === "void") row("Neighborhood", pick(q.zone, World.TIERS.map((_, n) => [n, World.zoneName(n)]).filter(([n]) => q.k === "area" || q.k === "void" || n > 0), ch((a, v) => (a.zone = +v))));
     if (q.k === "gust") { row("Every (s)", num(q.iv, 0.5, 0.5, 30, ch((a, v) => (a.iv = v)))); row("Power", num(q.pw, 1, 1, 60, ch((a, v) => (a.pw = Math.round(v))))); }
     if (q.k === "mover") {
       row("B offset", num(q.bx, 1, -200, 200, ch((a, v) => (a.bx = Math.round(v))), "52px"), num(q.by, 1, -100, 100, ch((a, v) => (a.by = Math.round(v))), "52px"), num(q.bz, 1, -200, 200, ch((a, v) => (a.bz = Math.round(v))), "52px"));
@@ -1246,7 +1248,7 @@ function buildPiece0(a, base) {   // the piece the bar (or the clipboard: base) 
     return { k: "block", x, z, y, w, h, d, m: B.m };
   }
   const x = Math.round(p.x + n.x * 0.3), z = Math.round(p.z + n.z * 0.3), s = World.surfaceAt(x, z, p.y + 0.3), q = { k: T, x, z, y: Math.round(Number.isFinite(s) && s > -1e9 ? s : p.y), r: ((base ? base.r | 0 : 0) + bm.r) % 4 };
-  if (T === "gate" || T === "wall") q.zone = base ? base.zone : Math.min(World.TIERS.length - 1, bm.zone + 1);   // (owner, 2026-11-14) the neighborhood you're editing places the gates (and walls) into the next
+  if (T === "gate" || T === "wall") { const ar = World.areaAt(q.x, q.z); q.zone = ar ? ar.d : base ? base.zone : bm.zone; }   // (owner, 2026-11-16) a gate belongs to (and unlocks) the neighborhood it's put in   // (owner, 2026-11-14) the neighborhood you're editing places the gates (and walls) into the next
   if (T === "wall") q.w = base ? base.w : bm.wl;
   if (T === "spawn") q.a = base ? base.a | 0 : Math.round(bm.a) % 360;
   return q;
@@ -1259,8 +1261,8 @@ function buildAim(px, py) {
     const s = hazSel(); if (bm.bPick && s && s.k === "mover") { const t = moverB(a, s); g = hologram({ ...t, id: 0 }); const ln = new THREE.Line(new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(s.x + s.w / 2, s.y + s.h, s.z + s.d / 2), new THREE.Vector3(t.x + s.w / 2, t.y + s.h, t.z + s.d / 2)]), new THREE.LineDashedMaterial({ color: "#ffd84a", dashSize: 0.6, gapSize: 0.4, depthTest: false })); ln.computeLineDistances(); ln.renderOrder = 6; g.add(ln); }
   }
   else if (bm.tool === "erase" || bm.tool === "cut" || bm.tool === "copy") { const q = a.id && World.build.find((o) => o.id === a.id); if (q) g = hologram(q, bm.tool !== "copy"); }
-  else if (bm.tool === "paste") { if (bm.clip) g = hologram({ ...buildPiece(a, bm.clip), id: 0 }); }
-  else if (bm.tool !== "area") g = hologram({ ...buildPiece(a), id: 0 });
+  else if (bm.tool === "paste") { if (bm.clip) { const q = buildPiece(a, bm.clip); g = hologram({ ...q, id: 0 }, !World.inBounds(q)); } }
+  else if (bm.tool !== "area") { const q = buildPiece(a); g = hologram({ ...q, id: 0 }, !World.inBounds(q)); }   // (owner, 2026-11-16) red: outside every neighborhood's bounds, can't go there
   if (g) { scene.add(g); bm.ghost = g; }
 }
 // (owner, 2026-11-13) doing and undoing (a keyboard: building is for computers): every placing and erasing (yours) can be
@@ -1284,6 +1286,7 @@ function paintPiece(px, py) {
   const base = bm.tool === "paste" ? bm.clip : null, q = buildPiece({ p: v, n: new THREE.Vector3(0, 1, 0), id: 0 }, base); q.y = P.y; return q;
 }
 function placeOnce(q) {
+  if (!World.inBounds(q)) return;   // (owner, 2026-11-16) only inside a neighborhood's bounds
   const P = bm.paint, [w0, h, d0, cx, cy, cz] = pieceBox(q), odd = q.k !== "block" && q.k !== "office" && q.r % 2, w = odd ? d0 : w0, d = odd ? w0 : d0, bx = { x: cx - w / 2 + 0.01, z: cz - d / 2 + 0.01, y: cy - h / 2, w: w - 0.02, h, d: d - 0.02 };   // what each piece takes up
   if (P.done.some((o) => overlaps(o, bx))) return; P.done.push(bx);
   // (owner, 2026-11-14) placed inside a neighborhood's bounds: that's the neighborhood being edited now (gates and walls keep theirs)
@@ -1315,15 +1318,15 @@ function paintMove(px, py) {
   const P = bm.paint; buildAim(px, py);
   if (P.erase) { const q = aimed(); if (q && !P.erase.has(q.id)) { P.erase.add(q.id); doDel(q); sfx("pop"); } return; }
   const q = paintPiece(px, py); if (!q) return; placeOnce(q);
-  if (bm.ghost) scene.remove(bm.ghost); bm.ghost = hologram({ ...q, id: 0 }); scene.add(bm.ghost);
+  if (bm.ghost) scene.remove(bm.ghost); bm.ghost = hologram({ ...q, id: 0 }, !World.inBounds(q)); scene.add(bm.ghost);
 }
 function buildTap(px, py) {
   if (bm.tool === "area") return;
   buildAim(px, py); const a = bm.aim; if (!a) return;
   if (bm.tool === "erase") { const q = aimed(); if (q) { doDel(q); sfx("pop"); } return; }
   if (bm.tool === "copy" || bm.tool === "cut") { copyBuild(bm.tool === "cut"); return; }
-  if (bm.tool === "paste") { if (bm.clip) { doAdd(buildPiece(a, bm.clip)); sfx("pad"); } return; }
-  doAdd(buildPiece(a)); sfx("pad");
+  if (bm.tool === "paste") { if (bm.clip) { const q = buildPiece(a, bm.clip); if (World.inBounds(q)) { doAdd(q); sfx("pad"); } } return; }
+  { const q = buildPiece(a); if (World.inBounds(q)) { doAdd(q); sfx("pad"); } }
 }
 // (owner, 2026-11-13) a neighborhood's bounds: with Bounds, a left drag on open space draws new ones for the neighborhood
 // you're editing; clicking bounds picks them, dragging inside moves them and dragging an edge resizes that side. What's
@@ -1879,8 +1882,8 @@ function pieceMesh(q, live) {
       if (q.k === "gate") { for (const x of [-W2 / 2, W2 / 2]) box(0.7, H, 0.7, "#6f7d8a", x, H / 2, 0, g); box(W2 + 0.7, 0.6, 0.7, "#6f7d8a", 0, H, 0, g); }
       // (owner, 2026-11-14) while locked the boundary runs all the way up and all the way down (it stops you at any height),
       // fading out above and below; unlocked it's gone
-      const sh = new THREE.Group(); g.add(sh); const w = holoWall(W2, H + 2 * HOLO_FADE, gateC(q.zone)); w.material.alphaMap = HOLO_ALPHA; w.position.y = H / 2; sh.add(w);
-      const L = q.k === "gate" ? lock(sh, H / 2) : null; if (live) gates.push({ g: sh, w, L, d: q.zone, built: 1, at: q });
+      const sh = new THREE.Group(); g.add(sh); const gd = live ? ((World.gates.find((o) => o.id === q.id) || {}).d ?? q.zone) : q.zone, w = holoWall(W2, H + 2 * HOLO_FADE, gateC(gd)); w.material.alphaMap = HOLO_ALPHA; w.position.y = H / 2; sh.add(w);
+      const L = q.k === "gate" ? lock(sh, H / 2) : null; if (live) gates.push({ g: sh, w, L, d: gd, built: 1, at: q });
     }
     else if (q.k === "pipe") {   // (owner, 2026-11-13) on its side, its mouth the way it's turned; bright green once linked
       const g = new THREE.Group(), R = World.TUBE.r, L = World.TUBE.l, on = live && World.tubePartner(World.pipes.find((p) => p.id === q.id)); g.position.set(q.x, q.y, q.z); g.rotation.y = (q.r | 0) * Math.PI / 2; G.add(g);
@@ -1895,7 +1898,9 @@ function pieceMesh(q, live) {
     else if (q.k === "spawn") { const g = new THREE.Group(); g.position.set(q.x, q.y + 0.08, q.z); g.rotation.y = q.a !== undefined ? (q.a * Math.PI) / 180 : (q.r | 0) * Math.PI / 2; G.add(g); if (live) { G.visible = !!bm; spawnG = G; }   /* (owner, 2026-11-13) only builders see it */ const sm = new THREE.MeshBasicMaterial({ color: "#7ef0c8", transparent: true, opacity: 0.85 });
       g.add(new THREE.Mesh(new THREE.RingGeometry(0.6, 0.9, 24).rotateX(-Math.PI / 2), sm)); const ar = new THREE.Mesh(new THREE.ConeGeometry(0.35, 0.8, 3).rotateX(Math.PI / 2), sm); ar.position.set(0, 0.05, 1.4); ar.scale.y = 0.15; g.add(ar); }   // which way couriers face
   G.traverse((o) => { o.userData.pid = q.id; });
-  G.traverse((o) => { o.userData.pid = q.id; });
+  if (live && !World.inBounds(q)) {   // (owner, 2026-11-16) outside every neighborhood's bounds: red while building
+    const [w0, h, d0, cx, cy, cz] = pieceBox(q), odd = q.k !== "block" && q.k !== "office" && q.r % 2, r = new THREE.Mesh(new THREE.BoxGeometry((odd ? d0 : w0) + 0.12, h + 0.12, (odd ? w0 : d0) + 0.12), HOLO.red[0]);
+    r.position.set(cx, cy, cz); r.renderOrder = 3; r.userData.noPick = 1; r.visible = !!bm; buildOnly.push(r); G.add(r); }
   return G;
 }
 // (owner, 2026-11-13) shift-click two pipes, then Link joins them into a shortcut (Unlink parts two already joined)
