@@ -35,7 +35,7 @@ const rankOf = (a) => (a.name.toLowerCase() === OWNER ? 3 : RANK[a.role] || 0);
 const between = ([a, b]) => a + Math.random() * (b - a);
 
 function makeRoom() {
-  const r = { players: new Map(), last: Date.now(), tick: 0, slow: 0, rocks: [], dives: [], plats: new Map(), pods: [null, null, null], podAt: 0, podPay: Date.now() + W.PODIUM.every * 1000 };
+  const r = { players: new Map(), last: Date.now(), tick: 0, slow: 0, rocks: [], dives: [], plats: new Map(), pods: [null, null, null], podAt: 0 };
   r.dogs = W.dogs.map((d) => ({ id: d.id, x: d.hx, z: d.hz, y: d.y, yaw: 0, mode: 0, t: 0, target: null, cool: 0, pause: 0, stuck: 0, awake: false }));
   r.geese = W.geese.map((g) => ({ id: g.id, x: g.x, z: g.z, y: g.y, yaw: 0, mode: 0, t: 0, target: null, carry: null, wx: g.x, wz: g.z, awake: false }));
   r.goats = W.goats.map((g) => ({ id: g.id, x: g.hx, z: g.hz, y: g.y, yaw: Math.PI / 2, mode: 0, t: 0, dx: 0, dz: 0, cool: 0, stuck: 0, awake: false }));
@@ -571,18 +571,16 @@ export function attachPets(server, { origins = [], allowLocal = false, store = m
     for (let n = r.rocks.length - 1; n >= 0; n--) { const k = r.rocks[n]; if (now < k.at) continue; r.rocks.splice(n, 1); for (const p of players) if (Math.abs(p.y - k.y) < 3 && hyp(p.x - k.x, p.z - k.z) < ROCK.r && now >= p.stunUntil && now >= p.tpAt) { stun(p, ROCK.stun, "rock"); hit(p, "rock"); } }
     for (let n = r.dives.length - 1; n >= 0; n--) { const k = r.dives[n]; if (now < k.at) continue; r.dives.splice(n, 1); const p = k.p; if (!p.gone && p.bag.length && Math.abs(p.y - k.y) < 3 && hyp(p.x - k.x, p.z - k.z) < SKYGOOSE.r && now >= p.graceUntil && !calmNow(p, now)) { all(r, { t: "fx", k: "skysteal", id: p.id }, p); lose(p, "skygoose", pick1(p.bag)); p.calmUntil = now + W.ATTACK.calm * 1000; } }
   }
-  // (owner, 2026-11-12) the podiums: each room's three best mounts (up to three a courier) stand by the post office and pay Aura
-  const podView = (r) => r.pods.map((q) => (q ? { id: q.p.id, name: q.p.name, sp: q.m.sp, r: q.m.r, va: q.m.va } : null));
+  // (owner, 2026-11-16) the podiums: stand on a free one to hold it (Aura Farming); every PODIUM.every s there pays Aura by
+  // the mount you ride; stepping off (or being kicked off) frees it
+  const podView = (r) => r.pods.map((q) => (q ? { id: q.p.id, name: q.p.name } : null));
+  const onPod = (p, s) => !p.gone && Math.abs(p.x - s.x) <= 2.4 && Math.abs(p.z - s.z) <= 2.4 && p.y > s.y - 0.4 && p.y < s.y + 1.5;
   function stepPodiums(r, now) {
-    const keep = r.pods.map((q) => (q && r.players.get(q.p.id) === q.p && q.p.acct.data.mounts.includes(q.m) ? q : null)), cands = [];
-    for (const p of r.players.values()) for (const m of [...p.acct.data.mounts].sort((a, b) => W.podiumScore(b) - W.podiumScore(a)).slice(0, 3)) cands.push({ p, m, s: W.podiumScore(m), was: keep.some((q) => q && q.m === m) });
-    cands.sort((a, b) => b.s - a.s || b.was - a.was);   // a rarer mount takes a podium; a tie keeps the one already standing
-    const top = cands.slice(0, 3), next = [null, null, null];
-    for (const c of top) { const n = keep.findIndex((q) => q && q.m === c.m); if (n >= 0) next[n] = keep[n]; }
-    for (const c of top) if (!next.some((q) => q && q.m === c.m)) { const n = next.indexOf(null); next[n] = { p: c.p, m: c.m }; }
-    const changedPods = next.some((q, n) => (q && q.m) !== (r.pods[n] && r.pods[n].m)); r.pods = next;
-    if (changedPods) all(r, { t: "podiums", pods: podView(r) });
-    if (now >= r.podPay) { r.podPay = now + W.PODIUM.every * 1000; for (const q of r.pods) if (q) { const a = W.podiumPay(q.m); q.p.acct.data.coins += a; changed(q.p); send(q.p.ws, { t: "aura", n: a, coins: q.p.acct.data.coins }); } }
+    const spots = W.PODIUM.spots; let ch = false;
+    const next = [0, 1, 2].map((n) => { const q = r.pods[n], s = spots[n]; if (!s) return null; if (q && r.players.get(q.p.id) === q.p && onPod(q.p, s)) return q; if (q) ch = true; return null; });
+    for (let n = 0; n < spots.length && n < 3; n++) if (!next[n]) for (const p of r.players.values()) if (!next.some((q) => q && q.p === p) && onPod(p, spots[n])) { next[n] = { p, payAt: now + W.PODIUM.every * 1000 }; ch = true; break; }
+    r.pods = next; if (ch) all(r, { t: "podiums", pods: podView(r) });
+    for (const q of r.pods) if (q && now >= q.payAt) { q.payAt = now + W.PODIUM.every * 1000; const d = q.p.acct.data, m = d.mounts.find((k) => k.id === d.ride) || d.mounts[0]; if (!m) continue; const a = W.podiumPay(m); d.coins += a; changed(q.p); send(q.p.ws, { t: "aura", n: a, coins: d.coins }); }
   }
   setInterval(() => {
     const now = Date.now();

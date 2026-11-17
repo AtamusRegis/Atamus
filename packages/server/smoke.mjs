@@ -80,7 +80,6 @@ try {
   const a = client("A"), b = client("B"); await Promise.all([a.open, b.open]);
   a.send({ t: "register", user: "smokeA", pass: "pass1234" });
   const wa = await a.wait((m) => m.t === "welcome", "welcome");
-  for (const r of game.rooms) r.podPay = Infinity;   // the podiums pay only in their own test below
   ok(wa.data.mounts.length === 1 && wa.data.coins === 0 && !wa.geese.length && !wa.dogs.length && wa.build.length === TEST_TOWN.length, "A starts as a new courier, and gets the built town");
   const belt = await a.wait((m) => m.t === "belt", "the conveyor"); ok(belt.ready.tier === 0 && belt.next.tier === 0, "a new courier's conveyor has Bronze parcels");
   b.send({ t: "register", user: "smokeB", pass: "pass1234" });
@@ -206,10 +205,11 @@ try {
   b.send({ t: "admin", op: "quick", cmd: "coins", n: 5000, name: "smokeB" });   // a player: nothing happens
   n.send({ t: "admin", op: "quick", cmd: "coins", n: 5000, name: "smokeB" });
   ok((await b.wait((m) => m.t === "data", "B's coins")).data.coins === 5000, "an admin gives coins once; a player's command is ignored");
-  // (owner, 2026-11-12) the podiums: the room's best mounts stand there and pay Aura
-  { const pa = who("smokeA"), pb = who("smokeB"), r = pa.room; pb.acct.data.mounts.push({ id: pb.acct.data.nextId++, sp: "wolf", r: 4, va: 1, cap: 0, spd: 0 }); await sleep(1300);
-    const best = r.pods[0] && r.pods.find((q) => q && q.m.sp === "wolf" && q.m.r === 4); ok(r.pods.every(Boolean) && best && best.p === pb, "a rarer mount takes a podium");
-    const c0 = pb.acct.data.coins; r.podPay = 0; const au = await b.wait((m) => m.t === "aura", "a podium's Aura"); r.podPay = Infinity; ok(au.n >= W.podiumPay(best.m) && pb.acct.data.coins > c0, "a podium pays its courier Aura"); pb.acct.data.coins = c0; }
+  // (owner, 2026-11-16) the podiums: stand on a free one to hold it; it pays Aura by the mount ridden; stepping off frees it
+  { const pb = who("smokeB"), r = pb.room, s0 = W.PODIUM.spots[0]; pb.acct.data.mounts.push({ id: pb.acct.data.nextId++, sp: "wolf", r: 4, va: 1, cap: 0, spd: 0 }); /* the later tests keep this mount */ await put(b, "smokeB", s0.x, s0.z, s0.y); await sleep(1300);
+    ok(r.pods[0] && r.pods[0].p === pb, "standing on a podium holds it");
+    const c0 = pb.acct.data.coins; r.pods[0].payAt = 0; const au = await b.wait((m) => m.t === "aura", "a podium's Aura"); ok(au.n > 0 && pb.acct.data.coins > c0, "a held podium pays its courier Aura"); pb.acct.data.coins = c0;
+    await put(b, "smokeB", s0.x + 12, s0.z, 0); await sleep(1300); ok(!r.pods[0], "stepping off frees the podium"); }
   n.send({ t: "admin", op: "give", what: "mount:gator", n: 1, r: 2, name: "smokeB" });
   const gg = await b.wait((m) => m.t === "data" && m.data.mounts.some((k) => k.sp === "gator" && k.r === 2), "B's Rare Gator");
   // upgrades and mounts: the server takes the coins and saves
