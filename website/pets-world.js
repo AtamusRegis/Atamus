@@ -319,12 +319,12 @@ export const buildings = [], gates = [], starts = [], areas = [], pipes = [];
 // unlocks) and a Cannon Pad (where that neighborhood's cannon lands you). A courier pays CANNONS.cost(zone) Aura at an
 // unlock for that neighborhood's cannon, and buys one of Main Street's houses (CANNONS.house Aura, one each, one owner);
 // at their house they set any cannon they've unlocked in its place (or the house back), any time. A cannon faces the way
-// the builder set on its house ("ca", degrees), whichever way the house faced; only its owner fires it ----
+// its neighborhood's Cannon Pad, whichever way the house faced; only its owner fires it ----
 export const cannonLocks = [], cannonPads = [];
 export const CANNONS = { house: 7500, cost: (z) => Math.round(2000 * Math.pow(1.35, z) / 100) * 100, near: 7, fire: 3.6, fuse: 1.3, fly: 2.4, s: 4.4, h: 3.2 };
 export const cannonPad = (z) => cannonPads.find((p) => p.d === z) || null;
 export const houseFor = (aid) => build.find((q) => q.k === "house" && q.ow === aid) || null;
-export const cannonYaw = (q) => ((q && q.ca !== undefined ? q.ca : ((q && q.r) | 0) * 90) * Math.PI) / 180;   // (owner, 2026-11-16) each house sets its cannon's facing (ca, degrees); at first the way the house faces
+export const cannonYaw = (q) => { const p = q && q.cz ? cannonPad(q.cz) : null; return p ? Math.atan2(p.x - q.x, p.z - q.z) : (((q && q.r) | 0) * Math.PI) / 2; };   // (owner, 2026-11-16) a cannon faces the pad it fires you to
 // ---- (owner, 2026-11-13) neighborhoods: each one's name, its animal (the mount its parcels bring, the one that opens the
 // next), the chance of each rarity and of a Shiny; an admin sets them in the builder. Where a spot belongs: the bounds
 // (areas) drawn for each; the smallest one a spot is in wins; outside every bound, the first neighborhood ----
@@ -349,7 +349,6 @@ export function cleanPiece(q) {
     o.brk = n(q.brk, 0, 2); o.bt = clamp(Math.round((+q.bt || MOVER.bt) * 2) / 2, 0.5, 30); o.rs = clamp(Math.round((q.rs === undefined ? MOVER.rs : +q.rs || 0) * 2) / 2, 0, 120); }   // (owner, 2026-11-14) breaking: 0 never, 1 on step (bt s after it's first stood on), 2 on prolonged step (bt s stood on in all); back after rs s
   else if (q.k === "area") { o.w = n(q.w, 1, AREA_MAX); o.d = n(q.d, 1, AREA_MAX); o.zone = n(q.zone, 0, TIERS.length - 1); }   // (owner, 2026-11-13) a neighborhood's bounds
   else { o.r = n(q.r, 0, 3); if (q.k === "gate" || q.k === "wall") o.zone = n(q.zone, 1, TIERS.length - 1); if (q.k === "wall") o.w = n(q.w, 1, BLOCK_MAX); if (q.k === "pipe") o.to = n(q.to, 0, 1e9); if (q.k === "spawn") o.a = n(q.a === undefined ? o.r * 90 : q.a, 0, 359);
-    if (q.k === "house") o.ca = n(q.ca === undefined ? o.r * 90 : q.ca, 0, 359);
     if (q.k === "house" && q.ow) { o.ow = n(q.ow, 1, 1e9); o.on = String(q.on || "").slice(0, 18); o.cz = n(q.cz, 0, TIERS.length - 1); } }   // (owner, 2026-11-16) its owner (account id and name) and the cannon in its place (0: none)   // a: (owner, 2026-11-13) the respawn point turns all the way round, in degrees
   return o;
 }

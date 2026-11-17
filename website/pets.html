@@ -74,6 +74,11 @@
     #zpanel { position: fixed; right: calc(74px + var(--sr)); bottom: calc(150px + var(--sb)); z-index: 27; display: none; background: var(--card); border-radius: 14px; padding: 12px; width: 270px; max-height: calc(100vh - 170px); overflow-y: auto; box-shadow: 0 6px 20px rgba(0,0,0,.25); }
     #zpanel > b { display: inline-block; font-size: 16px; margin-bottom: 8px; } #zpanel .zrow { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin: 5px 0; font-weight: 700; white-space: nowrap; }
     #zpanel .zsub { display: block; margin: 10px 0 4px; } #zpanel .zshot { display: flex; align-items: center; gap: 4px; margin: 4px 0; } #zpanel .zshot i { font-style: normal; font-weight: 700; width: 14px; } #zpanel .zshot input { flex: 1; width: auto; min-width: 0; } #zpanel .zshot .bt { padding: 4px 7px; } #zpanel .zshot.pick .bt:first-of-type { background: #ffd84a; } #zpanel .zadd { width: 100%; }
+    #insp { position: fixed; right: calc(74px + var(--sr)); top: calc(12px + var(--st)); z-index: 27; display: none; background: var(--card); border-radius: 14px; padding: 12px; width: 300px; max-height: calc(100vh - 200px); overflow-y: auto; box-shadow: 0 6px 20px rgba(0,0,0,.25); }
+    #insp > b { display: inline-block; font-size: 17px; margin-bottom: 6px; } #insp .zrow { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin: 6px 0; font-weight: 700; white-space: nowrap; }
+    #insp .ival { display: flex; gap: 4px; align-items: center; } #insp input, #insp select { width: 120px; padding: 4px 6px; border-radius: 8px; border: 1px solid #c9d2da; font: inherit; }
+    #insp .iacts { display: flex; gap: 6px; justify-content: flex-end; margin-top: 10px; } #insp .bt svg { width: 18px; height: 18px; vertical-align: middle; } #insp .bt.on { background: #ffd84a; }
+    body.insp #zpanel { right: calc(386px + var(--sr)); } body.cinema #insp { opacity: 0; pointer-events: none; }
     #zpanel input, #zpanel select { width: 120px; padding: 4px 6px; border-radius: 8px; border: 1px solid #c9d2da; font: inherit; } #zpanel .go { width: 100%; margin-top: 8px; }
     #buildbar .mat { color: #1d232a; text-shadow: 0 1px 0 rgba(255,255,255,.6); }
     body.building .act, body.building #gifts { display: none !important; } body.building #mbuild { background: #ffd84a; }
@@ -236,6 +241,7 @@
   <div id="zpick"><b class="disp"></b><input type="range" min="0" max="0" step="1" value="0"></div>
   <div id="zpanel"></div>
   <div id="pprompt"></div>
+  <div id="insp"></div>
   <div id="cprompt"></div>
   <div id="banner"><b></b><i></i></div>
   <div id="flash"></div>
@@ -255,6 +261,6 @@
     <button id="lgo" class="btn go" type="submit">Log in</button>
     <button id="lnew" class="btn" type="button">Create account</button>
   </form>
-  <script type="module" src="pets.js?v=1794652385"></script>
+  <script type="module" src="pets.js?v=1794652386"></script>
 </body>
 </html>
