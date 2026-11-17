@@ -256,6 +256,8 @@ export function attachPets(server, { origins = [], allowLocal = false, store = m
           lastChat: 0, party: null, ready: null, next: null, bag: [], stolen: [], dropped: [], slots: new Set(), calmUntil: 0, pids: 0, stunUntil: 0, graceUntil: 0, lastIsle: -1, nextRock: 0, nextDive: 0, pipeAt: 0 };
         me.lx = me.x; me.lz = me.z; me.lt = now;
         online.set(acct.id, me);
+        // (owner, 2026-11-17) a house bought before the Cannon Plots: its Aura back, and it's a plain house again
+        if (W.build.some((o) => o.k === "house" && o.ow === acct.id)) { acct.data.coins += W.CANNONS.plot; acct.rev++; dirty.add(acct); applyBuild(W.build.map((o) => (o.k === "house" && o.ow === acct.id ? (({ ow, on, cz, ...rest }) => rest)(o) : o))); }
         send(ws, { t: "welcome", plats: [...room.plats].filter(([, st]) => st.goneUntil).map(([id, st]) => [id, st.goneUntil === Infinity ? 1e12 : r1(st.goneUntil / 1000)]), build: W.build, zones: W.zones, web: websiteBuild(), by: websiteBy(), now, id: me.id, aid: acct.id, name: me.name, role: rankOf(acct) >= 2 ? "admin" : acct.role, token, data: acct.data, x: me.x, y: me.y, z: me.z, players: [...room.players.values()].map(pub),
           dogs: room.dogs.map(dogView), geese: room.geese.map(gooseView), goats: room.goats.map(goatView), pods: podView(room) });
         room.players.set(me.id, me);
@@ -425,23 +427,23 @@ export function attachPets(server, { origins = [], allowLocal = false, store = m
           else break;
           applyBuild(list); break;
         }
-        // (owner, 2026-11-16) cannons: buying a Main Street house, unlocking a neighborhood's cannon, setting one at your
-        // house, firing it
-        case "buyhouse": {
-          const q = W.build.find((o) => o.id === +m.id && o.k === "house"), b = q && W.buildings.find((o) => o.id === q.id); const d = me.acct.data;
-          if (!q || !b || b.d !== 0 || q.ow || W.houseFor(me.acct.id) || d.coins < W.CANNONS.house || hyp(me.x - q.x, me.z - q.z) > W.CANNONS.near + 4) break;
-          d.coins -= W.CANNONS.house; changed(me); pushData(me); applyBuild(W.build.map((o) => (o === q ? { ...o, ow: me.acct.id, on: me.name, cz: 0 } : o))); send(ws, { t: "fx", k: "house", id: q.id }); break;
+        // (owner, 2026-11-16) cannons: (owner, 2026-11-17) buying a Cannon Plot, unlocking a neighborhood's cannon, setting
+        // one on your plot, firing it
+        case "buyplot": {
+          const q = W.build.find((o) => o.id === +m.id && o.k === "plot"), d = me.acct.data;
+          if (!q || q.ow || W.plotFor(me.acct.id) || d.coins < W.CANNONS.plot || hyp(me.x - q.x, me.z - q.z) > W.PLOT_S / 2 + 4 || Math.abs(me.y - q.y) > 4) break;
+          d.coins -= W.CANNONS.plot; changed(me); pushData(me); applyBuild(W.build.map((o) => (o === q ? { ...o, ow: me.acct.id, on: me.name, cz: 0 } : o))); send(ws, { t: "fx", k: "plot", id: q.id }); break;
         }
         case "unlockcannon": {
           const c = W.cannonLocks.find((o) => o.id === +m.id), d = me.acct.data; if (!c || !c.d || d.cannons.includes(c.d) || hyp(me.x - c.x, me.z - c.z) > W.CANNONS.near || d.coins < W.CANNONS.cost(c.d)) break;
           d.coins -= W.CANNONS.cost(c.d); d.cannons.push(c.d); changed(me); pushData(me); send(ws, { t: "fx", k: "cannonlock", id: c.id, z: c.d }); break;
         }
         case "setcannon": {
-          const q = W.houseFor(me.acct.id), z = m.z | 0; if (!q || (z && !me.acct.data.cannons.includes(z)) || hyp(me.x - q.x, me.z - q.z) > W.CANNONS.near + 4 || (q.cz | 0) === z) break;
+          const q = W.plotFor(me.acct.id), z = m.z | 0; if (!q || (z && !me.acct.data.cannons.includes(z)) || hyp(me.x - q.x, me.z - q.z) > W.PLOT_S / 2 + 4 || (q.cz | 0) === z) break;
           applyBuild(W.build.map((o) => (o === q ? { ...o, cz: z, on: me.name } : o))); break;
         }
         case "cannon": {
-          const q = W.houseFor(me.acct.id), pad = q && q.cz && W.cannonPad(q.cz); if (!pad || now < me.stunUntil || now - (me.cannonAt || 0) < 4000 || hyp(me.x - q.x, me.z - q.z) > W.CANNONS.fire + 1.5 || Math.abs(me.y - q.y) > 4) break;
+          const q = W.plotFor(me.acct.id), pad = q && q.cz && W.cannonPad(q.cz); if (!pad || now < me.stunUntil || now - (me.cannonAt || 0) < 4000 || hyp(me.x - q.x, me.z - q.z) > W.CANNONS.fire + 1.5 || Math.abs(me.y - q.y) > 4) break;
           me.cannonAt = now; send(ws, { t: "cannon", id: q.id, x: pad.x, y: pad.y, z: pad.z, yaw: pad.yaw }); all(room, { t: "fx", k: "cannon", id: me.id, h: q.id }, me);
           const T = (W.CANNONS.fuse + W.CANNONS.fly) * 1000; me.tpAt = now + T; setTimeout(() => { if (!me.gone && me.room === room) teleport(me, pad.x, pad.z, pad.y, "cannon", pad.yaw); }, T); break;
         }

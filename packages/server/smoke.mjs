@@ -170,7 +170,7 @@ try {
     n.send({ t: "build", op: "add", piece: { k: "mailbox", x: -190, z: -190, y: 0 } }); await b.wait((m) => m.t === "build" && m.build.some((q) => q.k === "mailbox" && q.x === -190), "a mailbox inside");
     const mb = W.build.find((q) => q.k === "mailbox" && q.x === -190); ok(W.districtAt(-190, -190, 0) === 4 && W.addr(mb.id).d === 4 && / Floating Islands$/.test(W.addr(mb.id).name), "a mailbox inside bounds belongs to their neighborhood");
     n.send({ t: "build", op: "set", piece: { id: ack.id, k: "block", x: -300, z: -200, y: 0, w: 20, d: 20, zone: 4 } }); await b.wait((m) => m.t === "build" && m.build.some((q) => q.id === ack.id && q.x === -300), "the bounds moved");
-    ok(W.build.find((q) => q.id === ack.id).k === "area" && W.addr(mb.id).d === 0, "bounds move after the fact (keeping their kind), and what's left outside goes back to Main Street");
+    ok(W.build.find((q) => q.id === ack.id).k === "area" && !W.addr(mb.id), "bounds move after the fact (keeping their kind), and what's left outside is Spawn: no address there");
     n.send({ t: "build", op: "zone", n: 4, zone: { name: "Hilltop", sp: "gator", chance: [1, 0, 0, 0, 0], shiny: 0.5 } }); const zb = await b.wait((m) => m.t === "build" && m.zones && m.zones[4].name === "Hilltop", "the neighborhood renamed");
     ok(W.zoneName(4) === "Hilltop" && W.zoneSp(4) === "gator" && W.zoneCfg(4).chance[0] === 1 && W.zoneCfg(4).shiny === 0.5 && (await store.loadBuild()).zones[4].name === "Hilltop" && zb.zones.length === W.TIERS.length, "a neighborhood's name, animal, chances and shiny are set and saved");
     n.send({ t: "build", op: "zone", n: 4, zone: { ...W.zoneCfg(4), shots: [...Array.from({ length: 6 }, (_, k) => ({ name: "Wind " + k, x: k * 10, y: 5, z: -3 })), "junk"] } }); await b.wait((m) => m.t === "build" && m.zones && m.zones[4].shots.length, "the neighborhood's shots");
@@ -228,17 +228,17 @@ try {
     ok(r.pods[0] && r.pods[0].p === pb, "standing on a podium holds it");
     const c0 = pb.acct.data.coins; r.pods[0].payAt = 0; const au = await b.wait((m) => m.t === "aura", "a podium's Aura"); ok(au.n > 0 && pb.acct.data.coins > c0, "a held podium pays its courier Aura"); pb.acct.data.coins = c0;
     await put(b, "smokeB", s0.x + 12, s0.z, 0); await sleep(1300); ok(!r.pods[0], "stepping off frees the podium"); }
-  // (owner, 2026-11-16) cannons: buy a Main Street house, unlock neighborhood 5's cannon, set it at the house, fire it
+  // (owner, 2026-11-16) cannons: (owner, 2026-11-17) buy a Cannon Plot, unlock neighborhood 5's cannon, set it on the plot, fire it
   { const pb = who("smokeB"), pa = who("smokeA"), d = pb.acct.data, c0 = d.coins, a0 = pa.acct.data.coins; d.coins = 1e6; pa.acct.data.coins = 1e6;
     ok(W.CANNONS.cost(5) > W.CANNONS.cost(1) && W.cannonLocks.length === 1 && W.cannonLocks[0].d === 5 && W.cannonPad(5), "a Cannon Unlock and Pad belong to their neighborhood; a later cannon costs more");
-    await put(b, "smokeB", 40, 26, 0); b.send({ t: "buyhouse", id: 30 }); await b.wait((m) => m.t === "build" && m.build.some((q) => q.id === 30 && q.ow === pb.acct.id), "B's house");
-    ok(d.coins === 1e6 - W.CANNONS.house, "a house costs the same price");
-    await put(a, "smokeA", 40, 26, 0); a.send({ t: "buyhouse", id: 30 }); await sleep(250); ok(W.build.find((q) => q.id === 30).ow === pb.acct.id && pa.acct.data.coins === 1e6, "a house has one owner");
-    b.send({ t: "setcannon", z: 5 }); await sleep(200); ok(!W.build.find((q) => q.id === 30).cz, "no cannon before it's unlocked");
+    await put(b, "smokeB", 20, 30, 0); b.send({ t: "buyplot", id: 65 }); await b.wait((m) => m.t === "build" && m.build.some((q) => q.id === 65 && q.ow === pb.acct.id), "B's plot");
+    ok(d.coins === 1e6 - W.CANNONS.plot, "a Cannon Plot costs its price");
+    await put(a, "smokeA", 20, 30, 0); a.send({ t: "buyplot", id: 65 }); await sleep(250); ok(W.build.find((q) => q.id === 65).ow === pb.acct.id && pa.acct.data.coins === 1e6, "a plot has one owner");
+    b.send({ t: "setcannon", z: 5 }); await sleep(200); ok(!W.build.find((q) => q.id === 65).cz, "no cannon before it's unlocked");
     await put(b, "smokeB", 193, 30, 0); b.send({ t: "unlockcannon", id: 62 }); await b.wait((m) => m.t === "data" && m.data.cannons.includes(5), "the cannon unlocked");
-    await put(b, "smokeB", 40, 27, 0); b.send({ t: "setcannon", z: 5 }); await b.wait((m) => m.t === "build" && m.build.some((q) => q.id === 30 && q.cz === 5), "the cannon at the house");
-    await put(a, "smokeA", 41, 21, 0); a.send({ t: "cannon" }); await sleep(200); ok(!a.inbox.some((m) => m.t === "cannon"), "only its owner fires a cannon");
-    await put(b, "smokeB", 41, 21, 0); b.send({ t: "cannon" }); const cm = await b.wait((m) => m.t === "cannon", "the cannon fires"); ok(cm.x === 190 && cm.z === -40, "the cannon aims at its neighborhood's pad");
+    await put(b, "smokeB", 20, 30, 0); b.send({ t: "setcannon", z: 5 }); await b.wait((m) => m.t === "build" && m.build.some((q) => q.id === 65 && q.cz === 5), "the cannon on the plot");
+    await put(a, "smokeA", 21, 37, 0); a.send({ t: "cannon" }); await sleep(200); ok(!a.inbox.some((m) => m.t === "cannon"), "only its owner fires a cannon");
+    await put(b, "smokeB", 21, 37, 0); b.send({ t: "cannon" }); const cm = await b.wait((m) => m.t === "cannon", "the cannon fires"); ok(cm.x === 190 && cm.z === -40, "the cannon aims at its neighborhood's pad");
     const tp = await b.wait((m) => m.t === "tp" && m.why === "cannon", "landing on the pad", 8000); ok(tp.x === 190 && tp.z === -40, "it lands you on the pad");
     d.coins = c0; pa.acct.data.coins = a0; }
   n.send({ t: "admin", op: "give", what: "mount:gator", n: 1, r: 2, name: "smokeB" });
@@ -266,10 +266,12 @@ try {
   ok(!!tw, "an unlocked trail goes on a mount");
   b.send({ t: "set", friendly: true }); await a.wait((m) => m.t === "look" && m.id === wb.id && m.friendly, "Friendly");
   n.ws.close();
-  // logging in again replaces the old connection and keeps everything
+  // logging in again replaces the old connection and keeps everything; (owner, 2026-11-17) a house bought before the
+  // Cannon Plots is refunded and goes back to a house
+  W.setBuild({ pieces: W.build.map((q) => (q.id === 30 ? { ...q, ow: who("smokeB").acct.id, on: "smokeB", cz: 0 } : q)), zones: W.zones.slice() });
   const b2 = client("B2"); await b2.open; b2.send({ t: "login", user: "smokeB", pass: "pass1234" });
   const wb2 = await b2.wait((m) => m.t === "welcome" && m.name === "smokeB", "login");
-  ok(wb2.data.coins === 4700 && wb2.data.mounts.length === fu.data.mounts.length + 3 && wb2.data.mounts.some((k) => k.sp === "cat" && k.r === 2) && wb2.data.up.payout === 1 && wb2.data.set.friendly, "a courier's data is kept");
+  ok(!W.build.find((q) => q.id === 30).ow && wb2.data.coins === 4700 + W.CANNONS.plot && wb2.data.mounts.length === fu.data.mounts.length + 3 && wb2.data.mounts.some((k) => k.sp === "cat" && k.r === 2) && wb2.data.up.payout === 1 && wb2.data.set.friendly, "a courier's data is kept; an old house is refunded");
   await b.wait((m) => m.t === "kicked", "old connection kicked");
   for (const c of [a, b2]) c.ws.close();
 } catch (e) { fail(e.message); }

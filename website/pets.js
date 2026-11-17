@@ -5,7 +5,7 @@
 // and asks. Phone first: a thumb joystick, drag to look, pinch to zoom, big buttons.
 import * as THREE from "./vendor/three.module.min.js";
 import { svg, fillIcons, ICON } from "./icons.js?v=7";
-import * as World from "./pets-world.js?v=1794919411";
+import * as World from "./pets-world.js?v=1794919828";
 import { loadCritters, makeCritter, hasCritter } from "./critters.js?v=3";
 import * as Town from "./town.js?v=1";
 await Promise.all([loadCritters(), Town.loadTown()]);   // (owner, 2026-11-17) the critter and town models, before anything is drawn
@@ -1166,9 +1166,9 @@ const ray = new THREE.Raycaster(), ndc = new THREE.Vector2(), ground = new THREE
 $("mbuild").onclick = () => (bm ? endBuild() : startBuild());   // (owner, 2026-11-13) admins: the Build button on screen
 function startBuild() { closePanel(); if (!free) setFree(true); if (spawnG) spawnG.visible = true; for (const g of buildOnly) g.visible = true; bm = { n: 1, ey: 0, emode: "type", pm: { mv: true, sp: World.MOVER.sp, brk: 0, bt: World.MOVER.bt, rs: World.MOVER.rs }, tool: "select", a: ((Math.round((World.SPAWN.yaw * 180) / Math.PI) % 360) + 360) % 360, zone: 0, w: 2, h: 1, d: 2, vw: 20, vh: 4, vd: 20, m: "grass", r: 0, wl: 8, ly: 0, sel: 0, px: innerWidth / 2, py: innerHeight / 2, ghost: null, aim: null }; buildBar(); document.body.classList.add("building"); buildAim(bm.px, bm.py); drawAreas(); }
 function endBuild() { if (!bm) return; bm.zd = null; if (spawnG) spawnG.visible = false; for (const g of buildOnly) g.visible = false; if (bm.ghost) scene.remove(bm.ghost); if (bm.pselG) scene.remove(bm.pselG); bm = null; $("buildbar").style.display = "none"; $("zpanel").style.display = "none"; $("insp").style.display = "none"; document.body.classList.remove("insp"); $("pprompt").style.display = "none"; drawAreas(); document.body.classList.remove("building"); setFree(false); }
-const BUILD_TOOLS = [["select", "Select"], ["block", "Block"], ["house", "House"], ["mailbox", "Mailbox"], ["gate", "Gate"], ["wall", "Wall"], ["tree", "Tree"], ["boost", "Boost"], ["start", "Start Line"], ["podium", "Podium"], ["spawn", "Respawn"], ["office", "Post Office"], ["pipe", "Pipe"], ["gust", "Gust"], ["mover", "Platform"], ["cannonlock", "Cannon Unlock"], ["cannonpad", "Cannon Pad"], ["area", "Bounds"], ["void", "Respawn Box"], ["erase", "Erase"]];
+const BUILD_TOOLS = [["select", "Select"], ["block", "Block"], ["house", "House"], ["mailbox", "Mailbox"], ["gate", "Gate"], ["wall", "Wall"], ["tree", "Tree"], ["boost", "Boost"], ["start", "Start Line"], ["podium", "Podium"], ["spawn", "Respawn"], ["office", "Post Office"], ["pipe", "Pipe"], ["gust", "Gust"], ["mover", "Platform"], ["cannonlock", "Cannon Unlock"], ["cannonpad", "Cannon Pad"], ["plot", "Cannon Plot"], ["area", "Bounds"], ["void", "Respawn Box"], ["erase", "Erase"]];
 // (owner, 2026-11-16) the tiles in menus: Select and Erase always, the rest under the menu picked
-const BUILD_CATS = [["Ground", ["block", "wall", "gate", "area", "void"]], ["Town", ["house", "mailbox", "tree", "office", "spawn", "podium", "start"]], ["Hazards", ["gust", "mover", "boost"]], ["Shortcuts", ["pipe", "cannonlock", "cannonpad"]]];
+const BUILD_CATS = [["Ground", ["block", "wall", "gate", "area", "void"]], ["Town", ["house", "mailbox", "tree", "office", "spawn", "podium", "start"]], ["Hazards", ["gust", "mover", "boost"]], ["Shortcuts", ["pipe", "cannonlock", "cannonpad", "plot"]]];
 let buildCat = 0;
 // each tile's picture: the piece itself, drawn once (with the mount portraits' renderer)
 const THUMB = {}, THUMB_Q = { void: { w: 4, h: 3, d: 4, zone: 0 }, block: { w: 2, h: 1, d: 2, m: "grass" }, gate: { zone: 1 }, wall: { w: 6, zone: 1 }, area: { w: 6, d: 6, zone: 1 }, gust: { w: 4, h: 3, d: 4, a: 0, iv: 4, pw: 18 }, mover: { w: 4, h: 1, d: 4, m: "wood", bx: 0, by: 0, bz: 0, sp: 4 } };
@@ -1185,6 +1185,8 @@ function thumb(k) {
   return (THUMB[k] = portraitR.domElement.toDataURL());
 }
 // (owner, 2026-11-16) the next neighborhood can be made once this one (past Main Street) has its gate
+// (owner, 2026-11-17) pieces go inside a neighborhood's bounds, or anywhere (Spawn) with Build Outside Bounds on
+const okHere = (q) => !!(bm && bm.outside) || World.inBounds(q);
 const zoneReach = () => { let z = 0; while (z < World.TIERS.length - 1 && (z === 0 || World.gates.some((g) => !g.wall && g.d === z))) z++; return z; };
 function buildBar() {
   const B = $("buildbar"); B.innerHTML = ""; B.style.display = "flex"; const row0 = el("div", "brow"), row2 = el("div", "brow");
@@ -1200,6 +1202,7 @@ function buildBar() {
   // (owner, 2026-11-14) the next neighborhood can be edited only once a gate into it is placed
   bm.zone = Math.min(bm.zone, zoneReach()); const zLabel = () => World.zoneName(bm.zone); step(zLabel, () => bm.zone, (v) => { bm.zone = v; bm.zd = null; bm.shotPick = undefined; drawAreas(); if ($("zpanel").style.display === "block") zonePanel(); }, 0, zoneReach());
   row2.lastChild.querySelector("span").style.boxShadow = "inset 0 -4px 0 " + World.TIERS[bm.zone].c; row2.appendChild(ibtn("settings", "Neighborhood", () => { const P = $("zpanel"); if (P.style.display === "block") { P.style.display = "none"; bm.zd = null; bm.shotPick = undefined; drawAreas(); } else zonePanel(); }, "bt"));
+  row2.appendChild(btn("Build Outside Bounds", () => { bm.outside = !bm.outside; buildBar(); buildAim(bm.px, bm.py); }, "bt" + (bm.outside ? " on" : "")));
   B.appendChild(row2); inspector(); drawAreas();
 }
 // ---- (owner, 2026-11-16) the inspector, on the right: everything about the selected piece (or bounds), or the settings
@@ -1235,7 +1238,7 @@ function inspector() {
       row("Breaks", pick(q.brk | 0, BRK, ch((a, v) => (a.brk = +v))));
       if (q.brk) { row("Timer (s)", num(q.bt, 0.5, 0.5, 30, ch((a, v) => (a.bt = v)))); row("Respawn (s)", num(q.rs, 0.5, 0, 120, ch((a, v) => (a.rs = v)))); }
     }
-    if (q.k === "house" && q.on) row("Owner", el("span", "", q.on));
+    if (q.k === "plot" && q.on) row("Owner", el("span", "", q.on));
     const acts = el("div", "iacts"); P.appendChild(acts);
     acts.appendChild(ibtn("erase", "Delete", () => { doDel(q); bm.hsel = 0; bm.sel = 0; bm.vsel = 0; bm.bPick = false; buildBar(); drawHazSel(); drawAreas(); }, "bt"));
     acts.appendChild(ibtn("close", "Deselect", () => { bm.hsel = 0; bm.sel = 0; bm.vsel = 0; bm.bPick = false; buildBar(); drawHazSel(); drawAreas(); buildAim(bm.px, bm.py); }, "bt"));
@@ -1270,7 +1273,7 @@ function pieceBox(q) {
   const S = World.HOUSE_S, P = World.PO.b;
   return q.k === "block" || q.k === "gust" || q.k === "mover" || q.k === "void" ? [q.w, q.h, q.d, q.x + q.w / 2, q.y + q.h / 2, q.z + q.d / 2] : q.k === "pipe" ? [World.TUBE.r * 2, World.TUBE.r * 2, World.TUBE.l, q.x, q.y + World.TUBE.r, q.z] : q.k === "house" ? [S, 5, S, q.x, q.y + 2.5, q.z] : q.k === "gate" ? [World.GATE_W, World.GATE_H, World.GATE_T, q.x, q.y + World.GATE_H / 2, q.z] : q.k === "wall" ? [q.w, World.GATE_H, World.GATE_T, q.x, q.y + World.GATE_H / 2, q.z] : q.k === "area" ? [q.w, 1, q.d, q.x + q.w / 2, q.y, q.z + q.d / 2]
     : q.k === "tree" ? [3, 7, 3, q.x, q.y + 3.5, q.z] : q.k === "boost" ? [3.2, 0.3, 3.2, q.x, q.y + 0.15, q.z] : q.k === "start" ? [World.START_W, 0.3, World.START_D, q.x, q.y + 0.15, q.z] : q.k === "podium" ? [4.4, 1.6, 4.4, q.x, q.y + 0.8, q.z]
-    : q.k === "spawn" ? [1.8, 0.3, 1.8, q.x, q.y + 0.15, q.z] : q.k === "cannonlock" ? [2.2, 2.6, 2.2, q.x, q.y + 1.3, q.z] : q.k === "cannonpad" ? [6, 0.3, 6, q.x, q.y + 0.15, q.z] : q.k === "office" ? (() => { const L = World.PO_LOCAL, B = L.b, z0 = B.z - B.hd, z1 = L.belt.z1; return [B.hw * 2, B.h + 3, z1 - z0, q.x + B.x, q.y + (B.h + 3) / 2, q.z + (z0 + z1) / 2]; })() : [0.6, 1.5, 0.6, q.x, q.y + 0.75, q.z];
+    : q.k === "spawn" ? [1.8, 0.3, 1.8, q.x, q.y + 0.15, q.z] : q.k === "cannonlock" ? [2.2, 2.6, 2.2, q.x, q.y + 1.3, q.z] : q.k === "cannonpad" ? [6, 0.3, 6, q.x, q.y + 0.15, q.z] : q.k === "plot" ? [World.PLOT_S, 1.2, World.PLOT_S, q.x, q.y + 0.6, q.z] : q.k === "office" ? (() => { const L = World.PO_LOCAL, B = L.b, z0 = B.z - B.hd, z1 = L.belt.z1; return [B.hw * 2, B.h + 3, z1 - z0, q.x + B.x, q.y + (B.h + 3) / 2, q.z + (z0 + z1) / 2]; })() : [0.6, 1.5, 0.6, q.x, q.y + 0.75, q.z];
 }
 // (owner, 2026-11-13) the preview is a blueprint hologram of the piece itself: see-through blue with glowing edges (red
 // for what Erase or Cut takes)
@@ -1305,14 +1308,14 @@ function buildAim(px, py) {
   if (!bm) return; bm.px = px; bm.py = py; if (bm.ghost) { scene.remove(bm.ghost); bm.ghost = null; }
   if (bm.tool === "block" || bm.tool === "erase") { const c = sculptAt(px, py), a0 = pieceAt(px, py); bm.aim = a0;   // (owner, 2026-11-17) a box where it'd go (red: erasing, or outside the bounds); the eraser over any other piece: that piece
     const q0 = bm.tool === "erase" && a0 && a0.id && World.build.find((o) => o.id === a0.id); if (q0 && q0.k !== "block") { const g = hologram(q0, true); scene.add(g); bm.ghost = g; return; }
-    if (!c) return; const q = { k: "block", x: c.x, z: c.z, y: bm.ey, w: bm.n, h: bm.h, d: bm.n, m: bm.tool === "erase" ? "stone" : bm.m, id: 0 }; const g = hologram(q, bm.tool === "erase" || !World.inBounds(q)); scene.add(g); bm.ghost = g; return; }
+    if (!c) return; const q = { k: "block", x: c.x, z: c.z, y: bm.ey, w: bm.n, h: bm.h, d: bm.n, m: bm.tool === "erase" ? "stone" : bm.m, id: 0 }; const g = hologram(q, bm.tool === "erase" || !okHere(q)); scene.add(g); bm.ghost = g; return; }
   const a = pieceAt(px, py); bm.aim = a; if (!a) return; let g = null;
   if (bm.tool === "select") {   // (owner, 2026-11-14) picking a platform's B: a ghost where it would go, and the path there
     const s = hazSel(); if (bm.bPick && s && s.k === "mover") { const t = moverB(a, s); g = hologram({ ...t, id: 0 }); const ln = new THREE.Line(new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(s.x + s.w / 2, s.y + s.h, s.z + s.d / 2), new THREE.Vector3(t.x + s.w / 2, t.y + s.h, t.z + s.d / 2)]), new THREE.LineDashedMaterial({ color: "#ffd84a", dashSize: 0.6, gapSize: 0.4, depthTest: false })); ln.computeLineDistances(); ln.renderOrder = 6; g.add(ln); }
   }
   else if (bm.tool === "erase" || bm.tool === "cut" || bm.tool === "copy") { const q = a.id && World.build.find((o) => o.id === a.id); if (q) g = hologram(q, bm.tool !== "copy"); }
-  else if (bm.tool === "paste") { if (bm.clip) { const q = buildPiece(a, bm.clip); g = hologram({ ...q, id: 0 }, !World.inBounds(q)); } }
-  else if (bm.tool !== "area") { const q = buildPiece(a); g = hologram({ ...q, id: 0 }, !World.inBounds(q)); }   // (owner, 2026-11-16) red: outside every neighborhood's bounds, can't go there
+  else if (bm.tool === "paste") { if (bm.clip) { const q = buildPiece(a, bm.clip); g = hologram({ ...q, id: 0 }, !okHere(q)); } }
+  else if (bm.tool !== "area") { const q = buildPiece(a); g = hologram({ ...q, id: 0 }, !okHere(q)); }   // (owner, 2026-11-16) red: outside every neighborhood's bounds, can't go there
   if (g) { scene.add(g); bm.ghost = g; }
 }
 // (owner, 2026-11-13) doing and undoing (a keyboard: building is for computers): every placing and erasing (yours) can be
@@ -1338,7 +1341,7 @@ function paintPiece(px, py) {
   const base = bm.tool === "paste" ? bm.clip : null, q = buildPiece({ p: v, n: new THREE.Vector3(0, 1, 0), id: 0 }, base); q.y = P.y; return q;
 }
 function placeOnce(q) {
-  if (!World.inBounds(q)) return;   // (owner, 2026-11-16) only inside a neighborhood's bounds
+  if (!okHere(q)) return;   // (owner, 2026-11-16) only inside a neighborhood's bounds
   const P = bm.paint, [w0, h, d0, cx, cy, cz] = pieceBox(q), odd = q.k !== "block" && q.k !== "office" && q.r % 2, w = odd ? d0 : w0, d = odd ? w0 : d0, bx = { x: cx - w / 2 + 0.01, z: cz - d / 2 + 0.01, y: cy - h / 2, w: w - 0.02, h, d: d - 0.02 };   // what each piece takes up
   if (P.done.some((o) => overlaps(o, bx))) return; P.done.push(bx);
   // (owner, 2026-11-14) placed inside a neighborhood's bounds: that's the neighborhood being edited now (gates and walls keep theirs)
@@ -1374,15 +1377,15 @@ function paintMove(px, py) {
   if (P.sculpt) { sculptCell(px, py); return; }
   if (P.erase) { const q = aimed(); if (q && q.k !== "block" && !P.erase.has(q.id)) { P.erase.add(q.id); doDel(q); sfx("pop"); } return; }
   const q = paintPiece(px, py); if (!q) return; placeOnce(q);
-  if (bm.ghost) scene.remove(bm.ghost); bm.ghost = hologram({ ...q, id: 0 }, !World.inBounds(q)); scene.add(bm.ghost);
+  if (bm.ghost) scene.remove(bm.ghost); bm.ghost = hologram({ ...q, id: 0 }, !okHere(q)); scene.add(bm.ghost);
 }
 function buildTap(px, py) {
   if (bm.tool === "area") return;
   buildAim(px, py); const a = bm.aim; if (!a) return;
   if (bm.tool === "erase" || bm.tool === "block") { paintStart(px, py); if (bm.paint) paintEnd(); bm.paint = null; return; }
   if (bm.tool === "copy" || bm.tool === "cut") { copyBuild(bm.tool === "cut"); return; }
-  if (bm.tool === "paste") { if (bm.clip) { const q = buildPiece(a, bm.clip); if (World.inBounds(q)) { doAdd(q); sfx("pad"); } } return; }
-  { const q = buildPiece(a); if (!World.inBounds(q)) return; doAdd(q); sfx("pad"); }
+  if (bm.tool === "paste") { if (bm.clip) { const q = buildPiece(a, bm.clip); if (okHere(q)) { doAdd(q); sfx("pad"); } } return; }
+  { const q = buildPiece(a); if (!okHere(q)) return; doAdd(q); sfx("pad"); }
 }
 // ---- (owner, 2026-11-17) sculpting with blocks. The Block tool and the eraser work on a level (the wheel) with a square
 // size (Ctrl+wheel: 1 x 1, 2 x 2...) and the inspector's height: click for one, hold and drag to draw. On release a
@@ -1397,7 +1400,7 @@ function sculptAt(px, py) {   // the square under the pointer on the level, line
 }
 function sculptCell(px, py) {
   const P = bm.paint, c = sculptAt(px, py); if (!c) return; const from = P.last || [c.i, c.j]; let [i0, j0] = from; const di = Math.abs(c.i - i0), dj = Math.abs(c.j - j0), si = c.i > i0 ? 1 : -1, sj = c.j > j0 ? 1 : -1; let e = di - dj;
-  for (let k = 0; k < 400; k++) { const key = i0 + "," + j0; if (!P.cells.has(key)) { P.cells.add(key); const q = { k: "block", x: P.ax + i0 * bm.n, z: P.az + j0 * bm.n, y: bm.ey, w: bm.n, h: bm.h, d: bm.n, m: bm.m, id: 0 }; const g = hologram(q, bm.tool === "erase" || !World.inBounds(q)); P.ghosts.push(g); scene.add(g); sfx("tick"); }
+  for (let k = 0; k < 400; k++) { const key = i0 + "," + j0; if (!P.cells.has(key)) { P.cells.add(key); const q = { k: "block", x: P.ax + i0 * bm.n, z: P.az + j0 * bm.n, y: bm.ey, w: bm.n, h: bm.h, d: bm.n, m: bm.m, id: 0 }; const g = hologram(q, bm.tool === "erase" || !okHere(q)); P.ghosts.push(g); scene.add(g); sfx("tick"); }
     if (i0 === c.i && j0 === c.j) break; const e2 = 2 * e; if (e2 > -dj) { e -= dj; i0 += si; } if (e2 < di) { e += di; j0 += sj; } }
   P.last = [c.i, c.j];
 }
@@ -1430,7 +1433,7 @@ function touches(q, vox, bb) {   // does block q touch (share a face with, or ov
 const bbOf = (vox) => { const b = [Infinity, Infinity, Infinity, -Infinity, -Infinity, -Infinity]; for (const k of vox) { const [x, y, z] = k.split(",").map(Number); b[0] = Math.min(b[0], x); b[1] = Math.min(b[1], y); b[2] = Math.min(b[2], z); b[3] = Math.max(b[3], x); b[4] = Math.max(b[4], y); b[5] = Math.max(b[5], z); } return b; };
 function sculptEnd() {
   const P = bm.paint; for (const g of P.ghosts) scene.remove(g); const n = bm.n, cells = bm.tool === "block" ? filled(P.cells) : P.cells, boxes = [];
-  for (const k of cells) { const [i, j] = k.split(",").map(Number); const q = { k: "block", x: P.ax + i * n, z: P.az + j * n, y: bm.ey, w: n, h: bm.h, d: n, m: bm.m }; if (bm.tool === "erase" || World.inBounds(q)) boxes.push(q); }
+  for (const k of cells) { const [i, j] = k.split(",").map(Number); const q = { k: "block", x: P.ax + i * n, z: P.az + j * n, y: bm.ey, w: n, h: bm.h, d: n, m: bm.m }; if (bm.tool === "erase" || okHere(q)) boxes.push(q); }
   if (!boxes.length) return;
   if (bm.tool === "block") {   // add them, then redo everything of that material they touch
     const vox = new Set(); for (const q of boxes) voxOf(q, vox); const same = World.build.filter((o) => o.k === "block" && o.m === bm.m), took = new Set(), dels = [];
@@ -1751,7 +1754,7 @@ function onFx(m) {
     case "blink": if (o && !mineFx) { emit(o.x, o.y + 1, o.z, 18, { colors: ["#c77dff", "#ffffff"], speed: 4, up: 1, life: 0.5, grav: 0, size: 0.22 }); emit(m.x, m.y + 1, m.z, 18, { colors: ["#c77dff", "#ffffff"], speed: 4, up: 1, life: 0.5, grav: 0, size: 0.22 }); o.x = m.x; o.y = m.y; o.z = m.z; critOnce(o.rig, "hide", BLINK_AT); } break;   // (owner, 2026-11-16) another courier's Blink
     case "kick": if (o && !mineFx) { o.kickT = 0.28; if (nearMe) sfx("kick"); } break;
     case "cannon": if (o && !mineFx) { o.hideT = World.CANNONS.fuse + World.CANNONS.fly; cannonFire(m.h, false); } break;   // (owner, 2026-11-16) another courier's cannon goes off
-    case "house": { const b = World.buildings.find((q) => q.id === m.id); if (b) emit(b.x, b.y + 5, b.z, 50, { colors: CONFETTI, speed: 6, up: 8, life: 1.3 }); sfx("unlock"); break; }
+    case "plot": { const b = World.plots.find((q) => q.id === m.id); if (b) emit(b.x, b.y + 5, b.z, 50, { colors: CONFETTI, speed: 6, up: 8, life: 1.3 }); sfx("unlock"); break; }
     case "cannonlock": { const c = World.cannonLocks.find((q) => q.id === m.id); if (c) emit(c.x, c.y + 2, c.z, 50, { colors: CONFETTI, speed: 6, up: 8, life: 1.3 }); sfx("unlock"); banner(World.zoneName(m.z) + " Cannon", World.TIERS[m.z].c); break; }
     case "grace": if (mineFx) me.grace = m.s; else if (o) o.graceT = m.s; break;
     case "crack": if (o && nearMe) { sfx("crack"); emit(o.x, o.y + 1.4, o.z, 10, { colors: ["#c89a5e", "#8a5a34"], speed: 4, up: 3, life: 0.6, size: 0.14 }); } break;
@@ -1970,13 +1973,13 @@ function stepCannons(dt, t) {
 let cpKey = "", cannonAsk = 0;
 function stepCannonReach(t) {
   const P = $("cprompt"); if (!loggedIn || bm || free || me.transit || me.stun > 0) { if (cpKey) { cpKey = ""; P.style.display = "none"; } return; }
-  const C = World.CANNONS, mine = World.houseFor(myAid), near = (o, r) => hyp(o.x - me.x, o.z - me.z) < r && Math.abs(o.y - me.y) < 4;
+  const C = World.CANNONS, mine = World.plotFor(myAid), near = (o, r) => hyp(o.x - me.x, o.z - me.z) < r && Math.abs(o.y - me.y) < 4;
   if (mine && mine.cz && near(mine, C.fire) && t > cannonAsk) { cannonAsk = t + 1.5; netSend({ t: "cannon" }); }
   let key = "", build = null;
   const lk = World.cannonLocks.find((c) => c.d && !save.cannons.includes(c.d) && near(c, C.near));
   if (lk) { const cost = C.cost(lk.d); key = "L" + lk.id + (save.coins >= cost); build = () => { P.appendChild(el("b", "", World.zoneName(lk.d) + " Cannon")); const b = btn("Unlock " + fmt(cost), () => netSend({ t: "unlockcannon", id: lk.id }), "go"); b.disabled = save.coins < cost; P.appendChild(b); }; }
-  else if (mine && near(mine, World.HOUSE_S / 2 + 2.5) && save.cannons.length) { key = "M" + mine.id + mine.cz + save.cannons.join(); build = () => { P.appendChild(el("b", "", myName)); for (const z of [0, ...save.cannons]) P.appendChild(btn(z ? World.zoneName(z) : "House", () => netSend({ t: "setcannon", z }), "bt" + ((mine.cz | 0) === z ? " on" : ""))); }; }
-  else if (!mine) { const h = World.buildings.find((b) => b.d === 0 && !b.ow && near(b, World.HOUSE_S / 2 + 2.5));   /* (owner, 2026-11-16) right up by the house, so delivering to its mailbox doesn't ask */ if (h) { key = "H" + h.id + (save.coins >= C.house); build = () => { P.appendChild(el("b", "", "House")); const b = btn("Buy " + fmt(C.house), () => netSend({ t: "buyhouse", id: h.id }), "go"); b.disabled = save.coins < C.house; P.appendChild(b); }; } }
+  else if (mine && near(mine, World.PLOT_S / 2 + 2.5) && save.cannons.length) { key = "M" + mine.id + mine.cz + save.cannons.join(); build = () => { P.appendChild(el("b", "", myName)); for (const z of [0, ...save.cannons]) P.appendChild(btn(z ? World.zoneName(z) : "None", () => netSend({ t: "setcannon", z }), "bt" + ((mine.cz | 0) === z ? " on" : ""))); }; }
+  else if (!mine) { const h = World.plots.find((b) => !b.ow && near(b, World.PLOT_S / 2 + 1.5));   /* (owner, 2026-11-17) a Cannon Plot for sale */ if (h) { key = "H" + h.id + (save.coins >= C.plot); build = () => { P.appendChild(el("b", "", "Cannon Plot")); const b = btn("Buy " + fmt(C.plot), () => netSend({ t: "buyplot", id: h.id }), "go"); b.disabled = save.coins < C.plot; P.appendChild(b); }; } }
   if (key === cpKey) return; cpKey = key; P.innerHTML = ""; P.style.display = key ? "flex" : "none"; if (build) build();
 }
 // a water block's faces, less wherever another water block touches it (so joined water shows no seams)
@@ -2038,7 +2041,14 @@ function pieceMesh(q, live) {
         B.visible = !!bm; buildOnly.push(B); G.add(B); B.traverse((o) => { o.userData.noPick = 1; });
       }
     }
-    else if (q.k === "house" && q.cz) { const c = cannonModel(q.cz, 1, World.cannonYaw(q)); c.g.position.set(q.x, q.y, q.z); c.g.traverse((o) => { o.userData.pid = q.id; }); G.add(c.g); if (live) cannonMesh[q.id] = { ...c, play: c.fire, x: q.x, y: q.y, z: q.z, yaw: World.cannonYaw(q), fire: -1 }; if (q.on) { const tg = textSprite(q.on, { size: 30 }); tg.position.set(q.x, q.y + 5.2, q.z); G.add(tg); } }   // (owner, 2026-11-16) its owner's cannon in its place
+    else if (q.k === "plot") {   // (owner, 2026-11-17) a Cannon Plot: a fenced lot; once bought, its owner's name, and their cannon on it
+      const S = World.PLOT_S, g = new THREE.Group(); g.position.set(q.x, q.y, q.z); g.rotation.y = (q.r | 0) * Math.PI / 2; G.add(g);
+      box(S, 0.14, S, "#cdb48a", 0, 0.07, 0, g).userData.pid = q.id; box(S - 1, 0.16, S - 1, "#e3cfa6", 0, 0.08, 0, g, false).userData.pid = q.id;
+      for (const [x, z] of [[-1, -1], [1, -1], [-1, 1], [1, 1]]) { box(0.35, 1.1, 0.35, "#f4f1ea", x * (S / 2 - 0.2), 0.55, z * (S / 2 - 0.2), g); box(0.45, 0.12, 0.45, "#e5534b", x * (S / 2 - 0.2), 1.16, z * (S / 2 - 0.2), g, false); }
+      if (q.cz) { const c = cannonModel(q.cz, 1, World.cannonYaw(q) - g.rotation.y); g.add(c.g); if (live) cannonMesh[q.id] = { ...c, play: c.fire, x: q.x, y: q.y, z: q.z, yaw: World.cannonYaw(q), fire: -1 }; }
+      if (live) { const tg = textSprite(q.on || "Cannon Plot", { size: 30 }); tg.position.set(q.x, q.y + (q.cz ? 7 : 2.6), q.z); G.add(tg); }
+      G.traverse((o) => { o.userData.pid = q.id; });
+    }
     else if (q.k === "void") {   // (owner, 2026-11-16) a respawn box: see-through red, only builders see it
       const g = new THREE.Group(); g.position.set(q.x + q.w / 2, q.y + q.h / 2, q.z + q.d / 2); G.add(g); const f = new THREE.Mesh(new THREE.BoxGeometry(q.w, q.h, q.d), new THREE.MeshBasicMaterial({ color: "#e5534b", transparent: true, opacity: 0.18, depthWrite: false })); f.renderOrder = 2; f.userData.selOnly = 1; g.add(f);
       const e = new THREE.LineSegments(new THREE.EdgesGeometry(new THREE.BoxGeometry(q.w, q.h, q.d)), new THREE.LineBasicMaterial({ color: "#e5534b" })); e.userData.noPick = 1; g.add(e); if (live) { g.visible = !!bm; buildOnly.push(g); } }
@@ -2048,14 +2058,12 @@ function pieceMesh(q, live) {
       [[3, "#ffffff"], [2.3, c], [1.5, "#ffffff"], [0.8, c]].forEach(([r, col], i) => { const m = new THREE.Mesh(new THREE.CylinderGeometry(r, r, 0.1 + i * 0.03, 32), mat(col)); m.position.y = 0.05 + i * 0.015; m.receiveShadow = true; g.add(m); }); }
     else if (q.k === "house" && Town.hasTown("house_cottage")) {   // (owner, 2026-11-17) one of the five houses, its roof one of five colors (both by the piece)
       const h = Town.house(q.id | 0, Math.floor((q.id | 0) / 5)); h.g.position.set(q.x, q.y, q.z); h.g.rotation.y = (q.r | 0) * Math.PI / 2; h.g.traverse((o) => { o.userData.pid = q.id; }); G.add(h.g);
-      if (q.on) { const tg = textSprite(q.on, { size: 30 }); tg.position.set(q.x, q.y + h.h + 1.2, q.z); G.add(tg); }
     }
     else if (q.k === "house") {
       const hb = World.buildings.find((b) => b.id === q.id), [wall, roof] = HOUSE_C[hb ? hb.d : World.districtAt(q.x, q.z, q.y)] || HOUSE_C[0], g = new THREE.Group(), S = World.HOUSE_S; g.position.set(q.x, q.y, q.z); g.rotation.y = (q.r | 0) * Math.PI / 2; G.add(g);
       box(S, 3.2, S, wall, 0, 1.6, 0, g).userData.pid = q.id; box(1.3, 2.1, 0.12, roof, 0, 1.05, S / 2 + 0.02, g, false);
       for (const x of [-1, 1]) box(1.1, 1.0, 0.1, "#bfe6ff", x * S * 0.3, 2.0, S / 2 + 0.02, g, false);
       const rf = new THREE.Mesh(new THREE.ConeGeometry(S * 0.8, 2.6, 4), mat(roof)); rf.rotation.y = Math.PI / 4; rf.position.y = 4.5; rf.castShadow = true; rf.userData.pid = q.id; g.add(rf);
-      if (q.on) { const tg = textSprite(q.on, { size: 30 }); tg.position.set(q.x, q.y + 7, q.z); G.add(tg); }   // (owner, 2026-11-16) a bought house: its owner's name
     }
     else if (q.k === "mailbox") {
       const mb = new THREE.Group(); mb.position.set(q.x, q.y, q.z); mb.rotation.y = (q.r | 0) * Math.PI / 2; G.add(mb);
@@ -2084,9 +2092,6 @@ function pieceMesh(q, live) {
     else if (q.k === "spawn") { const g = new THREE.Group(); g.position.set(q.x, q.y + 0.08, q.z); g.rotation.y = q.a !== undefined ? (q.a * Math.PI) / 180 : (q.r | 0) * Math.PI / 2; G.add(g); if (live) { G.visible = !!bm; spawnG = G; }   /* (owner, 2026-11-13) only builders see it */ const sm = new THREE.MeshBasicMaterial({ color: "#7ef0c8", transparent: true, opacity: 0.85 });
       g.add(new THREE.Mesh(new THREE.RingGeometry(0.6, 0.9, 24).rotateX(-Math.PI / 2), sm)); const ar = new THREE.Mesh(new THREE.ConeGeometry(0.35, 0.8, 3).rotateX(Math.PI / 2), sm); ar.position.set(0, 0.05, 1.4); ar.scale.y = 0.15; g.add(ar); }   // which way couriers face
   G.traverse((o) => { o.userData.pid = q.id; });
-  if (live && !World.inBounds(q)) {   // (owner, 2026-11-16) outside every neighborhood's bounds: red while building
-    const [w0, h, d0, cx, cy, cz] = pieceBox(q), odd = q.k !== "block" && q.k !== "office" && q.r % 2, r = new THREE.Mesh(new THREE.BoxGeometry((odd ? d0 : w0) + 0.12, h + 0.12, (odd ? w0 : d0) + 0.12), HOLO.red[0]);
-    r.position.set(cx, cy, cz); r.renderOrder = 3; r.userData.noPick = 1; r.visible = !!bm; buildOnly.push(r); G.add(r); }
   return G;
 }
 // (owner, 2026-11-13) shift-click two pipes, then Link joins them into a shortcut (Unlink parts two already joined)
