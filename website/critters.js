@@ -10,7 +10,7 @@ export const STUD = 0.36;
 // each mount kind's model (the kinds kept their names in saves), and the town's chasers
 export const MODEL = { dog: "corgi_pup", cat: "kitten", gator: "axolotl", bear: "cheetah_cub", wolf: "griffin_chick", fox: "bunny", raptor: "baby_raptor", trike: "mini_trike", trex: "frog", unicorn: "cloud_pony", towndog: "town_dog", goose: "town_goose", goat: "town_goat" };
 const V = "1";
-const SRC = {}, SHINY = {};
+const SRC = {}, SHINY = {}, MATS = {};
 
 export async function loadCritters() {
   const L = new GLTFLoader(), T = new THREE.TextureLoader();
@@ -69,7 +69,14 @@ function coatTex(n, body, trim) {
 export function makeCritter(key, shiny, coat) {   // coat: [body, trim] for Uncommon to Legendary (none: as made)
   const n = MODEL[key], src = SRC[n]; if (!src) return null;
   const glow = [], inner = SkeletonUtils.clone(src.scene), g = new THREE.Group(); inner.scale.setScalar(STUD); g.add(inner);
-  inner.traverse((o) => { if (o.isMesh) { o.material = o.material.clone(); if (shiny && SHINY[n]) { o.material.map = SHINY[n]; o.material.emissive = new THREE.Color("#ffffff"); o.material.emissiveMap = SHINY[n]; o.material.emissiveIntensity = 0; glow.push(o.material); } else if (coat) o.material.map = coatTex(n, coat[0], coat[1]); } });
+  // (owner, 2026-11-17) one material per look (kind, coat, Shiny), shared by every copy; culled when off screen (its
+  // bind-pose bounds, padded for the animations)
+  const mk = n + (shiny ? "/s" : coat ? "/" + coat.join() : ""), shared = MATS[mk];
+  inner.traverse((o) => { if (!o.isMesh) return;
+    if (!o.geometry.boundingSphere) o.geometry.computeBoundingSphere(); o.boundingSphere = o.geometry.boundingSphere.clone(); o.boundingSphere.radius *= 1.6; o.frustumCulled = true;
+    if (shared) { o.material = shared; if (shiny) glow.push(shared); return; }
+    const M = (MATS[mk] = o.material.clone()); o.material = M;
+    if (shiny && SHINY[n]) { M.map = SHINY[n]; M.emissive = new THREE.Color("#ffffff"); M.emissiveMap = SHINY[n]; M.emissiveIntensity = 0; glow.push(M); } else if (coat) M.map = coatTex(n, coat[0], coat[1]); });
   const mixer = new THREE.AnimationMixer(inner), acts = {}; let gt = Math.random() * 9;
   for (const c of src.animations) { const k = c.name.slice(n.length + 1); acts[k] = mixer.clipAction(c); }
   const bones = {}; inner.traverse((o) => { if (o.isBone) bones[o.name] = o; });
