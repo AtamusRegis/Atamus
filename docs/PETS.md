@@ -264,7 +264,7 @@ is one 1 m grass block (`SEED`) to stand on, with sky all round. Everything is a
     pipes are bright green: riding into one's mouth brings you out 2 m in front of the other's, facing out of it and
     keeping your speed (once a second). Unlinked pipes are grey-green and go nowhere.
   - **Hazards** (owner, 2026-11-13):
-    - **Block materials:** Mud (slows you), Ice (you slide), Water ((owner, 2026-11-16) see-through and **swimmable**: inside it you go 35% speed, sink gently, rise while jump is held, and a jump near the top leaps out; where water blocks touch, the face between them isn't drawn, so joined water shows no seams) and
+    - **Block materials:** Mud (slows you), Ice (you slide), Water ((owner, 2026-11-16) see-through and **swimmable**: inside it you go 35% speed, sink gently, rise while jump is held, and a jump near the top leaps out; all the water is drawn as one body, a meter at a time, with faces only where water meets something else, so joined or overlapping water blocks show no seams or doubled layers) and
       Turbine (a spinning fan on top; its updraft, 12 m high over the block, blows you up into the air).
     - **Gust:** a box of wind (W / H / D, like a block) that blows the way it's turned (hold R to turn it, any angle)
       for 1.6 s out of every few seconds (the same moment for everyone), pushing riders inside. Players see its wind

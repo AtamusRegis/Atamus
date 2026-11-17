@@ -1832,21 +1832,21 @@ function stepCannonReach(t) {
 }
 // a water block's faces, less wherever another water block touches it (so joined water shows no seams)
 const WATER_M = new THREE.MeshLambertMaterial({ color: "#3f8fd0", transparent: true, opacity: 0.6, depthWrite: false, side: THREE.DoubleSide });
-function waterGeo(q) {
-  const B = (o) => ({ x0: o.x, x1: o.x + o.w, y0: o.y, y1: o.y + o.h, z0: o.z, z1: o.z + o.d }), a = B(q), others = World.build.filter((o) => o.k === "block" && o.m === "water" && o.id !== q.id).map(B), pos = [], nor = [];
-  const ax = { x: ["y", "z"], y: ["z", "x"], z: ["x", "y"] };
-  for (const [k, sg] of [["x", 1], ["x", -1], ["y", 1], ["y", -1], ["z", 1], ["z", -1]]) {
-    const at = sg > 0 ? a[k + "1"] : a[k + "0"], [u, v] = ax[k], U0 = a[u + "0"], U1 = a[u + "1"], V0 = a[v + "0"], V1 = a[v + "1"];
-    const cov = others.filter((o) => (sg > 0 ? o[k + "0"] : o[k + "1"]) === at || (o[k + "0"] < at && o[k + "1"] > at)).map((o) => [Math.max(U0, o[u + "0"]), Math.min(U1, o[u + "1"]), Math.max(V0, o[v + "0"]), Math.min(V1, o[v + "1"])]).filter((c) => c[0] < c[1] && c[2] < c[3]);
-    const us = [...new Set([U0, U1, ...cov.flatMap((c) => [c[0], c[1]])])].sort((m, n) => m - n), vs = [...new Set([V0, V1, ...cov.flatMap((c) => [c[2], c[3]])])].sort((m, n) => m - n);
-    for (let i = 0; i + 1 < us.length; i++) for (let j = 0; j + 1 < vs.length; j++) {
-      const cu = (us[i] + us[i + 1]) / 2, cv = (vs[j] + vs[j + 1]) / 2; if (cov.some((c) => cu > c[0] && cu < c[1] && cv > c[2] && cv < c[3])) continue;
-      const P = (uu, vv) => { const p = { x: 0, y: 0, z: 0 }; p[k] = at; p[u] = uu; p[v] = vv; return [p.x, p.y, p.z]; }, n = [0, 0, 0]; n["xyz".indexOf(k)] = sg;
-      const c = [P(us[i], vs[j]), P(us[i + 1], vs[j]), P(us[i + 1], vs[j + 1]), P(us[i], vs[j + 1])];
-      for (const t of [0, 1, 2, 0, 2, 3]) { pos.push(...c[t]); nor.push(...n); }
-    }
-  }
-  const g = new THREE.BufferGeometry(); g.setAttribute("position", new THREE.Float32BufferAttribute(pos, 3)); g.setAttribute("normal", new THREE.Float32BufferAttribute(nor, 3)); g.computeBoundingSphere(); return g;
+const PICK_M = new THREE.MeshBasicMaterial({ visible: false });
+// (owner, 2026-11-16) all the water as one body, a meter at a time: a face only where water meets anything but water, so
+// joined or overlapping water blocks show no seams and no doubled-up layers
+function waterBody() {
+  const W = World.build.filter((o) => o.k === "block" && o.m === "water"); if (!W.length) return null;
+  const cells = new Set(), key = (x, y, z) => x + "," + y + "," + z; let n = 0;
+  for (const q of W) for (let x = q.x; x < q.x + q.w; x++) for (let y = q.y; y < q.y + q.h; y++) for (let z = q.z; z < q.z + q.d; z++) { if (++n > 600000) break; cells.add(key(x, y, z)); }
+  const pos = [], nor = [], F = [[1, 0, 0], [-1, 0, 0], [0, 1, 0], [0, -1, 0], [0, 0, 1], [0, 0, -1]];
+  for (const c of cells) { const [x, y, z] = c.split(",").map(Number);
+    for (const [dx, dy, dz] of F) { if (cells.has(key(x + dx, y + dy, z + dz))) continue;
+      const k = dx ? 0 : dy ? 1 : 2, sg = dx + dy + dz, at = [x, y, z][k] + (sg > 0 ? 1 : 0), u = (k + 1) % 3, v = (k + 2) % 3, b = [x, y, z];
+      const P = (du, dv) => { const p = [0, 0, 0]; p[k] = at; p[u] = b[u] + du; p[v] = b[v] + dv; return p; }, q4 = [P(0, 0), P(1, 0), P(1, 1), P(0, 1)];
+      for (const t of sg > 0 ? [0, 1, 2, 0, 2, 3] : [0, 2, 1, 0, 3, 2]) { pos.push(...q4[t]); nor.push(dx, dy, dz); } } }
+  const g = new THREE.BufferGeometry(); g.setAttribute("position", new THREE.Float32BufferAttribute(pos, 3)); g.setAttribute("normal", new THREE.Float32BufferAttribute(nor, 3)); g.computeBoundingSphere();
+  const m = new THREE.Mesh(g, WATER_M); m.renderOrder = 1; m.userData.noPick = 1; return m;
 }
 function pieceMesh(q, live) {
   const G = new THREE.Group();
@@ -1854,7 +1854,7 @@ function pieceMesh(q, live) {
     const keep = [beltStripes.slice(), pusher], n0 = scene.children.length; officeMeshes(); for (const o of scene.children.slice(n0)) G.add(o);
     G.position.set(q.x, q.y, q.z); G.rotation.y = (q.r | 0) * Math.PI / 2; if (!live) { beltStripes.length = 0; beltStripes.push(...keep[0]); pusher = keep[1]; }
   }
-    else if (q.k === "block" && q.m === "water" && live) { const m = new THREE.Mesh(waterGeo(q), WATER_M); m.userData.pid = q.id; m.renderOrder = 1; G.add(m); }   // (owner, 2026-11-16) one see-through body: no faces where water meets water
+    else if (q.k === "block" && q.m === "water" && live) { const m = new THREE.Mesh(new THREE.BoxGeometry(q.w, q.h, q.d), PICK_M); m.position.set(q.x + q.w / 2, q.y + q.h / 2, q.z + q.d / 2); m.userData.pid = q.id; G.add(m); }   // (owner, 2026-11-16) just something to aim at: all the water is drawn as one body (waterBody)
     else if (q.k === "block") { const m = box(q.w, q.h, q.d, MAT_C[q.m], q.x + q.w / 2, q.y + q.h / 2, q.z + q.d / 2, G); if (q.m === "water" || q.m === "ice") { m.material = new THREE.MeshLambertMaterial({ color: MAT_C[q.m], transparent: true, opacity: q.m === "water" ? 0.6 : 0.85, depthWrite: q.m !== "water" }); } m.userData.pid = q.id;
       if (q.m === "turbine") {   // (owner, 2026-11-13) a fan on top, spinning, that blows you up into the air
         const f = new THREE.Group(); f.position.set(q.x + q.w / 2, q.y + q.h + 0.08, q.z + q.d / 2); G.add(f); const R0 = Math.min(q.w, q.d) * 0.45;
@@ -1967,6 +1967,7 @@ function drawBuild() {
   for (const k of Object.keys(houseMesh)) delete houseMesh[k]; for (const k of Object.keys(cannonMesh)) delete cannonMesh[k]; lockMesh.length = 0; for (let n = gates.length - 1; n >= 0; n--) if (gates[n].built) gates.splice(n, 1);
   const office = World.PO.on ? [...World.build].reverse().find((q) => q.k === "office") : null;
   for (const q of World.build) { if (q.k === "office" && q !== office) continue; const g = pieceMesh(q, true); if (q === office) { poG = g; scene.add(g); } else buildG.add(g); }
+  { const wb = waterBody(); if (wb) buildG.add(wb); }
   if (readyMesh && poG) poG.add(readyMesh); if (nextMesh && poG) poG.add(nextMesh);
 }
 // the holographic boundary: see-through blue with scan lines that drift up and a fine grid
