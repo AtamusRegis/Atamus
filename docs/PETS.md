@@ -253,6 +253,8 @@ is one 1 m grass block (`SEED`) to stand on, with sky all round. Everything is a
     blue, scan lines drifting up) and a padlock: closed (it stops you) until you've opened the neighborhood it's in ((owner, 2026-11-16) whose bounds it stands in)
     (an Uncommon or better of the one before's animal; see Parcels); then only its posts and beam. A newly opened
     neighborhood's showing flies to its gate as it opens.
+  - (owner, 2026-11-16) In the builder, aiming passes through a gate's or wall's boundary (pieces don't snap to it);
+    Select and Erase still pick it.
   - (owner, 2026-11-14) **A locked gate's (or wall's) boundary runs all the way up and down:** it stops you at any
     height (no jumping over or dropping under it) and is drawn fading out within 24 m above and below; unlocked, it's
     gone completely (a gate keeps its posts and beam).

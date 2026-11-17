@@ -1905,7 +1905,7 @@ function pieceMesh(q, live) {
       if (q.k === "gate") { for (const x of [-W2 / 2, W2 / 2]) box(0.7, H, 0.7, "#6f7d8a", x, H / 2, 0, g); box(W2 + 0.7, 0.6, 0.7, "#6f7d8a", 0, H, 0, g); }
       // (owner, 2026-11-14) while locked the boundary runs all the way up and all the way down (it stops you at any height),
       // fading out above and below; unlocked it's gone
-      const sh = new THREE.Group(); g.add(sh); const gd = live ? ((World.gates.find((o) => o.id === q.id) || {}).d ?? q.zone) : q.zone, w = holoWall(W2, H + 2 * HOLO_FADE, gateC(gd)); w.material.alphaMap = HOLO_ALPHA; w.position.y = H / 2; sh.add(w);
+      const sh = new THREE.Group(); g.add(sh); const gd = live ? ((World.gates.find((o) => o.id === q.id) || {}).d ?? q.zone) : q.zone, w = holoWall(W2, H + 2 * HOLO_FADE, gateC(gd)); w.userData.selOnly = 1; /* (owner, 2026-11-16) aimed at only to select or erase: blocks don't snap to it */ w.material.alphaMap = HOLO_ALPHA; w.position.y = H / 2; sh.add(w);
       const L = q.k === "gate" ? lock(sh, H / 2) : null; if (live) gates.push({ g: sh, w, L, d: gd, built: 1, at: q });
     }
     else if (q.k === "pipe") {   // (owner, 2026-11-13) on its side, its mouth the way it's turned; bright green once linked
