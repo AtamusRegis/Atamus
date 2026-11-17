@@ -256,7 +256,7 @@ export function attachPets(server, { origins = [], allowLocal = false, store = m
           lastChat: 0, party: null, ready: null, next: null, bag: [], stolen: [], dropped: [], slots: new Set(), calmUntil: 0, pids: 0, stunUntil: 0, graceUntil: 0, lastIsle: -1, nextRock: 0, nextDive: 0, pipeAt: 0 };
         me.lx = me.x; me.lz = me.z; me.lt = now;
         online.set(acct.id, me);
-        send(ws, { t: "welcome", plats: [...room.plats].filter(([, st]) => st.goneUntil).map(([id, st]) => [id, st.goneUntil === Infinity ? 1e12 : r1(st.goneUntil / 1000)]), build: W.build, zones: W.zones, web: websiteBuild(), by: websiteBy(), now, id: me.id, name: me.name, role: rankOf(acct) >= 2 ? "admin" : acct.role, token, data: acct.data, x: me.x, y: me.y, z: me.z, players: [...room.players.values()].map(pub),
+        send(ws, { t: "welcome", plats: [...room.plats].filter(([, st]) => st.goneUntil).map(([id, st]) => [id, st.goneUntil === Infinity ? 1e12 : r1(st.goneUntil / 1000)]), build: W.build, zones: W.zones, web: websiteBuild(), by: websiteBy(), now, id: me.id, aid: acct.id, name: me.name, role: rankOf(acct) >= 2 ? "admin" : acct.role, token, data: acct.data, x: me.x, y: me.y, z: me.z, players: [...room.players.values()].map(pub),
           dogs: room.dogs.map(dogView), geese: room.geese.map(gooseView), goats: room.goats.map(goatView), pods: podView(room) });
         room.players.set(me.id, me);
         all(room, { t: "join", p: pub(me) }, me);
@@ -407,9 +407,27 @@ export function attachPets(server, { origins = [], allowLocal = false, store = m
           else if (m.op === "set") { const i = list.findIndex((q) => q.id === +(m.piece && m.piece.id)), q = i >= 0 && W.cleanPiece({ ...m.piece, k: list[i].k }); if (!q) break; list[i] = q; }   // (owner, 2026-11-13) a piece changed (a bound moved or resized)
           else if (m.op === "zone") { const n = +m.n; if (!(n >= 0 && n < W.TIERS.length)) break; W.zones[n] = W.cleanZone(m.zone, n); }   // a neighborhood's name, animal and chances
           else break;
-          W.setBuild({ pieces: list, zones: W.zones.slice() }); store.saveBuild({ pieces: W.build, zones: W.zones }).catch((e) => console.error("[pets] saveBuild", e.message));
-          for (const r of rooms) { r.plats.clear(); all(r, { t: "build", build: W.build, zones: W.zones }); for (const p of r.players.values()) { for (const k of ["ready", "next"]) if (p[k] && !W.housesIn(p[k].tier).length) p[k] = null; fillBelt(p); } }
-          break;
+          applyBuild(list); break;
+        }
+        // (owner, 2026-11-16) cannons: buying a Main Street house, unlocking a neighborhood's cannon, setting one at your
+        // house, firing it
+        case "buyhouse": {
+          const q = W.build.find((o) => o.id === +m.id && o.k === "house"), b = q && W.buildings.find((o) => o.id === q.id); const d = me.acct.data;
+          if (!q || !b || b.d !== 0 || q.ow || W.houseFor(me.acct.id) || d.coins < W.CANNONS.house || hyp(me.x - q.x, me.z - q.z) > W.CANNONS.near + 4) break;
+          d.coins -= W.CANNONS.house; changed(me); pushData(me); applyBuild(W.build.map((o) => (o === q ? { ...o, ow: me.acct.id, on: me.name, cz: 0 } : o))); send(ws, { t: "fx", k: "house", id: q.id }); break;
+        }
+        case "unlockcannon": {
+          const c = W.cannonLocks.find((o) => o.id === +m.id), d = me.acct.data; if (!c || !c.d || d.cannons.includes(c.d) || hyp(me.x - c.x, me.z - c.z) > W.CANNONS.near || d.coins < W.CANNONS.cost(c.d)) break;
+          d.coins -= W.CANNONS.cost(c.d); d.cannons.push(c.d); changed(me); pushData(me); send(ws, { t: "fx", k: "cannonlock", id: c.id, z: c.d }); break;
+        }
+        case "setcannon": {
+          const q = W.houseFor(me.acct.id), z = m.z | 0; if (!q || (z && !me.acct.data.cannons.includes(z)) || hyp(me.x - q.x, me.z - q.z) > W.CANNONS.near + 4 || (q.cz | 0) === z) break;
+          applyBuild(W.build.map((o) => (o === q ? { ...o, cz: z, on: me.name } : o))); break;
+        }
+        case "cannon": {
+          const q = W.houseFor(me.acct.id), pad = q && q.cz && W.cannonPad(q.cz); if (!pad || now < me.stunUntil || now - (me.cannonAt || 0) < 4000 || hyp(me.x - q.x, me.z - q.z) > W.CANNONS.fire + 1.5 || Math.abs(me.y - q.y) > 4) break;
+          me.cannonAt = now; send(ws, { t: "cannon", id: q.id, x: pad.x, y: pad.y, z: pad.z, yaw: pad.yaw }); all(room, { t: "fx", k: "cannon", id: me.id, h: q.id }, me);
+          const T = (W.CANNONS.fuse + W.CANNONS.fly) * 1000; me.tpAt = now + T; setTimeout(() => { if (!me.gone && me.room === room) teleport(me, pad.x, pad.z, pad.y, "cannon", pad.yaw); }, T); break;
         }
         case "admin": admin(me, m).catch((e) => { console.error("[pets] admin", e.message); send(ws, { t: "admin_msg", msg: "Failed" }); }); break;
       }
@@ -573,6 +591,11 @@ export function attachPets(server, { origins = [], allowLocal = false, store = m
   }
   // (owner, 2026-11-12) the podiums: each room's three best mounts (up to three a courier) stand by the post office and pay Aura
   const podView = (r) => r.pods.map((q) => (q ? { id: q.p.id, name: q.p.name, sp: q.m.sp, r: q.m.r, va: q.m.va } : null));
+  // the build changed (an admin, or a courier's house): save it and send it everyone
+  function applyBuild(list) {
+    W.setBuild({ pieces: list, zones: W.zones.slice() }); store.saveBuild({ pieces: W.build, zones: W.zones }).catch((e) => console.error("[pets] saveBuild", e.message));
+    for (const r of rooms) { r.plats.clear(); all(r, { t: "build", build: W.build, zones: W.zones }); for (const p of r.players.values()) { for (const k of ["ready", "next"]) if (p[k] && !W.housesIn(p[k].tier).length) p[k] = null; fillBelt(p); } }
+  }
   function stepPodiums(r, now) {
     const keep = r.pods.map((q) => (q && r.players.get(q.p.id) === q.p && q.p.acct.data.mounts.includes(q.m) ? q : null)), cands = [];
     for (const p of r.players.values()) for (const m of [...p.acct.data.mounts].sort((a, b) => W.podiumScore(b) - W.podiumScore(a)).slice(0, 3)) cands.push({ p, m, s: W.podiumScore(m), was: keep.some((q) => q && q.m === m) });

@@ -157,6 +157,24 @@ A parcel that breaks or is lost is gone; the conveyor always has the next one. *
   whistle (owner, 2026-11-11: instantly, even while still stunned), when you reach it, or by itself after about 2 s.
 - Every mount fits every shortcut. Kinds differ only by look (and home zone); rarity sets the stats.
 
+## Cannons (owner, 2026-11-16)
+
+- **Unlocking:** standing by a Cannon Unlock shows "<neighborhood> Cannon" and Unlock with its price: 2,000 x 1.35^n
+  Aura for neighborhood n (rounded to 100: neighborhood 5 is 9,000). Unlocked cannons are kept in your data
+  (`cannons`).
+- **Houses:** every Main Street house is for sale at 7,500 Aura (the same for all). Standing by one for sale (when you
+  don't own one yet) shows House and Buy. A house has one owner (kept in the town's build: `ow`, `on` on the house),
+  shown by their name over it; one house each. Other couriers still deliver to its mailbox.
+- **Your house's cannon:** standing by your house shows your name and House plus each cannon you've unlocked; picking
+  one puts that cannon in the house's place (the house is gone; just the cannon's low base is solid), House puts it
+  back. Swap any time.
+- **Cannons** all face one way, set by the owner (Main Street's **Cannons face**, in degrees, in the ⚙ panel), however
+  their house faced; the barrel is up 35 degrees, in the neighborhood's color, and breathes gently. **Only its owner
+  fires it:** touch it and you're inside while the fuse fizzes and sparkles (1.3 s; the barrel swells and wobbles;
+  the camera turns to watch from behind and to the side), then BOOM (smoke, a flash, a shake, the barrel recoils and
+  bounces) and you fly in an arc to that neighborhood's Cannon Pad (2.4 s). Other couriers see the cannon go off and
+  you vanish until you land.
+
 ## Aura and the podiums
 
 - (owner, 2026-11-12) **Aura** (a shiny purple orb) is the money: it replaced coins one for one (the saved field is
@@ -217,6 +235,10 @@ is one 1 m grass block (`SEED`) to stand on, with sky all round. Everything is a
   - **Boost:** a yellow chevron pad: x1.6 speed for a moment, the way it points.
   - **Tree:** solid, 6.5 m tall.
   - **House:** 8 x 8 m, solid, in its neighborhood's colors; turned to face its door.
+  - (owner, 2026-11-16) **Cannon Unlock:** a pedestal with a little spinning cannon and "<neighborhood> Cannon": it
+    unlocks the cannon of the neighborhood whose bounds it stands in (the owner places one every 5 neighborhoods).
+  - (owner, 2026-11-16) **Cannon Pad:** a target on the ground: where that neighborhood's cannon lands you (one per
+    neighborhood that has an unlock; the first placed counts).
   - **Mailbox:** an **address** in the neighborhood it stands in: parcels of that neighborhood's tier go to its
     mailboxes, named in order of placing with the neighborhood's name ("1 Main Street", "2 Main Street", "1 Maple
     Suburbs"...). No mailboxes in a neighborhood: no parcels for it. A mailbox taken away loses the parcels going to it.
@@ -280,7 +302,7 @@ is one 1 m grass block (`SEED`) to stand on, with sky all round. Everything is a
   wheel (while building) raises or lowers where the next piece goes, a meter a notch (the blueprint shows it)
   ((owner, 2026-11-13) every piece a rounded tile with a picture of
   the piece and its name under it): Block, House, Mailbox, Gate, Wall,
-  Tree, Boost, Start Line / Podium, Respawn, Post Office, Pipe, Gust, Platform, Bounds, Erase ((owner, 2026-11-14) no
+  Tree, Boost, Start Line / Podium, Respawn, Post Office, Pipe, Gust, Platform, Cannon Unlock, Cannon Pad, Bounds, Erase ((owner, 2026-11-14) no
   turn or close buttons: R turns, Escape, B or the Build button closes); under it **the neighborhood you're editing**
   (− name +) and ⚙, then (owner, 2026-11-14) W / H / L typed into one box side by side and the material for a block,
   L for a wall (W / L for bounds). (owner, 2026-11-14) **A piece placed inside a neighborhood's bounds makes that the

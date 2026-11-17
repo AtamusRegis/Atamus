@@ -4,6 +4,12 @@ Critter Courier (Pet Delivery Co. until 2026-11-11). Newest first. Add one entry
 and any rule decided. Use `git log` for the code detail (and for the older Atamus prototypes, removed from the tree on
 2026-11-08).
 
+## 2026-11-16
+
+- **Cannons (owner).** The builder places Cannon Unlocks and Cannon Pads; couriers unlock a neighborhood's cannon with
+  Aura, buy a Main Street house, and put any unlocked cannon in its place to fire themselves to that neighborhood's pad
+  (a sparkling fuse, a bubbly BOOM). The owner sets which way all cannons face.
+
 ## 2026-11-14
 
 - **Builder flow; cracking platforms (owner).** Platforms get their kind (moving or static, breaking, timer, respawn)
