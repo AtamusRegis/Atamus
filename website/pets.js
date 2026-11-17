@@ -6,7 +6,7 @@
 import * as THREE from "./vendor/three.module.min.js";
 import { svg, fillIcons, ICON } from "./icons.js?v=7";
 import * as World from "./pets-world.js?v=1794916777";
-import { loadCritters, makeCritter, hasCritter } from "./critters.js?v=1";
+import { loadCritters, makeCritter, hasCritter } from "./critters.js?v=2";
 import * as Town from "./town.js?v=1";
 await Promise.all([loadCritters(), Town.loadTown()]);   // (owner, 2026-11-17) the critter and town models, before anything is drawn
 
@@ -218,8 +218,8 @@ const RAINBOW = ["#ff6b6b", "#ffb84d", "#ffe66b", "#7ee08a", "#6bb8ff", "#b48cff
 // (owner, 2026-11-09) a pet grows with its level but its rider stays the same size, so a big pet feels big
 function sizePet(m, sc) { m.g.scale.setScalar(sc); if (m.rider) { m.rOff = -0.52 / sc; m.rider.scale.setScalar(0.8 / sc); m.rider.position.y = m.seat - 0.52 / sc; m.top = m.seat * sc + 1.4; } else m.top *= sc; }
 // (owner, 2026-11-17) a critter model (critters.js): its rider sits on its RiderSeat bone, its parcels on its ParcelStack
-function critModel(key, rider, va) {
-  const C = makeCritter(key, !!va), g = new THREE.Group(), body = new THREE.Group(); g.add(body); body.add(C.g); C.update(0);
+function critModel(key, rider, va, r = 0) {   // r: the rarity, for its coat (Common: as made)
+  const C = makeCritter(key, !!va, r > 0 && World.MOUNTS[key === "towndog" ? "dog" : key] ? World.coat(key === "towndog" ? "dog" : key, r) : null), g = new THREE.Group(), body = new THREE.Group(); g.add(body); body.add(C.g); C.update(0);
   const seat = C.seat.y, seatZ = C.seat.z; let riderG = null, riderM = null, top = seat;
   if (rider) { const r = courierModel(rider, true); r.g.scale.setScalar(0.8); r.g.position.set(0, seat - 0.52, seatZ); body.add(r.g); riderG = r.g; riderM = r; top = seat + 1.4; }
   return { g, body, legs: [], wings: [], head: new THREE.Group(), tails: [], k: 1, top, seat, seatZ, rOff: -0.52, rider: riderG, riderM, crit: C, plan: "crit", act: null, ab: null };
@@ -234,7 +234,7 @@ function animateCrit(m, moving, speed, airborne) {
   if (m.rider) { m.rider.visible = m.rider.visible && !C.hide; const b = C.bone("RiderSeat"); if (b && !C.flip) { boneIn(b, m.body, crV); m.rider.position.set(crV.x, crV.y + m.rOff, crV.z); } else m.rider.position.set(0, m.seat + m.rOff, m.seatZ); }
 }
 function petModel(sp, rider, va, r = 0) { let riderM = null;
-  if (typeof sp !== "object" && hasCritter(sp)) return critModel(sp, rider, va);   // sp: a mount's kind (r: its rarity, for its coat), or { look, c, a, size }; va: 1 Shiny (the same coat: it sparkles)
+  if (typeof sp !== "object" && hasCritter(sp)) return critModel(sp, rider, va, r);   // sp: a mount's kind (r: its rarity, for its coat), or { look, c, a, size }; va: 1 Shiny (the same coat: it sparkles)
   let riderG = null;
   if (typeof sp !== "object") { const M = World.MOUNTS[sp] || World.MOUNTS.dog, [c, a] = World.coat(sp, r); sp = { look: M.look, c, a, size: M.size }; }
   const s = sp, L = LOOK[s.look] || LOOK.pup, k = s.size, g = new THREE.Group(), body = new THREE.Group(); g.add(body);
@@ -433,8 +433,8 @@ const KIND = {
 };
 function rarityRing(g, r, rad) { if (!r) return; const m = new THREE.Mesh(new THREE.RingGeometry(rad * 0.8, rad, 32).rotateX(-Math.PI / 2), basic(RARITY_C[r], 0.75)); m.position.y = 0.06; g.add(m); g.userData.rar = r; }
 function buildAnimals() {
-  const crit = (key, sc) => { if (!hasCritter(key)) return null; const m = critModel(key, null, 0); m.g.scale.setScalar(sc); return m; };   // (owner, 2026-11-17) the critter models: Main Street's dogs, geese and goats have their own; other zones' chasers are their zone's mount
-  for (const d of World.dogs) { const K = KIND[d.sp], [c, a] = World.coat(d.sp, d.r), m = crit(d.sp === "dog" ? "towndog" : d.sp, K.size * (1 + 0.08 * d.r)) || petModel({ look: K.look, c, a, size: K.size * (1 + 0.08 * d.r) }); /* (owner, 2026-11-11) the same coat as the mount of that kind and rarity */ m.g.position.set(d.hx, d.y, d.hz); scene.add(m.g); blobUnder(m.g, 1.6 * K.size); rarityRing(m.g, d.r, 1.1 * K.size);
+  const crit = (key, sc, r = 0) => { if (!hasCritter(key)) return null; const m = critModel(key, null, 0, r); m.g.scale.setScalar(sc); return m; };   // (owner, 2026-11-17) the critter models: Main Street's dogs, geese and goats have their own; other zones' chasers are their zone's mount
+  for (const d of World.dogs) { const K = KIND[d.sp], [c, a] = World.coat(d.sp, d.r), m = crit(d.sp === "dog" ? "towndog" : d.sp, K.size * (1 + 0.08 * d.r), d.r) || petModel({ look: K.look, c, a, size: K.size * (1 + 0.08 * d.r) }); /* (owner, 2026-11-11) the same coat as the mount of that kind and rarity */ m.g.position.set(d.hx, d.y, d.hz); scene.add(m.g); blobUnder(m.g, 1.6 * K.size); rarityRing(m.g, d.r, 1.1 * K.size);
     const bang = textSprite("!", { size: 64, color: "#ffffff", bg: "#e5534b" }); bang.position.y = 2.3; bang.visible = false; m.g.add(bang); dogMesh.push({ m, bang, x: d.hx, z: d.hz, yaw: 0, tx: d.hx, tz: d.hz, tyaw: 0, mode: 0, y: d.y, ty: d.y }); }
   for (const q of World.geese) { const m = crit("goose", 1 + 0.08 * q.r) || gooseModel(); if (m.crit) { m.slot = new THREE.Group(); m.slot.position.set(0, 0.95, 0.6); m.body.add(m.slot); } m.g.scale.setScalar(1 + 0.08 * q.r); m.g.position.set(q.x, q.y, q.z); scene.add(m.g); blobUnder(m.g, 1.2); rarityRing(m.g, q.r, 0.8); gooseMesh.push({ m, x: q.x, y: q.y, z: q.z, yaw: 0, tx: q.x, ty: q.y, tz: q.z, tyaw: 0, mode: 0, carry: -1, box: null }); }
   for (const q of World.goats) { const m = crit("goat", 0.95 * (1 + 0.08 * q.r)) || petModel({ look: "goat", c: "#e9e4dc", a: "#8a7a66", size: 0.95 * (1 + 0.08 * q.r) }); m.g.position.set(q.hx, q.y, q.hz); scene.add(m.g); blobUnder(m.g, 1.7); rarityRing(m.g, q.r, 1.0); goatMesh.push({ m, x: q.hx, z: q.hz, yaw: Math.PI / 2, tx: q.hx, tz: q.hz, tyaw: Math.PI / 2, mode: 0, y: q.y }); }

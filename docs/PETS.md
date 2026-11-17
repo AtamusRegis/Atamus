@@ -130,8 +130,12 @@ A parcel that breaks or is lost is gone; the conveyor always has the next one. (
   **Bunny**, raptor **Baby Raptor**, trike **Mini Trike**, trex **Frog**, unicorn **Cloud Pony** (abilities unchanged).
   Main Street's dogs, geese and goats are the town dog, goose and goat models; the other zones' chasers are their zone's
   mount model. Each mount carries a mail bag; the rider sits on its `RiderSeat` bone (following it as it moves), the
-  parcels stack at its `ParcelStack`. A **Shiny** swaps in the model's `_shiny` atlas (and sparkles). The coats no longer
-  tint the models (rarity still shows by the name, size, ring and tag). Clips: idle, run (sped up with the speed), jump
+  parcels stack at its `ParcelStack`. A **Shiny** swaps in the model's `_shiny` atlas (and sparkles). (owner, 2026-11-17) **Each
+  rarity wears its coat:** Common is the model as made; Uncommon to Legendary recolor its atlas to the kind's coat for
+  that rarity (`MOUNTS[..].coats`: the body colors to the coat's body color, the pale cream parts to its trim, each
+  keeping its shading; the coat's lightness is pulled halfway to the model's own so dark coats stay bright toys; eyes,
+  blush and the saddle, straps, bag and rack keep theirs). Other zones' chasers and Main Street's dogs wear the coat of
+  their rarity too (the town dog takes the Dog coats). Clips: idle, run (sped up with the speed), jump
   (held in the air) and the ability: Sprint and Glide loop while on; **Blink** shrinks the mount to a dot with the rider
   hidden and the jump forward happens at frame 7 (others see it reappear from there); **Double Jump** flips the mount
   while the rider stays upright. Chasers: idle, run and attack (a dog's bark-lunge as it chases, a goose's honk-flap, a
