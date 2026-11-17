@@ -6,6 +6,8 @@ and any rule decided. Use `git log` for the code detail (and for the older Atamu
 
 ## 2026-11-16
 
+- **Fix: water seams (owner).** All the water is now drawn as one body, so touching or overlapping water blocks show
+  no seams or darker overlaps.
 - **Building only inside bounds; gates unlock their own neighborhood (owner).** Pieces can only be placed inside a
   neighborhood's bounds (the hologram is red outside); pieces left outside bounds show red while building. A gate now
   belongs to and unlocks the neighborhood whose bounds it stands in.
