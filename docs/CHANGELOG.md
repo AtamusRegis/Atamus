@@ -6,6 +6,9 @@ and any rule decided. Use `git log` for the code detail (and for the older Atamu
 
 ## 2026-11-16
 
+- **Building only inside bounds; gates unlock their own neighborhood (owner).** Pieces can only be placed inside a
+  neighborhood's bounds (the hologram is red outside); pieces left outside bounds show red while building. A gate now
+  belongs to and unlocks the neighborhood whose bounds it stands in.
 - **Swimmable water (owner).** Water blocks aren't walls any more: you swim through them slowly, sinking gently and
   rising with jump. Joined water blocks show no seams between them.
 - **Face handles on bounds and respawn boxes (owner).** A picked one shows a white square on each face to drag that face

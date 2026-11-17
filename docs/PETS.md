@@ -250,7 +250,7 @@ is one 1 m grass block (`SEED`) to stand on, with sky all round. Everything is a
   - **Gate:** 8 m wide, 7 m high, posts and a beam with (owner, 2026-11-13) **a holographic boundary**
     ((owner, 2026-11-14) in the neighborhood's own gate color: blue, pink, yellow, green, purple, orange, cyan, red,
     lime for neighborhoods 1 to 9, so two gates in a row never match; a bound wall takes its gate's color) (see-through
-    blue, scan lines drifting up) and a padlock: closed (it stops you) until you've opened the neighborhood it leads into
+    blue, scan lines drifting up) and a padlock: closed (it stops you) until you've opened the neighborhood it's in ((owner, 2026-11-16) whose bounds it stands in)
     (an Uncommon or better of the one before's animal; see Parcels); then only its posts and beam. A newly opened
     neighborhood's showing flies to its gate as it opens.
   - (owner, 2026-11-14) **A locked gate's (or wall's) boundary runs all the way up and down:** it stops you at any
@@ -312,11 +312,13 @@ is one 1 m grass block (`SEED`) to stand on, with sky all round. Everything is a
   turn or close buttons: R turns, Escape, B or the Build button closes); under it **the neighborhood you're editing**
   (− name +) and ⚙, then (owner, 2026-11-14) W / H / L typed into one box side by side and the material for a block,
   L for a wall (W / L for bounds). (owner, 2026-11-14) **A piece placed inside a neighborhood's bounds makes that the
-  neighborhood you're editing** (gates and walls keep the neighborhood they lead into). **The ⚙ panel opens on the
-  right of the screen.** (owner, 2026-11-13) Bounds are placed for the neighborhood you're editing; (owner, 2026-11-14) gates and
-  walls placed while editing a neighborhood lead into the next one, and **the next neighborhood can't be picked for
-  editing until a gate into it is placed** (take the last gate into one away and the picker can't go past the one
-  before). **⚙** opens that neighborhood's panel: name, animal, each rarity's
+  neighborhood you're editing** (gates and walls don't switch it). **The ⚙ panel opens on the
+  right of the screen.** (owner, 2026-11-13) Bounds are placed for the neighborhood you're editing; (owner, 2026-11-16) **pieces go only
+  inside a neighborhood's bounds** (bounds and respawn boxes anywhere): outside, the hologram is red and nothing is
+  placed. A piece belongs to whichever neighborhood's bounds it's in now: move the bounds off it and it shows red while
+  building (until some bounds cover it again). **A gate (or bound wall) belongs to and unlocks the neighborhood whose
+  bounds it stands in** (outside any: the one it was placed in), and **the next neighborhood can't be picked for
+  editing until this one (past Main Street) has a gate**. **⚙** opens that neighborhood's panel: name, animal, each rarity's
   chance (%), Shiny "1 in" (0: never), Save. **Bounds** (seen only while building: a see-through box in the
   neighborhood's color with its name; the edited neighborhood's brighter, the picked one outlined yellow): a left drag
   on open space draws new ones; **they can be edited after**: click bounds to pick them (that neighborhood becomes the
