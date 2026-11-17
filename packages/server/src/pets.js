@@ -112,7 +112,7 @@ export function attachPets(server, { origins = [], allowLocal = false, store = m
     const gift = { gid: d.nextGid++, r: roll.tier, pt: q.tier };
     // a courier's second delivery brings a new mount, revealed when that gift is opened: (owner, 2026-11-11) the parcel's
     // area's animal, at the gift's rarity (set when it's opened, so a merged-up gift gives the better one)
-    if (d.stats.del === 2 && d.mounts.length < W.MOUNT_CAP) { const nm = { id: d.nextId++, sp: W.CHASERS[q.tier], r: gift.r, va: 0 }; d.mounts.push(nm); gift.m = nm.id; }
+    if (d.stats.del === 2 && d.mounts.length < W.MOUNT_CAP) { const nm = { id: d.nextId++, sp: W.CHASERS[0], r: Math.max(1, gift.r), va: 0 };   /* (owner, 2026-11-16) a Main Street Dog, Uncommon at least */ d.mounts.push(nm); gift.m = nm.id; }
     d.gifts.push(gift); const merges = W.mergeGifts(d.gifts, () => d.nextGid++);
     const over = d.gifts.length > W.GIFT_CAP ? d.gifts.slice(0, d.gifts.length - W.GIFT_CAP) : [];   // too many waiting: the oldest open by themselves
     if (over.length) openGifts(p, over.map((g) => g.gid), true);
@@ -128,7 +128,7 @@ export function attachPets(server, { origins = [], allowLocal = false, store = m
     for (const gid of new Set(gids)) {
       const g = d.gifts.find((k) => k.gid === gid); if (!g) continue; d.gifts.splice(d.gifts.indexOf(g), 1);
       const c = W.giftContents(g.r, g.pt, d.up, Math.random, d.set.pz === g.pt ? g.pt + 1 : W.openFor(d)); d.coins += c.coins;   // (owner, 2026-11-14) no bottom-raising bonus for the zone picked
-      let mount = g.m ? d.mounts.find((k) => k.id === g.m) || null : null; if (mount) mount.r = g.r;   // the second delivery's mount: the gift's rarity
+      let mount = g.m ? d.mounts.find((k) => k.id === g.m) || null : null; if (mount) mount.r = Math.max(1, g.r);   // the second delivery's mount: the gift's rarity, (owner, 2026-11-16) Uncommon at least
       else if (c.pet && d.mounts.length < W.MOUNT_CAP) { mount = { id: d.nextId++, sp: c.pet.sp, r: c.pet.r, va: c.pet.va }; d.mounts.push(mount); if (mount.va || mount.r >= 3) announce(p, mount); }   // (owner, 2026-11-11) a mount, the parcel's area's animal at its rarity
       delete c.pet; list.push({ gid, r: g.r, pt: g.pt, ...c, mount });
     }
