@@ -119,8 +119,9 @@ A parcel that breaks or is lost is gone; the conveyor always has the next one. *
   Spark 2,500, Bubble 6,000, Heart 15,000, Flame 40,000 (kept in the courier's `trails`). Any mount can wear any unlocked trail (its button in the
   Stable, on or off); everyone sees it.
 
-- (owner, 2026-11-11) **A gift on the second delivery:** a mount, that parcel's area's animal at the gift's rarity when
-  it's opened, shown in a pink box after you close the roll's card.
+- (owner, 2026-11-11) **A gift on the second delivery** (a new courier carries one parcel, so that's the second run):
+  a mount, (owner, 2026-11-16) a Main Street **Dog, Uncommon at least** (the gift's rarity when it's opened, if
+  better), shown in a pink box after you close the roll's card.
 - One equipped mount, seen by everyone; the rest wait in the Stable menu. (owner, 2026-11-11) **No mount levels: the
   rarity decides.** A mount's size is 1 + 0.25 x rarity (Common 1x, Legendary 2x); the rider stays the same size.
 - (owner, 2026-11-11) **The mounts are the areas' animals:** Dog (Main Street), Cat (Maple Suburbs), Gator

@@ -6,6 +6,8 @@ and any rule decided. Use `git log` for the code detail (and for the older Atamu
 
 ## 2026-11-16
 
+- **An Uncommon Dog early (owner).** The second delivery's mount (a new courier's second run) is now always a Main
+  Street Dog, Uncommon or better.
 - **Abilities; one speed for every mount (owner).** Every mount goes the same speed. Each animal has a movement ability:
   Sprint (Dog, Bear, Raptor), Blink (Gator, Trike), Double Jump (Cat, Fox, T-Rex), Glide (Wolf, Unicorn); E or the new
   ability button for Sprint and Blink.
