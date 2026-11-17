@@ -130,7 +130,7 @@ A parcel that breaks or is lost is gone; the conveyor always has the next one. (
   **Bunny**, raptor **Baby Raptor**, trike **Mini Trike**, trex **Frog**, unicorn **Cloud Pony** (abilities unchanged).
   Main Street's dogs, geese and goats are the town dog, goose and goat models; the other zones' chasers are their zone's
   mount model. Each mount carries a mail bag; the rider sits on its `RiderSeat` bone (following it as it moves), the
-  parcels stack at its `ParcelStack`. A **Shiny** swaps in the model's `_shiny` atlas (and sparkles). (owner, 2026-11-17) **Each
+  parcels stack at its `ParcelStack`. A **Shiny** swaps in the model's `_shiny` atlas, (owner, 2026-11-17) saturated well past the kit's pastel, shimmers (a soft glow that breathes, with a bright glint now and then) and sparkles (more and bigger stars than before). (owner, 2026-11-17) **Each
   rarity wears its coat:** Common is the model as made; Uncommon to Legendary recolor its atlas to the kind's coat for
   that rarity (`MOUNTS[..].coats`: the body colors to the coat's body color, the pale cream parts to its trim, each
   keeping its shading; the coat's lightness is pulled halfway to the model's own so dark coats stay bright toys; eyes,
