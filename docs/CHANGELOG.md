@@ -6,6 +6,7 @@ and any rule decided. Use `git log` for the code detail (and for the older Atamu
 
 ## 2026-11-17
 
+- **No empty-handed speed (owner).** Mounts go the same speed with or without parcels.
 - **Sculpting with blocks (owner).** Blocks and the eraser use a square size (Ctrl+wheel), a level (wheel) and a height;
   drawn outlines fill in; same-material blocks that touch are redone as the fewest boxes; the eraser carves (this
   material or all blocks) and erases other pieces as before. Respawning no longer swings the builder's camera.
