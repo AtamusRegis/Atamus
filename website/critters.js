@@ -19,9 +19,15 @@ export async function loadCritters() {
     try {
       const g = await L.loadAsync(`critters/${n}.glb?v=${V}`); SRC[n] = g;
       g.scene.traverse((o) => { if (o.isMesh) { o.castShadow = true; o.frustumCulled = false; const m = o.material; if (m.map) { m.map.magFilter = THREE.NearestFilter; m.map.colorSpace = THREE.SRGBColorSpace; } m.roughness = 1; m.metalness = 0; } });
-      const t = await T.loadAsync(`critters/${n}_shiny.png?v=${V}`); t.flipY = false; t.colorSpace = THREE.SRGBColorSpace; t.magFilter = THREE.NearestFilter; SHINY[n] = t;
+      const t = vivid((await T.loadAsync(`critters/${n}_shiny.png?v=${V}`)).image); SHINY[n] = t;
     } catch (e) { console.warn("critter", n, e && e.message); }
   }));
+}
+// (owner, 2026-11-17) a Shiny's atlas, more saturated than the kit's pastel one
+function vivid(img) {
+  const cv = document.createElement("canvas"), W = (cv.width = img.width), H = (cv.height = img.height), x = cv.getContext("2d"); x.drawImage(img, 0, 0); const d = x.getImageData(0, 0, W, H);
+  for (let i = 0; i < d.data.length; i += 4) { const [h, s, l] = hsl([d.data[i], d.data[i + 1], d.data[i + 2]]); if (s < 0.08 || l > 0.97 || l < 0.15) continue; const c = rgb(h, Math.min(1, s * 1.7 + 0.15), l > 0.6 ? l - (l - 0.6) * 0.45 : l); d.data[i] = c[0]; d.data[i + 1] = c[1]; d.data[i + 2] = c[2]; }
+  x.putImageData(d, 0, 0); const t = new THREE.CanvasTexture(cv); t.flipY = false; t.colorSpace = THREE.SRGBColorSpace; t.magFilter = THREE.NearestFilter; return t;
 }
 export const hasCritter = (key) => !!SRC[MODEL[key]];
 
@@ -62,9 +68,9 @@ function coatTex(n, body, trim) {
 // a copy of one: { g (meters, facing +Z, feet at 0), mixer, play(name, once), update(dt), seat, parcel, bone(name) }
 export function makeCritter(key, shiny, coat) {   // coat: [body, trim] for Uncommon to Legendary (none: as made)
   const n = MODEL[key], src = SRC[n]; if (!src) return null;
-  const inner = SkeletonUtils.clone(src.scene), g = new THREE.Group(); inner.scale.setScalar(STUD); g.add(inner);
-  inner.traverse((o) => { if (o.isMesh) { o.material = o.material.clone(); if (shiny && SHINY[n]) o.material.map = SHINY[n]; else if (coat) o.material.map = coatTex(n, coat[0], coat[1]); } });
-  const mixer = new THREE.AnimationMixer(inner), acts = {};
+  const glow = [], inner = SkeletonUtils.clone(src.scene), g = new THREE.Group(); inner.scale.setScalar(STUD); g.add(inner);
+  inner.traverse((o) => { if (o.isMesh) { o.material = o.material.clone(); if (shiny && SHINY[n]) { o.material.map = SHINY[n]; o.material.emissive = new THREE.Color("#ffffff"); o.material.emissiveMap = SHINY[n]; o.material.emissiveIntensity = 0; glow.push(o.material); } else if (coat) o.material.map = coatTex(n, coat[0], coat[1]); } });
+  const mixer = new THREE.AnimationMixer(inner), acts = {}; let gt = Math.random() * 9;
   for (const c of src.animations) { const k = c.name.slice(n.length + 1); acts[k] = mixer.clipAction(c); }
   const bones = {}; inner.traverse((o) => { if (o.isBone) bones[o.name] = o; });
   g.updateMatrixWorld(true); const at = (b) => { if (!bones[b]) return null; const v = new THREE.Vector3(); bones[b].getWorldPosition(v); return g.worldToLocal(v); };
@@ -79,7 +85,7 @@ export function makeCritter(key, shiny, coat) {   // coat: [body, trim] for Unco
       if (cur === a) return; if (opt.hold) { a.setLoop(THREE.LoopOnce, 1); a.clampWhenFinished = true; } else a.setLoop(THREE.LoopRepeat, Infinity);
       a.reset().fadeIn(0.12).play(); if (cur) cur.fadeOut(0.12); cur = a;
     },
-    update(dt) { if (C.onceT > 0) { C.onceT -= dt; if (C.onceT <= 0) { const a = cur; cur = null; if (a) a.fadeOut(0.1); C.hide = C.flip = false; } } mixer.update(dt); },
+    update(dt) { if (C.onceT > 0) { C.onceT -= dt; if (C.onceT <= 0) { const a = cur; cur = null; if (a) a.fadeOut(0.1); C.hide = C.flip = false; } } mixer.update(dt); if (glow.length) { gt += dt; const k = 0.18 + 0.12 * Math.sin(gt * 3) + 0.35 * Math.max(0, Math.sin(gt * 1.3)) ** 24; for (const m of glow) m.emissiveIntensity = k; } },   // a Shiny shimmers, with a bright glint now and then
     bone: (b) => bones[b] || null,
   };
   C.play("idle"); return C;

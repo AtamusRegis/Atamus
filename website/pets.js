@@ -6,7 +6,7 @@
 import * as THREE from "./vendor/three.module.min.js";
 import { svg, fillIcons, ICON } from "./icons.js?v=7";
 import * as World from "./pets-world.js?v=1794916777";
-import { loadCritters, makeCritter, hasCritter } from "./critters.js?v=2";
+import { loadCritters, makeCritter, hasCritter } from "./critters.js?v=3";
 import * as Town from "./town.js?v=1";
 await Promise.all([loadCritters(), Town.loadTown()]);   // (owner, 2026-11-17) the critter and town models, before anything is drawn
 
@@ -213,7 +213,7 @@ const LOOK = {
 };
 // (owner, 2026-11-11) a Shiny keeps its coat and sparkles: little stars twinkle on and around it all the time
 const SPARK = ["#ffffff", "#fff6c2", "#c9f0ff", "#ffd1f3"];
-function sparkle(x, y, z, sc, dt) { if (Math.random() < dt * 10) emit(x, y + 0.9 * sc, z, 1, { colors: SPARK, speed: 0.15, up: 0.3, life: 0.75, grav: 0, size: 0.24, spread: 1.7 * sc, tw: 1 }); }
+function sparkle(x, y, z, sc, dt) { const n = Math.floor(dt * 28 + Math.random()); if (n) emit(x, y + 0.9 * sc, z, n, { colors: SPARK, speed: 0.2, up: 0.4, life: 0.8, grav: 0, size: 0.34, spread: 2 * sc, tw: 1 }); }   // (owner, 2026-11-17) more and bigger
 const RAINBOW = ["#ff6b6b", "#ffb84d", "#ffe66b", "#7ee08a", "#6bb8ff", "#b48cff"];
 // (owner, 2026-11-09) a pet grows with its level but its rider stays the same size, so a big pet feels big
 function sizePet(m, sc) { m.g.scale.setScalar(sc); if (m.rider) { m.rOff = -0.52 / sc; m.rider.scale.setScalar(0.8 / sc); m.rider.position.y = m.seat - 0.52 / sc; m.top = m.seat * sc + 1.4; } else m.top *= sc; }

@@ -6,6 +6,8 @@ and any rule decided. Use `git log` for the code detail (and for the older Atamu
 
 ## 2026-11-17
 
+- **Shinier Shinies (owner).** Shiny critters are much more colorful, shimmer with a glint now and then, and sparkle
+  more.
 - **Critter coats (owner).** Every rarity of a critter has its own colors again (Uncommon to Legendary wear their
   coat; Common is the model as made), mounts and chasers alike.
 - **Ground gradients (owner).** Blocks shade softly like the town models: sides darker toward the foot, tops in broad
