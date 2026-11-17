@@ -162,7 +162,7 @@ A parcel that breaks or is lost is gone; the conveyor always has the next one. *
 - **Unlocking:** standing by a Cannon Unlock shows "<neighborhood> Cannon" and Unlock with its price: 2,000 x 1.35^n
   Aura for neighborhood n (rounded to 100: neighborhood 5 is 9,000). Unlocked cannons are kept in your data
   (`cannons`).
-- **Houses:** every Main Street house is for sale at 7,500 Aura (the same for all). Standing by one for sale (when you
+- **Houses:** every Main Street house is for sale at 7,500 Aura (the same for all). Standing right by one for sale (within 2.5 m of its walls; when you
   don't own one yet) shows House and Buy. A house has one owner (kept in the town's build: `ow`, `on` on the house),
   shown by their name over it; one house each. Other couriers still deliver to its mailbox.
 - **Your house's cannon:** standing by your house shows your name and House plus each cannon you've unlocked; picking

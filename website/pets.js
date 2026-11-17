@@ -1737,8 +1737,8 @@ function stepCannonReach(t) {
   let key = "", build = null;
   const lk = World.cannonLocks.find((c) => c.d && !save.cannons.includes(c.d) && near(c, C.near));
   if (lk) { const cost = C.cost(lk.d); key = "L" + lk.id + (save.coins >= cost); build = () => { P.appendChild(el("b", "", World.zoneName(lk.d) + " Cannon")); const b = btn("Unlock " + fmt(cost), () => netSend({ t: "unlockcannon", id: lk.id }), "go"); b.disabled = save.coins < cost; P.appendChild(b); }; }
-  else if (mine && near(mine, C.near + 3) && save.cannons.length) { key = "M" + mine.id + mine.cz + save.cannons.join(); build = () => { P.appendChild(el("b", "", myName)); for (const z of [0, ...save.cannons]) P.appendChild(btn(z ? World.zoneName(z) : "House", () => netSend({ t: "setcannon", z }), "bt" + ((mine.cz | 0) === z ? " on" : ""))); }; }
-  else if (!mine) { const h = World.buildings.find((b) => b.d === 0 && !b.ow && near(b, C.near + 3)); if (h) { key = "H" + h.id + (save.coins >= C.house); build = () => { P.appendChild(el("b", "", "House")); const b = btn("Buy " + fmt(C.house), () => netSend({ t: "buyhouse", id: h.id }), "go"); b.disabled = save.coins < C.house; P.appendChild(b); }; } }
+  else if (mine && near(mine, World.HOUSE_S / 2 + 2.5) && save.cannons.length) { key = "M" + mine.id + mine.cz + save.cannons.join(); build = () => { P.appendChild(el("b", "", myName)); for (const z of [0, ...save.cannons]) P.appendChild(btn(z ? World.zoneName(z) : "House", () => netSend({ t: "setcannon", z }), "bt" + ((mine.cz | 0) === z ? " on" : ""))); }; }
+  else if (!mine) { const h = World.buildings.find((b) => b.d === 0 && !b.ow && near(b, World.HOUSE_S / 2 + 2.5));   /* (owner, 2026-11-16) right up by the house, so delivering to its mailbox doesn't ask */ if (h) { key = "H" + h.id + (save.coins >= C.house); build = () => { P.appendChild(el("b", "", "House")); const b = btn("Buy " + fmt(C.house), () => netSend({ t: "buyhouse", id: h.id }), "go"); b.disabled = save.coins < C.house; P.appendChild(b); }; } }
   if (key === cpKey) return; cpKey = key; P.innerHTML = ""; P.style.display = key ? "flex" : "none"; if (build) build();
 }
 function pieceMesh(q, live) {

@@ -9,7 +9,8 @@ and any rule decided. Use `git log` for the code detail (and for the older Atamu
 - **Fix: placing near Main Street houses (owner).** Aiming in the builder hit the cannon arrows over the houses (and
   other builder-only or hidden things), so pieces went on top of an arrow instead of where you pointed; aiming now
   passes through them, and the arrows no longer show through walls. Holding R with a Main Street house selected spins
-  its cannon (the arrow turns as you hold it).
+  its cannon (the arrow turns as you hold it). A house's Buy (or your cannons) shows only right by its walls, higher
+  on the screen, so delivering to a mailbox nearby doesn't bring it up.
 - **Back at the gate (owner).** Falling off with a parcel in a neighborhood that has a gate brings you back at its
   gate, facing in, instead of the respawn point.
 - **Builder menus; each cannon's facing (owner).** The build tiles are in menus (Ground, Town, Hazards, Shortcuts).
