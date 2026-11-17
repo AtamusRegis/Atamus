@@ -6,6 +6,8 @@ and any rule decided. Use `git log` for the code detail (and for the older Atamu
 
 ## 2026-11-17
 
+- **Faster towns (owner).** Blocks, trees and houses draw in a handful of batches instead of one each, and editing
+  the town no longer rebuilds the water unless blocks changed.
 - **Polish and speed (owner).** Everyone sees your Sprint and Double Jump flip (Glide too, since the fix). The builder's
   inspector shows each piece's neighborhood (Spawn outside every bounds), and a mailbox in Spawn shows red. Critters
   share their materials, aren't drawn off screen and animate less often far away; idle cannons cost nothing; the

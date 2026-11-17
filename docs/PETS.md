@@ -361,7 +361,9 @@ is one 1 m grass block (`SEED`) to stand on, with sky all round. Everything is a
   inside a neighborhood's bounds** (bounds and respawn boxes anywhere): outside, the hologram is red and nothing is
   placed. (owner, 2026-11-17) **Build Outside Bounds** (a button on the builder's bottom row, on or off) lets pieces go
   anywhere: outside, they're Spawn's (placed pieces there show no red, except a mailbox: it gets no deliveries). The
-  inspector shows every piece's Neighborhood (Spawn outside every bounds). A piece belongs to whichever neighborhood's
+  inspector shows every piece's Neighborhood (Spawn outside every bounds). (owner, 2026-11-17) Blocks, trees and houses are drawn instanced (each
+  mesh-and-material once, however many copies; aiming finds the piece by its instance), and the water body is only
+  worked out again when a block changed. A piece belongs to whichever neighborhood's
   bounds it's in now. **A gate (or bound wall) belongs to and unlocks the neighborhood whose
   bounds it stands in** (outside any: the one it was placed in), and **the next neighborhood can't be picked for
   editing until this one (past Main Street) has a gate**. **⚙** opens that neighborhood's panel: name, animal, each rarity's
