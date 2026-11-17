@@ -597,7 +597,7 @@ function stepTransit(dt) {
 }
 let tubeAsk = 0;
 // (owner, 2026-11-14) at the respawn point: facing its arrow, the camera straight behind you looking the same way, 30 degrees down
-function faceSpawn() { me.yaw = World.SPAWN.yaw; cam.yaw = me.yaw + Math.PI; cam.pitch = Math.PI / 6; cam.d = undefined; camAt.y = me.y + 2.4; }
+function faceSpawn() { me.yaw = World.SPAWN.yaw; if (bm) return;   /* (owner, 2026-11-17) building: the builder's camera stays put */ cam.yaw = me.yaw + Math.PI; cam.pitch = Math.PI / 6; cam.d = undefined; camAt.y = me.y + 2.4; }
 function stepMe(dt) {
   const t = now(); musicZone = World.districtAt(me.x, me.z, me.y);
   if (me.stun > 0) { me.stun -= dt; if (me.stun <= 0) { me.stun = 0; me.footT = 2.2; } }
@@ -769,7 +769,8 @@ const endPointer = (e) => {
 canvas.addEventListener("pointermove", (e) => { if (bm && e.pointerType === "mouse") { if (bm.hdrag) handleMove(e.clientX, e.clientY); else if (bm.gdrag) shotMove(e.clientX, e.clientY); else if (bm.adrag) areaMove(e.clientX, e.clientY); else if (bm.paint) paintMove(e.clientX, e.clientY); else buildAim(e.clientX, e.clientY); } });
 addEventListener("pointerup", (e) => { if (bm && e.button === 0) { if (bm.hdrag) handleUp(); if (bm.gdrag) shotUp(); if (bm.adrag) areaEnd(); if (bm.paint) paintEnd(); bm.paint = null; } });
 canvas.addEventListener("pointerup", endPointer); canvas.addEventListener("pointercancel", endPointer);
-canvas.addEventListener("wheel", (e) => { if (bm) { bm.lift = clamp((bm.lift || 0) + (e.deltaY > 0 ? -1 : 1), -100, 100); buildAim(bm.px, bm.py); e.preventDefault(); return; }   // (owner, 2026-11-14) building: the wheel raises or lowers where a piece goes
+canvas.addEventListener("wheel", (e) => { if (bm && (bm.tool === "block" || bm.tool === "erase")) { const s = e.deltaY > 0 ? -1 : 1; if (e.ctrlKey) bm.n = clamp(bm.n + s, 1, World.BLOCK_MAX); else bm.ey = clamp(bm.ey + s, -40, 300); inspector(); buildAim(bm.px, bm.py); e.preventDefault(); return; }   // (owner, 2026-11-17) blocks and the eraser: Ctrl+wheel the size, the wheel the level
+  if (bm) { bm.lift = clamp((bm.lift || 0) + (e.deltaY > 0 ? -1 : 1), -100, 100); buildAim(bm.px, bm.py); e.preventDefault(); return; }   // (owner, 2026-11-14) building: the wheel raises or lowers where a piece goes
   cam.dist = clamp(cam.dist * (e.deltaY > 0 ? 1.1 : 0.9), 5, 26); e.preventDefault(); }, { passive: false });
 addEventListener("contextmenu", (e) => { if (!/^(INPUT|TEXTAREA)$/.test(e.target.tagName)) e.preventDefault(); });   // (owner, 2026-11-13) no browser menu on a right click, anywhere in the game
 addEventListener("keydown", (e) => {
@@ -1126,7 +1127,7 @@ setInterval(() => { if (invites.length) renderInvite(); }, 1000);
 let bm = null;
 const ray = new THREE.Raycaster(), ndc = new THREE.Vector2(), ground = new THREE.Plane(new THREE.Vector3(0, 1, 0), 0), hitV = new THREE.Vector3();
 $("mbuild").onclick = () => (bm ? endBuild() : startBuild());   // (owner, 2026-11-13) admins: the Build button on screen
-function startBuild() { closePanel(); if (!free) setFree(true); if (spawnG) spawnG.visible = true; for (const g of buildOnly) g.visible = true; bm = { pm: { mv: true, sp: World.MOVER.sp, brk: 0, bt: World.MOVER.bt, rs: World.MOVER.rs }, tool: "select", a: ((Math.round((World.SPAWN.yaw * 180) / Math.PI) % 360) + 360) % 360, zone: 0, w: 2, h: 1, d: 2, vw: 20, vh: 4, vd: 20, m: "grass", r: 0, wl: 8, ly: 0, sel: 0, px: innerWidth / 2, py: innerHeight / 2, ghost: null, aim: null }; buildBar(); document.body.classList.add("building"); buildAim(bm.px, bm.py); drawAreas(); }
+function startBuild() { closePanel(); if (!free) setFree(true); if (spawnG) spawnG.visible = true; for (const g of buildOnly) g.visible = true; bm = { n: 1, ey: 0, emode: "type", pm: { mv: true, sp: World.MOVER.sp, brk: 0, bt: World.MOVER.bt, rs: World.MOVER.rs }, tool: "select", a: ((Math.round((World.SPAWN.yaw * 180) / Math.PI) % 360) + 360) % 360, zone: 0, w: 2, h: 1, d: 2, vw: 20, vh: 4, vd: 20, m: "grass", r: 0, wl: 8, ly: 0, sel: 0, px: innerWidth / 2, py: innerHeight / 2, ghost: null, aim: null }; buildBar(); document.body.classList.add("building"); buildAim(bm.px, bm.py); drawAreas(); }
 function endBuild() { if (!bm) return; bm.zd = null; if (spawnG) spawnG.visible = false; for (const g of buildOnly) g.visible = false; if (bm.ghost) scene.remove(bm.ghost); if (bm.pselG) scene.remove(bm.pselG); bm = null; $("buildbar").style.display = "none"; $("zpanel").style.display = "none"; $("insp").style.display = "none"; document.body.classList.remove("insp"); $("pprompt").style.display = "none"; drawAreas(); document.body.classList.remove("building"); setFree(false); }
 const BUILD_TOOLS = [["select", "Select"], ["block", "Block"], ["house", "House"], ["mailbox", "Mailbox"], ["gate", "Gate"], ["wall", "Wall"], ["tree", "Tree"], ["boost", "Boost"], ["start", "Start Line"], ["podium", "Podium"], ["spawn", "Respawn"], ["office", "Post Office"], ["pipe", "Pipe"], ["gust", "Gust"], ["mover", "Platform"], ["cannonlock", "Cannon Unlock"], ["cannonpad", "Cannon Pad"], ["area", "Bounds"], ["void", "Respawn Box"], ["erase", "Erase"]];
 // (owner, 2026-11-16) the tiles in menus: Select and Erase always, the rest under the menu picked
@@ -1168,7 +1169,7 @@ function buildBar() {
 // the tile picked will place with; typed in, picked from lists ----
 const KIND_NAME = Object.fromEntries(BUILD_TOOLS);
 function inspector() {
-  const P = $("insp"); P.innerHTML = ""; const piece = bm && bm.tool === "select" ? hazSel() : bm && bm.tool === "area" ? selArea() : bm && bm.tool === "void" ? selVoid() : null, tool = bm && !piece && ["block", "gust", "mover", "wall", "void"].includes(bm.tool) ? bm.tool : null;
+  const P = $("insp"); P.innerHTML = ""; const piece = bm && bm.tool === "select" ? hazSel() : bm && bm.tool === "area" ? selArea() : bm && bm.tool === "void" ? selVoid() : null, tool = bm && !piece && ["block", "gust", "mover", "wall", "void", "erase"].includes(bm.tool) ? bm.tool : null;
   document.body.classList.toggle("insp", !!(piece || tool)); P.style.display = piece || tool ? "block" : "none"; if (!piece && !tool) return;
   const re = () => { buildBar(); buildAim(bm.px, bm.py); };
   const row = (name, ...nodes) => { const r = el("label", "zrow"); r.appendChild(el("span", "", name)); const g = el("div", "ival"); g.append(...nodes); r.appendChild(g); P.appendChild(r); };
@@ -1204,6 +1205,11 @@ function inspector() {
     return;
   }
   if (tool === "wall") { row("Length", num(bm.wl, 1, 1, BX, (v) => { bm.wl = Math.round(v); re(); })); return; }
+  if (tool === "block" || tool === "erase") {   // (owner, 2026-11-17) size (Ctrl+wheel), level (wheel), height
+    row("Size", num(bm.n, 1, 1, BX, (v) => { bm.n = Math.round(v); re(); })); row("Height", num(bm.h, 1, 1, BX, (v) => { bm.h = Math.round(v); re(); })); row("Level", num(bm.ey, 1, -40, 300, (v) => { bm.ey = Math.round(v); re(); }));
+    if (tool === "erase") row("Erase", pick(bm.emode, [["type", "This material"], ["all", "All blocks"]], (v) => { bm.emode = v; re(); }));
+    if (tool === "block" || bm.emode === "type") row("Material", pick(bm.m === "turbine" && false ? "wood" : bm.m, mats("block"), (v) => { bm.m = v; re(); }));
+    return; }
   if (tool === "void") { row("Size", num(bm.vw, 1, 1, World.AREA_MAX, (v) => { bm.vw = Math.round(v); re(); }, "52px"), num(bm.vh, 1, 1, 200, (v) => { bm.vh = Math.round(v); re(); }, "52px"), num(bm.vd, 1, 1, World.AREA_MAX, (v) => { bm.vd = Math.round(v); re(); }, "52px")); return; }
   row("Size", num(bm.w, 1, 1, BX, (v) => { bm.w = Math.round(v); re(); }, "52px"), num(bm.h, 1, 1, BX, (v) => { bm.h = Math.round(v); re(); }, "52px"), num(bm.d, 1, 1, BX, (v) => { bm.d = Math.round(v); re(); }, "52px"));
   if (tool !== "gust") row("Material", pick(bm.m === "turbine" && tool === "mover" ? "wood" : bm.m, mats(tool), (v) => { bm.m = v; re(); }));
@@ -1260,6 +1266,9 @@ function buildPiece0(a, base) {   // the piece the bar (or the clipboard: base) 
 const moverB = (a, s) => { const r0 = bm.r; bm.r = 0; const t = buildPiece(a, { ...s, k: "mover" }); bm.r = r0; return t; };   // where a platform's B would go, at the pointer
 function buildAim(px, py) {
   if (!bm) return; bm.px = px; bm.py = py; if (bm.ghost) { scene.remove(bm.ghost); bm.ghost = null; }
+  if (bm.tool === "block" || bm.tool === "erase") { const c = sculptAt(px, py), a0 = pieceAt(px, py); bm.aim = a0;   // (owner, 2026-11-17) a box where it'd go (red: erasing, or outside the bounds); the eraser over any other piece: that piece
+    const q0 = bm.tool === "erase" && a0 && a0.id && World.build.find((o) => o.id === a0.id); if (q0 && q0.k !== "block") { const g = hologram(q0, true); scene.add(g); bm.ghost = g; return; }
+    if (!c) return; const q = { k: "block", x: c.x, z: c.z, y: bm.ey, w: bm.n, h: bm.h, d: bm.n, m: bm.tool === "erase" ? "stone" : bm.m, id: 0 }; const g = hologram(q, bm.tool === "erase" || !World.inBounds(q)); scene.add(g); bm.ghost = g; return; }
   const a = pieceAt(px, py); bm.aim = a; if (!a) return; let g = null;
   if (bm.tool === "select") {   // (owner, 2026-11-14) picking a platform's B: a ghost where it would go, and the path there
     const s = hazSel(); if (bm.bPick && s && s.k === "mover") { const t = moverB(a, s); g = hologram({ ...t, id: 0 }); const ln = new THREE.Line(new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(s.x + s.w / 2, s.y + s.h, s.z + s.d / 2), new THREE.Vector3(t.x + s.w / 2, t.y + s.h, t.z + s.d / 2)]), new THREE.LineDashedMaterial({ color: "#ffd84a", dashSize: 0.6, gapSize: 0.4, depthTest: false })); ln.computeLineDistances(); ln.renderOrder = 6; g.add(ln); }
@@ -1295,7 +1304,6 @@ function placeOnce(q) {
   if (!World.inBounds(q)) return;   // (owner, 2026-11-16) only inside a neighborhood's bounds
   const P = bm.paint, [w0, h, d0, cx, cy, cz] = pieceBox(q), odd = q.k !== "block" && q.k !== "office" && q.r % 2, w = odd ? d0 : w0, d = odd ? w0 : d0, bx = { x: cx - w / 2 + 0.01, z: cz - d / 2 + 0.01, y: cy - h / 2, w: w - 0.02, h, d: d - 0.02 };   // what each piece takes up
   if (P.done.some((o) => overlaps(o, bx))) return; P.done.push(bx);
-  if (q.k === "block" && P.pend) { P.pend.push(q); const g = hologram({ ...q, id: 0 }); P.ghosts.push(g); scene.add(g); sfx("tick"); return; }   // (owner, 2026-11-17) blocks: shown now, placed (merged) on release
   // (owner, 2026-11-14) placed inside a neighborhood's bounds: that's the neighborhood being edited now (gates and walls keep theirs)
   if (q.k !== "gate" && q.k !== "wall") { const ar = World.build.find((o) => o.k === "area" && cx >= o.x && cx < o.x + o.w && cz >= o.z && cz < o.z + o.d); if (ar && ar.zone !== bm.zone && ar.zone <= zoneReach()) { bm.zone = ar.zone; bm.zd = null; bm.shotPick = undefined; buildBar(); drawAreas(); if ($("zpanel").style.display === "block") zonePanel(); } }
   // (owner, 2026-11-14) a moving platform: straight on to picking where it goes
@@ -1315,67 +1323,90 @@ function paintStart(px, py) {
     if (bm.bPick && s && s.k === "mover" && a) { const t = moverB(a, s); doSet(s, { ...s, bx: t.x - s.x, by: t.y - s.y, bz: t.z - s.z }); bm.bPick = false; sfx("pad"); buildBar(); buildAim(px, py); return; }
     const q = a && a.id && World.build.find((o) => o.id === a.id && o.k !== "area"); bm.hsel = q ? q.id : 0; bm.bPick = false; if (q) sfx("tick"); buildBar(); drawHazSel(); return;
   }
+  if (bm.tool === "block" || bm.tool === "erase") { buildAim(px, py); const a0 = bm.aim, q0 = bm.tool === "erase" && a0 && a0.id && World.build.find((o) => o.id === a0.id);
+    if (q0 && q0.k !== "block") { bm.paint = { erase: new Set() }; paintMove(px, py); return; }   // the eraser on other pieces: as before
+    const c = sculptAt(px, py); if (!c) return; bm.paint = { sculpt: true, ax: c.x, az: c.z, cells: new Set(), last: null, ghosts: [] }; sculptCell(px, py); return; }
   buildAim(px, py); const a = bm.aim; if (!a) return;
-  if (bm.tool === "erase") { bm.paint = { erase: new Set(), cut: new Map(), ghosts: [] }; paintMove(px, py); return; }
+  if (bm.tool === "erase") { bm.paint = { erase: new Set() }; paintMove(px, py); return; }
   if (bm.tool === "copy" || bm.tool === "cut") { copyBuild(bm.tool === "cut"); return; }
   if (bm.tool === "paste" && !bm.clip) return;
-  const q = buildPiece(a, bm.tool === "paste" ? bm.clip : null); bm.paint = { y: q.y, done: [], pend: [], ghosts: [] }; placeOnce(q);
+  const q = buildPiece(a, bm.tool === "paste" ? bm.clip : null); bm.paint = { y: q.y, done: [] }; placeOnce(q);
 }
 function paintMove(px, py) {
   const P = bm.paint; buildAim(px, py);
-  if (P.erase) { const q = aimed(); if (q && q.k === "block") { eraseCells(q, bm.aim); return; } if (q && !P.erase.has(q.id)) { P.erase.add(q.id); doDel(q); sfx("pop"); } return; }
+  if (P.sculpt) { sculptCell(px, py); return; }
+  if (P.erase) { const q = aimed(); if (q && q.k !== "block" && !P.erase.has(q.id)) { P.erase.add(q.id); doDel(q); sfx("pop"); } return; }
   const q = paintPiece(px, py); if (!q) return; placeOnce(q);
   if (bm.ghost) scene.remove(bm.ghost); bm.ghost = hologram({ ...q, id: 0 }, !World.inBounds(q)); scene.add(bm.ghost);
 }
 function buildTap(px, py) {
   if (bm.tool === "area") return;
   buildAim(px, py); const a = bm.aim; if (!a) return;
-  if (bm.tool === "erase") { const q = aimed(); if (q && q.k === "block") { bm.paint = { erase: new Set(), cut: new Map(), ghosts: [] }; eraseCells(q, a); paintEnd(); bm.paint = null; return; } if (q) { doDel(q); sfx("pop"); } return; }
+  if (bm.tool === "erase" || bm.tool === "block") { paintStart(px, py); if (bm.paint) paintEnd(); bm.paint = null; return; }
   if (bm.tool === "copy" || bm.tool === "cut") { copyBuild(bm.tool === "cut"); return; }
   if (bm.tool === "paste") { if (bm.clip) { const q = buildPiece(a, bm.clip); if (World.inBounds(q)) { doAdd(q); sfx("pad"); } } return; }
-  { const q = buildPiece(a); if (!World.inBounds(q)) return; if (q.k === "block") { commitBlocks([q]); sfx("pad"); return; } doAdd(q); sfx("pad"); }
+  { const q = buildPiece(a); if (!World.inBounds(q)) return; doAdd(q); sfx("pad"); }
 }
-// ---- (owner, 2026-11-17) blocks merge: blocks of the same material, height and level that touch become as few
-// rectangles as fit (a meter grid; no side over BLOCK_MAX), and the eraser cuts its own footprint (the Block tool's W x L,
-// the block's full height) out of a block instead of taking it all ----
-const layerKey = (q) => q.m + "|" + q.y + "|" + q.h;
-function cellsOf(q, set) { for (let x = q.x; x < q.x + q.w; x++) for (let z = q.z; z < q.z + q.d; z++) set.add(x + "," + z); }
-function rects(cells) {   // fewest rectangles we can find: rows first or columns first, whichever gives fewer
-  const run = (swap) => { const left = new Set(cells), out = [], K = (a, b) => (swap ? b + "," + a : a + "," + b), M = World.BLOCK_MAX;
-    const pts = [...cells].map((c) => c.split(",").map(Number)).map(([x, z]) => (swap ? [z, x] : [x, z])).sort((p, q) => p[1] - q[1] || p[0] - q[0]);
-    for (const [a, b] of pts) { if (!left.has(K(a, b))) continue; let w = 1; while (w < M && left.has(K(a + w, b))) w++; let d = 1;
-      while (d < M) { let ok = true; for (let i = 0; i < w; i++) if (!left.has(K(a + i, b + d))) { ok = false; break; } if (!ok) break; d++; }
-      for (let i = 0; i < w; i++) for (let j = 0; j < d; j++) left.delete(K(a + i, b + j)); out.push(swap ? { x: b, z: a, w: d, d: w } : { x: a, z: b, w, d }); }
+// ---- (owner, 2026-11-17) sculpting with blocks. The Block tool and the eraser work on a level (the wheel) with a square
+// size (Ctrl+wheel: 1 x 1, 2 x 2...) and the inspector's height: click for one, hold and drag to draw. On release a
+// drawn outline that closes is filled in; then every block of that material it touches (and theirs) is redone as the
+// fewest boxes we find. The eraser cuts its boxes out of the blocks there (of the chosen material, or of all) and redoes
+// what's left the same way. ----
+function sculptAt(px, py) {   // the square under the pointer on the level, lined up with the drag's start
+  ndc.set((px / innerWidth) * 2 - 1, -(py / innerHeight) * 2 + 1); ray.setFromCamera(ndc, camera); const v = new THREE.Vector3();
+  if (!ray.ray.intersectPlane(new THREE.Plane(new THREE.Vector3(0, 1, 0), -bm.ey), v)) return null; const n = bm.n, P = bm.paint;
+  if (P && P.sculpt) { const i = Math.round((v.x - n / 2 - P.ax) / n), j = Math.round((v.z - n / 2 - P.az) / n); return { i, j, x: P.ax + i * n, z: P.az + j * n }; }
+  return { i: 0, j: 0, x: Math.round(v.x - n / 2), z: Math.round(v.z - n / 2) };
+}
+function sculptCell(px, py) {
+  const P = bm.paint, c = sculptAt(px, py); if (!c) return; const from = P.last || [c.i, c.j]; let [i0, j0] = from; const di = Math.abs(c.i - i0), dj = Math.abs(c.j - j0), si = c.i > i0 ? 1 : -1, sj = c.j > j0 ? 1 : -1; let e = di - dj;
+  for (let k = 0; k < 400; k++) { const key = i0 + "," + j0; if (!P.cells.has(key)) { P.cells.add(key); const q = { k: "block", x: P.ax + i0 * bm.n, z: P.az + j0 * bm.n, y: bm.ey, w: bm.n, h: bm.h, d: bm.n, m: bm.m, id: 0 }; const g = hologram(q, bm.tool === "erase" || !World.inBounds(q)); P.ghosts.push(g); scene.add(g); sfx("tick"); }
+    if (i0 === c.i && j0 === c.j) break; const e2 = 2 * e; if (e2 > -dj) { e -= dj; i0 += si; } if (e2 < di) { e += di; j0 += sj; } }
+  P.last = [c.i, c.j];
+}
+function filled(cells) {   // the drawn squares plus whatever they close in
+  const pts = [...cells].map((k) => k.split(",").map(Number)); if (pts.length < 4) return cells;
+  const i0 = Math.min(...pts.map((p) => p[0])) - 1, i1 = Math.max(...pts.map((p) => p[0])) + 1, j0 = Math.min(...pts.map((p) => p[1])) - 1, j1 = Math.max(...pts.map((p) => p[1])) + 1;
+  if ((i1 - i0 + 1) * (j1 - j0 + 1) > 40000) return cells; const out = new Set(), st = [[i0, j0]]; out.add(i0 + "," + j0);
+  while (st.length) { const [i, j] = st.pop(); for (const [a, b] of [[i + 1, j], [i - 1, j], [i, j + 1], [i, j - 1]]) { const k = a + "," + b; if (a < i0 || a > i1 || b < j0 || b > j1 || out.has(k) || cells.has(k)) continue; out.add(k); st.push([a, b]); } }
+  const all = new Set(cells); for (let i = i0; i <= i1; i++) for (let j = j0; j <= j1; j++) { const k = i + "," + j; if (!out.has(k)) all.add(k); } return all;
+}
+const VK = (x, y, z) => x + "," + y + "," + z;
+function boxesOf(vox) {   // the fewest boxes we can find for a set of meter cubes: greedy, two ways round, the better one
+  const run = (zx) => { const left = new Set(vox), out = [], M = World.BLOCK_MAX, has = (a, y, b) => left.has(zx ? VK(b, y, a) : VK(a, y, b));
+    const pts = [...vox].map((k) => k.split(",").map(Number)).map(([x, y, z]) => (zx ? [z, y, x] : [x, y, z])).sort((p, q) => p[1] - q[1] || p[2] - q[2] || p[0] - q[0]);
+    for (const [a, y, b] of pts) { if (!has(a, y, b)) continue; let w = 1; while (w < M && has(a + w, y, b)) w++; let d = 1;
+      const row = (bb, yy) => { for (let i = 0; i < w; i++) if (!has(a + i, yy, bb)) return false; return true; }; while (d < M && row(b + d, y)) d++; let h = 1;
+      const slab = (yy) => { for (let j = 0; j < d; j++) if (!row(b + j, yy)) return false; return true; }; while (h < M && slab(y + h)) h++;
+      for (let i = 0; i < w; i++) for (let j = 0; j < d; j++) for (let k = 0; k < h; k++) left.delete(zx ? VK(b + j, y + k, a + i) : VK(a + i, y + k, b + j));
+      out.push(zx ? { x: b, y, z: a, w: d, h, d: w } : { x: a, y, z: b, w, h, d }); }
     return out; };
   const r1 = run(false), r2 = run(true); return r2.length < r1.length ? r2 : r1;
 }
-function commitBlocks(news) {
-  const groups = new Map(); for (const q of news) { const k = layerKey(q); if (!groups.has(k)) groups.set(k, []); groups.get(k).push(q); }
-  const dels = [], adds = [];
-  for (const [k, list] of groups) {
-    const cells = new Set(); for (const q of list) cellsOf(q, cells); const same = World.build.filter((o) => o.k === "block" && layerKey(o) === k), took = new Set();
-    for (let grew = true; grew; ) { grew = false; for (const o of same) { if (took.has(o.id)) continue;   // the blocks of this layer it touches (or overlaps), and theirs, and so on
-      let hit = false; for (let x = o.x - 1; x <= o.x + o.w && !hit; x++) for (let z = o.z - 1; z <= o.z + o.d; z++) { const edge = (x === o.x - 1 || x === o.x + o.w) && (z === o.z - 1 || z === o.z + o.d); if (!edge && cells.has(x + "," + z)) { hit = true; break; } }
-      if (hit) { took.add(o.id); cellsOf(o, cells); dels.push(o); grew = true; } } }
-    const { m, y, h } = list[0]; for (const r of rects(cells)) adds.push({ k: "block", ...r, y, h, m });
+function voxOf(q, set) { for (let x = q.x; x < q.x + q.w; x++) for (let y = q.y; y < q.y + q.h; y++) for (let z = q.z; z < q.z + q.d; z++) set.add(VK(x, y, z)); }
+const vol = (q) => q.w * q.h * q.d, VMAX = 400000;
+function touches(q, vox, bb) {   // does block q touch (share a face with, or overlap) any of these cubes?
+  for (let x = Math.max(q.x - 1, bb[0]); x <= Math.min(q.x + q.w, bb[3]); x++) for (let y = Math.max(q.y - 1, bb[1]); y <= Math.min(q.y + q.h, bb[4]); y++) for (let z = Math.max(q.z - 1, bb[2]); z <= Math.min(q.z + q.d, bb[5]); z++) {
+    const ox = x < q.x || x >= q.x + q.w, oy = y < q.y || y >= q.y + q.h, oz = z < q.z || z >= q.z + q.d; if (ox + oy + oz <= 1 && vox.has(VK(x, y, z))) return true; }
+  return false;
+}
+const bbOf = (vox) => { const b = [Infinity, Infinity, Infinity, -Infinity, -Infinity, -Infinity]; for (const k of vox) { const [x, y, z] = k.split(",").map(Number); b[0] = Math.min(b[0], x); b[1] = Math.min(b[1], y); b[2] = Math.min(b[2], z); b[3] = Math.max(b[3], x); b[4] = Math.max(b[4], y); b[5] = Math.max(b[5], z); } return b; };
+function sculptEnd() {
+  const P = bm.paint; for (const g of P.ghosts) scene.remove(g); const n = bm.n, cells = bm.tool === "block" ? filled(P.cells) : P.cells, boxes = [];
+  for (const k of cells) { const [i, j] = k.split(",").map(Number); const q = { k: "block", x: P.ax + i * n, z: P.az + j * n, y: bm.ey, w: n, h: bm.h, d: n, m: bm.m }; if (bm.tool === "erase" || World.inBounds(q)) boxes.push(q); }
+  if (!boxes.length) return;
+  if (bm.tool === "block") {   // add them, then redo everything of that material they touch
+    const vox = new Set(); for (const q of boxes) voxOf(q, vox); const same = World.build.filter((o) => o.k === "block" && o.m === bm.m), took = new Set(), dels = [];
+    for (let grew = true; grew && vox.size < VMAX; ) { grew = false; const bb = bbOf(vox); for (const o of same) { if (took.has(o.id) || vox.size + vol(o) > VMAX) continue; if (touches(o, vox, bb)) { took.add(o.id); voxOf(o, vox); dels.push(o); grew = true; } } }
+    const adds = boxesOf(vox).map((r) => ({ k: "block", ...r, m: bm.m })); if (!dels.length && adds.length >= boxes.length) { for (const q of boxes) doAdd(q); } else doSwap(dels, adds); sfx("pad"); return;
   }
-  if (!dels.length && adds.length === news.length) { for (const q of adds) doAdd(q); return; }
-  doSwap(dels, adds);
+  const cut = (o) => boxes.some((b) => o.x < b.x + b.w && b.x < o.x + o.w && o.z < b.z + b.d && b.z < o.z + o.d && o.y < b.y + b.h && b.y < o.y + o.h);   // the eraser: cut its boxes out
+  const hit = World.build.filter((o) => o.k === "block" && (bm.emode === "all" || o.m === bm.m) && cut(o) && vol(o) <= VMAX); if (!hit.length) return; const adds = [];
+  for (const o of hit) { const vox = new Set(); voxOf(o, vox); for (const b of boxes) for (let x = Math.max(o.x, b.x); x < Math.min(o.x + o.w, b.x + b.w); x++) for (let y = Math.max(o.y, b.y); y < Math.min(o.y + o.h, b.y + b.h); y++) for (let z = Math.max(o.z, b.z); z < Math.min(o.z + o.d, b.z + b.d); z++) vox.delete(VK(x, y, z));
+    for (const r of boxesOf(vox)) adds.push({ ...strip(o), ...r }); }
+  doSwap(hit, adds); sfx("pop");
 }
-function eraseCells(q, a) {   // mark the eraser's footprint out of block q (shown red), cut on release
-  const P = bm.paint, w = bm.w, d = bm.d, x0 = Math.round(a.p.x - w / 2), z0 = Math.round(a.p.z - d / 2); let cut = P.cut.get(q.id); if (!cut) { cut = new Set(); P.cut.set(q.id, cut); }
-  let n = 0; for (let x = Math.max(q.x, x0); x < Math.min(q.x + q.w, x0 + w); x++) for (let z = Math.max(q.z, z0); z < Math.min(q.z + q.d, z0 + d); z++) { const c = x + "," + z; if (cut.has(c)) continue; cut.add(c); n++;
-    const g = hologram({ k: "block", x, z, y: q.y, w: 1, h: q.h, d: 1, m: q.m, id: 0 }, true); P.ghosts.push(g); scene.add(g); }
-  if (n) sfx("pop");
-}
-function paintEnd() {
-  const P = bm.paint; for (const g of P.ghosts || []) scene.remove(g);
-  if (P.pend && P.pend.length) commitBlocks(P.pend);
-  if (P.cut && P.cut.size) { const dels = [], adds = [];
-    for (const [id, cut] of P.cut) { const q = World.build.find((o) => o.id === id); if (!q) continue; const cells = new Set(); cellsOf(q, cells); for (const c of cut) cells.delete(c);
-      dels.push(q); for (const r of rects(cells)) adds.push({ ...strip(q), ...r }); }
-    if (dels.length) doSwap(dels, adds); }
-}
+function paintEnd() { const P = bm.paint; if (P.sculpt) sculptEnd(); }
 // (owner, 2026-11-13) a neighborhood's bounds: with Bounds, a left drag on open space draws new ones for the neighborhood
 // you're editing; clicking bounds picks them, dragging inside moves them and dragging an edge resizes that side. What's
 // inside belongs to that neighborhood (the smallest bounds win where they overlap). Seen only while building.
@@ -1638,7 +1669,7 @@ function onNet(m) {
     case "stun": me.stun = m.s; if (me.transit && me.transit.k !== "pipe") me.transit = null; knockedOff(); sfx("stun"); cam.shake = Math.max(cam.shake, 0.5); flash(m.why === "kick" ? "#ffffff" : "#e5534b"); if (m.why === "dog") sfx("growl"); break;
     case "knock": me.px = m.x; me.pz = m.z; me.vy = m.y; me.ground = false; sfx("kick"); cam.shake = Math.max(cam.shake, 0.5); break;
     case "tp": { const sp0 = hyp(me.vx, me.vz); if (m.why === "home" || m.why === "balloon") faceSpawn();   // (owner, 2026-11-13) facing the way the respawn point is turned
-      me.x = m.x; me.y = m.y; me.z = m.z; me.vx = me.vz = me.vy = me.px = me.pz = 0; me.transit = null; me.ground = true; me.armed = false; me.foot = false; camAt.y = m.y + 2; if (m.why === "fall") { flash("#ffffff"); sfx("pop"); } else if (m.why === "home") sfx("pad"); else if (m.why === "gate") { me.yaw = m.yaw; cam.yaw = me.yaw + Math.PI; cam.pitch = Math.PI / 6; flash("#ffffff"); sfx("pad"); }   /* (owner, 2026-11-16) back at the neighborhood's gate, facing in */ else if (m.why === "tube") { me.yaw = m.yaw; cam.yaw = me.yaw - Math.PI; me.vx = Math.sin(me.yaw) * sp0; me.vz = Math.cos(me.yaw) * sp0; sfx("pipe"); emit(me.x, me.y + 1, me.z, 18, { colors: ["#5fb56b", "#ffffff"], speed: 4, up: 3, life: 0.5 }); } else { flash("#bfe6ff"); sfx("pad"); }   /* tube: (owner, 2026-11-13) out of a pipe shortcut, keeping your speed; home: (owner, 2026-11-11) the run's over, back at the post office */ sendPos(true); break; }
+      me.x = m.x; me.y = m.y; me.z = m.z; me.vx = me.vz = me.vy = me.px = me.pz = 0; me.transit = null; me.ground = true; me.armed = false; me.foot = false; camAt.y = m.y + 2; if (m.why === "fall") { flash("#ffffff"); sfx("pop"); } else if (m.why === "home") sfx("pad"); else if (m.why === "gate") { me.yaw = m.yaw; if (!bm) { cam.yaw = me.yaw + Math.PI; cam.pitch = Math.PI / 6; } flash("#ffffff"); sfx("pad"); }   /* (owner, 2026-11-16) back at the neighborhood's gate, facing in */ else if (m.why === "tube") { me.yaw = m.yaw; cam.yaw = me.yaw - Math.PI; me.vx = Math.sin(me.yaw) * sp0; me.vz = Math.cos(me.yaw) * sp0; sfx("pipe"); emit(me.x, me.y + 1, me.z, 18, { colors: ["#5fb56b", "#ffffff"], speed: 4, up: 3, life: 0.5 }); } else { flash("#bfe6ff"); sfx("pad"); }   /* tube: (owner, 2026-11-13) out of a pipe shortcut, keeping your speed; home: (owner, 2026-11-11) the run's over, back at the post office */ sendPos(true); break; }
     case "piped": me.transit = { k: "pipe", until: now() + m.s, x: m.x, y: m.y, z: m.z }; me.hidden = true; me.vx = me.vz = me.px = me.pz = 0; sfx("pipe"); if (m.goose) setTimeout(() => sfx("honk"), 600); break;
     case "rock": { const r = new THREE.Mesh(new THREE.DodecahedronGeometry(1.3), mat("#8a8278")); r.position.set(m.x, m.y + 22, m.z); scene.add(r); fallers.push({ g: r, y0: m.y + 22, y1: m.y + 0.8, t: 0, s: m.s });
       groundMark(m.x, m.y, m.z, World.ROCK.r, m.s, "#1d232a", (k) => { if (hyp(k.x - me.x, k.z - me.z) < 60) sfx("rock"); emit(k.x, k.y + 0.3, k.z, 22, { colors: ["#8a8278", "#c9bfae"], speed: 6, up: 4, life: 0.7 }); if (hyp(k.x - me.x, k.z - me.z) < 14) cam.shake = Math.max(cam.shake, 0.4); }); break; }
