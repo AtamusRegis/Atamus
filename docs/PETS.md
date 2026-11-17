@@ -315,12 +315,16 @@ is one 1 m grass block (`SEED`) to stand on, with sky all round. Everything is a
   (− name +) and ⚙, then (owner, 2026-11-14) W / H / L typed into one box side by side and the material for a block,
   L for a wall (W / L for bounds). (owner, 2026-11-14) **A piece placed inside a neighborhood's bounds makes that the
   neighborhood you're editing** (gates and walls don't switch it). **The ⚙ panel opens on the
-  right of the screen.** (owner, 2026-11-13) Bounds are placed for the neighborhood you're editing; (owner, 2026-11-17) **Blocks:** placed on
-  the ground (level 0) unless aimed at something to sit on; holding the button keeps placing on the level the press
-  started at. **Blocks merge:** on release, the blocks placed and any blocks of the same material, height and level
-  they touch (or overlap) become as few rectangles as fit (no side over 60 m), so four 1 x 1s become one 2 x 2. **The
-  eraser on a block** cuts out its own footprint (the Block tool's W x L, the block's full height; drag to cut more,
-  shown red, cut on release) and leaves the rest as rectangles. Merging and cutting are one undo each. (owner, 2026-11-16) **pieces go only
+  right of the screen.** (owner, 2026-11-13) Bounds are placed for the neighborhood you're editing; (owner, 2026-11-17) **Sculpting with blocks.** The Block tool
+  places a square box: **Ctrl+wheel sets its size** (1 x 1, 2 x 2, 3 x 3...), **the wheel sets its level**, the
+  inspector its Height and Material (and shows Size and Level too); it shows where it'll go (red outside bounds). Click
+  for one, or hold and drag to draw squares in a row; on release a drawn outline that closes is **filled in**, and the
+  new blocks plus every block of the same material they touch (and the ones those touch) are redone as **the fewest
+  boxes** found (any shape, any heights: a 3 x 3 x 3 with a corner cut is a 3 x 3 x 2, a 3 x 2 and a 2 x 1). **The
+  eraser** works the same way (size, level, height; click or drag, shown red) and cuts its boxes out of the blocks
+  there, **this material** (the inspector's) or **all blocks**, redoing what's left as fewest boxes; over any other
+  piece it erases that piece, as before. Each placing or cutting is one undo. While building, a respawn doesn't turn
+  the camera. (owner, 2026-11-16) **pieces go only
   inside a neighborhood's bounds** (bounds and respawn boxes anywhere): outside, the hologram is red and nothing is
   placed. A piece belongs to whichever neighborhood's bounds it's in now: move the bounds off it and it shows red while
   building (until some bounds cover it again). **A gate (or bound wall) belongs to and unlocks the neighborhood whose

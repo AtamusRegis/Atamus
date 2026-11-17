@@ -6,6 +6,9 @@ and any rule decided. Use `git log` for the code detail (and for the older Atamu
 
 ## 2026-11-17
 
+- **Sculpting with blocks (owner).** Blocks and the eraser use a square size (Ctrl+wheel), a level (wheel) and a height;
+  drawn outlines fill in; same-material blocks that touch are redone as the fewest boxes; the eraser carves (this
+  material or all blocks) and erases other pieces as before. Respawning no longer swings the builder's camera.
 - **Blocks merge; the eraser cuts (owner).** Blocks of the same material, height and level that touch merge into as few
   rectangles as fit when you let go; the eraser cuts its footprint out of a block instead of removing it all. Water
   overlapped by another block isn't drawn there.
