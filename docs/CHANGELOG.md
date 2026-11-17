@@ -9,6 +9,8 @@ and any rule decided. Use `git log` for the code detail (and for the older Atamu
 - **Cannons (owner).** The builder places Cannon Unlocks and Cannon Pads; couriers unlock a neighborhood's cannon with
   Aura, buy a Main Street house, and put any unlocked cannon in its place to fire themselves to that neighborhood's pad
   (a sparkling fuse, a bubbly BOOM). The owner sets which way all cannons face.
+- **Aura Farming on the podiums (owner).** The podiums are plain marble with no mounts on them; stand on a free one to
+  hold it and earn Aura while you're there, striking poses on your mount.
 
 ## 2026-11-14
 

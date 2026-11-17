@@ -180,10 +180,11 @@ A parcel that breaks or is lost is gone; the conveyor always has the next one. *
 - (owner, 2026-11-12) **Aura** (a shiny purple orb) is the money: it replaced coins one for one (the saved field is
   still `coins`). Deliveries, gifts, geese and everything else that paid coins pay Aura; the farther the area, the more
   a delivery pays (its tier). Aura buys courier upgrades, carry levels on a mount, and trails.
-- **The podiums:** three by the post office (gold, silver, bronze). Each server's three best mounts stand on them, with
-  their courier's name; each courier's best three can stand. Best: rarity, then Shiny, then the farther area, then its
-  Aura levels. A better mount takes a podium from a lesser one; a tie keeps the one already standing; a courier leaving
-  frees theirs. Every 10 s each podium pays its courier 2 x 2^rarity x (3 if Shiny) x (1 + 0.5 x its area) Aura.
+- (owner, 2026-11-16) **The podiums: Aura Farming.** Three plain marble podiums (tallest first). Stand on a free one, on
+  your mount or on foot, and it's yours while you stay on it (stepping off or being kicked off frees it; one at a time).
+  Every 10 s held pays you 2 x 2^rarity x (3 if Shiny) x (1 + 0.5 x its area) Aura, by the mount you ride. While you
+  hold one, standing still on your mount, your courier strikes a new pose every few seconds (arms up, a flex, a wave,
+  standing up surfing, a point) for everyone to see.
 
 ## Merging and skins
 
@@ -228,8 +229,8 @@ is one 1 m grass block (`SEED`) to stand on, with sky all round. Everything is a
     down (also after falling below the town). (owner, 2026-11-13) It turns all the way round:
     holding R turns it (a full turn in 3 s), ⟳ steps it 45 degrees; only builders see it (in build mode).
     One at a time; none: on the first block.
-  - **Podium:** up to three (gold, silver, bronze in the order placed; 1.6 / 1.1 / 0.7 m high): the server's best mounts
-    stand on them (see Aura and the podiums).
+  - **Podium:** up to three (marble; 1.6 / 1.1 / 0.7 m high in the order placed): couriers stand on them to Aura Farm
+    (see Aura and the podiums).
   - **Start Line:** a purple chevron strip 8 m across, 2 m deep: crossing one switches on your mount's own speed until
     you're back at the post office (before it, every mount goes 12 m/s). No start lines: always its own speed.
   - **Boost:** a yellow chevron pad: x1.6 speed for a moment, the way it points.
@@ -458,6 +459,8 @@ Courier's rules.
 
 ## Rejected / removed
 
+- (owner, 2026-11-16) The podiums showing the server's three best mounts (gold, silver, bronze) and paying their
+  couriers: now couriers stand on them to Aura Farm.
 - (owner, 2026-11-14) Mount Jump and Grip levels (by rarity and area) and their bars; the Aura Boost (speed) levels
   bought on a mount.
 

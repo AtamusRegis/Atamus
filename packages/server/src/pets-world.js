@@ -151,11 +151,9 @@ export function mountStats(m, zone) {   // m: { sp, r (rarity), spd }; zone: whe
 // (owner, 2026-11-12) and trails bought with Aura (d.trails)
 export const TRAILS = [{ k: "cloud", name: "Cloud Trail", zones: 5 }, { k: "comet", name: "Comet Trail", zones: 10 }, { k: "spark", name: "Spark Trail", cost: 2500 }, { k: "bubble", name: "Bubble Trail", cost: 6000 }, { k: "heart", name: "Heart Trail", cost: 15000 }, { k: "flame", name: "Flame Trail", cost: 40000 }];
 export const trailsFor = (d) => TRAILS.filter((t) => (t.zones ? openFor(d) >= t.zones : (d.trails || []).includes(t.k))).map((t) => t.k);
-// (owner, 2026-11-12) podiums: the three best mounts of the couriers in a server stand on the three podiums by the post
-// office (each courier's best three can stand); a rarer one takes a podium from a lesser one. Each pays its courier Aura
-// every PODIUM.every s while it stands there, more for rarer, Shiny and farther animals
-export const PODIUM = { every: 10, spots: [] };   // (owner, 2026-11-13) the spots are placed with the zone builder (gold, silver, bronze in that order)
-export const podiumScore = (m) => clamp(m.r | 0, 0, 4) * 100 + (m.va ? 50 : 0) + homeZone(m.sp) * 10 + (m.spd | 0) + (m.cap | 0);
+// (owner, 2026-11-16) podiums: marble, for Aura Farming; a courier standing on a free one holds it till they step off
+// (owner, 2026-11-16) every PODIUM.every s a courier holds a podium, by the mount they ride: more for rarer, Shiny and farther animals
+export const PODIUM = { every: 10, spots: [] };   // (owner, 2026-11-13) the spots are placed with the zone builder (tallest first)
 export const podiumPay = (m) => Math.round(2 * Math.pow(2, clamp(m.r | 0, 0, 4)) * (m.va ? 3 : 1) * (1 + 0.5 * homeZone(m.sp)));
 // (owner, 2026-11-11) no eggs any more: parcels drop mounts. Eggs someone still had became a Dog each (a Basic Egg a
 // Common one, a Rare Egg a Rare one, a Legendary Egg a Legendary one)
