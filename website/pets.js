@@ -5,7 +5,7 @@
 // and asks. Phone first: a thumb joystick, drag to look, pinch to zoom, big buttons.
 import * as THREE from "./vendor/three.module.min.js";
 import { svg, fillIcons, ICON } from "./icons.js?v=7";
-import * as World from "./pets-world.js?v=1794652389";
+import * as World from "./pets-world.js?v=1794652391";
 
 const $ = (id) => document.getElementById(id);
 const { TAU, clamp, hyp, MOUNTS, TIERS, RARITY, RARITY_C, MODS, UPGRADES } = World;
@@ -617,17 +617,21 @@ function stepMe(dt) {
   if (World.inSafeZone(me.x, me.z, me.y)) me.started = false; else if (World.onStart(me.x, me.z, me.y)) me.started = true;
   const real = !World.starts.length || me.started; if (real && !me.real && !me.foot) { sfx("boost"); cam.shake = Math.max(cam.shake, 0.15); emit(me.x, me.y + 1, me.z, 24, { colors: ["#c77dff", "#ffffff", "#e2b8ff"], speed: 4, up: 2, life: 0.6, grav: 0, size: 0.2 }); } me.real = real;
   let speed = me.foot ? 5.5 : (real ? st.speed : World.BASE_SPEED) * (bag.length ? 1 : World.EMPTY_FAST) * mud   // (owner, 2026-11-11) a parcel weighs you down: empty-handed you ride back much faster
-    * (me.boost > 0 ? 1.6 : 1) * (me.sprint > 0 && !me.foot ? World.ABILITIES.sprint.mul : 1) * (me.gliding ? World.ABILITIES.glide.mul : 1);   // (owner, 2026-11-16) Sprint, Glide
+    * (me.boost > 0 ? 1.6 : 1) * (me.sprint > 0 && !me.foot ? World.ABILITIES.sprint.mul : 1) * (me.gliding ? World.ABILITIES.glide.mul : 1) * (me.swim ? World.SWIM.mul : 1);   // (owner, 2026-11-16) Sprint, Glide, swimming
   if (me.sprint > 0) { me.sprint -= dt; if (Math.random() < 0.6) emit(me.x, me.y + 0.6, me.z, 1, { colors: ["#ffd84a", "#ffffff"], speed: 1, up: 0.5, life: 0.35, grav: 0, size: 0.18 }); }
   const grip = Math.max(70, speed * 7), steer = hyp(mx, mz) > 0.08, acc = (me.ground ? (kind === "ice" ? grip * World.ICE_GRIP : grip) : steer ? Math.max(12, speed * 1.1) : 0) * dt,   /* (owner, 2026-11-13) a jump keeps the speed it left the ground with: no stopping in the air, only a gentle steer */   /* (owner, 2026-11-12) no drifting: quick to speed up and stop however fast it goes */   /* (owner, 2026-11-12) ice: hard to start, turn and stop */ tvx = mx * speed, tvz = mz * speed;
-  if (me.gliding) { const ga = 18 * dt; me.vx += clamp(tvx - me.vx, -ga, ga); me.vz += clamp(tvz - me.vz, -ga, ga); } else
+  if (me.gliding || me.swim) { const ga = (me.swim ? 14 : 18) * dt; me.vx += clamp(tvx - me.vx, -ga, ga); me.vz += clamp(tvz - me.vz, -ga, ga); } else
   me.vx += clamp(tvx - me.vx, -acc, acc); me.vz += clamp(tvz - me.vz, -acc, acc);
   me.moving = hyp(me.vx, me.vz) > 0.6;
   if (hyp(mx, mz) > 0.08) me.yaw = angDiff(me.yaw + angDiff(Math.atan2(mx, mz), me.yaw) * Math.min(1, 12 * dt), 0);   // kept within a turn (owner, 2026-11-11: others saw you sideways)
   // jumping, gliding, falling
+  // (owner, 2026-11-16) swimming: in a water block you sink gently, rise while jump's held, and a jump near the top leaps out
+  const wt = !me.transit && World.waterAt(me.x, me.z, me.y + 0.7); me.swim = !!wt;
+  if (wt && jumpTap) { jumpTap = false; if (me.y + 1.6 > wt.y1) { me.vy = st.jump * World.SWIM.out; me.ground = false; sfx("jump"); emit(me.x, wt.y1, me.z, 14, { colors: ["#bfe6ff", "#ffffff"], speed: 3, up: 3, life: 0.5, grav: 8, size: 0.18 }); } }
   if (jumpTap) { jumpTap = false; tryJump(); }
-  me.vy -= GRAV * dt;
-  me.gliding = !me.ground && !me.foot && !me.transit && jumpHeld && me.vy < 0 && st.ab === "glide";   // (owner, 2026-11-16) Glide: hold jump while falling
+  if (wt) { const tv = jumpHeld ? World.SWIM.up : -World.SWIM.sink; me.vy += clamp(tv - me.vy, -14 * dt, 14 * dt); if (Math.random() < 0.15) emit(me.x, me.y + 1.2, me.z, 1, { colors: ["#e8f7ff"], speed: 0.3, up: 1.5, life: 0.8, grav: -1, size: 0.12 }); }
+  else me.vy -= GRAV * dt;
+  me.gliding = !me.ground && !me.foot && !me.transit && !wt && jumpHeld && me.vy < 0 && st.ab === "glide";   // (owner, 2026-11-16) Glide: hold jump while falling
   if (me.gliding) { me.vy = Math.max(me.vy, -World.ABILITIES.glide.fall); if (Math.random() < 0.4) emit(me.x, me.y + 0.4, me.z, 1, { colors: ["#ffffff", "#cfe9ff"], speed: 0.6, up: -0.3, life: 0.6, grav: 0, size: 0.16 }); }
   if (me.ground) me.dj = false;
   { const B = $("bab"), on = !me.foot && (st.ab === "sprint" || st.ab === "blink"), A = World.ABILITIES[st.ab], left = on ? Math.max(0, (me.abAt || -99) + A.cd - now()) / A.cd : 0, key = (on ? st.ab : "") + Math.ceil(left * 30);   // the ability button: its icon, its cooldown
@@ -1823,12 +1827,31 @@ function stepCannonReach(t) {
   else if (!mine) { const h = World.buildings.find((b) => b.d === 0 && !b.ow && near(b, World.HOUSE_S / 2 + 2.5));   /* (owner, 2026-11-16) right up by the house, so delivering to its mailbox doesn't ask */ if (h) { key = "H" + h.id + (save.coins >= C.house); build = () => { P.appendChild(el("b", "", "House")); const b = btn("Buy " + fmt(C.house), () => netSend({ t: "buyhouse", id: h.id }), "go"); b.disabled = save.coins < C.house; P.appendChild(b); }; } }
   if (key === cpKey) return; cpKey = key; P.innerHTML = ""; P.style.display = key ? "flex" : "none"; if (build) build();
 }
+// a water block's faces, less wherever another water block touches it (so joined water shows no seams)
+const WATER_M = new THREE.MeshLambertMaterial({ color: "#3f8fd0", transparent: true, opacity: 0.6, depthWrite: false, side: THREE.DoubleSide });
+function waterGeo(q) {
+  const B = (o) => ({ x0: o.x, x1: o.x + o.w, y0: o.y, y1: o.y + o.h, z0: o.z, z1: o.z + o.d }), a = B(q), others = World.build.filter((o) => o.k === "block" && o.m === "water" && o.id !== q.id).map(B), pos = [], nor = [];
+  const ax = { x: ["y", "z"], y: ["z", "x"], z: ["x", "y"] };
+  for (const [k, sg] of [["x", 1], ["x", -1], ["y", 1], ["y", -1], ["z", 1], ["z", -1]]) {
+    const at = sg > 0 ? a[k + "1"] : a[k + "0"], [u, v] = ax[k], U0 = a[u + "0"], U1 = a[u + "1"], V0 = a[v + "0"], V1 = a[v + "1"];
+    const cov = others.filter((o) => (sg > 0 ? o[k + "0"] : o[k + "1"]) === at || (o[k + "0"] < at && o[k + "1"] > at)).map((o) => [Math.max(U0, o[u + "0"]), Math.min(U1, o[u + "1"]), Math.max(V0, o[v + "0"]), Math.min(V1, o[v + "1"])]).filter((c) => c[0] < c[1] && c[2] < c[3]);
+    const us = [...new Set([U0, U1, ...cov.flatMap((c) => [c[0], c[1]])])].sort((m, n) => m - n), vs = [...new Set([V0, V1, ...cov.flatMap((c) => [c[2], c[3]])])].sort((m, n) => m - n);
+    for (let i = 0; i + 1 < us.length; i++) for (let j = 0; j + 1 < vs.length; j++) {
+      const cu = (us[i] + us[i + 1]) / 2, cv = (vs[j] + vs[j + 1]) / 2; if (cov.some((c) => cu > c[0] && cu < c[1] && cv > c[2] && cv < c[3])) continue;
+      const P = (uu, vv) => { const p = { x: 0, y: 0, z: 0 }; p[k] = at; p[u] = uu; p[v] = vv; return [p.x, p.y, p.z]; }, n = [0, 0, 0]; n["xyz".indexOf(k)] = sg;
+      const c = [P(us[i], vs[j]), P(us[i + 1], vs[j]), P(us[i + 1], vs[j + 1]), P(us[i], vs[j + 1])];
+      for (const t of [0, 1, 2, 0, 2, 3]) { pos.push(...c[t]); nor.push(...n); }
+    }
+  }
+  const g = new THREE.BufferGeometry(); g.setAttribute("position", new THREE.Float32BufferAttribute(pos, 3)); g.setAttribute("normal", new THREE.Float32BufferAttribute(nor, 3)); g.computeBoundingSphere(); return g;
+}
 function pieceMesh(q, live) {
   const G = new THREE.Group();
   if (q.k === "office") {   // built as if at (0, 0) facing +z, then moved and turned as it stands
     const keep = [beltStripes.slice(), pusher], n0 = scene.children.length; officeMeshes(); for (const o of scene.children.slice(n0)) G.add(o);
     G.position.set(q.x, q.y, q.z); G.rotation.y = (q.r | 0) * Math.PI / 2; if (!live) { beltStripes.length = 0; beltStripes.push(...keep[0]); pusher = keep[1]; }
   }
+    else if (q.k === "block" && q.m === "water" && live) { const m = new THREE.Mesh(waterGeo(q), WATER_M); m.userData.pid = q.id; m.renderOrder = 1; G.add(m); }   // (owner, 2026-11-16) one see-through body: no faces where water meets water
     else if (q.k === "block") { const m = box(q.w, q.h, q.d, MAT_C[q.m], q.x + q.w / 2, q.y + q.h / 2, q.z + q.d / 2, G); if (q.m === "water" || q.m === "ice") { m.material = new THREE.MeshLambertMaterial({ color: MAT_C[q.m], transparent: true, opacity: q.m === "water" ? 0.6 : 0.85, depthWrite: q.m !== "water" }); } m.userData.pid = q.id;
       if (q.m === "turbine") {   // (owner, 2026-11-13) a fan on top, spinning, that blows you up into the air
         const f = new THREE.Group(); f.position.set(q.x + q.w / 2, q.y + q.h + 0.08, q.z + q.d / 2); G.add(f); const R0 = Math.min(q.w, q.d) * 0.45;
