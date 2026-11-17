@@ -183,14 +183,14 @@ A parcel that breaks or is lost is gone; the conveyor always has the next one. (
 - **Unlocking:** standing by a Cannon Unlock shows "<neighborhood> Cannon" and Unlock with its price: 2,000 x 1.35^n
   Aura for neighborhood n (rounded to 100: neighborhood 5 is 9,000). Unlocked cannons are kept in your data
   (`cannons`).
-- **Houses:** every Main Street house is for sale at 7,500 Aura (the same for all). Standing right by one for sale (within 2.5 m of its walls; when you
-  don't own one yet) shows House and Buy. A house has one owner (kept in the town's build: `ow`, `on` on the house),
-  shown by their name over it; one house each. Other couriers still deliver to its mailbox.
-- **Your house's cannon:** standing by your house shows your name and House plus each cannon you've unlocked; picking
-  one puts that cannon in the house's place (the house is gone; just the cannon's low base is solid), House puts it
-  back. Swap any time.
-- **Cannons** (owner, 2026-11-16) face the Cannon Pad they fire you to, whichever way the house faced. (owner, 2026-11-17) The town kit's
-  cannon (turret on a turntable, barrel up 45 degrees, its launch pad behind, centered on the house's spot at 0.9 size) in
+- (owner, 2026-11-17) **Cannon Plots:** the builder places Cannon Plots (Shortcuts menu) anywhere: a 10 m fenced lot
+  with "Cannon Plot" over it. Standing on or by one for sale (when you don't own one yet) shows Cannon Plot and Buy
+  (7,500 Aura, the same for all). A plot has one owner (kept in the town's build: `ow`, `on` on the plot), shown by
+  their name over it; one plot each.
+- **Your plot's cannon:** standing by your plot shows your name, None and each cannon you've unlocked; picking one puts
+  that cannon on the plot (its low base is solid), None takes it off. Swap any time.
+- **Cannons** (owner, 2026-11-16) face the Cannon Pad they fire you to, whichever way the plot is turned. (owner, 2026-11-17) The town kit's
+  cannon (turret on a turntable, barrel up 45 degrees, its launch pad behind, centered on the plot at 0.9 size) in
   the metal of the neighborhood it fires to: Bronze (1-2), Silver (3-4), Gold (5-6), Diamond (7-8), Rainbow (9); a
   Cannon Unlock's little turning one too. **Only its owner
   fires it:** touch it and you're inside while the fuse fizzes and sparkles (1.3 s; sparks at the breech;
@@ -315,7 +315,8 @@ is one 1 m grass block (`SEED`) to stand on, with sky all round. Everything is a
       bar: Moving or Static, Speed, the breaking button, Timer, Respawn); placing a Moving one selects it and goes
       straight on to picking its B.
   - **Bounds** (owner, 2026-11-13): a rectangle (up to 1000 x 1000 m, any height) for a neighborhood. **Anything inside
-    belongs to that neighborhood** (where bounds overlap, the smallest wins); outside every bounds is Main Street.
+    belongs to that neighborhood** (where bounds overlap, the smallest wins); (owner, 2026-11-17) outside every bounds is **Spawn**: it plays as Main Street but has no deliveries (a mailbox there is
+    no address).
 - **The neighborhood a spot is in** is its bounds' (above): it names the mailboxes and colors the houses, and sets the
   the sky color.
 - **Each neighborhood's settings** (owner, 2026-11-13; saved with the pieces): its name, the animal its parcels bring and
@@ -356,8 +357,9 @@ is one 1 m grass block (`SEED`) to stand on, with sky all round. Everything is a
   piece it erases that piece, as before. Each placing or cutting is one undo. While building, a respawn doesn't turn
   the camera. (owner, 2026-11-16) **pieces go only
   inside a neighborhood's bounds** (bounds and respawn boxes anywhere): outside, the hologram is red and nothing is
-  placed. A piece belongs to whichever neighborhood's bounds it's in now: move the bounds off it and it shows red while
-  building (until some bounds cover it again). **A gate (or bound wall) belongs to and unlocks the neighborhood whose
+  placed. (owner, 2026-11-17) **Build Outside Bounds** (a button on the builder's bottom row, on or off) lets pieces go
+  anywhere: outside, they're Spawn's (placed pieces there show no red). A piece belongs to whichever neighborhood's
+  bounds it's in now. **A gate (or bound wall) belongs to and unlocks the neighborhood whose
   bounds it stands in** (outside any: the one it was placed in), and **the next neighborhood can't be picked for
   editing until this one (past Main Street) has a gate**. **⚙** opens that neighborhood's panel: name, animal, each rarity's
   chance (%), Shiny "1 in" (0: never), Save. **Bounds** (seen only while building: a see-through box in the
@@ -517,6 +519,11 @@ its own fresh saves, with the same logins. It is described in `docs/POKEMON.md`;
 Courier's rules.
 
 ## Rejected / removed
+
+- (owner, 2026-11-17) **Buying a Main Street house for a cannon** (2026-11-16): cannons go on Cannon Plots instead. A
+  house still holding an owner refunds them 7,500 Aura when they next log in and goes back to a plain house.
+- (owner, 2026-11-17) **Outside every bounds counting as Main Street:** it's Spawn now, with no deliveries (a mailbox
+  there is no address); and the builder's red for pieces outside the bounds.
 
 - (owner, 2026-11-16) The podiums showing the server's three best mounts (gold, silver, bronze) and paying their
   couriers: now couriers stand on them to Aura Farm.

@@ -14,6 +14,8 @@ export const TEST_TOWN = [
   { id: 59, k: "start", x: 0, z: 24, y: 0, r: 0 }, { id: 60, k: "boost", x: 30, z: 0, y: 0, r: 1 }, { id: 61, k: "tree", x: -40, z: -30, y: 0, r: 0 },
   ...Array.from({ length: 10 }, (_, d) => [{ id: 1 + d * 2, k: "mailbox", x: 40 + d * 30, z: 10, y: 0, zone: d }, { id: 2 + d * 2, k: "mailbox", x: 40 + d * 30, z: -10, y: 0, zone: d }]).flat(),
   { id: 30, k: "house", x: 40, z: 20, y: 0, r: 2, zone: 0 },
+  { id: 65, k: "plot", x: 20, z: 36, y: 0, r: 0 },   // (owner, 2026-11-17) a Cannon Plot
+  { id: 80, k: "area", x: -60, z: -60, y: 0, w: 115, d: 120, zone: 0 },   // (owner, 2026-11-17) Main Street's bounds (outside every bounds is Spawn: no addresses)
   { id: 31, k: "block", x: 24, z: -24, y: 0, w: 4, h: 2, d: 4, m: "stone" },
   { id: 32, k: "gate", x: 55, z: 0, y: 0, r: 1, zone: 1 },
   // (owner, 2026-11-16) neighborhood 5's Cannon Unlock and its Cannon Pad
