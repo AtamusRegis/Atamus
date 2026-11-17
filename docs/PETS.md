@@ -123,6 +123,19 @@ A parcel that breaks or is lost is gone; the conveyor always has the next one. (
   better), shown in a pink box after you close the roll's card.
 - One equipped mount, seen by everyone; the rest wait in the Stable menu. (owner, 2026-11-11) **No mount levels: the
   rarity decides.** A mount's size is 1 + 0.25 x rarity (Common 1x, Legendary 2x); the rider stays the same size.
+- (owner, 2026-11-17) **The critter models:** every mount and Main Street chaser is a chunky block model made in Blender
+  (`website/critters/*.glb`, loaded by `website/critters.js` before anything is drawn; one skinned mesh under 1,300
+  triangles, its colors from a small atlas; made in studs, 0.36 m each). The kinds kept their keys in saves and took their
+  models' names: dog **Corgi Pup**, cat **Kitten**, gator **Axolotl**, bear **Cheetah Cub**, wolf **Griffin Chick**, fox
+  **Bunny**, raptor **Baby Raptor**, trike **Mini Trike**, trex **Frog**, unicorn **Cloud Pony** (abilities unchanged).
+  Main Street's dogs, geese and goats are the town dog, goose and goat models; the other zones' chasers are their zone's
+  mount model. Each mount carries a mail bag; the rider sits on its `RiderSeat` bone (following it as it moves), the
+  parcels stack at its `ParcelStack`. A **Shiny** swaps in the model's `_shiny` atlas (and sparkles). The coats no longer
+  tint the models (rarity still shows by the name, size, ring and tag). Clips: idle, run (sped up with the speed), jump
+  (held in the air) and the ability: Sprint and Glide loop while on; **Blink** shrinks the mount to a dot with the rider
+  hidden and the jump forward happens at frame 7 (others see it reappear from there); **Double Jump** flips the mount
+  while the rider stays upright. Chasers: idle, run and attack (a dog's bark-lunge as it chases, a goose's honk-flap, a
+  goat's headbutt). Sky geese stay the drawn ones. If a model can't load, the drawn animal is used.
 - (owner, 2026-11-11) **The mounts are the areas' animals:** Dog (Main Street), Cat (Maple Suburbs), Gator
   (Goose Marsh), Bear (Cliffside), Wolf (Floating Islands), (owner, 2026-11-12) Fox (Frostbite Fields), Raptor (Sunscorch
   Dunes), Trike (Jungle Ruins), T-Rex (Lava Flats), Unicorn (Moon Garden), each **Common to Legendary**

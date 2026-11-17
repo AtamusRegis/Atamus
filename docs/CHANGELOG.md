@@ -6,6 +6,10 @@ and any rule decided. Use `git log` for the code detail (and for the older Atamu
 
 ## 2026-11-17
 
+- **Critter models (owner).** Every mount and Main Street's dogs, geese and goats are new animated block critters: Corgi
+  Pup, Kitten, Axolotl, Cheetah Cub, Griffin Chick, Bunny, Baby Raptor, Mini Trike, Frog and Cloud Pony (the old kinds,
+  renamed), each with a mail bag, a Shiny texture and idle, run, jump and ability animations; Blink shrinks the mount
+  away before the jump.
 - **Floating in water (owner).** In water you float at the surface instead of sinking.
 - **Abilities reset on respawn (owner).** Respawning recharges Sprint and Blink at once.
 - **Fair kicking (owner).** Repeated kicks on the same courier get weaker, then stop working on them for a while; new

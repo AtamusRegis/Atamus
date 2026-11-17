@@ -80,19 +80,20 @@ export const rankOf = (total) => (total >= 23 ? 4 : total >= 15 ? 3 : total >= 8
 // drop its kind, at the parcel's rarity. The town's animals wear the same coats.
 // (owner, 2026-11-11) each animal has its own five coats, one per rarity (Common to Legendary), each suiting it: a mount
 // is named by its coat, e.g. "Black Gator", "Shiny Spirit Wolf". Each also comes Shiny (the same coat, sparkling)
+// (owner, 2026-11-17) the critter models: each kind kept its key (saves) and took its model's name
 export const MOUNTS = {
-  dog: { name: "Dog", look: "pup", size: 1, coats: [["Tan", "#c98a4b", "#f3dcc0"], ["Chocolate", "#5a3a24", "#d9a77a"], ["Blue Merle", "#5a6f8a", "#c9d6e8"], ["Ember", "#b8361c", "#ffb347"], ["Starlight", "#22305a", "#f2c94c"]] },
-  cat: { name: "Cat", look: "cat", size: 0.95, coats: [["Tabby", "#b98a5a", "#f3e0c8"], ["Ginger", "#e8862e", "#ffe1bf"], ["Siamese", "#efe2cc", "#4a3426"], ["Lilac", "#b9a2d9", "#f5ecff"], ["Cosmic", "#3a1d6e", "#7fd0ff"]] },
-  gator: { name: "Gator", look: "gator", size: 1, coats: [["Green", "#4f7a3a", "#c9d48a"], ["Albino", "#efe6d8", "#ff9aa8"], ["Sapphire", "#2a5fb8", "#9fe0ff"], ["Black", "#1f2329", "#4fe08a"], ["Magma", "#2a1a14", "#ff6a1f"]] },
-  bear: { name: "Bear", look: "bear", size: 1.05, coats: [["Brown", "#7a5236", "#c9a27e"], ["Black", "#2b2523", "#8a6a4e"], ["Polar", "#f4f8fb", "#bfe0f0"], ["Honey", "#d99a2b", "#fff0c2"], ["Aurora", "#2c4a7a", "#7ef0c8"]] },
-  wolf: { name: "Wolf", look: "wolf", size: 1, coats: [["Gray", "#8a96a2", "#e9eef2"], ["Timber", "#7a5a3a", "#d9c3a2"], ["Arctic", "#eef3f8", "#a9c9e8"], ["Shadow", "#1b1d24", "#e33a4a"], ["Spirit", "#6fc8ff", "#ffffff"]] },
+  dog: { name: "Corgi Pup", look: "pup", size: 1, coats: [["Tan", "#c98a4b", "#f3dcc0"], ["Chocolate", "#5a3a24", "#d9a77a"], ["Blue Merle", "#5a6f8a", "#c9d6e8"], ["Ember", "#b8361c", "#ffb347"], ["Starlight", "#22305a", "#f2c94c"]] },
+  cat: { name: "Kitten", look: "cat", size: 0.95, coats: [["Tabby", "#b98a5a", "#f3e0c8"], ["Ginger", "#e8862e", "#ffe1bf"], ["Siamese", "#efe2cc", "#4a3426"], ["Lilac", "#b9a2d9", "#f5ecff"], ["Cosmic", "#3a1d6e", "#7fd0ff"]] },
+  gator: { name: "Axolotl", look: "gator", size: 1, coats: [["Green", "#4f7a3a", "#c9d48a"], ["Albino", "#efe6d8", "#ff9aa8"], ["Sapphire", "#2a5fb8", "#9fe0ff"], ["Black", "#1f2329", "#4fe08a"], ["Magma", "#2a1a14", "#ff6a1f"]] },
+  bear: { name: "Cheetah Cub", look: "bear", size: 1.05, coats: [["Brown", "#7a5236", "#c9a27e"], ["Black", "#2b2523", "#8a6a4e"], ["Polar", "#f4f8fb", "#bfe0f0"], ["Honey", "#d99a2b", "#fff0c2"], ["Aurora", "#2c4a7a", "#7ef0c8"]] },
+  wolf: { name: "Griffin Chick", look: "wolf", size: 1, coats: [["Gray", "#8a96a2", "#e9eef2"], ["Timber", "#7a5a3a", "#d9c3a2"], ["Arctic", "#eef3f8", "#a9c9e8"], ["Shadow", "#1b1d24", "#e33a4a"], ["Spirit", "#6fc8ff", "#ffffff"]] },
   // (owner, 2026-11-12) zones 6 to 10: Frostbite Fields foxes, Sunscorch Dunes raptors, Jungle Ruins trikes, Lava Flats
   // T-Rexes, Moon Garden unicorns
-  fox: { name: "Fox", look: "fox", size: 1, coats: [["Snow", "#f4f6f8", "#c9d6e2"], ["Silver", "#9aa6b4", "#f4f6f8"], ["Red", "#d9541f", "#fff1dc"], ["Frost", "#7fd0ff", "#ffffff"], ["Aurora", "#1d2a4a", "#7ef0c8"]] },
-  raptor: { name: "Raptor", look: "raptor", size: 1, coats: [["Sand", "#d9b47a", "#8a6a3e"], ["Rust", "#a8582a", "#f0c48a"], ["Scarab", "#2f7a6a", "#e8c84a"], ["Sunset", "#e8662e", "#7a2a6a"], ["Pharaoh", "#1d1d2a", "#f2c94c"]] },
-  trike: { name: "Trike", look: "trike", size: 1, coats: [["Moss", "#6a8a4a", "#d9c99a"], ["Clay", "#b9744a", "#f0d9b8"], ["Jade", "#2a9a7a", "#d9fff0"], ["Orchid", "#b05ad9", "#ffd1f3"], ["Temple Gold", "#d9a52a", "#2a5a3a"]] },
-  trex: { name: "T-Rex", look: "trex", size: 0.9, coats: [["Ash", "#6a6a6a", "#b9b9b9"], ["Obsidian", "#1d1d22", "#8a8a9a"], ["Ember", "#c8401e", "#ffb347"], ["Molten", "#2a1a14", "#ff6a1f"], ["Inferno", "#ffd84a", "#ff3a1f"]] },
-  unicorn: { name: "Unicorn", look: "unicorn", size: 1, coats: [["Moonbeam", "#e9e6f4", "#b9b2d9"], ["Lavender", "#b9a2e8", "#ffffff"], ["Nebula", "#4a2a8a", "#ff8fd9"], ["Comet", "#2a4a8a", "#9fe0ff"], ["Celestial", "#1a1030", "#ffd84a"]] },
+  fox: { name: "Bunny", look: "fox", size: 1, coats: [["Snow", "#f4f6f8", "#c9d6e2"], ["Silver", "#9aa6b4", "#f4f6f8"], ["Red", "#d9541f", "#fff1dc"], ["Frost", "#7fd0ff", "#ffffff"], ["Aurora", "#1d2a4a", "#7ef0c8"]] },
+  raptor: { name: "Baby Raptor", look: "raptor", size: 1, coats: [["Sand", "#d9b47a", "#8a6a3e"], ["Rust", "#a8582a", "#f0c48a"], ["Scarab", "#2f7a6a", "#e8c84a"], ["Sunset", "#e8662e", "#7a2a6a"], ["Pharaoh", "#1d1d2a", "#f2c94c"]] },
+  trike: { name: "Mini Trike", look: "trike", size: 1, coats: [["Moss", "#6a8a4a", "#d9c99a"], ["Clay", "#b9744a", "#f0d9b8"], ["Jade", "#2a9a7a", "#d9fff0"], ["Orchid", "#b05ad9", "#ffd1f3"], ["Temple Gold", "#d9a52a", "#2a5a3a"]] },
+  trex: { name: "Frog", look: "trex", size: 0.9, coats: [["Ash", "#6a6a6a", "#b9b9b9"], ["Obsidian", "#1d1d22", "#8a8a9a"], ["Ember", "#c8401e", "#ffb347"], ["Molten", "#2a1a14", "#ff6a1f"], ["Inferno", "#ffd84a", "#ff3a1f"]] },
+  unicorn: { name: "Cloud Pony", look: "unicorn", size: 1, coats: [["Moonbeam", "#e9e6f4", "#b9b2d9"], ["Lavender", "#b9a2e8", "#ffffff"], ["Nebula", "#4a2a8a", "#ff8fd9"], ["Comet", "#2a4a8a", "#9fe0ff"], ["Celestial", "#1a1030", "#ffd84a"]] },
 };
 export const ZONE_KIND = ["dog", "cat", "gator", "bear", "wolf", "fox", "raptor", "trike", "trex", "unicorn"];   // each area's animal, in order (the same as CHASERS)
 export const coat = (sp, r) => (MOUNTS[sp] || MOUNTS.dog).coats[clamp(r | 0, 0, 4)].slice(1);   // [body, trim]
