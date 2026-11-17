@@ -303,6 +303,10 @@ function solid(x, z, hw, hd, y0, y1, yaw = 0) { solids.push({ x, z, hw, hd, c: M
 const STREET = ["Main Street", "Maple Lane", "Goose Way", "Cliff Road", "Cloud Isle", "Frost Lane", "Dune Road", "Vine Street", "Ember Way", "Star Lane"];
 // (owner, 2026-11-12) each far zone's tough going: ice (slippery), sand (slow, and sandstorms), rivers across the jungle
 // (slow, and thick trees), lava pools (a burn and a bounce), and the moon's low gravity
+// (owner, 2026-11-16) water blocks aren't walls any more: you swim through them, slowly (SWIM.mul of your speed), sinking
+// gently, rising while jump is held, and jumping out at the top
+export const waters = [], SWIM = { mul: 0.35, sink: 1.5, up: 4.5, out: 0.85 };
+export function waterAt(x, z, y) { for (const w of waters) if (x >= w.x0 && x <= w.x1 && z >= w.z0 && z <= w.z1 && y >= w.y0 && y <= w.y1) return w; return null; }
 export const lavas = [], ICE_GRIP = 0.12, SAND_SLOW = 0.8, WATER_SLOW = 0.5, MOON_GRAV = 0.45, LAVA = { stun: 0.6, every: 2 };
 export const lavaAt = (x, z, y) => y < 1.2 && lavas.some((l) => hyp(x - l.x, z - l.z) < l.r);
 
@@ -319,7 +323,7 @@ const BASE_N = { slabs: slabs.length, solids: solids.length };
 // colors). A mailbox: an address in zone d (parcels of that zone's tier go to its mailboxes). A gate: 8 m wide, closed
 // to anyone who hasn't opened zone d yet (the zone it leads into) ----
 export const BUILD_MAX = 6000, BLOCK_MAX = 60, HOUSE_S = 8, HOUSE_H = 5, GATE_W = 8, GATE_H = 7, GATE_T = 1;
-export const MATS = ["grass", "dirt", "stone", "brick", "wood", "road", "sand", "snow", "ice", "water", "mud", "turbine"];   // (owner, 2026-11-13) mud slows, ice slides, water is a see-through wall, a turbine blows you up into the air
+export const MATS = ["grass", "dirt", "stone", "brick", "wood", "road", "sand", "snow", "ice", "water", "mud", "turbine"];   // (owner, 2026-11-13) mud slows, ice slides, water you swim through (owner, 2026-11-16), a turbine blows you up into the air
 export const PIECES = ["block", "house", "mailbox", "gate", "wall", "tree", "boost", "start", "podium", "spawn", "office", "area", "pipe", "gust", "mover", "cannonlock", "cannonpad", "void"];
 export const AREA_MAX = 1000;
 export const ONE_ONLY = ["spawn", "office"];   // the last one placed counts
@@ -375,12 +379,13 @@ export function setBuild(data) {   // data: { pieces, zones } (or, from before, 
   build = list.map(cleanPiece).filter(Boolean).slice(0, BUILD_MAX); if (!build.length) build = SEED.map((q) => ({ ...q }));
   areas.length = 0; for (const q of build) if (q.k === "area") areas.push({ id: q.id, x0: q.x, z0: q.z, x1: q.x + q.w, z1: q.z + q.d, d: q.zone, size: q.w * q.d });
   areas.sort((a, b) => a.size - b.size);
-  slabs.length = BASE_N.slabs; solids.length = BASE_N.solids; houses.length = 0; buildings.length = 0; gates.length = 0; starts.length = 0; boosts.length = 0; trees.length = 0; pipes.length = 0; gusts.length = 0; movers.length = 0; cannonLocks.length = 0; cannonPads.length = 0; voids.length = 0; updrafts.length = 0; PODIUM.spots.length = 0; PO.on = false;
+  slabs.length = BASE_N.slabs; solids.length = BASE_N.solids; houses.length = 0; buildings.length = 0; gates.length = 0; starts.length = 0; boosts.length = 0; trees.length = 0; pipes.length = 0; gusts.length = 0; movers.length = 0; cannonLocks.length = 0; cannonPads.length = 0; voids.length = 0; waters.length = 0; updrafts.length = 0; PODIUM.spots.length = 0; PO.on = false;
   Object.assign(SPAWN, { x: 0.5, z: 0.5, y: 0, yaw: 0 });
   const count = TIERS.map(() => 0);
   for (const q of build) {
     const yaw = q.k === "spawn" && q.a !== undefined ? (q.a * Math.PI) / 180 : (q.r | 0) * (Math.PI / 2);
-    if (q.k === "block") { rect(q.x, q.x + q.w, q.z, q.z + q.d, q.y + q.h, q.m, q.y, STAND_X); if (q.m === "turbine") updrafts.push({ id: q.id, x0: q.x, x1: q.x + q.w, z0: q.z, z1: q.z + q.d, y0: q.y + q.h, y1: q.y + q.h + TURBINE.h }); }
+    if (q.k === "block" && q.m === "water") waters.push({ id: q.id, x0: q.x, x1: q.x + q.w, z0: q.z, z1: q.z + q.d, y0: q.y, y1: q.y + q.h });   // (owner, 2026-11-16) water: you swim in it
+    else if (q.k === "block") { rect(q.x, q.x + q.w, q.z, q.z + q.d, q.y + q.h, q.m, q.y, STAND_X); if (q.m === "turbine") updrafts.push({ id: q.id, x0: q.x, x1: q.x + q.w, z0: q.z, z1: q.z + q.d, y0: q.y + q.h, y1: q.y + q.h + TURBINE.h }); }
     else if (q.k === "gust") { const a = (q.a * Math.PI) / 180; gusts.push({ id: q.id, x0: q.x, x1: q.x + q.w, z0: q.z, z1: q.z + q.d, y0: q.y, y1: q.y + q.h, dx: Math.sin(a), dz: Math.cos(a), iv: q.iv, pw: q.pw }); }
     else if (q.k === "mover") movers.push({ ...q });
     else if (q.k === "house") { buildings.push({ id: q.id, x: q.x, z: q.z, y: q.y, yaw, d: districtAt(q.x, q.z, q.y), ow: q.ow || 0, cz: q.cz || 0 }); if (q.cz) solid(q.x, q.z, CANNONS.s / 2, CANNONS.s / 2, q.y - 1, q.y + 1.2); else solid(q.x, q.z, HOUSE_S / 2, HOUSE_S / 2, q.y - 1, q.y + HOUSE_H, yaw); }   // (owner, 2026-11-16) a cannon in its place: just its low base is solid
