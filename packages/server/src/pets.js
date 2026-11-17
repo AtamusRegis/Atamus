@@ -135,7 +135,7 @@ export function attachPets(server, { origins = [], allowLocal = false, store = m
     if (!list.length) return; changed(p); flush(p.acct);
     if (!quiet) send(p.ws, { t: "opened", list, data: d });
   }
-  function teleport(p, x, z, y, why, yaw) { p.x = x; p.z = z; p.y = y; p.tpAt = Date.now(); p.lx = x; p.lz = z; p.lt = p.tpAt; send(p.ws, yaw === undefined ? { t: "tp", x, z, y, why } : { t: "tp", x, z, y, why, yaw }); }
+  function teleport(p, x, z, y, why, yaw) { if (why === "home" || why === "gate" || why === "fall") p.blinkAt = -1e13;   /* (owner, 2026-11-17) a respawn resets the ability */ p.x = x; p.z = z; p.y = y; p.tpAt = Date.now(); p.lx = x; p.lz = z; p.lt = p.tpAt; send(p.ws, yaw === undefined ? { t: "tp", x, z, y, why } : { t: "tp", x, z, y, why, yaw }); }
 
   // ---- parties ----
   const invites = new Map();   // "to:from" -> expiry

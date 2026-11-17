@@ -146,7 +146,7 @@ A parcel that breaks or is lost is gone; the conveyor always has the next one. (
   ahead up to 12 m at the same height, stopping short of a wall, a block or a closed gate, every 3 s; a purple puff where
   you left and where you land, others see it too. **Double Jump** (Cat, Fox, T-Rex): jump again in the air, once till
   you land (90% of a jump). **Glide** (Wolf, Unicorn): hold jump while falling: down at most 2.5 m/s, at 55% speed the
-  way you steer, till you land. The ability button shows only for Sprint and Blink, and not on foot.
+  way you steer, till you land. The ability button shows only for Sprint and Blink, and not on foot. (owner, 2026-11-17) **A respawn resets it:** coming back at the respawn point or a gate recharges Sprint and Blink at once (and ends a Sprint).
 - **Jumping** (owner, 2026-11-13): Space (or Jump, (owner, 2026-11-14) the big button now) jumps by the mount's Jump.
   **A jump keeps its speed:** in the air
   you carry on at the speed you left the ground with (letting go doesn't stop you), and the controls only steer gently.
