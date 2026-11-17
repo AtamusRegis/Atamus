@@ -408,6 +408,11 @@ export function attachPets(server, { origins = [], allowLocal = false, store = m
             list = list.map((q) => (q.k === "pipe" && (q.to === a.id || (b && q.to === b.id) || q === a || q === b) ? { ...q, to: q === a ? (b ? b.id : 0) : q === b ? a.id : 0 } : q));
           }
           else if (m.op === "del") { const n = list.length; list = list.filter((q) => q.id !== +m.id); if (list.length === n) break; }
+          else if (m.op === "swap") {   // (owner, 2026-11-17) pieces out and pieces in, in one go (blocks merged into fewer, or a piece cut out of one)
+            const del = new Set((Array.isArray(m.del) ? m.del : []).map(Number)), ids = []; list = list.filter((q) => !del.has(q.id)); let top = W.build.reduce((a, b) => Math.max(a, b.id), 0);
+            for (const p of (Array.isArray(m.add) ? m.add : []).slice(0, 2000)) { const q = list.length < W.BUILD_MAX && W.cleanPiece({ ...p, id: ++top }); if (q && !W.ONE_ONLY.includes(q.k)) { list.push(q); ids.push(q.id); } else ids.push(0); }
+            send(ws, { t: "buildok", tag: m.tag, ids });
+          }
           else if (m.op === "set") { const i = list.findIndex((q) => q.id === +(m.piece && m.piece.id)), q = i >= 0 && W.cleanPiece({ ...m.piece, k: list[i].k }); if (!q) break; list[i] = q; }   // (owner, 2026-11-13) a piece changed (a bound moved or resized)
           else if (m.op === "zone") { const n = +m.n; if (!(n >= 0 && n < W.TIERS.length)) break; W.zones[n] = W.cleanZone(m.zone, n); }   // a neighborhood's name, animal and chances
           else break;

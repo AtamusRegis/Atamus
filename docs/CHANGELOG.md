@@ -4,6 +4,12 @@ Critter Courier (Pet Delivery Co. until 2026-11-11). Newest first. Add one entry
 and any rule decided. Use `git log` for the code detail (and for the older Atamus prototypes, removed from the tree on
 2026-11-08).
 
+## 2026-11-17
+
+- **Blocks merge; the eraser cuts (owner).** Blocks of the same material, height and level that touch merge into as few
+  rectangles as fit when you let go; the eraser cuts its footprint out of a block instead of removing it all. Water
+  overlapped by another block isn't drawn there.
+
 ## 2026-11-16
 
 - **Fix: blocks snapping to gate walls (owner).** Placing aims through gate and wall boundaries; Select and Erase still

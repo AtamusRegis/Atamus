@@ -767,7 +767,7 @@ const endPointer = (e) => {
   pinch = 0;
 };
 canvas.addEventListener("pointermove", (e) => { if (bm && e.pointerType === "mouse") { if (bm.hdrag) handleMove(e.clientX, e.clientY); else if (bm.gdrag) shotMove(e.clientX, e.clientY); else if (bm.adrag) areaMove(e.clientX, e.clientY); else if (bm.paint) paintMove(e.clientX, e.clientY); else buildAim(e.clientX, e.clientY); } });
-addEventListener("pointerup", (e) => { if (bm && e.button === 0) { if (bm.hdrag) handleUp(); if (bm.gdrag) shotUp(); if (bm.adrag) areaEnd(); bm.paint = null; } });
+addEventListener("pointerup", (e) => { if (bm && e.button === 0) { if (bm.hdrag) handleUp(); if (bm.gdrag) shotUp(); if (bm.adrag) areaEnd(); if (bm.paint) paintEnd(); bm.paint = null; } });
 canvas.addEventListener("pointerup", endPointer); canvas.addEventListener("pointercancel", endPointer);
 canvas.addEventListener("wheel", (e) => { if (bm) { bm.lift = clamp((bm.lift || 0) + (e.deltaY > 0 ? -1 : 1), -100, 100); buildAim(bm.px, bm.py); e.preventDefault(); return; }   // (owner, 2026-11-14) building: the wheel raises or lowers where a piece goes
   cam.dist = clamp(cam.dist * (e.deltaY > 0 ? 1.1 : 0.9), 5, 26); e.preventDefault(); }, { passive: false });
@@ -1277,8 +1277,10 @@ function sendAdd(piece, then) { const tag = ++tagN; pend.set(tag, then); netSend
 function doAdd(piece, then) { const repl = World.ONE_ONLY.includes(piece.k) ? World.build.filter((q) => q.k === piece.k).map((q) => ({ ...q })) : []; sendAdd(piece, (id) => { hist.push({ add: { ...piece, id }, repl }); redos.length = 0; if (then) then(id); }); }
 function doSet(before, after) { hist.push({ set: { before: { ...before }, after: { ...after } } }); redos.length = 0; netSend({ t: "build", op: "set", piece: after }); sfx("pad"); }
 function doDel(q) { hist.push({ del: { ...q } }); redos.length = 0; netSend({ t: "build", op: "del", id: q.id }); }
-function undoBuild() { const e = hist.pop(); if (!e) return; if (e.set) netSend({ t: "build", op: "set", piece: e.set.before }); else if (e.add) { netSend({ t: "build", op: "del", id: e.add.id }); for (const r of e.repl) sendAdd(r, (id) => { r.id = id; }); } else sendAdd(e.del, (id) => { e.del.id = id; }); redos.push(e); sfx("pop"); }
-function redoBuild() { const e = redos.pop(); if (!e) return; if (e.set) netSend({ t: "build", op: "set", piece: e.set.after }); else if (e.add) sendAdd(e.add, (id) => { e.add.id = id; }); else netSend({ t: "build", op: "del", id: e.del.id }); hist.push(e); sfx("pad"); }
+function sendSwap(dels, adds, then) { const tag = ++tagN; pend.set(tag, (ids) => { adds.forEach((q, i) => { q.id = ids[i] || 0; }); if (then) then(); }); netSend({ t: "build", op: "swap", del: dels.map((q) => q.id), add: adds.map(strip), tag }); }
+function doSwap(dels, adds) { const e = { swap: { dels: dels.map((q) => ({ ...q })), adds: adds.map((q) => ({ ...q })) } }; sendSwap(e.swap.dels, e.swap.adds, () => { hist.push(e); redos.length = 0; }); }
+function undoBuild() { const e = hist.pop(); if (!e) return; if (e.swap) { sendSwap(e.swap.adds, e.swap.dels); redos.push(e); sfx("pop"); return; } if (e.set) netSend({ t: "build", op: "set", piece: e.set.before }); else if (e.add) { netSend({ t: "build", op: "del", id: e.add.id }); for (const r of e.repl) sendAdd(r, (id) => { r.id = id; }); } else sendAdd(e.del, (id) => { e.del.id = id; }); redos.push(e); sfx("pop"); }
+function redoBuild() { const e = redos.pop(); if (!e) return; if (e.swap) { sendSwap(e.swap.dels, e.swap.adds); hist.push(e); sfx("pad"); return; } if (e.set) netSend({ t: "build", op: "set", piece: e.set.after }); else if (e.add) sendAdd(e.add, (id) => { e.add.id = id; }); else netSend({ t: "build", op: "del", id: e.del.id }); hist.push(e); sfx("pad"); }
 const aimed = () => bm && bm.aim && bm.aim.id && World.build.find((o) => o.id === bm.aim.id);
 function copyBuild(cut) { const q = aimed(); if (!q) return; bm.clip = strip(q); bm.r = 0; if (cut) doDel(q); bm.tool = "paste"; buildBar(); buildAim(bm.px, bm.py); sfx("pad"); }
 // painting: a left-button drag keeps placing on the level it started at (or erasing what it passes over), never on top
@@ -1293,6 +1295,7 @@ function placeOnce(q) {
   if (!World.inBounds(q)) return;   // (owner, 2026-11-16) only inside a neighborhood's bounds
   const P = bm.paint, [w0, h, d0, cx, cy, cz] = pieceBox(q), odd = q.k !== "block" && q.k !== "office" && q.r % 2, w = odd ? d0 : w0, d = odd ? w0 : d0, bx = { x: cx - w / 2 + 0.01, z: cz - d / 2 + 0.01, y: cy - h / 2, w: w - 0.02, h, d: d - 0.02 };   // what each piece takes up
   if (P.done.some((o) => overlaps(o, bx))) return; P.done.push(bx);
+  if (q.k === "block" && P.pend) { P.pend.push(q); const g = hologram({ ...q, id: 0 }); P.ghosts.push(g); scene.add(g); sfx("tick"); return; }   // (owner, 2026-11-17) blocks: shown now, placed (merged) on release
   // (owner, 2026-11-14) placed inside a neighborhood's bounds: that's the neighborhood being edited now (gates and walls keep theirs)
   if (q.k !== "gate" && q.k !== "wall") { const ar = World.build.find((o) => o.k === "area" && cx >= o.x && cx < o.x + o.w && cz >= o.z && cz < o.z + o.d); if (ar && ar.zone !== bm.zone && ar.zone <= zoneReach()) { bm.zone = ar.zone; bm.zd = null; bm.shotPick = undefined; buildBar(); drawAreas(); if ($("zpanel").style.display === "block") zonePanel(); } }
   // (owner, 2026-11-14) a moving platform: straight on to picking where it goes
@@ -1313,24 +1316,65 @@ function paintStart(px, py) {
     const q = a && a.id && World.build.find((o) => o.id === a.id && o.k !== "area"); bm.hsel = q ? q.id : 0; bm.bPick = false; if (q) sfx("tick"); buildBar(); drawHazSel(); return;
   }
   buildAim(px, py); const a = bm.aim; if (!a) return;
-  if (bm.tool === "erase") { bm.paint = { erase: new Set() }; paintMove(px, py); return; }
+  if (bm.tool === "erase") { bm.paint = { erase: new Set(), cut: new Map(), ghosts: [] }; paintMove(px, py); return; }
   if (bm.tool === "copy" || bm.tool === "cut") { copyBuild(bm.tool === "cut"); return; }
   if (bm.tool === "paste" && !bm.clip) return;
-  const q = buildPiece(a, bm.tool === "paste" ? bm.clip : null); bm.paint = { y: q.y, done: [] }; placeOnce(q);
+  const q = buildPiece(a, bm.tool === "paste" ? bm.clip : null); bm.paint = { y: q.y, done: [], pend: [], ghosts: [] }; placeOnce(q);
 }
 function paintMove(px, py) {
   const P = bm.paint; buildAim(px, py);
-  if (P.erase) { const q = aimed(); if (q && !P.erase.has(q.id)) { P.erase.add(q.id); doDel(q); sfx("pop"); } return; }
+  if (P.erase) { const q = aimed(); if (q && q.k === "block") { eraseCells(q, bm.aim); return; } if (q && !P.erase.has(q.id)) { P.erase.add(q.id); doDel(q); sfx("pop"); } return; }
   const q = paintPiece(px, py); if (!q) return; placeOnce(q);
   if (bm.ghost) scene.remove(bm.ghost); bm.ghost = hologram({ ...q, id: 0 }, !World.inBounds(q)); scene.add(bm.ghost);
 }
 function buildTap(px, py) {
   if (bm.tool === "area") return;
   buildAim(px, py); const a = bm.aim; if (!a) return;
-  if (bm.tool === "erase") { const q = aimed(); if (q) { doDel(q); sfx("pop"); } return; }
+  if (bm.tool === "erase") { const q = aimed(); if (q && q.k === "block") { bm.paint = { erase: new Set(), cut: new Map(), ghosts: [] }; eraseCells(q, a); paintEnd(); bm.paint = null; return; } if (q) { doDel(q); sfx("pop"); } return; }
   if (bm.tool === "copy" || bm.tool === "cut") { copyBuild(bm.tool === "cut"); return; }
   if (bm.tool === "paste") { if (bm.clip) { const q = buildPiece(a, bm.clip); if (World.inBounds(q)) { doAdd(q); sfx("pad"); } } return; }
-  { const q = buildPiece(a); if (World.inBounds(q)) { doAdd(q); sfx("pad"); } }
+  { const q = buildPiece(a); if (!World.inBounds(q)) return; if (q.k === "block") { commitBlocks([q]); sfx("pad"); return; } doAdd(q); sfx("pad"); }
+}
+// ---- (owner, 2026-11-17) blocks merge: blocks of the same material, height and level that touch become as few
+// rectangles as fit (a meter grid; no side over BLOCK_MAX), and the eraser cuts its own footprint (the Block tool's W x L,
+// the block's full height) out of a block instead of taking it all ----
+const layerKey = (q) => q.m + "|" + q.y + "|" + q.h;
+function cellsOf(q, set) { for (let x = q.x; x < q.x + q.w; x++) for (let z = q.z; z < q.z + q.d; z++) set.add(x + "," + z); }
+function rects(cells) {   // fewest rectangles we can find: rows first or columns first, whichever gives fewer
+  const run = (swap) => { const left = new Set(cells), out = [], K = (a, b) => (swap ? b + "," + a : a + "," + b), M = World.BLOCK_MAX;
+    const pts = [...cells].map((c) => c.split(",").map(Number)).map(([x, z]) => (swap ? [z, x] : [x, z])).sort((p, q) => p[1] - q[1] || p[0] - q[0]);
+    for (const [a, b] of pts) { if (!left.has(K(a, b))) continue; let w = 1; while (w < M && left.has(K(a + w, b))) w++; let d = 1;
+      while (d < M) { let ok = true; for (let i = 0; i < w; i++) if (!left.has(K(a + i, b + d))) { ok = false; break; } if (!ok) break; d++; }
+      for (let i = 0; i < w; i++) for (let j = 0; j < d; j++) left.delete(K(a + i, b + j)); out.push(swap ? { x: b, z: a, w: d, d: w } : { x: a, z: b, w, d }); }
+    return out; };
+  const r1 = run(false), r2 = run(true); return r2.length < r1.length ? r2 : r1;
+}
+function commitBlocks(news) {
+  const groups = new Map(); for (const q of news) { const k = layerKey(q); if (!groups.has(k)) groups.set(k, []); groups.get(k).push(q); }
+  const dels = [], adds = [];
+  for (const [k, list] of groups) {
+    const cells = new Set(); for (const q of list) cellsOf(q, cells); const same = World.build.filter((o) => o.k === "block" && layerKey(o) === k), took = new Set();
+    for (let grew = true; grew; ) { grew = false; for (const o of same) { if (took.has(o.id)) continue;   // the blocks of this layer it touches (or overlaps), and theirs, and so on
+      let hit = false; for (let x = o.x - 1; x <= o.x + o.w && !hit; x++) for (let z = o.z - 1; z <= o.z + o.d; z++) { const edge = (x === o.x - 1 || x === o.x + o.w) && (z === o.z - 1 || z === o.z + o.d); if (!edge && cells.has(x + "," + z)) { hit = true; break; } }
+      if (hit) { took.add(o.id); cellsOf(o, cells); dels.push(o); grew = true; } } }
+    const { m, y, h } = list[0]; for (const r of rects(cells)) adds.push({ k: "block", ...r, y, h, m });
+  }
+  if (!dels.length && adds.length === news.length) { for (const q of adds) doAdd(q); return; }
+  doSwap(dels, adds);
+}
+function eraseCells(q, a) {   // mark the eraser's footprint out of block q (shown red), cut on release
+  const P = bm.paint, w = bm.w, d = bm.d, x0 = Math.round(a.p.x - w / 2), z0 = Math.round(a.p.z - d / 2); let cut = P.cut.get(q.id); if (!cut) { cut = new Set(); P.cut.set(q.id, cut); }
+  let n = 0; for (let x = Math.max(q.x, x0); x < Math.min(q.x + q.w, x0 + w); x++) for (let z = Math.max(q.z, z0); z < Math.min(q.z + q.d, z0 + d); z++) { const c = x + "," + z; if (cut.has(c)) continue; cut.add(c); n++;
+    const g = hologram({ k: "block", x, z, y: q.y, w: 1, h: q.h, d: 1, m: q.m, id: 0 }, true); P.ghosts.push(g); scene.add(g); }
+  if (n) sfx("pop");
+}
+function paintEnd() {
+  const P = bm.paint; for (const g of P.ghosts || []) scene.remove(g);
+  if (P.pend && P.pend.length) commitBlocks(P.pend);
+  if (P.cut && P.cut.size) { const dels = [], adds = [];
+    for (const [id, cut] of P.cut) { const q = World.build.find((o) => o.id === id); if (!q) continue; const cells = new Set(); cellsOf(q, cells); for (const c of cut) cells.delete(c);
+      dels.push(q); for (const r of rects(cells)) adds.push({ ...strip(q), ...r }); }
+    if (dels.length) doSwap(dels, adds); }
 }
 // (owner, 2026-11-13) a neighborhood's bounds: with Bounds, a left drag on open space draws new ones for the neighborhood
 // you're editing; clicking bounds picks them, dragging inside moves them and dragging an edge resizes that side. What's
@@ -1604,7 +1648,7 @@ function onNet(m) {
     case "fused": adopt(m.data); selMount = m.m.id; if (panel === "stable") renderPanel(); hatchShow("fuse", m.m); break;
     case "reset": location.reload(); break;   // (owner, 2026-11-11) staff made this a brand new courier
     case "petup": adopt(m.data); remount(); sfx("buy"); if (panel === "stable") renderPanel(); emit(me.x, me.y + 2, me.z, 30, { colors: ["#c77dff", "#ffffff", "#e2b8ff"], speed: 4, up: 5, life: 1 }); break;
-    case "buildok": { const f = pend.get(m.tag); pend.delete(m.tag); if (f) f(m.id); break; }
+    case "buildok": { const f = pend.get(m.tag); pend.delete(m.tag); if (f) f(m.ids || m.id); break; }
     case "plat": if (m.gone !== undefined) { const q = World.movers.find((o) => o.id === m.id); delete World.platWarn[m.id]; World.platGone[m.id] = m.gone; if (m.gone && q) { const p = World.moverPos(q, srvNow()); if (hyp(p.x - me.x, p.z - me.z) < 80) { sfx("crack"); emit(p.x + q.w / 2, p.y + q.h, p.z + q.d / 2, 26, { colors: [MAT_C[q.m] || "#a87a4a", "#ffffff"], speed: 5, up: 3, life: 0.8, spread: Math.max(q.w, q.d) / 2 }); } } } else if (m.warn !== undefined) World.platWarn[m.id] = now(); break;   // (owner, 2026-11-14) a breaking platform
     case "build": for (const k in World.platGone) delete World.platGone[k]; for (const k in World.platWarn) delete World.platWarn[k]; World.setBuild({ pieces: m.build || [], zones: m.zones || [] }); drawBuild(); setPods(lastPods); if (bm) { if ((bm.tool === "select" && bm.hsel) || (bm.tool === "void" && bm.vsel)) buildBar(); drawAreas(); buildAim(bm.px, bm.py); pipeSel(); drawHazSel(); if (bm.sel && !World.build.some((q) => q.id === bm.sel)) bm.sel = 0; drawAreas(); if ($("zpanel").style.display === "block") zonePanel(); } break;   // (owner, 2026-11-13) someone built
     case "aura": save.coins = m.coins; popup("+" + fmt(m.n), "#d9a6ff", me.x, me.y + 2.6, me.z); hudDirty = true; break;   // (owner, 2026-11-12) a podium paid
@@ -1838,10 +1882,15 @@ const PICK_M = new THREE.MeshBasicMaterial({ visible: false });
 function waterBody() {
   const W = World.build.filter((o) => o.k === "block" && o.m === "water"); if (!W.length) return null;
   const cells = new Set(), key = (x, y, z) => x + "," + y + "," + z; let n = 0;
-  for (const q of W) for (let x = q.x; x < q.x + q.w; x++) for (let y = q.y; y < q.y + q.h; y++) for (let z = q.z; z < q.z + q.d; z++) { if (++n > 600000) break; cells.add(key(x, y, z)); }
+  // (owner, 2026-11-17) where another block takes the same space, that block wins: no water there, and no water face against it
+  const lo = [Infinity, Infinity, Infinity], hi = [-Infinity, -Infinity, -Infinity]; for (const q of W) { lo[0] = Math.min(lo[0], q.x - 1); lo[1] = Math.min(lo[1], q.y - 1); lo[2] = Math.min(lo[2], q.z - 1); hi[0] = Math.max(hi[0], q.x + q.w + 1); hi[1] = Math.max(hi[1], q.y + q.h + 1); hi[2] = Math.max(hi[2], q.z + q.d + 1); }
+  const solid = new Set(); for (const q of World.build) { if (q.k !== "block" || q.m === "water") continue;
+    const x0 = Math.max(q.x, lo[0]), x1 = Math.min(q.x + q.w, hi[0]), y0 = Math.max(q.y, lo[1]), y1 = Math.min(q.y + q.h, hi[1]), z0 = Math.max(q.z, lo[2]), z1 = Math.min(q.z + q.d, hi[2]);
+    for (let x = x0; x < x1; x++) for (let y = y0; y < y1; y++) for (let z = z0; z < z1; z++) { if (++n > 600000) break; solid.add(key(x, y, z)); } }
+  for (const q of W) for (let x = q.x; x < q.x + q.w; x++) for (let y = q.y; y < q.y + q.h; y++) for (let z = q.z; z < q.z + q.d; z++) { if (++n > 1200000) break; const k = key(x, y, z); if (!solid.has(k)) cells.add(k); }
   const pos = [], nor = [], F = [[1, 0, 0], [-1, 0, 0], [0, 1, 0], [0, -1, 0], [0, 0, 1], [0, 0, -1]];
   for (const c of cells) { const [x, y, z] = c.split(",").map(Number);
-    for (const [dx, dy, dz] of F) { if (cells.has(key(x + dx, y + dy, z + dz))) continue;
+    for (const [dx, dy, dz] of F) { const nk = key(x + dx, y + dy, z + dz); if (cells.has(nk) || solid.has(nk)) continue;
       const k = dx ? 0 : dy ? 1 : 2, sg = dx + dy + dz, at = [x, y, z][k] + (sg > 0 ? 1 : 0), u = (k + 1) % 3, v = (k + 2) % 3, b = [x, y, z];
       const P = (du, dv) => { const p = [0, 0, 0]; p[k] = at; p[u] = b[u] + du; p[v] = b[v] + dv; return p; }, q4 = [P(0, 0), P(1, 0), P(1, 1), P(0, 1)];
       for (const t of sg > 0 ? [0, 1, 2, 0, 2, 3] : [0, 2, 1, 0, 3, 2]) { pos.push(...q4[t]); nor.push(dx, dy, dz); } } }

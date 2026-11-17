@@ -266,7 +266,7 @@ is one 1 m grass block (`SEED`) to stand on, with sky all round. Everything is a
     pipes are bright green: riding into one's mouth brings you out 2 m in front of the other's, facing out of it and
     keeping your speed (once a second). Unlinked pipes are grey-green and go nowhere.
   - **Hazards** (owner, 2026-11-13):
-    - **Block materials:** Mud (slows you), Ice (you slide), Water ((owner, 2026-11-16) see-through and **swimmable**: inside it you go 35% speed, sink gently, rise while jump is held, and a jump near the top leaps out; all the water is drawn as one body, a meter at a time, with faces only where water meets something else, so joined or overlapping water blocks show no seams or doubled layers) and
+    - **Block materials:** Mud (slows you), Ice (you slide), Water ((owner, 2026-11-16) see-through and **swimmable**: inside it you go 35% speed, sink gently, rise while jump is held, and a jump near the top leaps out; all the water is drawn as one body, a meter at a time, with faces only where water meets something else, so joined or overlapping water blocks show no seams or doubled layers; (owner, 2026-11-17) where another block takes the same space, there's no water drawn there and no water face against it) and
       Turbine (a spinning fan on top; its updraft, 12 m high over the block, blows you up into the air).
     - **Gust:** a box of wind (W / H / D, like a block) that blows the way it's turned (hold R to turn it, any angle)
       for 1.6 s out of every few seconds (the same moment for everyone), pushing riders inside. Players see its wind
@@ -315,7 +315,12 @@ is one 1 m grass block (`SEED`) to stand on, with sky all round. Everything is a
   (− name +) and ⚙, then (owner, 2026-11-14) W / H / L typed into one box side by side and the material for a block,
   L for a wall (W / L for bounds). (owner, 2026-11-14) **A piece placed inside a neighborhood's bounds makes that the
   neighborhood you're editing** (gates and walls don't switch it). **The ⚙ panel opens on the
-  right of the screen.** (owner, 2026-11-13) Bounds are placed for the neighborhood you're editing; (owner, 2026-11-16) **pieces go only
+  right of the screen.** (owner, 2026-11-13) Bounds are placed for the neighborhood you're editing; (owner, 2026-11-17) **Blocks:** placed on
+  the ground (level 0) unless aimed at something to sit on; holding the button keeps placing on the level the press
+  started at. **Blocks merge:** on release, the blocks placed and any blocks of the same material, height and level
+  they touch (or overlap) become as few rectangles as fit (no side over 60 m), so four 1 x 1s become one 2 x 2. **The
+  eraser on a block** cuts out its own footprint (the Block tool's W x L, the block's full height; drag to cut more,
+  shown red, cut on release) and leaves the rest as rectangles. Merging and cutting are one undo each. (owner, 2026-11-16) **pieces go only
   inside a neighborhood's bounds** (bounds and respawn boxes anywhere): outside, the hologram is red and nothing is
   placed. A piece belongs to whichever neighborhood's bounds it's in now: move the bounds off it and it shows red while
   building (until some bounds cover it again). **A gate (or bound wall) belongs to and unlocks the neighborhood whose

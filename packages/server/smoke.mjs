@@ -152,6 +152,12 @@ try {
   { n.send({ t: "build", op: "add", piece: { k: "office", x: 0, z: 100, y: 0, r: 1 }, tag: 7 }); const ack = await n.wait((m) => m.t === "buildok" && m.tag === 7, "the builder's id back");
     await sleep(100); ok(W.build.filter((q) => q.k === "office").length === 1 && W.PO.z === 100 && W.PO.yaw === Math.PI / 2 && Math.abs(W.PO.end.x - 3.9) < 1e-9 && W.addr && ack.id > 0, "one post office at a time (a new one replaces it), turnable; the builder gets the new piece's id");
     n.send({ t: "build", op: "del", id: ack.id }); n.send({ t: "build", op: "add", piece: { k: "office", x: 0, z: 0, y: 0, r: 0 } }); await sleep(150); }
+  // (owner, 2026-11-17) a swap: pieces out and in at once (blocks merged), the new ids back
+  { const n0 = W.build.length; n.send({ t: "build", op: "swap", del: [], add: [{ k: "block", x: 300, z: 300, y: 0, w: 1, h: 1, d: 1, m: "grass" }, { k: "block", x: 301, z: 300, y: 0, w: 1, h: 1, d: 1, m: "grass" }], tag: 8 });
+    const sa = await n.wait((m) => m.t === "buildok" && m.tag === 8, "the swap's ids"); ok(sa.ids.length === 2 && W.build.length === n0 + 2, "a swap adds pieces");
+    n.send({ t: "build", op: "swap", del: sa.ids, add: [{ k: "block", x: 300, z: 300, y: 0, w: 2, h: 1, d: 1, m: "grass" }], tag: 9 }); const sb = await n.wait((m) => m.t === "buildok" && m.tag === 9, "the merge");
+    ok(W.build.length === n0 + 1 && W.build.find((q) => q.id === sb.ids[0]).w === 2, "and swaps them for one");
+    n.send({ t: "build", op: "del", id: sb.ids[0] }); await sleep(150); }
   // (owner, 2026-11-13) neighborhoods: bounds decide where a piece belongs, can be moved after; walls close like gates; each neighborhood's name, animal and chances
   { n.send({ t: "build", op: "add", piece: { k: "area", x: -200, z: -200, y: 0, w: 20, d: 20, zone: 4 }, tag: 8 }); const ack = await n.wait((m) => m.t === "buildok" && m.tag === 8, "new bounds");
     n.send({ t: "build", op: "add", piece: { k: "mailbox", x: -190, z: -190, y: 0 } }); await b.wait((m) => m.t === "build" && m.build.some((q) => q.k === "mailbox" && q.x === -190), "a mailbox inside");
