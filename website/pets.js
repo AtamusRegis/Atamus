@@ -1208,7 +1208,7 @@ function inspector() {
 const unpickable = (o) => { for (; o; o = o.parent) if (o.userData.noPick || !o.visible || (o.userData.selOnly && bm && bm.tool !== "select" && bm.tool !== "erase" && bm.tool !== "void")) return true; return false; };   /* a respawn box: only to select or erase it */
 function pieceAt(px, py) {   // what's pointed at: the point, its face's normal and the piece's id (0: the ground)
   ndc.set((px / innerWidth) * 2 - 1, -(py / innerHeight) * 2 + 1); ray.setFromCamera(ndc, camera);
-  const hits = buildG ? ray.intersectObjects([...buildG.children, ...(poG ? [poG] : [])], true) : []; for (const h of hits) { if (unpickable(h.object)) continue; let o = h.object; while (o && !o.userData.pid && o.parent) o = o.parent; if (o && o.userData.pid) { const n = h.face ? h.face.normal.clone().transformDirection(h.object.matrixWorld) : new THREE.Vector3(0, 1, 0); return { p: h.point, n, id: o.userData.pid }; } }
+  const hits = buildG ? ray.intersectObjects([...buildG.children, ...(poG ? [poG] : [])], true) : []; for (const h of hits) { if (unpickable(h.object)) continue; if (h.object.userData.pids && h.instanceId !== undefined) { const id = h.object.userData.pids[h.instanceId], im = new THREE.Matrix4(); h.object.getMatrixAt(h.instanceId, im); const n = h.face ? h.face.normal.clone().transformDirection(im).transformDirection(h.object.matrixWorld) : new THREE.Vector3(0, 1, 0); return { p: h.point, n, id }; } let o = h.object; while (o && !o.userData.pid && o.parent) o = o.parent; if (o && o.userData.pid) { const n = h.face ? h.face.normal.clone().transformDirection(h.object.matrixWorld) : new THREE.Vector3(0, 1, 0); return { p: h.point, n, id: o.userData.pid }; } }
   if (ray.ray.intersectPlane(ground, hitV)) return { p: hitV.clone(), n: new THREE.Vector3(0, 1, 0), id: 0 };
   return null;
 }
@@ -1826,7 +1826,7 @@ function groundMat(m) {
   M.onBeforeCompile = (sh) => {
     sh.uniforms.gK = { value: k };
     sh.vertexShader = sh.vertexShader.replace("#include <common>", "#include <common>\nvarying vec3 vGW; varying float vGN; varying float vGY;")
-      .replace("#include <begin_vertex>", "#include <begin_vertex>\nvGW = (modelMatrix * vec4(transformed, 1.0)).xyz; vGN = normalize(mat3(modelMatrix) * objectNormal).y; vGY = position.y + 0.5;");
+      .replace("#include <begin_vertex>", "#include <begin_vertex>\n\n#ifdef USE_INSTANCING\nvGW = (modelMatrix * instanceMatrix * vec4(transformed, 1.0)).xyz; vGN = normalize(mat3(modelMatrix) * mat3(instanceMatrix) * objectNormal).y;\n#else\nvGW = (modelMatrix * vec4(transformed, 1.0)).xyz; vGN = normalize(mat3(modelMatrix) * objectNormal).y;\n#endif\nvGY = position.y + 0.5;");
     sh.fragmentShader = sh.fragmentShader.replace("#include <common>", `#include <common>
 varying vec3 vGW; varying float vGN; varying float vGY; uniform float gK;
 float gH(vec2 p) { return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }
@@ -1932,8 +1932,14 @@ const WATER_M = new THREE.MeshLambertMaterial({ color: "#3f8fd0", transparent: t
 const PICK_M = new THREE.MeshBasicMaterial({ visible: false });
 // (owner, 2026-11-16) all the water as one body, a meter at a time: a face only where water meets anything but water, so
 // joined or overlapping water blocks show no seams and no doubled-up layers
+let waterKey = "", waterMesh = null;
 function waterBody() {
   const W = World.build.filter((o) => o.k === "block" && o.m === "water"); if (!W.length) return null;
+  // (owner, 2026-11-17) worked out again only when a block changed (any edit used to redo it)
+  const key = World.build.filter((o) => o.k === "block").map((o) => o.x + "," + o.y + "," + o.z + "," + o.w + "," + o.h + "," + o.d + o.m).join(";"); if (key === waterKey && waterMesh) return waterMesh;
+  if (waterMesh) waterMesh.geometry.dispose(); waterKey = key; return (waterMesh = waterBodyMake(W));
+}
+function waterBodyMake(W) {
   const cells = new Set(), key = (x, y, z) => x + "," + y + "," + z; let n = 0;
   // (owner, 2026-11-17) where another block takes the same space, that block wins: no water there, and no water face against it
   const lo = [Infinity, Infinity, Infinity], hi = [-Infinity, -Infinity, -Infinity]; for (const q of W) { lo[0] = Math.min(lo[0], q.x - 1); lo[1] = Math.min(lo[1], q.y - 1); lo[2] = Math.min(lo[2], q.z - 1); hi[0] = Math.max(hi[0], q.x + q.w + 1); hi[1] = Math.max(hi[1], q.y + q.h + 1); hi[2] = Math.max(hi[2], q.z + q.d + 1); }
@@ -2075,13 +2081,23 @@ function stepHazards(dt) {
     for (let k = 0; k < n || (k === 0 && Math.random() < n); k++) emit(g.x0 + Math.random() * (g.x1 - g.x0), g.y0 + 0.3 + Math.random() * (g.y1 - g.y0 - 0.3), g.z0 + Math.random() * (g.z1 - g.z0), 1, { colors: ["#ffffff", "#e3f4ff"], dir: [g.dx, 0, g.dz], speed: 6 + g.pw * 0.5, grav: 0, life: 0.5, size: 0.09, spread: 0 }); }
   for (const u of World.updrafts) { const cx = (u.x0 + u.x1) / 2, cz = (u.z0 + u.z1) / 2; if (hyp(cx - P.x, cz - P.z) > 90 || Math.random() > dt * 14) continue; emit(u.x0 + Math.random() * (u.x1 - u.x0), u.y0 + 0.3, u.z0 + Math.random() * (u.z1 - u.z0), 1, { colors: ["#ffffff", "#dfe9f2"], dir: [0, 1, 0], speed: 10, grav: 0, life: 0.9, size: 0.1, spread: 0 }); }
 }
+const instMeshes = [];
 function drawBuild() {
   buildOnly.length = 0; fans.length = 0; moverMeshes.length = 0;
   if (poG) { scene.remove(poG); poG = null; }
   if (buildG) scene.remove(buildG); buildG = new THREE.Group(); scene.add(buildG);
   for (const k of Object.keys(houseMesh)) delete houseMesh[k]; for (const k of Object.keys(cannonMesh)) delete cannonMesh[k]; lockMesh.length = 0; for (let n = gates.length - 1; n >= 0; n--) if (gates[n].built) gates.splice(n, 1);
   const office = World.PO.on ? [...World.build].reverse().find((q) => q.k === "office") : null;
-  for (const q of World.build) { if (q.k === "office" && q !== office) continue; const g = pieceMesh(q, true); if (q === office) { poG = g; scene.add(g); } else buildG.add(g); }
+  // (owner, 2026-11-17) the static pieces (blocks, trees, houses) are drawn instanced: every copy of the same mesh and
+  // material is one draw, however many there are; aiming finds the piece by its instance
+  for (const im of instMeshes) im.dispose(); instMeshes.length = 0; const inst = new Map();
+  for (const q of World.build) { if (q.k === "office" && q !== office) continue; const g = pieceMesh(q, true); if (q === office) { poG = g; scene.add(g); continue; }
+    if (!(q.k === "tree" || q.k === "house" || (q.k === "block" && q.m !== "water" && q.m !== "ice" && q.m !== "turbine"))) { buildG.add(g); continue; }
+    g.updateMatrixWorld(true); const take = [];
+    g.traverse((o) => { if (o.isMesh && !o.isSkinnedMesh && !o.isInstancedMesh && o.visible && o.material.visible !== false) take.push(o); });
+    for (const o of take) { const k = o.geometry.uuid + "|" + o.material.uuid; let e = inst.get(k); if (!e) inst.set(k, (e = { geo: o.geometry, mat: o.material, ms: [], pids: [], cast: o.castShadow, recv: o.receiveShadow })); e.ms.push(o.matrixWorld.clone()); e.pids.push(q.id); o.parent.remove(o); }
+    let left = false; g.traverse((o) => { if (o !== g && !o.isGroup) left = true; }); if (left) buildG.add(g); }
+  for (const e of inst.values()) { const im = new THREE.InstancedMesh(e.geo, e.mat, e.ms.length); e.ms.forEach((m, i) => im.setMatrixAt(i, m)); im.castShadow = e.cast; im.receiveShadow = e.recv; im.userData.pids = e.pids; im.computeBoundingSphere(); buildG.add(im); instMeshes.push(im); }
   { const wb = waterBody(); if (wb) buildG.add(wb); }
   if (readyMesh && poG) poG.add(readyMesh); if (nextMesh && poG) poG.add(nextMesh);
 }
