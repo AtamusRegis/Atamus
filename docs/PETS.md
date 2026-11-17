@@ -337,7 +337,10 @@ is one 1 m grass block (`SEED`) to stand on, with sky all round. Everything is a
   you come back at its gate instead (the nearest gate into it), just inside, facing in. (owner, 2026-11-16) **Respawn boxes** (the
   builder's Respawn Box, under Ground: a see-through red box only builders see, any size, for a neighborhood) do the
   same at once: touching one counts as falling off (its neighborhood's gate if you carry a parcel, else the respawn
-  point), so you don't fall for a while first. A box over the spot it would send you back to does nothing. **Drop** (the button beside the parcel counter) lets go of every parcel you
+  point), so you don't fall for a while first. A box over the spot it would send you back to does nothing. (owner, 2026-11-16) With the
+  Respawn Box tile, clicking a box picks it (open space lets go and places a new one, picked); the inspector edits it.
+  **Picked bounds or a picked respawn box** (also with Select) show a small white square in the middle of each face
+  (bounds: their four sides; a respawn box: all six): drag one to move that face, the opposite one staying put. **Drop** (the button beside the parcel counter) lets go of every parcel you
   carry (no banner), so you can take new ones.
 
 ## Danger
