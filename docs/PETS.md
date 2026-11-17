@@ -168,8 +168,9 @@ A parcel that breaks or is lost is gone; the conveyor always has the next one. *
 - **Your house's cannon:** standing by your house shows your name and House plus each cannon you've unlocked; picking
   one puts that cannon in the house's place (the house is gone; just the cannon's low base is solid), House puts it
   back. Swap any time.
-- **Cannons** all face one way, set by the owner (Main Street's **Cannons face**, in degrees, in the ⚙ panel), however
-  their house faced; the barrel is up 35 degrees, in the neighborhood's color, and breathes gently. **Only its owner
+- **Cannons** face the way set on their house ((owner, 2026-11-16) a selected Main Street house's **Cannon** setting,
+  15 degrees a step, round and round; at first the way the house faces; builders see it as an orange arrow over the
+  roof), whichever way the house faces; the barrel is up 35 degrees, in the neighborhood's color, and breathes gently. **Only its owner
   fires it:** touch it and you're inside while the fuse fizzes and sparkles (1.3 s; the barrel swells and wobbles;
   the camera turns to watch from behind and to the side), then BOOM (smoke, a flash, a shake, the barrel recoils and
   bounces) and you fly in an arc to that neighborhood's Cannon Pad (2.4 s). Other couriers see the cannon go off and
@@ -302,8 +303,9 @@ is one 1 m grass block (`SEED`) to stand on, with sky all round. Everything is a
   pieces; (owner, 2026-11-14) while a piece is selected the tiles go and the bar shows only its settings. The mouse
   wheel (while building) raises or lowers where the next piece goes, a meter a notch (the blueprint shows it)
   ((owner, 2026-11-13) every piece a rounded tile with a picture of
-  the piece and its name under it): Block, House, Mailbox, Gate, Wall,
-  Tree, Boost, Start Line / Podium, Respawn, Post Office, Pipe, Gust, Platform, Cannon Unlock, Cannon Pad, Bounds, Erase ((owner, 2026-11-14) no
+  the piece and its name under it), (owner, 2026-11-16) in menus (**Ground**: Block, Wall, Gate, Bounds; **Town**: House, Mailbox, Tree, Post Office,
+  Respawn, Podium, Start Line; **Hazards**: Gust, Platform, Boost; **Shortcuts**: Pipe, Cannon Unlock, Cannon Pad), with
+  Select first and Erase last whichever menu is open ((owner, 2026-11-14) no
   turn or close buttons: R turns, Escape, B or the Build button closes); under it **the neighborhood you're editing**
   (− name +) and ⚙, then (owner, 2026-11-14) W / H / L typed into one box side by side and the material for a block,
   L for a wall (W / L for bounds). (owner, 2026-11-14) **A piece placed inside a neighborhood's bounds makes that the

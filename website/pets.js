@@ -1105,6 +1105,9 @@ $("mbuild").onclick = () => (bm ? endBuild() : startBuild());   // (owner, 2026-
 function startBuild() { closePanel(); if (!free) setFree(true); if (spawnG) spawnG.visible = true; for (const g of buildOnly) g.visible = true; bm = { pm: { mv: true, sp: World.MOVER.sp, brk: 0, bt: World.MOVER.bt, rs: World.MOVER.rs }, tool: "select", a: ((Math.round((World.SPAWN.yaw * 180) / Math.PI) % 360) + 360) % 360, zone: 0, w: 2, h: 1, d: 2, m: "grass", r: 0, wl: 8, ly: 0, sel: 0, px: innerWidth / 2, py: innerHeight / 2, ghost: null, aim: null }; buildBar(); document.body.classList.add("building"); buildAim(bm.px, bm.py); drawAreas(); }
 function endBuild() { if (!bm) return; bm.zd = null; if (spawnG) spawnG.visible = false; for (const g of buildOnly) g.visible = false; if (bm.ghost) scene.remove(bm.ghost); if (bm.pselG) scene.remove(bm.pselG); bm = null; $("buildbar").style.display = "none"; $("zpanel").style.display = "none"; $("pprompt").style.display = "none"; drawAreas(); document.body.classList.remove("building"); setFree(false); }
 const BUILD_TOOLS = [["select", "Select"], ["block", "Block"], ["house", "House"], ["mailbox", "Mailbox"], ["gate", "Gate"], ["wall", "Wall"], ["tree", "Tree"], ["boost", "Boost"], ["start", "Start Line"], ["podium", "Podium"], ["spawn", "Respawn"], ["office", "Post Office"], ["pipe", "Pipe"], ["gust", "Gust"], ["mover", "Platform"], ["cannonlock", "Cannon Unlock"], ["cannonpad", "Cannon Pad"], ["area", "Bounds"], ["erase", "Erase"]];
+// (owner, 2026-11-16) the tiles in menus: Select and Erase always, the rest under the menu picked
+const BUILD_CATS = [["Ground", ["block", "wall", "gate", "area"]], ["Town", ["house", "mailbox", "tree", "office", "spawn", "podium", "start"]], ["Hazards", ["gust", "mover", "boost"]], ["Shortcuts", ["pipe", "cannonlock", "cannonpad"]]];
+let buildCat = 0;
 // each tile's picture: the piece itself, drawn once (with the mount portraits' renderer)
 const THUMB = {}, THUMB_Q = { block: { w: 2, h: 1, d: 2, m: "grass" }, gate: { zone: 1 }, wall: { w: 6, zone: 1 }, area: { w: 6, d: 6, zone: 1 }, gust: { w: 4, h: 3, d: 4, a: 0, iv: 4, pw: 18 }, mover: { w: 4, h: 1, d: 4, m: "wood", bx: 0, by: 0, bz: 0, sp: 4 } };
 function thumb(k) {
@@ -1123,7 +1126,9 @@ const zoneReach = () => { let z = 0; while (z < World.TIERS.length - 1 && World.
 function buildBar() {
   const B = $("buildbar"); B.innerHTML = ""; B.style.display = "flex"; const row0 = el("div", "brow"), row2 = el("div", "brow");
   // (owner, 2026-11-13) every piece a rounded tile with its picture
-  if (!(bm.tool === "select" && hazSel())) for (const [k, name] of BUILD_TOOLS) {   /* (owner, 2026-11-14) a selected piece: just its settings */ const b = btn("", () => { bm.tool = k; if (k !== "area") bm.sel = 0; buildBar(); buildAim(bm.px, bm.py); drawAreas(); }, "btile" + (bm.tool === k ? " on" : "")); const im = document.createElement("img"); im.src = thumb(k); im.alt = ""; b.append(im, el("span", "", name)); b.title = name; row0.appendChild(b); }
+  if (!(bm.tool === "select" && hazSel())) { const tabs = el("div", "bcats"); BUILD_CATS.forEach(([name], n) => tabs.appendChild(btn(name, () => { buildCat = n; buildBar(); }, "bt" + (n === buildCat ? " on" : "")))); B.appendChild(tabs); }
+  const shown = ["select", ...BUILD_CATS[buildCat][1], "erase"];
+  if (!(bm.tool === "select" && hazSel())) for (const [k, name] of BUILD_TOOLS.filter(([k]) => shown.includes(k)).sort((a, b) => shown.indexOf(a[0]) - shown.indexOf(b[0]))) {   /* (owner, 2026-11-14) a selected piece: just its settings */ const b = btn("", () => { bm.tool = k; if (k !== "area") bm.sel = 0; buildBar(); buildAim(bm.px, bm.py); drawAreas(); }, "btile" + (bm.tool === k ? " on" : "")); const im = document.createElement("img"); im.src = thumb(k); im.alt = ""; b.append(im, el("span", "", name)); b.title = name; row0.appendChild(b); }
   row0.className = "btiles"; B.appendChild(row0);
   const step = (label, get, set, lo, hi) => { const g = el("div", "bstep" + (label === zLabel ? " zone" : "")); g.appendChild(btn("−", () => { set(clamp(get() - 1, lo, hi)); buildBar(); buildAim(bm.px, bm.py); }, "bt")); g.appendChild(el("span", "", label())); g.appendChild(btn("+", () => { set(clamp(get() + 1, lo, hi)); buildBar(); buildAim(bm.px, bm.py); }, "bt")); row2.appendChild(g); };
   // (owner, 2026-11-14) sizes: typed in, side by side in one box
@@ -1139,6 +1144,7 @@ function buildBar() {
     if (q.k === "block" || q.k === "mover") { const mb = btn(q.m[0].toUpperCase() + q.m.slice(1), () => { let m = q.m; do m = World.MATS[(World.MATS.indexOf(m) + 1) % World.MATS.length]; while (q.k === "mover" && m === "turbine"); doSet(q, { ...q, m }); }, "bt mat"); mb.style.background = MAT_C[q.m]; row2.appendChild(mb); }
     if (q.k !== "gust" && q.k !== "mover" && q.k !== "block") row2.appendChild(ibtn("rotate", "Turn", () => doSet(q, q.k === "spawn" ? { ...q, a: ((q.a | 0) + 45) % 360 } : { ...q, r: ((q.r | 0) + 1) % 4 }), "bt"));
     if (q.k === "gust") row2.appendChild(ibtn("rotate", "Turn", () => doSet(q, { ...q, a: ((q.a | 0) + 45) % 360 }), "bt"));
+    if (q.k === "house" && World.districtAt(q.x, q.z, q.y) === 0) step(() => "Cannon " + (q.ca | 0) + "°", () => Math.round((q.ca | 0) / 15), ch((a, v) => (a.ca = (((v % 24) + 24) % 24) * 15)), -1, 24);   // (owner, 2026-11-16) its cannon's facing, 15 degrees a step (round and round)
     if (q.k === "gust") { step(() => "Every " + q.iv + "s", () => Math.round(q.iv * 2), ch((a, v) => (a.iv = v / 2)), 1, 60); step(() => "Power " + q.pw, () => q.pw, ch((a, v) => (a.pw = v)), 1, 60); }
     else if (q.k === "mover") { step(() => "Speed " + q.sp, () => q.sp, ch((a, v) => (a.sp = v)), 1, 30);
       // (owner, 2026-11-14) breaking: never, on step, or on prolonged step; its timer; when it comes back (0: never)
@@ -1353,7 +1359,7 @@ function drawAreas() {
 // the neighborhood panel: its name, the animal it gives, each rarity's chance and the shiny chance
 function zonePanel() {   // (what's typed is kept while you pick shot points or the town changes, until Save or another neighborhood)
   const P = $("zpanel"), n = bm.zone, Z = World.zoneCfg(n); P.innerHTML = ""; P.style.display = "block";
-  if (!bm.zd || bm.zd.n !== n) bm.zd = { n, name: Z.name, sp: Z.sp, chance: Z.chance.map((v) => +(v * 100).toFixed(3)), shinyN: Z.shiny > 0 ? Math.round(1 / Z.shiny) : 0, shots: Z.shots.map((q) => ({ ...q })), ca: Z.ca | 0 };
+  if (!bm.zd || bm.zd.n !== n) bm.zd = { n, name: Z.name, sp: Z.sp, chance: Z.chance.map((v) => +(v * 100).toFixed(3)), shinyN: Z.shiny > 0 ? Math.round(1 / Z.shiny) : 0, shots: Z.shots.map((q) => ({ ...q })) };
   const D = bm.zd, row = (name, node) => { const r = el("label", "zrow"); r.appendChild(el("span", "", name)); r.appendChild(node); P.appendChild(r); return node; };
   const num = (v, step, lo, hi, set) => { const i = document.createElement("input"); i.type = "number"; i.step = step; i.min = lo; i.max = hi; i.value = v; i.oninput = () => set(+i.value || 0); return i; };
   const h = el("b", "", World.zoneName(n)); h.style.boxShadow = "inset 0 -4px 0 " + World.TIERS[n].c; P.appendChild(h);
@@ -1361,7 +1367,6 @@ function zonePanel() {   // (what's typed is kept while you pick shot points or 
   const sp = row("Animal", document.createElement("select")); for (const k of Object.keys(World.MOUNTS)) { const o = document.createElement("option"); o.value = k; o.textContent = World.MOUNTS[k].name; if (k === D.sp) o.selected = true; sp.appendChild(o); } sp.onchange = () => (D.sp = sp.value);
   World.RARITY.forEach((r, i) => { const inp = row(r + " %", num(D.chance[i], 0.1, 0, 100, (v) => (D.chance[i] = v))); inp.previousSibling.style.color = World.RARITY_C[i] === "#ffffff" ? "" : "#" + new THREE.Color(World.RARITY_C[i]).multiplyScalar(0.8).getHexString(); });
   row("Shiny 1 in", num(D.shinyN, 1, 0, 1e7, (v) => (D.shinyN = v)));
-  if (n === 0) row("Cannons face", num(D.ca, 15, 0, 359, (v) => (D.ca = v)));   // (owner, 2026-11-16) every cannon's facing, in degrees
   // (owner, 2026-11-13) the cinematic shots shown when the neighborhood opens: 1 to 5, each a short name and a point the camera circles
   P.appendChild(el("b", "zsub", "Shots"));
   D.shots.forEach((q, k) => {
@@ -1371,7 +1376,7 @@ function zonePanel() {   // (what's typed is kept while you pick shot points or 
     r.appendChild(ibtn("pin", "Point", () => { bm.shotPick = bm.shotPick === k ? undefined : k; zonePanel(); }, "bt")); r.appendChild(ibtn("close", "Remove", () => { D.shots.splice(k, 1); bm.shotPick = undefined; zonePanel(); drawAreas(); }, "bt")); P.appendChild(r);
   });
   if (D.shots.length < World.SHOTS_MAX) P.appendChild(btn("+", () => { const a = bm.aim ? bm.aim.p : { x: me.x, y: me.y, z: me.z }; D.shots.push({ name: "", x: Math.round(a.x), y: Math.round(a.y), z: Math.round(a.z) }); bm.shotPick = D.shots.length - 1; zonePanel(); drawAreas(); }, "bt zadd"));
-  const go = btn("Save", () => { const N = D.shinyN; netSend({ t: "build", op: "zone", n, zone: { name: D.name, sp: D.sp, chance: D.chance.map((v) => v / 100), shiny: N >= 2 ? 1 / N : 0, shots: D.shots, ca: D.ca | 0 } }); sfx("pad"); bm.zd = null; bm.shotPick = undefined; P.style.display = "none"; drawAreas(); }, "go"); P.appendChild(go);
+  const go = btn("Save", () => { const N = D.shinyN; netSend({ t: "build", op: "zone", n, zone: { name: D.name, sp: D.sp, chance: D.chance.map((v) => v / 100), shiny: N >= 2 ? 1 / N : 0, shots: D.shots } }); sfx("pad"); bm.zd = null; bm.shotPick = undefined; P.style.display = "none"; drawAreas(); }, "go"); P.appendChild(go);
 }
 function tapAt(sx, sy) {   // tapping a courier: their name and a party invitation
   if (bm) { buildTap(sx, sy); return; }
@@ -1461,7 +1466,7 @@ function onNet(m) {
     case "data": adopt(m.data); break;
     case "cannon": {   // (owner, 2026-11-16) my cannon: in the barrel while the fuse burns, then out of the muzzle to the pad
       const c = cannonMesh[m.id]; cannonFire(m.id, true); me.hidden = true; me.vx = me.vz = me.vy = me.px = me.pz = 0; if (c) { me.x = c.x; me.z = c.z; me.y = c.y + 1.5; }
-      me.transit = { k: "fuse", until: now() + World.CANNONS.fuse, c, pad: m }; cam.yaw = World.cannonYaw() + Math.PI * 0.72; cam.pitch = 0.3; break;   /* from behind and to the side: the fuse in view */
+      me.transit = { k: "fuse", until: now() + World.CANNONS.fuse, c, pad: m }; cam.yaw = (c ? c.yaw : 0) + Math.PI * 0.72; cam.pitch = 0.3; break;   /* from behind and to the side: the fuse in view */
     }
     case "join": addOther(m.p); hudDirty = true; break;
     case "leave": dropOther(m.id); hudDirty = true; break;
@@ -1689,10 +1694,10 @@ const BOOST_M = new THREE.MeshLambertMaterial({ map: chevrons("#ffd84a", "#e0701
 let buildG = null, poG = null;
 // one piece's model (live: the real one, registered for mailbox shakes and gate locks; else a blueprint)
 // ---- (owner, 2026-11-16) cannons: a round, bubbly cannon on a wheeled carriage, its barrel up 35 degrees the way the
-// builder set (Main Street's "Cannons face"), a fuse at the back; a Cannon Unlock has a little one on its pedestal ----
+// builder set on its house, a fuse at the back; a Cannon Unlock has a little one on its pedestal ----
 const cannonMesh = {}, lockMesh = [];
-function cannonModel(d, k = 1) {
-  const g = new THREE.Group(), c = World.TIERS[d] ? World.TIERS[d].c : "#ffd84a", yaw = new THREE.Group(); g.add(yaw); yaw.rotation.y = World.cannonYaw(); g.scale.setScalar(k);
+function cannonModel(d, k = 1, ya = 0) {
+  const g = new THREE.Group(), c = World.TIERS[d] ? World.TIERS[d].c : "#ffd84a", yaw = new THREE.Group(); g.add(yaw); yaw.rotation.y = ya; g.scale.setScalar(k);
   box(3.2, 0.9, 3.4, "#8a5a34", 0, 0.75, 0, yaw); for (const x of [-1.75, 1.75]) for (const z of [-1, 1]) { const w = new THREE.Mesh(new THREE.CylinderGeometry(0.75, 0.75, 0.35, 16).rotateZ(Math.PI / 2), mat("#5b3a22")); w.position.set(x, 0.75, z); w.castShadow = true; yaw.add(w); }
   const pivot = new THREE.Group(); pivot.position.set(0, 1.5, -0.3); pivot.rotation.x = -0.61; yaw.add(pivot);
   const barrel = new THREE.Group(); pivot.add(barrel);
@@ -1765,7 +1770,7 @@ function pieceMesh(q, live) {
         B.visible = !!bm; buildOnly.push(B); G.add(B); B.traverse((o) => { o.userData.noPick = 1; });
       }
     }
-    else if (q.k === "house" && q.cz) { const c = cannonModel(q.cz); c.g.position.set(q.x, q.y, q.z); c.g.traverse((o) => { o.userData.pid = q.id; }); G.add(c.g); if (live) cannonMesh[q.id] = { ...c, x: q.x, y: q.y, z: q.z, fire: -1 }; if (q.on) { const tg = textSprite(q.on, { size: 30 }); tg.position.set(q.x, q.y + 5.2, q.z); G.add(tg); } }   // (owner, 2026-11-16) its owner's cannon in its place
+    else if (q.k === "house" && q.cz) { const c = cannonModel(q.cz, 1, World.cannonYaw(q)); c.g.position.set(q.x, q.y, q.z); c.g.traverse((o) => { o.userData.pid = q.id; }); G.add(c.g); if (live) cannonMesh[q.id] = { ...c, x: q.x, y: q.y, z: q.z, yaw: World.cannonYaw(q), fire: -1 }; if (q.on) { const tg = textSprite(q.on, { size: 30 }); tg.position.set(q.x, q.y + 5.2, q.z); G.add(tg); } }   // (owner, 2026-11-16) its owner's cannon in its place
     else if (q.k === "cannonlock") { const g = new THREE.Group(); g.position.set(q.x, q.y, q.z); G.add(g); const d = live ? World.districtAt(q.x, q.z, q.y) : 5;
       box(2.2, 1.2, 2.2, "#4a4f5a", 0, 0.6, 0, g); box(2.4, 0.2, 2.4, World.TIERS[d] ? World.TIERS[d].c : "#ffd84a", 0, 1.3, 0, g); const c = cannonModel(d, 0.32); c.g.position.y = 1.4; g.add(c.g); if (live) { lockMesh.push({ g: c.g, id: q.id, d }); const tg = textSprite(World.zoneName(d) + " Cannon", { size: 30 }); tg.position.y = 3.4; g.add(tg); } }
     else if (q.k === "cannonpad") { const g = new THREE.Group(); g.position.set(q.x, q.y + 0.06, q.z); G.add(g); const d = live ? World.districtAt(q.x, q.z, q.y) : 5, c = World.TIERS[d] ? World.TIERS[d].c : "#ffd84a";
@@ -1776,6 +1781,10 @@ function pieceMesh(q, live) {
       for (const x of [-1, 1]) box(1.1, 1.0, 0.1, "#bfe6ff", x * S * 0.3, 2.0, S / 2 + 0.02, g, false);
       const rf = new THREE.Mesh(new THREE.ConeGeometry(S * 0.8, 2.6, 4), mat(roof)); rf.rotation.y = Math.PI / 4; rf.position.y = 4.5; rf.castShadow = true; rf.userData.pid = q.id; g.add(rf);
       if (q.on) { const tg = textSprite(q.on, { size: 30 }); tg.position.set(q.x, q.y + 7, q.z); G.add(tg); }   // (owner, 2026-11-16) a bought house: its owner's name
+      if (live && (hb ? hb.d : World.districtAt(q.x, q.z, q.y)) === 0) {   // (owner, 2026-11-16) builders see which way its cannon would face: an arrow on the roof
+        const A = new THREE.Group(), am = new THREE.MeshBasicMaterial({ color: "#ff8a3d", depthTest: false }); A.position.set(q.x, q.y + 6.4, q.z); A.rotation.y = World.cannonYaw(q);
+        const sh = new THREE.Mesh(new THREE.BoxGeometry(0.35, 0.35, 3.2), am); sh.position.z = 1.6; const hd = new THREE.Mesh(new THREE.ConeGeometry(0.7, 1.4, 12).rotateX(Math.PI / 2), am); hd.position.z = 3.8; A.add(sh, hd);
+        A.traverse((o) => { o.renderOrder = 5; o.userData.noPick = 1; }); A.visible = !!bm; buildOnly.push(A); G.add(A); }
     }
     else if (q.k === "mailbox") {
       const mb = new THREE.Group(); mb.position.set(q.x, q.y, q.z); mb.rotation.y = (q.r | 0) * Math.PI / 2; G.add(mb);
