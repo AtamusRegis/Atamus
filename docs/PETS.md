@@ -328,7 +328,8 @@ is one 1 m grass block (`SEED`) to stand on, with sky all round. Everything is a
   redoes. Placing a post office or respawn point replaces the old one (undo brings it back). Up to 6,000 pieces.
   Erasing everything leaves the one block.
 - **Falling off** (below 20 m down, `EDGE_Y`) sends you back to the respawn point; (owner, 2026-11-14) you keep the
-  parcels you carry and go on with them. **Drop** (the button beside the parcel counter) lets go of every parcel you
+  parcels you carry and go on with them. (owner, 2026-11-16) **Carrying a parcel in a neighborhood that has a gate**,
+  you come back at its gate instead (the nearest gate into it), just inside, facing in. **Drop** (the button beside the parcel counter) lets go of every parcel you
   carry (no banner), so you can take new ones.
 
 ## Danger

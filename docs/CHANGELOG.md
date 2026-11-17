@@ -6,6 +6,8 @@ and any rule decided. Use `git log` for the code detail (and for the older Atamu
 
 ## 2026-11-16
 
+- **Back at the gate (owner).** Falling off with a parcel in a neighborhood that has a gate brings you back at its
+  gate, facing in, instead of the respawn point.
 - **Cannons (owner).** The builder places Cannon Unlocks and Cannon Pads; couriers unlock a neighborhood's cannon with
   Aura, buy a Main Street house, and put any unlocked cannon in its place to fire themselves to that neighborhood's pad
   (a sparkling fuse, a bubbly BOOM). The owner sets which way all cannons face.
